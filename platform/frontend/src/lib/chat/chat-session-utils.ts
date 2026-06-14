@@ -56,6 +56,35 @@ export function restoreRenderableAssistantParts(params: {
 }
 
 /**
+ * While a session auto-recovers from a severed stream (auto-retry or
+ * reattaching to the still-running response), the live message list passes
+ * through ugly intermediate states: regenerate() drops the partial assistant
+ * answer, and the replay rebuilds it from scratch a moment later. Rendering
+ * those states blinks the streamed text away and back. Instead, the UI keeps
+ * showing the frozen pre-recovery snapshot until the recovered stream has
+ * renderable assistant content again — the replay delivers its whole backlog
+ * in the first batch, so the swap happens at full length with no visible gap.
+ */
+export function shouldFreezeChatMessages(params: {
+  isRecovering: boolean;
+  liveMessages: UIMessage[];
+  frozenMessages: UIMessage[];
+}): boolean {
+  const { isRecovering, liveMessages, frozenMessages } = params;
+  if (!isRecovering || frozenMessages.length === 0) {
+    return false;
+  }
+
+  const lastMessage = liveMessages.at(-1);
+  // Once the recovered stream renders assistant content again, the live list
+  // has caught up with (or passed) the frozen snapshot — stop freezing.
+  return !(
+    lastMessage?.role === "assistant" &&
+    hasRenderableAssistantContent(lastMessage)
+  );
+}
+
+/**
  * Drops a trailing assistant message left with no renderable content. Mirrors the
  * backend's persist behavior (an empty last message is not stored), keeping the live
  * view consistent with what a reload would show — used after stripping dangling tool

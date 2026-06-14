@@ -267,8 +267,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
-- Colocate test files with source (`.test.ts`)
-- Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
@@ -398,7 +396,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
-**Skill Sandbox Runtime** (not released yet — gated behind the sandbox feature flag):
+**Skill Sandbox Runtime** (gated behind the sandbox feature flag):
 
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
 - MCP tools exposed by `archestra-mcp-server/sandbox.ts`, all gated by `sandbox:execute` (`archestra-mcp-server/rbac.ts`). Each accepts a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
@@ -406,9 +404,9 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - `upload_file` — writes an input file (chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs
   - `download_file` — exports a file from a materialized sandbox into `skill_sandbox_files` (kind `artifact`) and returns a reference + a `/api/skill-sandbox/artifacts/:id` URL
 - Chat attachments are auto-staged into the conversation's **default** sandbox under `/home/sandbox/attachments/` (idempotent, tracked via `skill_sandbox_files.source_attachment_id`), so the model uses user-attached files without knowing attachment ids. Over-limit attachments are skipped with a model-visible notice. `upload_file` stays the path for inline content, explicit paths, non-default sandboxes, and non-UI gateway clients
-- `activate_skill` (and slash-command activation) mounts the skill's pinned version into the conversation's default sandbox when the sandbox is usable, so its scripts are runnable under `/skills/<name>`. `run_command`/`download_file` re-check that every mounted skill is still readable by the caller before building a container (fail-closed)
+- `load_skill` (and slash-command activation) mounts the skill's pinned version into the conversation's default sandbox when the sandbox is usable, so its scripts are runnable under `/skills/<name>`. This happens for both `load_skill` modes (name only, and name + path), so a file read also mounts the skill. `run_command`/`download_file` re-check that every mounted skill is still readable by the caller before building a container (fail-closed)
 - Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skill_mounts`, `skill_sandbox_commands`, `skill_sandbox_files`, `skill_sandbox_replay_events`); skill bytes are versioned immutably in `skill_versions` + `skill_version_files` and mounts pin a `skill_version_id`. Dagger owns ephemeral filesystem state with no retention guarantee. Ordering across commands/uploads/mounts is the `skill_sandbox_replay_events` log, sequenced via `skill_sandboxes.next_replay_sequence`
-- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `read_skill_file` and use the sandbox tools to execute scripts. Each mounted skill root (`/skills/<name>`) is appended to `PYTHONPATH` (in `archestra-rs/sandbox-core/src/backends/dagger.rs`), so the model imports a skill's modules directly without `sys.path` edits. `run_command`'s cwd defaults to `/home/sandbox`, **not** the skill root, so a bundled script that reads its own files by relative path must be run with `cwd: /skills/<name>`
+- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `load_skill` (passing a path) and use the sandbox tools to execute scripts. Each mounted skill root (`/skills/<name>`) is appended to `PYTHONPATH` (in `archestra-rs/sandbox-core/src/backends/dagger.rs`), so the model imports a skill's modules directly without `sys.path` edits. `run_command`'s cwd defaults to `/home/sandbox`, **not** the skill root, so a bundled script that reads its own files by relative path must be run with `cwd: /skills/<name>`
 
 **Testing**:
 

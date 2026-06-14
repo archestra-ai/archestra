@@ -1,9 +1,11 @@
 import {
   ConversationAttachmentModel,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
 } from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
+import { asSandboxId } from "@/types";
 import {
   __internals,
   skillSandboxRuntimeService,
@@ -48,7 +50,7 @@ describe("skillSandboxRuntimeService", () => {
   test("runCommand rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
       }),
@@ -58,7 +60,7 @@ describe("skillSandboxRuntimeService", () => {
   test("exportArtifact rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         path: "out/report.txt",
       }),
@@ -71,20 +73,11 @@ describe("skillSandboxRuntimeService", () => {
     1.5,
     Number.NaN,
   ])("runCommand rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
         timeoutSeconds,
@@ -93,53 +86,36 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("runCommand rejects empty commands", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "   ",
       }),
     ).rejects.toThrow("command must be a non-empty string");
   });
 
-  test("runCommand rejects after maxSandboxQueueLength requests for the same sandbox", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+  test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
+    const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
-    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
-    // fire maxSandboxQueueLength+1 concurrent calls; all will fail (no real
-    // Dagger engine) but the first N reach the per-sandbox chain while the
-    // (N+1)th is rejected immediately by the queue-length guard before any await.
-    const calls = Array.from(
-      { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
-      () =>
-        enabled.runCommand({
-          sandboxId,
-          caller: { userId: "u", organizationId: "o" },
-          command: "echo hi",
-        }),
+    const sandboxId = asSandboxId(crypto.randomUUID());
+    // all N+1 calls are created synchronously, so the first N take queue slots
+    // (and later fail — no real Dagger engine) while only the last one trips
+    // the guard before any await.
+    const results = await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
     );
-    const results = await Promise.allSettled(calls);
     // use message check rather than instanceof: vi.resetModules creates a fresh
     // class so instanceof against the top-level import would always be false.
     const queueErrors = results.filter(
@@ -147,11 +123,124 @@ describe("skillSandboxRuntimeService", () => {
         r.status === "rejected" &&
         (r.reason as Error)?.message?.includes("too many requests"),
     );
-    expect(queueErrors.length).toBeGreaterThanOrEqual(1);
+    expect(queueErrors).toHaveLength(1);
+  });
+
+  test("queue guard resets after the saturated queue drains", async () => {
+    const enabled = await importEnabledService();
+    const { SKILL_SANDBOX_LIMITS } = await import("./types");
+
+    const sandboxId = asSandboxId(crypto.randomUUID());
+    await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
+    );
+
+    // the queue fully drained, so the next call must reach the sandbox load
+    // (and fail there — no sandbox row) instead of tripping the queue guard.
+    const [after] = await Promise.allSettled([
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      }),
+    ]);
+    expect(after.status).toBe("rejected");
+    expect((after as PromiseRejectedResult).reason?.message).not.toContain(
+      "too many requests",
+    );
+  });
+
+  test("a call enqueued right as the previous one settles is not lost", async () => {
+    const enabled = await importEnabledService();
+
+    const sandboxId = asSandboxId(crypto.randomUUID());
+    const run = () =>
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      });
+
+    // sequential reuse of the same sandbox right after the previous call
+    // settled: guards against cleanup schemes (e.g. tail-attached deletion)
+    // that could evict or reject a freshly enqueued call.
+    const [first] = await Promise.allSettled([run()]);
+    const [second] = await Promise.allSettled([run()]);
+    for (const result of [first, second]) {
+      expect(result.status).toBe("rejected");
+      expect((result as PromiseRejectedResult).reason?.message).not.toContain(
+        "too many requests",
+      );
+    }
   });
 });
 
+/**
+ * the queue tests need the service compiled with the sandbox feature on; each
+ * gets a fresh module registry so the singleton's queue state starts empty.
+ */
+async function importEnabledService() {
+  vi.resetModules();
+  vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
+  vi.stubEnv(
+    "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
+    "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
+  );
+  const { skillSandboxRuntimeService: enabled } = await import(
+    "./skill-sandbox-runtime-service"
+  );
+  return enabled;
+}
+
 describe("__internals", () => {
+  test("requirementsInstallCommands picks up root and nested requirements.txt in path order", () => {
+    const commands = __internals.requirementsInstallCommands("alpha", [
+      "tools/extract.py",
+      "tools/requirements.txt",
+      "requirements.txt",
+      "references/notes.md",
+    ]);
+    expect(commands.map((c) => c.command)).toEqual([
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/requirements.txt'",
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/tools/requirements.txt'",
+    ]);
+    expect(commands.every((c) => c.cwd === "/home/sandbox")).toBe(true);
+  });
+
+  test("requirementsInstallCommands ignores files merely named like requirements", () => {
+    expect(
+      __internals.requirementsInstallCommands("alpha", [
+        "docs/requirements.txt.md",
+        "old-requirements.txt",
+        "tools/requirements.md",
+      ]),
+    ).toEqual([]);
+  });
+
+  test("requirementsInstallCommands skips documentation under references/", () => {
+    expect(
+      __internals
+        .requirementsInstallCommands("alpha", [
+          "references/requirements.txt",
+          "references/setup/requirements.txt",
+          "./references/requirements.txt",
+          "tools/requirements.txt",
+        ])
+        .map((c) => c.command),
+    ).toEqual([
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/tools/requirements.txt'",
+    ]);
+  });
+
   test("resolveArtifactPath joins relative paths against defaultCwd", () => {
     expect(
       __internals.resolveArtifactPath({
@@ -496,5 +585,203 @@ describe("stageConversationAttachments (db)", () => {
         await SkillSandboxReplayEventModel.listBySandbox(sandboxA.id),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("uploadFile dedupeId idempotency (db)", () => {
+  /**
+   * Tests the dedup mechanism at the model layer — the same layer `uploadFile`
+   * delegates to — because the runtime service's `ensureEnabled()` guard
+   * requires a live Dagger runner which is not available in the test environment.
+   * The service-layer wiring (passing `dedupeId` → `sourceAttachmentId` →
+   * conflict handling) is covered by the runtime-service unit tests above.
+   */
+  test("same dedupeId → one skill_sandbox_files row + one replay event; no-throw on repeat; different dedupeId still appends", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+
+    const dedupeId = crypto.randomUUID();
+    const fileData = Buffer.from("print('hello')", "utf8");
+
+    // First insert — should create a file row and a replay event.
+    const row1 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/script.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: fileData.byteLength,
+      data: fileData,
+      sourceAttachmentId: dedupeId,
+    });
+    expect(row1).not.toBeNull();
+    expect(row1?.id).toBeTruthy();
+
+    // Second append with the same dedupeId — ON CONFLICT → returns null (no-op).
+    const row2 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/script.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: fileData.byteLength,
+      data: fileData,
+      sourceAttachmentId: dedupeId,
+    });
+    expect(row2).toBeNull();
+
+    // Exactly one upload event in the replay log despite two calls.
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const uploads = log.filter((e) => e.kind === "upload");
+    expect(uploads).toHaveLength(1);
+
+    // The file model can look up the already-staged row by (sandboxId, dedupeId).
+    const existing = await SkillSandboxFileModel.findUploadByDedupeId(
+      sandbox.id,
+      dedupeId,
+    );
+    expect(existing).not.toBeNull();
+    expect(existing?.id).toBe(row1?.id);
+
+    // A different dedupeId → a new distinct row + replay event.
+    const otherDedupeId = crypto.randomUUID();
+    const row3 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/other.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: 7,
+      data: Buffer.from("exit(0)", "utf8"),
+      sourceAttachmentId: otherDedupeId,
+    });
+    expect(row3).not.toBeNull();
+    expect(row3?.id).not.toBe(row1?.id);
+
+    const logAfter = await SkillSandboxReplayEventModel.listBySandbox(
+      sandbox.id,
+    );
+    expect(logAfter.filter((e) => e.kind === "upload")).toHaveLength(2);
+
+    // An upload without a sourceAttachmentId (no dedupeId) also appends normally.
+    const row4 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/payload.json",
+      mimeType: "application/json",
+      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("{}", "utf8"),
+    });
+    expect(row4).not.toBeNull();
+
+    const logFinal = await SkillSandboxReplayEventModel.listBySandbox(
+      sandbox.id,
+    );
+    expect(logFinal.filter((e) => e.kind === "upload")).toHaveLength(3);
+  });
+});
+
+describe("path validation vectors (mirrored with sandbox-core)", () => {
+  // mirrored with UPLOAD_PATH_VECTORS / ARTIFACT_PATH_VECTORS in
+  // archestra-rs/sandbox-core/src/validation.rs — keep the two tables in sync
+  // when adding cases. the Rust module is the trust boundary and stays
+  // authoritative; this layer rejects early for friendlier errors and to keep
+  // unreplayable events out of the log. the third column documents the Rust
+  // verdict on the same string so divergences are explicit.
+  const DEFAULT_CWD = "/home/sandbox";
+
+  // (path, acceptedHere, acceptedByRust)
+  const UPLOAD_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/home/sandbox/input.csv", true, true],
+    ["/skills/alpha/data/in.bin", true, true],
+    // relative: resolved against defaultCwd before validation, so it is
+    // accepted here while the raw string would be rejected at the boundary
+    ["input.csv", true, false],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["/home/sandbox/../etc/passwd", false, false],
+    // directory, not a file
+    ["/home/sandbox/", false, false],
+    // a root itself: rejected here before it is persisted as an unreplayable
+    // event; the boundary alone would accept it
+    ["/home/sandbox", false, true],
+    // shell metacharacters / control chars / null
+    ['/home/sandbox/a"b', false, false],
+    ["/home/sandbox/a$b", false, false],
+    ["/home/sandbox/a`b", false, false],
+    ["/home/sandbox/a\\b", false, false],
+    ["/home/sandbox/a\nb", false, false],
+    ["/home/sandbox/a\rb", false, false],
+    ["/home/sandbox/a\0b", false, false],
+  ];
+
+  // (path, acceptedHere, acceptedByRust)
+  const ARTIFACT_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/skills/alpha/result.txt", true, true],
+    ["out/report.txt", true, true],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["a/../b.txt", false, false],
+    // null byte
+    ["a\0b.txt", false, false],
+    // shell metacharacters: pass through here; the Rust boundary rejects them
+    ['/skills/alpha/foo"bar', true, false],
+    ["/skills/alpha/foo$bar", true, false],
+    ["/skills/alpha/foo`bar", true, false],
+    ["/skills/alpha/foo\\bar", true, false],
+    ["/skills/alpha/foo\nbar", true, false],
+    ["/skills/alpha/foo\rbar", true, false],
+  ];
+
+  test("upload path vectors", () => {
+    const stageUpload = (path: string) => {
+      const resolved = __internals.resolveArtifactPath({
+        path,
+        defaultCwd: DEFAULT_CWD,
+      });
+      __internals.validateUploadPath(resolved);
+    };
+    for (const [path, accepted] of UPLOAD_PATH_VECTORS) {
+      if (accepted) {
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).not.toThrow();
+      } else {
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).toThrow();
+      }
+    }
+  });
+
+  test("artifact path vectors", () => {
+    for (const [path, accepted] of ARTIFACT_PATH_VECTORS) {
+      const resolve = () =>
+        __internals.resolveArtifactPath({ path, defaultCwd: DEFAULT_CWD });
+      if (accepted) {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).not.toThrow();
+      } else {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).toThrow();
+      }
+    }
   });
 });

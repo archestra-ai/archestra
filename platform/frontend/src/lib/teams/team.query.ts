@@ -2,7 +2,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
 
-const { getTeams, getTeamVaultFolder } = archestraApiSdk;
+const { getTeams, getTeamVaultFolder, getTeamLabelKeys, getTeamLabelValues } =
+  archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -16,17 +17,33 @@ export function useTeams(params?: {
   enabled?: boolean;
   /**
    * When true, fetch only the teams the current user is a member of (even for
-   * team:admins). Use for resource team-assignment, where membership — not the
-   * org-wide team:admin permission — determines which teams can be assigned.
+   * organization-level team managers). Use for resource team-assignment, where
+   * membership determines which teams can be assigned.
    */
   mine?: boolean;
+  /** Server-side name filter (case-insensitive substring match). */
+  name?: string;
+  /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
+  labels?: string;
 }) {
   const mine = params?.mine ?? false;
+  const name = params?.name?.trim() || undefined;
+  const labels = params?.labels || undefined;
   return useQuery({
-    queryKey: mine ? ["teams", "mine"] : ["teams"],
+    queryKey: [
+      "teams",
+      ...(mine ? ["mine"] : []),
+      ...(name || labels ? [{ name, labels }] : []),
+    ],
     queryFn: async () => {
       const { data } = await getTeams({
-        query: { limit: 100, offset: 0, ...(mine ? { mine: true } : {}) },
+        query: {
+          limit: 100,
+          offset: 0,
+          ...(mine ? { mine: true } : {}),
+          ...(name ? { name } : {}),
+          ...(labels ? { labels } : {}),
+        },
       });
       return data?.data ?? [];
     },
@@ -35,7 +52,24 @@ export function useTeams(params?: {
   });
 }
 
-/** The teams the current user is a member of (membership, not team:admin view). */
+export function useTeamLabelKeys() {
+  return useQuery({
+    queryKey: ["teams", "labels", "keys"],
+    queryFn: async () => (await getTeamLabelKeys()).data ?? [],
+  });
+}
+
+export function useTeamLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["teams", "labels", "values", key],
+    queryFn: async () =>
+      (await getTeamLabelValues({ query: key ? { key } : {} })).data ?? [],
+    enabled: key !== undefined,
+  });
+}
+
+/** The teams the current user is a member of. */
 export function useMyTeams(params?: { enabled?: boolean }) {
   return useTeams({ mine: true, enabled: params?.enabled });
 }

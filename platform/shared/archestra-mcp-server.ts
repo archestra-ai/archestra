@@ -109,12 +109,11 @@ export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
-export const TOOL_ACTIVATE_SKILL_SHORT_NAME = "activate_skill";
-export const TOOL_READ_SKILL_FILE_SHORT_NAME = "read_skill_file";
+export const TOOL_LOAD_SKILL_SHORT_NAME = "load_skill";
 export const TOOL_CREATE_SKILL_SHORT_NAME = "create_skill";
 export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 // code execution sandbox — implicit per-conversation sandbox; the create step
-// is hidden (lazy default) and run_python is folded into run_command.
+// is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
@@ -184,8 +183,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
-  TOOL_READ_SKILL_FILE_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
@@ -332,10 +330,8 @@ export const TOOL_RUN_TOOL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_TOOL_SHORT_NAME}` as const;
 export const TOOL_LIST_SKILLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_SKILLS_SHORT_NAME}` as const;
-export const TOOL_ACTIVATE_SKILL_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ACTIVATE_SKILL_SHORT_NAME}` as const;
-export const TOOL_READ_SKILL_FILE_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_READ_SKILL_FILE_SHORT_NAME}` as const;
+export const TOOL_LOAD_SKILL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LOAD_SKILL_SHORT_NAME}` as const;
 export const TOOL_CREATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_SKILL_SHORT_NAME}` as const;
 export const TOOL_UPDATE_SKILL_FULL_NAME =
@@ -366,11 +362,31 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
  */
 export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
-  TOOL_READ_SKILL_FILE_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Code-execution sandbox tools. Gated by `sandbox:execute` and only seeded when
+ * the sandbox feature is on; unlike other built-ins they participate in the
+ * `search_tools`/`run_tool` first-use auto-assignment relaxation (see
+ * `tool-auto-assign.ts`) so a user with `sandbox:execute` can reach them without
+ * a manual assignment.
+ */
+const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+export function isSandboxArchestraToolShortName(shortName: string): boolean {
+  return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
 
 /**
  * tools that stay top-level in `tools/list` regardless of an agent's
@@ -381,11 +397,8 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
-  TOOL_READ_SKILL_FILE_SHORT_NAME,
-  TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_DOWNLOAD_FILE_SHORT_NAME,
-  TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

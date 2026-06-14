@@ -156,6 +156,13 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
   name: string;
   podSelectorLabels: Record<string, string>;
   effectivePolicy: EffectiveNetworkPolicy;
+  /**
+   * ClusterIP(s) of the cluster DNS service. ApplicationNetworkPolicy only
+   * supports ipBlock and domainNames egress peers (no pod/namespace
+   * selectors), so DNS must be allowlisted by IP or the policy blocks all
+   * lookups and every domainNames rule becomes unreachable.
+   */
+  clusterDnsIps: string[];
 }): Record<string, unknown> {
   const policy = params.effectivePolicy.policy;
   if (!policy) {
@@ -177,14 +184,18 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
     metadata: {
       name: params.name,
       labels,
-      annotations: buildPolicyAnnotations(params.effectivePolicy, "active"),
+      annotations: {
+        ...buildPolicyAnnotations(params.effectivePolicy, "active"),
+        "archestra.io/network-policy-cluster-dns":
+          params.clusterDnsIps.join(",") || "any",
+      },
     },
     spec: {
       podSelector: {
         matchLabels: params.podSelectorLabels,
       },
       policyTypes: ["Egress"],
-      egress: buildAwsApplicationEgressRules(policy),
+      egress: buildAwsApplicationEgressRules(policy, params.clusterDnsIps),
     },
   };
 }
@@ -278,6 +289,7 @@ function buildCiliumEgressRules(
 
 function buildAwsApplicationEgressRules(
   policy: NonNullable<EffectiveNetworkPolicy["policy"]>,
+  clusterDnsIps: string[],
 ): Array<Record<string, unknown>> {
   if (policy.egressMode === "off") {
     return [];
@@ -287,15 +299,41 @@ function buildAwsApplicationEgressRules(
     return [];
   }
 
+  const domains = networkPolicyDomains(policy);
+
   return [
-    buildAwsDnsEgressRule(),
+    buildAwsDnsBootstrapEgressRule(clusterDnsIps),
     ...policy.allowedCidrs.map((cidr) => ({
       to: [{ ipBlock: { cidr } }],
     })),
-    ...networkPolicyDomains(policy).map((domain) => ({
-      to: [{ domainNames: [domain] }],
-    })),
+    // All domains go in a single domainNames list: one rule per domain
+    // bloats the generated PolicyEndpoints on EKS Auto Mode.
+    ...(domains.length > 0 ? [{ to: [{ domainNames: domains }] }] : []),
   ];
+}
+
+/**
+ * DNS bootstrap rule for EKS Auto Mode. When the cluster DNS ClusterIP could
+ * not be resolved, fall back to allowing port 53 anywhere — restricting DNS
+ * to an unknown IP would break every domainNames rule in the policy.
+ */
+function buildAwsDnsBootstrapEgressRule(
+  clusterDnsIps: string[],
+): Record<string, unknown> {
+  const to =
+    clusterDnsIps.length > 0
+      ? clusterDnsIps.map((ip) => ({
+          ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+        }))
+      : [{ ipBlock: { cidr: "0.0.0.0/0" } }];
+
+  return {
+    to,
+    ports: [
+      { protocol: "UDP", port: 53 },
+      { protocol: "TCP", port: 53 },
+    ],
+  };
 }
 
 function buildCiliumDnsEgressRule(): Record<string, unknown> {
@@ -315,29 +353,6 @@ function buildCiliumDnsEgressRule(): Record<string, unknown> {
           dns: [{ matchPattern: "*" }],
         },
       },
-    ],
-  };
-}
-
-function buildAwsDnsEgressRule(): Record<string, unknown> {
-  return {
-    to: [
-      {
-        namespaceSelector: {
-          matchLabels: {
-            "kubernetes.io/metadata.name": "kube-system",
-          },
-        },
-        podSelector: {
-          matchLabels: {
-            "k8s-app": "kube-dns",
-          },
-        },
-      },
-    ],
-    ports: [
-      { protocol: "UDP", port: 53 },
-      { protocol: "TCP", port: 53 },
     ],
   };
 }

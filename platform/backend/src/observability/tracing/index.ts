@@ -1,9 +1,9 @@
 export {
+  ATTR_ARCHESTRA_AGENT_LABEL_PREFIX,
   ATTR_ARCHESTRA_AGENT_TYPE,
   ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_EXECUTION_ID,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
-  ATTR_ARCHESTRA_LABEL_PREFIX,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_ARCHESTRA_USER_EMAIL,
   ATTR_ARCHESTRA_USER_ID,
@@ -26,6 +26,8 @@ export {
   ATTR_GENAI_TOOL_CALL_RESULT,
   ATTR_GENAI_TOOL_NAME,
   ATTR_GENAI_TOOL_TYPE,
+  ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
@@ -44,11 +46,13 @@ export {
   RouteCategory,
   // Types
   type SpanAgentInfo,
+  type SpanTeamInfo,
   type SpanUserInfo,
   // Helpers
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
 export { startActiveChatSpan } from "./chat";

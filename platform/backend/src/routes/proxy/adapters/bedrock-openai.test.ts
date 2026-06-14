@@ -164,7 +164,13 @@ describe("BedrockOpenai response adapter", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].name).toBe("do_thing");
     expect(resp.hasToolCalls()).toBe(true);
-    expect(resp.getUsage()).toEqual({ inputTokens: 1, outputTokens: 1 });
+    expect(resp.getUsage()).toEqual({
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
+    });
     expect(resp.getFinishReasons()).toEqual(["tool_use"]);
   });
 });

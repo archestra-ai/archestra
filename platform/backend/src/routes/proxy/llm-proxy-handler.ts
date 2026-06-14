@@ -31,6 +31,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
@@ -41,10 +42,13 @@ import {
   ATTR_GENAI_RESPONSE_FINISH_REASONS,
   ATTR_GENAI_RESPONSE_ID,
   ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
   EVENT_GENAI_CONTENT_COMPLETION,
+  type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
   type Agent,
@@ -130,6 +134,8 @@ export interface LLMProxyContext<TRequest> {
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
 }
 
 export type LLMProxyAuthOverride = {
@@ -611,8 +617,19 @@ export async function handleLLMProxy<
     const globalToolPolicy =
       await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
-    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
-    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+    // Fetch the agent's teams (with labels) once. Used both for policy
+    // evaluation context (trusted data) and for trace span team attributes.
+    const teams =
+      await AgentTeamModel.getTeamLabelInfoForAgent(resolvedAgentId);
+    const teamIds = teams.map((team) => team.id);
+
+    // Fetch the requesting user's teams (with labels) for trace span attributes.
+    const userTeams = userId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId,
+          organizationId: resolvedAgent.organizationId,
+        })
+      : [];
 
     // Evaluate trusted data policies
     logger.debug(
@@ -838,6 +855,8 @@ export async function handleLLMProxy<
       executionId,
       parentContext,
       teamIds,
+      teams,
+      userTeams,
     };
 
     if (requestAdapter.isStreaming()) {
@@ -942,6 +961,8 @@ async function handleStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -967,6 +988,8 @@ async function handleStreaming<
       model: actualModel,
       stream: true,
       agent,
+      teams,
+      userTeams,
       sessionId,
       executionId,
       externalAgentId,
@@ -1087,11 +1110,28 @@ async function handleStreaming<
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
             state.usage.inputTokens + state.usage.outputTokens,
           );
+          if (state.usage.cacheReadTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+              state.usage.cacheReadTokens,
+            );
+          }
+          if (state.usage.cacheWriteTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+              state.usage.cacheWriteTokens,
+            );
+          }
           const cost = await utils.costOptimization.calculateCost(
             actualModel,
             state.usage.inputTokens,
             state.usage.outputTokens,
             providerName,
+            {
+              readTokens: state.usage.cacheReadTokens,
+              writeTokens: state.usage.cacheWriteTokens,
+              write1hTokens: state.usage.cacheWrite1hTokens,
+            },
           );
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -1164,6 +1204,8 @@ async function handleStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,
@@ -1216,7 +1258,12 @@ async function handleStreaming<
         metrics.llm.reportLLMTokens(
           providerName,
           agent,
-          { input: usage.inputTokens, output: usage.outputTokens },
+          {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            cacheRead: usage.cacheReadTokens,
+            cacheWrite: usage.cacheWriteTokens,
+          },
           actualModel,
           source,
           externalAgentId,
@@ -1332,6 +1379,8 @@ async function handleNonStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1348,6 +1397,8 @@ async function handleNonStreaming<
     model: actualModel,
     stream: false,
     agent,
+    teams,
+    userTeams,
     sessionId,
     executionId,
     externalAgentId,
@@ -1374,11 +1425,28 @@ async function handleNonStreaming<
         ATTR_GENAI_USAGE_TOTAL_TOKENS,
         usage.inputTokens + usage.outputTokens,
       );
+      if (usage.cacheReadTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.cacheReadTokens,
+        );
+      }
+      if (usage.cacheWriteTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.cacheWriteTokens,
+        );
+      }
       const cost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
         usage.outputTokens,
         providerName,
+        {
+          readTokens: usage.cacheReadTokens,
+          writeTokens: usage.cacheWriteTokens,
+          write1hTokens: usage.cacheWrite1hTokens,
+        },
       );
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -1439,6 +1507,8 @@ async function handleNonStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,

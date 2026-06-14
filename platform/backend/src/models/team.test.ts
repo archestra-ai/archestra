@@ -782,7 +782,7 @@ describe("TeamModel", () => {
   });
 
   describe("checkTeamAccess", () => {
-    test("should allow access for team admin regardless of membership", async ({
+    test("should allow access for organization-level team manager regardless of membership", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -791,15 +791,15 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      // Admin user who is NOT a member of the team
+      // Organization-level team manager who is NOT a member of the team
       const adminUser = await makeUser({ email: "admin@test.com" });
 
-      // Should not throw - admin has full access
+      // Should not throw - organization-level team manager has full access
       await expect(
         TeamModel.checkTeamAccess({
           userId: adminUser.id,
           teamId: team.id,
-          isTeamAdmin: true,
+          canManageAllTeams: true,
         }),
       ).resolves.toBeUndefined();
     });
@@ -822,7 +822,7 @@ describe("TeamModel", () => {
         TeamModel.checkTeamAccess({
           userId: memberUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         }),
       ).resolves.toBeUndefined();
     });
@@ -844,7 +844,7 @@ describe("TeamModel", () => {
         TeamModel.checkTeamAccess({
           userId: outsiderUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         }),
       ).rejects.toThrow("Not authorized to access this team");
     });
@@ -864,7 +864,7 @@ describe("TeamModel", () => {
         await TeamModel.checkTeamAccess({
           userId: outsiderUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         });
         // Should not reach here
         expect.fail("Expected checkTeamAccess to throw an error");

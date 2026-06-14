@@ -16,6 +16,7 @@ export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-agent-override";
+export { default as ConnectionSetupModel } from "./connection-setup";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationAttachmentModel } from "./conversation-attachment";
@@ -25,6 +26,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as GithubAppConfigModel } from "./github-app-config";
+export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
@@ -66,6 +68,7 @@ export { default as SkillFileModel } from "./skill-file";
 export {
   default as SkillSandboxModel,
   SkillInvalidFilePathError,
+  SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
 export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";
@@ -76,6 +79,7 @@ export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";
+export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";

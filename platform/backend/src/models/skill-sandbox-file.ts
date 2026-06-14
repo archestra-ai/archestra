@@ -1,6 +1,7 @@
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** Artifact row without its bytes — what the Files panel needs to list outputs. */
 type SkillSandboxArtifactMeta = {
@@ -28,7 +29,7 @@ class SkillSandboxFileModel {
     if (!row) {
       throw new Error("failed to insert sandbox artifact");
     }
-    return normalizeFileData(row);
+    return normalizeByteaField(row, "data");
   }
 
   static async findArtifactById(id: string): Promise<SkillSandboxFile | null> {
@@ -41,7 +42,7 @@ class SkillSandboxFileModel {
           eq(schema.skillSandboxFilesTable.kind, "artifact"),
         ),
       );
-    return row ? normalizeFileData(row) : null;
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /**
@@ -84,6 +85,28 @@ class SkillSandboxFileModel {
   }
 
   /**
+   * Look up an already-staged upload by its dedup id (stored as
+   * `source_attachment_id`). Used by `uploadFile` to return a stable ref when
+   * the idempotency index fires and `appendUpload` returns null.
+   */
+  static async findUploadByDedupeId(
+    sandboxId: string,
+    dedupeId: string,
+  ): Promise<SkillSandboxFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.sandboxId, sandboxId),
+          eq(schema.skillSandboxFilesTable.sourceAttachmentId, dedupeId),
+          eq(schema.skillSandboxFilesTable.kind, "upload"),
+        ),
+      );
+    return row ? normalizeByteaField(row, "data") : null;
+  }
+
+  /**
    * Chat-attachment ids already staged into a sandbox, so auto-staging only
    * appends the not-yet-present delta.
    */
@@ -106,14 +129,3 @@ class SkillSandboxFileModel {
 }
 
 export default SkillSandboxFileModel;
-
-// === internal helpers ===
-
-/**
- * pg returns `bytea` as Buffer; PGlite returns Uint8Array. Callers rely on
- * Buffer semantics, so normalize at the read boundary.
- */
-function normalizeFileData(row: SkillSandboxFile): SkillSandboxFile {
-  if (Buffer.isBuffer(row.data)) return row;
-  return { ...row, data: Buffer.from(row.data as unknown as Uint8Array) };
-}

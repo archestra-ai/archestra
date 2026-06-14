@@ -158,6 +158,27 @@ class OrganizationModel {
   }
 
   /**
+   * Turn on the Agent Skill tools for every organization that hasn't already
+   * opted in. Run at startup when the skills feature flag is enabled so the
+   * model-facing skill tools are on by default — newly created agents then
+   * inherit them via `ToolModel.assignSkillToolsToAgent`, and the
+   * slash-command toggle unlocks. Pre-existing agents are not retrofitted;
+   * admins add skill tools to them via the agent tools editor if needed.
+   * Idempotent; returns the number of orgs flipped on.
+   */
+  static async enableSkillToolsForAllOrgs(): Promise<number> {
+    const rows = await db
+      .update(schema.organizationsTable)
+      .set({ skillToolsEnabled: true })
+      .where(eq(schema.organizationsTable.skillToolsEnabled, false))
+      .returning({ id: schema.organizationsTable.id });
+    for (const { id } of rows) {
+      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    }
+    return rows.length;
+  }
+
+  /**
    * List ids of organizations that have opted into the Agent Skill tools
    * (`skillToolsEnabled`). Used to backfill newly introduced skill tools.
    */
@@ -185,6 +206,24 @@ class OrganizationModel {
       "OrganizationModel.getById: completed",
     );
     return organization || null;
+  }
+
+  /**
+   * Whether the org allows search_tools/run_tool to discover and auto-assign
+   * catalog tools beyond the agent's assigned set. Lean read on the tool
+   * dispatch path; intentionally not cached so admin toggles affect the next
+   * discovery/dispatch call. Defaults to true when the organization is missing.
+   */
+  static async getAllowToolAutoAssignment(id: string): Promise<boolean> {
+    const [organization] = await db
+      .select({
+        allowToolAutoAssignment:
+          schema.organizationsTable.allowToolAutoAssignment,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return organization?.allowToolAutoAssignment ?? true;
   }
 
   /**
@@ -304,6 +343,7 @@ class OrganizationModel {
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
       allowChatFileUploads: org.allowChatFileUploads,
+      allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       defaultLlmModel: org.defaultLlmModel ?? null,
       defaultLlmProvider: org.defaultLlmProvider ?? null,

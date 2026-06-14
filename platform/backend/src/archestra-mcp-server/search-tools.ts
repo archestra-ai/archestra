@@ -1,5 +1,5 @@
 import {
-  ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES,
+  isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -23,6 +23,7 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { getUnassignedDiscoverableTools } from "./tool-auto-assign";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -82,6 +83,11 @@ const InputParameterSchema = z.object({
 });
 
 type InputParameterSummary = z.infer<typeof InputParameterSchema>;
+type NestedParameterSummary = z.infer<typeof NestedParameterSchema>;
+
+// cap on enum values rendered inline in a parameter signature; the full list
+// stays recoverable via run_tool validation feedback.
+const PARAM_ENUM_VALUE_CAP = 20;
 
 const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
@@ -106,10 +112,6 @@ const SearchToolsOutputSchema = z.object({
       toolName: z
         .string()
         .describe(`Exact tool name to pass to ${TOOL_RUN_TOOL_SHORT_NAME}.`),
-      title: z
-        .string()
-        .nullable()
-        .describe("Human-friendly title when available."),
       description: z
         .string()
         .nullable()
@@ -123,11 +125,15 @@ const SearchToolsOutputSchema = z.object({
         .describe(
           "MCP server prefix for third-party MCP tools when available.",
         ),
-      catalogName: z
+      params: z
         .string()
-        .nullable()
-        .describe("Catalog name for installed MCP tools when available."),
-      inputParameters: z.array(InputParameterSchema),
+        .describe(
+          "Compact one-line input signature. Parameters are joined by '; ', each rendered as " +
+            "`name<!|?>:<type>` where `!` marks required and `?` optional. Object parameters are " +
+            "expanded one level as `{child<!|?>:type, …}`, enums as `enum(<json-values>)`, and a " +
+            "trailing ` — description` is added when available. Empty string when the tool takes " +
+            `no input. Pass matching values inside tool_args when calling ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+        ),
     }),
   ),
 });
@@ -149,22 +155,11 @@ type SearchCandidate = {
   };
 };
 
-// search_tools only runs in search_and_run_only mode. The meta tools and the
-// always-exposed runtime tools (skills + sandbox) are already top-level there,
-// so returning them as search results would be redundant noise. This set spans
-// both categories — not just meta tools — so it gates search-result membership,
-// not "is this a meta tool".
-const EXCLUDED_FROM_SEARCH_SHORT_NAMES = new Set<string>([
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  ...ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES,
-]);
-
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SEARCH_TOOLS_SHORT_NAME,
     title: "Search Tools",
-    description: `Search the agent's available tools on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
+    description: `Search the tools available to this agent and to you on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
     schema: SearchToolsArgsSchema,
     outputSchema: SearchToolsOutputSchema,
     async handler({ args, context }) {
@@ -245,6 +240,7 @@ export const __test = {
   rankCandidatesByKeyword,
   rankCandidatesByRegex,
   summarizeInputParameters,
+  formatParamsSignature,
   makeRankingCandidate(input: {
     toolName: string;
     title?: string | null;
@@ -279,15 +275,27 @@ async function getSearchableTools(params: {
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  const assignedNames = new Set(assignedTools.map((tool) => tool.name));
+  // Widened search space: skills reference tools nobody assigned to the agent,
+  // so discovery also spans third-party tools from every catalog the user can
+  // access, plus the sandbox built-ins when the feature is on. Running such a
+  // tool is not silent — run_tool proposes granting it to the agent (or steers
+  // the user to an admin), which keeps these results actionable.
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: assignedNames,
+    userId,
+    organizationId,
+  });
+  const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(
-    assignedTools.map((tool) => tool.name),
+    searchSpace.map((tool) => tool.name),
     userId,
     organizationId,
   );
-  const filteredAssignedTools = assignedTools.filter(
+  const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
-      !isExcludedFromSearchResults(tool.name) &&
+      !isExcludedFromSearchResults(tool.name, assignedNames) &&
       !tool.name.startsWith("agent__"),
   );
 
@@ -301,9 +309,16 @@ async function getSearchableTools(params: {
         })
       : [];
 
-  const catalogNamesById = await getCatalogNamesById(filteredAssignedTools);
+  const catalogNamesById = await getCatalogNamesById(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
-  for (const tool of filteredAssignedTools) {
+  // First occurrence wins on duplicate names: assigned tools come before the
+  // discoverable ones, and the discoverable set is ordered newest-first — the
+  // same row the grant flow resolves, so the description shown by search
+  // matches the row a later run_tool grant assigns.
+  for (const tool of filteredTools) {
+    if (candidates.has(tool.name)) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({
@@ -537,13 +552,70 @@ function prepareSearchQuery(query: string): PreparedSearchQuery {
 function toSearchResult(candidate: SearchCandidate) {
   return {
     toolName: candidate.toolName,
-    title: candidate.title,
     description: candidate.description,
     source: candidate.source,
     server: candidate.server,
-    catalogName: candidate.catalogName,
-    inputParameters: candidate.inputParameters,
+    params: formatParamsSignature(candidate.inputParameters),
   };
+}
+
+// Render the structured per-tool parameter summaries as a single compact line so
+// repeated search_tools calls do not accumulate verbose nested JSON in context.
+// Intentionally bounded (see PARAM_ENUM_VALUE_CAP) — the full schema stays
+// recoverable through run_tool's validation feedback, matching the existing
+// "deeper structure is left to the actual call" design above.
+function formatParamsSignature(params: InputParameterSummary[]): string {
+  return params.map(formatParamSignature).join("; ");
+}
+
+function formatParamSignature(param: InputParameterSummary): string {
+  const requiredMark = param.required ? "!" : "?";
+  const typePart = formatParamType(param);
+  const typeSuffix = typePart ? `:${typePart}` : "";
+  // collapse whitespace so a multiline schema description cannot break the
+  // one-line signature contract.
+  const description = param.description
+    ? param.description.replace(/\s+/g, " ").trim()
+    : "";
+  const descriptionSuffix = description ? ` — ${description}` : "";
+  return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
+}
+
+// Additive: a parameter can carry a scalar type, a one-level object shape, and an
+// enum constraint at once, so each present part is appended rather than replacing
+// the others (e.g. `sort?:string enum("asc"|"desc")`).
+function formatParamType(param: InputParameterSummary): string {
+  let type = param.type ?? "";
+  if (param.properties && param.properties.length > 0) {
+    type += formatNestedProperties(param.properties);
+  }
+  if (param.enum && param.enum.length > 0) {
+    const enumClause = formatEnumValues(param.enum);
+    type = type ? `${type} ${enumClause}` : enumClause;
+  }
+  return type;
+}
+
+function formatNestedProperties(properties: NestedParameterSummary[]): string {
+  const inner = properties
+    .map((property) => {
+      const requiredMark = property.required ? "!" : "?";
+      const typeSuffix = property.type ? `:${property.type}` : "";
+      return `${property.name}${requiredMark}${typeSuffix}`;
+    })
+    .join(", ");
+  return `{${inner}}`;
+}
+
+// enum values are arbitrary JSON (number/boolean/null/object, or strings that may
+// contain "|"), so JSON-encode each to keep the signature unambiguous.
+function formatEnumValues(values: unknown[]): string {
+  const shown = values
+    .slice(0, PARAM_ENUM_VALUE_CAP)
+    .map((value) => JSON.stringify(value));
+  const overflow = values.length - PARAM_ENUM_VALUE_CAP;
+  const suffix = overflow > 0 ? `|…(+${overflow} more)` : "";
+  return `enum(${shown.join("|")}${suffix})`;
 }
 
 type RegexRankResult =
@@ -880,9 +952,30 @@ function visitSchema(
   }
 }
 
-function isExcludedFromSearchResults(toolName: string): boolean {
+// search_tools only runs in search_and_run_only mode, where the meta tools and
+// the always-exposed runtime tools (skills + sandbox) are already top-level —
+// returning them as results would be redundant noise. But "always-exposed" only
+// holds once a tool is assigned: an unassigned sandbox tool the user can reach
+// via sandbox:execute is NOT top-level, so surface it here so the model can
+// discover it and propose granting it. Meta tools are never useful as results.
+function isExcludedFromSearchResults(
+  toolName: string,
+  assignedNames: Set<string>,
+): boolean {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
-  return shortName != null && EXCLUDED_FROM_SEARCH_SHORT_NAMES.has(shortName);
+  if (shortName == null) {
+    return false;
+  }
+  if (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME
+  ) {
+    return true;
+  }
+  if (isAlwaysExposedArchestraToolShortName(shortName)) {
+    return assignedNames.has(toolName);
+  }
+  return false;
 }
 
 function formatArchestraToolTitle(toolName: string): string | null {

@@ -276,6 +276,15 @@ export function useImportGithubSkills() {
         `Imported ${created} skill${created === 1 ? "" : "s"}` +
           (skipped > 0 ? ` — skipped ${skipped} already in the org` : ""),
       );
+      const droppedFiles = data.skippedFiles.reduce(
+        (sum, entry) => sum + entry.files.length,
+        0,
+      );
+      if (droppedFiles > 0) {
+        toast.warning(
+          `${droppedFiles} resource file${droppedFiles === 1 ? " was" : "s were"} not imported (oversized or unfetchable)`,
+        );
+      }
     },
   });
 }

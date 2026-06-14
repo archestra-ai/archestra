@@ -26,6 +26,7 @@ import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import { test } from "@/test";
 import type { ChatMessage } from "@/types";
+import { __test as __prepareTest } from "./prepare-model-messages";
 import {
   __test,
   buildChatStopConditions,
@@ -37,7 +38,7 @@ import {
 
 describe("prepareMessagesForProvider", () => {
   it("normalizes csv files to text/plain for anthropic", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "anthropic",
       messages: [
         {
@@ -63,7 +64,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("normalizes markdown files to text/plain for anthropic", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "anthropic",
       messages: [
         {
@@ -88,6 +89,32 @@ describe("prepareMessagesForProvider", () => {
     });
   });
 
+  it("normalizes json files to text/plain for anthropic", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
   it("leaves non-anthropic file parts unchanged", () => {
     const message = {
       role: "user" as const,
@@ -101,7 +128,7 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "openai",
       messages: [message],
     });
@@ -117,7 +144,7 @@ describe("prepareMessagesForProvider", () => {
   };
 
   it("prepends placeholder text for bedrock user messages with only a file part", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [{ role: "user", parts: [pdfFilePart] }],
     });
@@ -129,7 +156,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("prepends placeholder when the only existing text part is whitespace", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -151,7 +178,7 @@ describe("prepareMessagesForProvider", () => {
       parts: [{ type: "text", text: "Summarize this" }, pdfFilePart],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -160,7 +187,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock assistant messages whose only text part is whitespace", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [{ role: "assistant", parts: [{ type: "text", text: "" }] }],
     });
@@ -174,7 +201,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages whose reasoning lacks a bedrock signature", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -193,7 +220,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain ignored UI data parts", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -221,7 +248,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain step markers and ignored data parts", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -246,7 +273,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads bedrock messages that only contain streaming tool input", () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -273,7 +300,7 @@ describe("prepareMessagesForProvider", () => {
   });
 
   it("pads empty bedrock assistant step blocks before later tool calls", async () => {
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [
         {
@@ -331,7 +358,7 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -351,7 +378,7 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
@@ -371,12 +398,63 @@ describe("prepareMessagesForProvider", () => {
       ],
     };
 
-    const messages = __test.prepareMessagesForProvider({
+    const messages = __prepareTest.prepareMessagesForProvider({
       provider: "bedrock",
       messages: [message],
     });
 
     expect(messages[0]).toBe(message);
+  });
+
+  it("normalizes application/json files to text/plain for bedrock", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            { type: "text", text: "review this" },
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
+  it("leaves bedrock pdf files unchanged after normalization", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        { type: "text", text: "Summarize this" },
+        {
+          type: "file",
+          mediaType: "application/pdf",
+          filename: "report.pdf",
+          url: "data:application/pdf;base64,JVBERi0=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      mediaType: "application/pdf",
+    });
   });
 });
 
@@ -385,7 +463,7 @@ describe("buildModelMessagesForProvider", () => {
   const conversationId = "conv-model-prep";
 
   it("drops an assistant turn that converts to empty model content", async () => {
-    const modelMessages = await __test.buildModelMessagesForProvider({
+    const modelMessages = await __prepareTest.buildModelMessagesForProvider({
       provider: "openai",
       conversationId,
       messages: [
@@ -409,7 +487,7 @@ describe("buildModelMessagesForProvider", () => {
   });
 
   it("keeps normal text and tool assistant turns", async () => {
-    const modelMessages = await __test.buildModelMessagesForProvider({
+    const modelMessages = await __prepareTest.buildModelMessagesForProvider({
       provider: "openai",
       conversationId,
       messages: [
@@ -1148,7 +1226,29 @@ describe("generateConversationTitle", () => {
       model: "mocked-model",
       system: "Return only a title.",
       prompt: "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
+      maxOutputTokens: 64,
     });
+  });
+
+  it("caps output tokens so non-streaming requests stay under the provider limit", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Short Title" });
+
+    await generateConversationTitle({
+      provider: "anthropic",
+      apiKey: "test-key",
+      modelName: "claude-test",
+      baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    const callArg = mockGenerateText.mock.calls[0][0];
+    expect(callArg.maxOutputTokens).toBeLessThanOrEqual(64);
+    expect(callArg.maxOutputTokens).toBeGreaterThan(0);
   });
 });
 

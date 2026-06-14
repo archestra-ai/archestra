@@ -29,7 +29,10 @@ overrides:
   body-parser: 2.2.1
   dompurify: 3.4.0
   glob: 11.1.0
-  esbuild: 0.27.0
+  # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
+  # Pinned exact (not a `>=` floor) because esbuild is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  esbuild: 0.28.1
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1
@@ -95,6 +98,12 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - next
   - "@next/*"
+  # TEMPORARY: esbuild 0.28.1 (the only fix for GHSA-gv7w-rqvm-qjhr, HIGH) was
+  # published 2026-06-11 and clears the 7-day window on 2026-06-18. Remove these
+  # two entries on/after that date — the lockfile stays pinned at 0.28.1
+  # regardless. @esbuild/* are the per-platform native binaries esbuild pulls in.
+  - esbuild
+  - "@esbuild/*"
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

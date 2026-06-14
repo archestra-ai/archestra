@@ -316,6 +316,9 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
+          # Generate the full Archestra MCP tool catalog (incl. flag-gated app
+          # tools) so codegen matches the committed docs; mirrors values-ci.yaml.
+          ARCHESTRA_APPS_ENABLED: "true"
         run: |
           set -e
 

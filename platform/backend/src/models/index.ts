@@ -24,6 +24,7 @@ export { default as ConversationCompactionModel } from "./conversation-compactio
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
+export { default as FileModel } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";

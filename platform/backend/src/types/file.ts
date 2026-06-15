@@ -12,11 +12,13 @@ export type PersistedFile = z.infer<typeof SelectPersistedFileSchema>;
 
 /**
  * Minimal row shape the sandbox byte-storage router needs to read or delete a
- * stored blob. Both `skill_sandbox_files` and `files` rows satisfy it.
+ * stored blob. `files` rows carry `storageProvider`/`objectKey`; upload rows
+ * (`skill_sandbox_files`, always Postgres bytes) omit them — a missing
+ * provider is treated as `db`.
  */
 export type StoredBlobRow = {
   id: string;
   data: Buffer | null;
-  storageProvider: z.infer<typeof SkillSandboxFileStorageProviderSchema>;
-  objectKey: string | null;
+  storageProvider?: z.infer<typeof SkillSandboxFileStorageProviderSchema>;
+  objectKey?: string | null;
 };

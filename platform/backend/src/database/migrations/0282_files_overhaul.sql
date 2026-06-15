@@ -55,11 +55,7 @@ CREATE TABLE "skill_sandbox_folders" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ALTER COLUMN "data" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "conversations" ADD COLUMN "project_id" uuid;--> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ADD COLUMN "storage_provider" text DEFAULT 'db' NOT NULL;--> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ADD COLUMN "object_key" text;--> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ADD COLUMN "folder_id" uuid;--> statement-breakpoint
 ALTER TABLE "skill_sandbox_files" ADD COLUMN "origin" text;--> statement-breakpoint
 ALTER TABLE "files" ADD CONSTRAINT "files_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "files" ADD CONSTRAINT "files_folder_id_skill_sandbox_folders_id_fk" FOREIGN KEY ("folder_id") REFERENCES "public"."skill_sandbox_folders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -79,11 +75,6 @@ CREATE INDEX "files_sandbox_id_idx" ON "files" USING btree ("sandbox_id");--> st
 CREATE UNIQUE INDEX "projects_user_name_uidx" ON "projects" USING btree ("user_id","name");--> statement-breakpoint
 CREATE UNIQUE INDEX "skill_sandbox_folders_user_name_uidx" ON "skill_sandbox_folders" USING btree ("user_id","name");--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ADD CONSTRAINT "skill_sandbox_files_folder_id_skill_sandbox_folders_id_fk" FOREIGN KEY ("folder_id") REFERENCES "public"."skill_sandbox_folders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "skill_sandbox_files" ADD CONSTRAINT "skill_sandbox_files_storage_payload_chk" CHECK ((
-        ("skill_sandbox_files"."storage_provider" = 'db' AND "skill_sandbox_files"."data" IS NOT NULL AND "skill_sandbox_files"."object_key" IS NULL)
-        OR ("skill_sandbox_files"."storage_provider" = 'filesystem' AND "skill_sandbox_files"."object_key" IS NOT NULL AND "skill_sandbox_files"."data" IS NULL)
-      ));--> statement-breakpoint
 -- Data migration: move persistent My Files out of skill_sandbox_files
 -- (kind='artifact') into the new files table, ids/bytes/timestamps verbatim so
 -- /api/skill-sandbox/artifacts/:id URLs keep working, then drop the old rows.

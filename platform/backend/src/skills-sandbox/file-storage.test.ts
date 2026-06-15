@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { SandboxArtifactRow, SkillSandboxFile } from "@/types";
+import type { SandboxArtifactRow, StoredBlobRow } from "@/types";
 import { getSandboxFileStorage, storageFilename } from "./file-storage";
 
 describe("getSandboxFileStorage (db provider)", () => {
@@ -40,7 +40,7 @@ describe("getSandboxFileStorage (db provider)", () => {
   });
 
   test("get returns row bytes as a Buffer when pg returns Buffer", async () => {
-    const file = { data: Buffer.from("abc") } as SkillSandboxFile;
+    const file = { data: Buffer.from("abc") } as StoredBlobRow;
     const bytes = await storage.get(file);
     expect(Buffer.isBuffer(bytes)).toBe(true);
     expect(bytes.toString()).toBe("abc");
@@ -49,7 +49,7 @@ describe("getSandboxFileStorage (db provider)", () => {
   test("get normalizes Uint8Array rows (PGlite) to Buffer", async () => {
     const file = {
       data: new Uint8Array([0x61, 0x62, 0x63]),
-    } as unknown as SkillSandboxFile;
+    } as unknown as StoredBlobRow;
     const bytes = await storage.get(file);
     expect(Buffer.isBuffer(bytes)).toBe(true);
     expect(bytes.toString()).toBe("abc");
@@ -119,7 +119,7 @@ describe("getSandboxFileStorage routing", () => {
       storageProvider: "db",
       data: Buffer.from("from-bytea"),
       objectKey: null,
-    } as SkillSandboxFile);
+    } as StoredBlobRow);
     expect(bytes.toString()).toBe("from-bytea");
   });
 });

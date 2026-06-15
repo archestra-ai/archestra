@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { SandboxArtifactRow, SkillSandboxFile } from "@/types";
+import type { SandboxArtifactRow, StoredBlobRow } from "@/types";
 import {
   FilesystemSandboxFileStorage,
   SandboxFileMissingError,
@@ -31,12 +31,12 @@ describe("FilesystemSandboxFileStorage", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  function fileRow(objectKey: string): SkillSandboxFile {
+  function fileRow(objectKey: string): StoredBlobRow {
     return {
       storageProvider: "filesystem",
       objectKey,
       data: null,
-    } as SkillSandboxFile;
+    } as StoredBlobRow;
   }
 
   function putParams(params: {
@@ -138,7 +138,7 @@ describe("FilesystemSandboxFileStorage", () => {
       storage.get({
         storageProvider: "filesystem",
         objectKey: null,
-      } as SkillSandboxFile),
+      } as StoredBlobRow),
     ).rejects.toThrow(/object key/);
   });
 
@@ -572,10 +572,10 @@ describe("FilesystemSandboxFileStorage symlink hardening", () => {
   });
 });
 
-function fileEscapeRow(objectKey: string): SkillSandboxFile {
+function fileEscapeRow(objectKey: string): StoredBlobRow {
   return {
     storageProvider: "filesystem",
     objectKey,
     data: null,
-  } as SkillSandboxFile;
+  } as StoredBlobRow;
 }

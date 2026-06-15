@@ -57,7 +57,6 @@ export const SelectSkillSandboxFileSchema = createSelectSchema(
   schema.skillSandboxFilesTable,
   {
     kind: SkillSandboxFileKindSchema,
-    storageProvider: SkillSandboxFileStorageProviderSchema,
     origin: SandboxFileOriginSchema.nullable(),
   },
 );
@@ -65,9 +64,6 @@ export const InsertSkillSandboxFileSchema = createInsertSchema(
   schema.skillSandboxFilesTable,
   {
     kind: SkillSandboxFileKindSchema,
-    // optional: DB column has DEFAULT 'db', so callers may omit it when
-    // inserting db-provider rows.
-    storageProvider: SkillSandboxFileStorageProviderSchema.optional(),
     origin: SandboxFileOriginSchema.nullable().optional(),
   },
 ).omit({

@@ -1,5 +1,5 @@
 {
-  "id": "b83a08dd-93b6-4189-9d9e-6d6c68c5a977",
+  "id": "e9acb3ec-56f5-400b-bb5b-a17b86baa5fc",
   "prevId": "2813db77-d3d9-4acf-afb5-6a666eee1ded",
   "version": "7",
   "dialect": "postgresql",
@@ -10575,26 +10575,7 @@
           "name": "data",
           "type": "bytea",
           "primaryKey": false,
-          "notNull": false
-        },
-        "storage_provider": {
-          "name": "storage_provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'db'"
-        },
-        "object_key": {
-          "name": "object_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "folder_id": {
-          "name": "folder_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "origin": {
           "name": "origin",
@@ -10683,19 +10664,6 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "skill_sandbox_files_folder_id_skill_sandbox_folders_id_fk": {
-          "name": "skill_sandbox_files_folder_id_skill_sandbox_folders_id_fk",
-          "tableFrom": "skill_sandbox_files",
-          "tableTo": "skill_sandbox_folders",
-          "columnsFrom": [
-            "folder_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10710,12 +10678,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "skill_sandbox_files_storage_payload_chk": {
-          "name": "skill_sandbox_files_storage_payload_chk",
-          "value": "(\n        (\"skill_sandbox_files\".\"storage_provider\" = 'db' AND \"skill_sandbox_files\".\"data\" IS NOT NULL AND \"skill_sandbox_files\".\"object_key\" IS NULL)\n        OR (\"skill_sandbox_files\".\"storage_provider\" = 'filesystem' AND \"skill_sandbox_files\".\"object_key\" IS NOT NULL AND \"skill_sandbox_files\".\"data\" IS NULL)\n      )"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.skill_sandbox_folders": {

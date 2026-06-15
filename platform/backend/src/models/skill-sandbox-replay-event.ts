@@ -132,9 +132,8 @@ class SkillSandboxReplayEventModel {
           sourceAttachmentId: upload.sourceAttachmentId ?? null,
           origin: upload.origin ?? null,
           sizeBytes: upload.sizeBytes,
-          data: stored.dbData,
-          storageProvider: stored.provider,
-          objectKey: stored.objectKey,
+          // uploads are always Postgres bytes; the column is NOT NULL again.
+          data: upload.data,
         })
         .onConflictDoNothing({
           target: [

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
 import {
-  SkillSandboxFileModel,
+  FileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
 } from "@/models";
@@ -63,8 +63,7 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
       data: Buffer.from("phase3 in"),
     });
     expect(row).not.toBeNull();
-    expect(row?.storageProvider).toBe("db");
-    expect(row?.objectKey).toBeNull();
+    // uploads are Postgres-only: bytes on the row, nothing on disk.
     expect(row?.data?.toString()).toBe("phase3 in");
     // the storage root was never touched
     expect(await readdir(root)).toEqual([]);
@@ -86,12 +85,16 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
   }) => {
     const owner = await makeOwner({ makeUser, makeOrganization });
     const sandbox = await makeSandboxFor(owner);
-    const artifact = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
+    const artifact = await FileModel.create({
+      organizationId: owner.org.id,
       userId: owner.user.id,
-      path: "/home/sandbox/out.txt",
+      namespaceUserId: owner.user.id,
+      conversationId: null,
+      sandboxId: sandbox.id,
+      folderId: null,
+      folderName: null,
+      filename: "out.txt",
       mimeType: "text/plain",
-      originalName: null,
       sizeBytes: 9,
       data: Buffer.from("phase3 ok"),
     });
@@ -100,7 +103,7 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
     expect(artifact.data).toBeNull();
     const onDisk = await readFile(join(root, owner.user.email, "out.txt"));
     expect(onDisk.toString()).toBe("phase3 ok");
-    const fetched = await SkillSandboxFileModel.findArtifactById(artifact.id);
+    const fetched = await FileModel.findById(artifact.id);
     expect(fetched).not.toBeNull();
     const bytes = await getSandboxFileStorage().get(fetched ?? artifact);
     expect(bytes.toString()).toBe("phase3 ok");
@@ -114,23 +117,21 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
     const sandboxA = await makeSandboxFor(owner);
     const sandboxB = await makeSandboxFor(owner);
     const params = (sandboxId: string, content: string) => ({
-      sandboxId,
+      organizationId: owner.org.id,
       userId: owner.user.id,
-      path: "/home/sandbox/report.txt",
+      namespaceUserId: owner.user.id,
+      conversationId: null,
+      sandboxId,
+      folderId: null,
+      folderName: null,
+      filename: "report.txt",
       mimeType: "text/plain",
-      originalName: null,
       sizeBytes: content.length,
       data: Buffer.from(content),
     });
-    const first = await SkillSandboxFileModel.createArtifact(
-      params(sandboxA.id, "from A"),
-    );
-    const second = await SkillSandboxFileModel.createArtifact(
-      params(sandboxB.id, "from B"),
-    );
-    const third = await SkillSandboxFileModel.createArtifact(
-      params(sandboxA.id, "from A again"),
-    );
+    const first = await FileModel.create(params(sandboxA.id, "from A"));
+    const second = await FileModel.create(params(sandboxB.id, "from B"));
+    const third = await FileModel.create(params(sandboxA.id, "from A again"));
     expect(first.objectKey).toBe(`${owner.user.email}/report.txt`);
     expect(second.objectKey).toBe(`${owner.user.email}/report (1).txt`);
     expect(third.objectKey).toBe(`${owner.user.email}/report (2).txt`);

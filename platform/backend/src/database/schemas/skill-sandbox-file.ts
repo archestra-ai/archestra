@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  check,
   customType,
   index,
   integer,
@@ -14,10 +13,8 @@ import {
 import type {
   SandboxFileOrigin,
   SkillSandboxFileKind,
-  SkillSandboxFileStorageProvider,
 } from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
-import skillSandboxFoldersTable from "./skill-sandbox-folder";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
   dataType() {
@@ -26,21 +23,17 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
 });
 
 /**
- * Every file byte that lives in a sandbox, in one role-tagged table (S3-like:
- * a key/value blob plus metadata). `kind` distinguishes the two roles:
+ * Sandbox INPUT files (`kind = 'upload'`): bytes written via `upload_file`
+ * that become part of the sandbox replay recipe. Each upload is referenced
+ * from exactly one ordered `skill_sandbox_replay_events` row (composite FK on
+ * `kind`), so a file uploaded between two commands materializes at that point
+ * and is never visible to a command that ran before it.
  *
- *   - `upload` — an INPUT written via `upload_file`. Its bytes become part of
- *     the sandbox replay recipe: each upload is referenced from exactly one
- *     ordered `skill_sandbox_replay_events` row (composite FK on `kind`), so a
- *     file uploaded between two commands materializes at that point and is never
- *     visible to a command that ran before it.
- *   - `artifact` — an OUTPUT copied out of a materialized container via
- *     `download_file`. Sandboxes are ephemeral, so artifacts are how generated
- *     files survive a Dagger cache flush.
- *
- * Bytes live in `data` (when `storage_provider = 'db'`) or on the filesystem
- * under `object_key` (when `storage_provider = 'filesystem'`), per the operator
- * config; mixed-mode rows are supported permanently.
+ * Uploads are always Postgres bytes (`data`); they must be re-readable on every
+ * container rebuild. Persistent OUTPUT files ("My Files", formerly
+ * `kind = 'artifact'`) moved to the `files` table — see `database/schemas/file.ts`.
+ * The `kind` column is retained (still `'upload'` for every row) because the
+ * replay-event composite FK pins to it.
  */
 const skillSandboxFilesTable = pgTable(
   "skill_sandbox_files",
@@ -70,30 +63,12 @@ const skillSandboxFilesTable = pgTable(
      */
     sourceAttachmentId: uuid("source_attachment_id"),
     sizeBytes: integer("size_bytes").notNull(),
-    /**
-     * Bytes when storage_provider = 'db'. Null when they live externally —
-     * then `object_key` points at them instead (XOR enforced below).
-     */
-    data: bytea("data"),
-    /** Which storage backend holds this row's bytes. */
-    storageProvider: text("storage_provider")
-      .$type<SkillSandboxFileStorageProvider>()
-      .notNull()
-      .default("db"),
-    /** Path relative to the configured storage root; filesystem rows only. */
-    objectKey: text("object_key"),
-    /**
-     * PFS folder the artifact was exported into; artifacts only. SET NULL on
-     * folder delete (defensive — no folder delete API yet); the on-disk
-     * location is still recorded by `object_key` in filesystem mode.
-     */
-    folderId: uuid("folder_id").references(() => skillSandboxFoldersTable.id, {
-      onDelete: "set null",
-    }),
+    /** Upload bytes; always present (uploads are Postgres-only). */
+    data: bytea("data").notNull(),
     /**
      * How an upload entered the sandbox: 'x_file' = copied from the user's
-     * persistent X-Files storage (these surface in the conversation Files
-     * panel). Null for artifacts and for ordinary uploads.
+     * persistent My Files storage (these surface in the conversation Files
+     * panel). Null for ordinary uploads.
      */
     origin: text("origin").$type<SandboxFileOrigin>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
@@ -113,15 +88,6 @@ const skillSandboxFilesTable = pgTable(
     uniqueIndex("skill_sandbox_files_sandbox_attachment_uidx")
       .on(table.sandboxId, table.sourceAttachmentId)
       .where(sql`${table.sourceAttachmentId} IS NOT NULL`),
-    // exactly one byte location per row: bytea for 'db', object_key for
-    // 'filesystem'. A row violating this is unreadable, so reject at write time.
-    check(
-      "skill_sandbox_files_storage_payload_chk",
-      sql`(
-        (${table.storageProvider} = 'db' AND ${table.data} IS NOT NULL AND ${table.objectKey} IS NULL)
-        OR (${table.storageProvider} = 'filesystem' AND ${table.objectKey} IS NOT NULL AND ${table.data} IS NULL)
-      )`,
-    ),
   ],
 );
 

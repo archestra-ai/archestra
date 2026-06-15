@@ -102,7 +102,7 @@ export interface UploadFileParams {
    * appends a new row (existing tool-upload behavior).
    */
   dedupeId?: string;
-  /** How the upload entered the sandbox; 'x_file' = copied from the user's PFS. */
+  /** How the upload entered the sandbox; 'my_file' = copied from the user's PFS. */
   origin?: SandboxFileOrigin | null;
 }
 

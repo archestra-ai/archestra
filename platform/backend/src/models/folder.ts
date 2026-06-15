@@ -6,7 +6,7 @@ import type { SkillSandboxFolder } from "@/types";
  * A user's PFS folders (`skill_sandbox_folders`). Names are unique per user
  * and double as the on-disk directory name in filesystem storage mode.
  */
-class SkillSandboxFolderModel {
+class FolderModel {
   static async create(params: {
     organizationId: string;
     userId: string;
@@ -14,7 +14,7 @@ class SkillSandboxFolderModel {
   }): Promise<SkillSandboxFolder> {
     try {
       const [row] = await db
-        .insert(schema.skillSandboxFoldersTable)
+        .insert(schema.foldersTable)
         .values(params)
         .returning();
       if (!row) throw new Error("failed to insert sandbox folder");
@@ -33,17 +33,14 @@ class SkillSandboxFolderModel {
   }): Promise<SkillSandboxFolder[]> {
     return db
       .select()
-      .from(schema.skillSandboxFoldersTable)
+      .from(schema.foldersTable)
       .where(
         and(
-          eq(
-            schema.skillSandboxFoldersTable.organizationId,
-            params.organizationId,
-          ),
-          eq(schema.skillSandboxFoldersTable.userId, params.userId),
+          eq(schema.foldersTable.organizationId, params.organizationId),
+          eq(schema.foldersTable.userId, params.userId),
         ),
       )
-      .orderBy(asc(schema.skillSandboxFoldersTable.name));
+      .orderBy(asc(schema.foldersTable.name));
   }
 
   static async findByName(params: {
@@ -53,15 +50,12 @@ class SkillSandboxFolderModel {
   }): Promise<SkillSandboxFolder | null> {
     const [row] = await db
       .select()
-      .from(schema.skillSandboxFoldersTable)
+      .from(schema.foldersTable)
       .where(
         and(
-          eq(
-            schema.skillSandboxFoldersTable.organizationId,
-            params.organizationId,
-          ),
-          eq(schema.skillSandboxFoldersTable.userId, params.userId),
-          eq(schema.skillSandboxFoldersTable.name, params.name),
+          eq(schema.foldersTable.organizationId, params.organizationId),
+          eq(schema.foldersTable.userId, params.userId),
+          eq(schema.foldersTable.name, params.name),
         ),
       );
     return row ?? null;
@@ -74,8 +68,8 @@ class SkillSandboxFolderModel {
     if (ids.length === 0) return new Map();
     const rows = await db
       .select()
-      .from(schema.skillSandboxFoldersTable)
-      .where(inArray(schema.skillSandboxFoldersTable.id, ids));
+      .from(schema.foldersTable)
+      .where(inArray(schema.foldersTable.id, ids));
     return new Map(rows.map((row) => [row.id, row]));
   }
 
@@ -84,13 +78,11 @@ class SkillSandboxFolderModel {
    * project whose own insert then failed. There is no user-facing delete.
    */
   static async deleteById(id: string): Promise<void> {
-    await db
-      .delete(schema.skillSandboxFoldersTable)
-      .where(eq(schema.skillSandboxFoldersTable.id, id));
+    await db.delete(schema.foldersTable).where(eq(schema.foldersTable.id, id));
   }
 }
 
-export default SkillSandboxFolderModel;
+export default FolderModel;
 
 /** The user already has a folder with this name. */
 export class SandboxFolderExistsError extends Error {

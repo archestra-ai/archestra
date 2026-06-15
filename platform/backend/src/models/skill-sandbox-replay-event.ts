@@ -32,7 +32,7 @@ interface UploadInput {
    * stage is a no-op that returns `null` instead of a duplicate replay event.
    */
   sourceAttachmentId?: string | null;
-  /** How the upload entered the sandbox; 'x_file' = copied from the user's PFS. */
+  /** How the upload entered the sandbox; 'my_file' = copied from the user's PFS. */
   origin?: SandboxFileOrigin | null;
 }
 

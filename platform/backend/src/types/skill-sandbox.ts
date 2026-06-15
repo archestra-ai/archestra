@@ -26,11 +26,11 @@ export type SkillSandboxFileStorageProvider = z.infer<
 >;
 
 /**
- * How an upload entered the sandbox (nullable column). `x_file` = copied from
- * the user's persistent X-Files storage; these uploads surface in the
+ * How an upload entered the sandbox (nullable column). `my_file` = copied from
+ * the user's persistent My Files storage; these uploads surface in the
  * conversation Files panel.
  */
-export const SandboxFileOriginSchema = z.enum(["x_file"]);
+export const SandboxFileOriginSchema = z.enum(["my_file"]);
 export type SandboxFileOrigin = z.infer<typeof SandboxFileOriginSchema>;
 
 export const SelectSkillSandboxSchema = createSelectSchema(
@@ -72,7 +72,7 @@ export const InsertSkillSandboxFileSchema = createInsertSchema(
 });
 
 export const SelectSkillSandboxFolderSchema = createSelectSchema(
-  schema.skillSandboxFoldersTable,
+  schema.foldersTable,
 );
 export type SkillSandboxFolder = z.infer<typeof SelectSkillSandboxFolderSchema>;
 
@@ -130,7 +130,7 @@ export type SandboxArtifactRow = {
 };
 
 /**
- * One PFS folder as the X-Files surfaces render it. `id` is null for a
+ * One PFS folder as the My Files surfaces render it. `id` is null for a
  * directory that exists on disk without a `skill_sandbox_folders` row (made by
  * hand in the storage folder).
  */
@@ -142,7 +142,7 @@ export const SandboxFolderListItemSchema = z.object({
 export type SandboxFolderListItem = z.infer<typeof SandboxFolderListItemSchema>;
 
 /**
- * One file as the X-Files surfaces render it. `id` is the artifact row id used
+ * One file as the My Files surfaces render it. `id` is the artifact row id used
  * for download via `/api/skill-sandbox/artifacts/:id`; it is null (and
  * `downloadable` false) for filesystem files that were added by hand and have
  * no row.

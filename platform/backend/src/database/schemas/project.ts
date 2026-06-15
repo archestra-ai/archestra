@@ -7,13 +7,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import skillSandboxFoldersTable from "./skill-sandbox-folder";
+import foldersTable from "./folder";
 import { team } from "./team";
 import usersTable from "./user";
 
 /**
  * A project: a named collection of chat conversations with a dedicated result
- * folder in the owner's persistent file system (PFS / X-Files). The folder is
+ * folder in the owner's persistent file system (PFS / My Files). The folder is
  * created together with the project and shares its name — project names are
  * validated with the folder-name rules for exactly that reason.
  *
@@ -40,7 +40,7 @@ const projectsTable = pgTable(
      */
     folderId: uuid("folder_id")
       .notNull()
-      .references(() => skillSandboxFoldersTable.id),
+      .references(() => foldersTable.id),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },

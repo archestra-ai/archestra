@@ -73,6 +73,7 @@ export {
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
 export { default as filesTable } from "./file";
+export { default as foldersTable } from "./folder";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
@@ -131,7 +132,6 @@ export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
 export { default as skillSandboxFilesTable } from "./skill-sandbox-file";
-export { default as skillSandboxFoldersTable } from "./skill-sandbox-folder";
 export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay-event";
 export { default as skillSandboxSkillMountsTable } from "./skill-sandbox-skill-mount";
 export {

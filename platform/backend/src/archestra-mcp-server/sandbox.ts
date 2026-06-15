@@ -221,7 +221,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
     .describe("Upload a UTF-8 text file provided inline."),
   z
     .strictObject({
-      type: z.literal("x_file"),
+      type: z.literal("my_file"),
       id: z
         .string()
         .trim()
@@ -248,7 +248,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
       message: "provide exactly one of `id` or `filename`",
     })
     .describe(
-      "Copy a file from the user's persistent storage (X-Files) into the " +
+      "Copy a file from the user's persistent storage (My Files) into the " +
         "sandbox. Find files with search_files first.",
     ),
 ]);
@@ -305,7 +305,7 @@ const SearchFilesSchema = z
       ),
   })
   .describe(
-    "Search the user's persistent file storage (X-Files): files exported " +
+    "Search the user's persistent file storage (My Files): files exported " +
       "from sandboxes across ALL conversations, plus files added by hand.",
   );
 
@@ -316,7 +316,7 @@ const SearchFilesOutputSchema = z.object({
         .string()
         .nullable()
         .describe(
-          "Persistent file id — pass to upload_file's x_file source. Null " +
+          "Persistent file id — pass to upload_file's my_file source. Null " +
             "for files added outside Archestra; reference those by filename " +
             "+ folder instead.",
         ),
@@ -555,7 +555,7 @@ const registry = defineArchestraTools([
           originalName: loaded.originalName,
           // PFS-sourced uploads are marked so the conversation Files panel
           // can show which persistent files the agent touched here.
-          origin: args.source.type === "x_file" ? "x_file" : null,
+          origin: args.source.type === "my_file" ? "my_file" : null,
         });
 
         logger.info(
@@ -581,11 +581,11 @@ const registry = defineArchestraTools([
     shortName: TOOL_SEARCH_FILES_SHORT_NAME,
     title: "Search Files",
     description:
-      "Search the user's persistent file storage (X-Files): files exported " +
+      "Search the user's persistent file storage (My Files): files exported " +
       "with download_file across ALL conversations, organized in flat " +
       "folders, plus files the user added by hand. Returns metadata only. " +
       "To work on a found file, copy it into the sandbox with upload_file's " +
-      "x_file source (by `id`, or by `filename` + `folder` when id is null). " +
+      "my_file source (by `id`, or by `filename` + `folder` when id is null). " +
       "Requires `sandbox:execute`.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
@@ -654,7 +654,7 @@ const registry = defineArchestraTools([
     title: "Save Result",
     description:
       "Save inline content directly to the user's persistent file storage " +
-      "(X-Files) and return a download URL — no sandbox roundtrip. Use it " +
+      "(My Files) and return a download URL — no sandbox roundtrip. Use it " +
       "for results you produced in the conversation itself (text, markdown, " +
       "small data files). In a project chat the file is saved into the " +
       "project's result folder. For files generated INSIDE the sandbox, use " +
@@ -967,7 +967,7 @@ async function loadUploadSource(params: {
   source: UploadSource;
   userCtx: UserContext;
   conversationId: string | undefined;
-  /** Project file scope of the conversation; confines x_file resolution. */
+  /** Project file scope of the conversation; confines my_file resolution. */
   scope: ProjectFileScope | null;
 }): Promise<LoadedUpload | { error: string }> {
   const { source, userCtx, conversationId, scope } = params;
@@ -1045,8 +1045,8 @@ async function loadUploadSource(params: {
         originalName: attachment.originalName,
       };
     }
-    case "x_file": {
-      const resolved = await skillSandboxArtifactService.resolveXFileSource({
+    case "my_file": {
+      const resolved = await skillSandboxArtifactService.resolveMyFileSource({
         organizationId: userCtx.organizationId,
         userId: userCtx.userId,
         id: source.id,
@@ -1066,7 +1066,7 @@ async function loadUploadSource(params: {
             xFileRef: ref,
             reason: resolved.error,
           },
-          "[Sandbox] rejected x_file upload",
+          "[Sandbox] rejected my_file upload",
         );
         switch (resolved.error) {
           case "ambiguous":

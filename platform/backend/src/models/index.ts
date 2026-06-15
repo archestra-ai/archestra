@@ -25,6 +25,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as FileModel } from "./file";
+export { default as FolderModel, SandboxFolderExistsError } from "./folder";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
@@ -76,10 +77,6 @@ export {
   SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
-export {
-  default as SkillSandboxFolderModel,
-  SandboxFolderExistsError,
-} from "./skill-sandbox-folder";
 export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";

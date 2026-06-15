@@ -11,8 +11,8 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   FileModel,
+  FolderModel,
   SkillModel,
-  SkillSandboxFolderModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -833,7 +833,7 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 });
 
-describe("PFS tools (search_files, x_file source, download_file folder)", () => {
+describe("PFS tools (search_files, my_file source, download_file folder)", () => {
   let agent: Agent;
   let organizationId: string;
   let userId: string;
@@ -909,7 +909,7 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
     test("lists and filters the user's persistent files", async () => {
       await seedPfsArtifact("q2-report.txt");
       await seedPfsArtifact("notes.txt");
-      await SkillSandboxFolderModel.create({
+      await FolderModel.create({
         organizationId,
         userId,
         name: "reports",
@@ -979,7 +979,7 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
     });
   });
 
-  describe("upload_file x_file source", () => {
+  describe("upload_file my_file source", () => {
     test("loads PFS bytes by id and marks the upload origin", async () => {
       const ctx = await makeConversationCtx();
       const artifact = await seedPfsArtifact("pull-me.txt", "pfs-bytes");
@@ -997,14 +997,14 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
         TOOL_UPLOAD_FILE_FULL_NAME,
         {
           path: "pull-me.txt",
-          source: { type: "x_file", id: artifact.id },
+          source: { type: "my_file", id: artifact.id },
         },
         ctx,
       );
       expect(result.isError).toBe(false);
       expect(spy).toHaveBeenCalledOnce();
       const call = spy.mock.calls[0][0];
-      expect(call.origin).toBe("x_file");
+      expect(call.origin).toBe("my_file");
       expect(call.data.toString()).toBe("pfs-bytes");
       expect(call.originalName).toBe("pull-me.txt");
     });
@@ -1016,7 +1016,7 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
         TOOL_UPLOAD_FILE_FULL_NAME,
         {
           path: "x.txt",
-          source: { type: "x_file", filename: "does-not-exist.txt" },
+          source: { type: "my_file", filename: "does-not-exist.txt" },
         },
         ctx,
       );
@@ -1029,7 +1029,7 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
       const ctx = await makeConversationCtx();
       const result = await executeArchestraTool(
         TOOL_UPLOAD_FILE_FULL_NAME,
-        { path: "x.txt", source: { type: "x_file" } },
+        { path: "x.txt", source: { type: "my_file" } },
         ctx,
       );
       expect(result.isError).toBe(true);
@@ -1101,7 +1101,7 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
   });
 });
 
-describe("project file scope (save_result, scoped search/x_file)", () => {
+describe("project file scope (save_result, scoped search/my_file)", () => {
   let agent: Agent;
   let organizationId: string;
   let userId: string;
@@ -1290,7 +1290,7 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
     expect(textOf(wrongFolder)).toContain("searchable");
   });
 
-  test("x_file uploads in a project chat are confined to the project folder", async () => {
+  test("my_file uploads in a project chat are confined to the project folder", async () => {
     const { project, ctx } = await makeProjectChatCtx("confined");
     const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
@@ -1338,7 +1338,7 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
 
     const ok = await executeArchestraTool(
       TOOL_UPLOAD_FILE_FULL_NAME,
-      { path: "in.txt", source: { type: "x_file", id: inside.id } },
+      { path: "in.txt", source: { type: "my_file", id: inside.id } },
       ctx,
     );
     expect(ok.isError).toBe(false);
@@ -1346,7 +1346,7 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
 
     const denied = await executeArchestraTool(
       TOOL_UPLOAD_FILE_FULL_NAME,
-      { path: "out.txt", source: { type: "x_file", id: outside.id } },
+      { path: "out.txt", source: { type: "my_file", id: outside.id } },
       ctx,
     );
     expect(denied.isError).toBe(true);

@@ -66,7 +66,7 @@ const skillSandboxFilesTable = pgTable(
     /** Upload bytes; always present (uploads are Postgres-only). */
     data: bytea("data").notNull(),
     /**
-     * How an upload entered the sandbox: 'x_file' = copied from the user's
+     * How an upload entered the sandbox: 'my_file' = copied from the user's
      * persistent My Files storage (these surface in the conversation Files
      * panel). Null for ordinary uploads.
      */

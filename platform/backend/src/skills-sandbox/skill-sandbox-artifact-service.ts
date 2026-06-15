@@ -1,8 +1,8 @@
 import {
   FileModel,
+  FolderModel,
   ProjectModel,
   ProjectShareModel,
-  SkillSandboxFolderModel,
 } from "@/models";
 import type {
   PersistedFile,
@@ -13,19 +13,19 @@ import { getSandboxFileStorage } from "./file-storage";
 import { SandboxFileMissingError } from "./file-storage-filesystem";
 
 /** Bytes + metadata of a PFS file resolved for sandbox upload. */
-type ResolvedXFile = {
+type ResolvedMyFile = {
   data: Buffer;
   mimeType: string;
   originalName: string;
 };
 
-/** Why an x_file reference failed to resolve. */
-type XFileResolutionError = {
+/** Why an my_file reference failed to resolve. */
+type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project_folder";
 };
 
 /**
- * The user's persistent file system (PFS / X-Files): listing, folders, and
+ * The user's persistent file system (PFS / My Files): listing, folders, and
  * byte access for the upload path. Rows live in the `files` table; the
  * storage router decides what a listing means per backend (db = the rows;
  * filesystem = the on-disk directory tree).
@@ -59,7 +59,7 @@ class SkillSandboxArtifactService {
   }> {
     const [rows, folderRows] = await Promise.all([
       FileModel.listForUser(params),
-      SkillSandboxFolderModel.listByUser(params),
+      FolderModel.listByUser(params),
     ]);
     return getSandboxFileStorage().listUserFiles({
       userId: params.userId,
@@ -85,9 +85,7 @@ class SkillSandboxArtifactService {
     if (!file || file.organizationId !== params.organizationId) return null;
     if (file.userId !== params.userId) {
       const folder = file.folderId
-        ? (await SkillSandboxFolderModel.findByIds([file.folderId])).get(
-            file.folderId,
-          )
+        ? (await FolderModel.findByIds([file.folderId])).get(file.folderId)
         : undefined;
       if (!folder || folder.organizationId !== params.organizationId) {
         return null;
@@ -130,13 +128,13 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Resolve an `x_file` upload source — a reference to a PFS file by row id or
+   * Resolve an `my_file` upload source — a reference to a PFS file by row id or
    * by location (`filename` + optional `folder`) — to its bytes. Location
    * resolution goes through the same listing the user sees, so it reaches
    * orphans (filesystem files with no row) too; a duplicated filename is
    * reported as ambiguous rather than picking one silently.
    */
-  async resolveXFileSource(params: {
+  async resolveMyFileSource(params: {
     organizationId: string;
     userId: string;
     id?: string;
@@ -147,7 +145,7 @@ class SkillSandboxArtifactService {
       folderName: string;
       folderOwnerUserId: string;
     } | null;
-  }): Promise<ResolvedXFile | XFileResolutionError> {
+  }): Promise<ResolvedMyFile | MyFileResolutionError> {
     const scope = params.scope ?? null;
 
     if (params.id) {

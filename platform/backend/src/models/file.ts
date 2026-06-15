@@ -118,19 +118,19 @@ class FileModel {
         storageProvider: schema.filesTable.storageProvider,
         objectKey: schema.filesTable.objectKey,
         folderId: schema.filesTable.folderId,
-        folderName: schema.skillSandboxFoldersTable.name,
+        folderName: schema.foldersTable.name,
       })
       .from(schema.filesTable)
       .leftJoin(
-        schema.skillSandboxFoldersTable,
-        eq(schema.filesTable.folderId, schema.skillSandboxFoldersTable.id),
+        schema.foldersTable,
+        eq(schema.filesTable.folderId, schema.foldersTable.id),
       )
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           or(
             eq(schema.filesTable.userId, params.userId),
-            eq(schema.skillSandboxFoldersTable.userId, params.userId),
+            eq(schema.foldersTable.userId, params.userId),
           ),
         ),
       )
@@ -154,12 +154,12 @@ class FileModel {
         storageProvider: schema.filesTable.storageProvider,
         objectKey: schema.filesTable.objectKey,
         folderId: schema.filesTable.folderId,
-        folderName: schema.skillSandboxFoldersTable.name,
+        folderName: schema.foldersTable.name,
       })
       .from(schema.filesTable)
       .leftJoin(
-        schema.skillSandboxFoldersTable,
-        eq(schema.filesTable.folderId, schema.skillSandboxFoldersTable.id),
+        schema.foldersTable,
+        eq(schema.filesTable.folderId, schema.foldersTable.id),
       )
       .where(
         and(

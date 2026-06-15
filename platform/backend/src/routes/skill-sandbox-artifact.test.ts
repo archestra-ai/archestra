@@ -248,7 +248,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
   });
 });
 
-describe("X-Files list routes", () => {
+describe("My Files list routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -405,7 +405,7 @@ describe("project folder cross-user access", () => {
   }) => {
     // `user` owns the project/folder; `member` produced a file into it.
     const { projectService } = await import("@/services/project");
-    const { SkillSandboxFolderModel } = await import("@/models");
+    const { FolderModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId: user.id,
@@ -420,9 +420,9 @@ describe("project folder cross-user access", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const folder = (
-      await SkillSandboxFolderModel.findByIds([project.folderId])
-    ).get(project.folderId);
+    const folder = (await FolderModel.findByIds([project.folderId])).get(
+      project.folderId,
+    );
     const produced = await seedArtifact({
       sandboxId: memberSandbox.id,
       userId: member.id, // author
@@ -435,7 +435,7 @@ describe("project folder cross-user access", () => {
       folderName: folder?.name ?? null,
     });
 
-    // listing: the folder owner's X-Files include it
+    // listing: the folder owner's My Files include it
     const files = await app.inject({
       method: "GET",
       url: "/api/skill-sandbox/files",

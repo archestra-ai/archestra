@@ -8,16 +8,16 @@ import {
 import usersTable from "./user";
 
 /**
- * A user's folders in their persistent X-Files storage (PFS). Flat — no
+ * A user's folders in their persistent My Files storage (PFS). Flat — no
  * nesting. In filesystem storage mode a folder is also a real directory under
  * `<root>/<userId>/<name>`; in db mode this table is the only representation
  * (which is what lets empty folders exist there).
  *
- * Files reference folders via `skill_sandbox_files.folder_id` (SET NULL on
- * delete — defensive; there is no folder delete API yet).
+ * Files reference folders via `files.folder_id` (SET NULL on delete —
+ * defensive; there is no folder delete API yet).
  */
-const skillSandboxFoldersTable = pgTable(
-  "skill_sandbox_folders",
+const foldersTable = pgTable(
+  "folders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
@@ -31,11 +31,8 @@ const skillSandboxFoldersTable = pgTable(
   (table) => [
     // one folder name per user — names are the cross-provider identity
     // (filesystem directories have no row id to match on).
-    uniqueIndex("skill_sandbox_folders_user_name_uidx").on(
-      table.userId,
-      table.name,
-    ),
+    uniqueIndex("folders_user_name_uidx").on(table.userId, table.name),
   ],
 );
 
-export default skillSandboxFoldersTable;
+export default foldersTable;

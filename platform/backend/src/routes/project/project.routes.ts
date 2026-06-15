@@ -151,7 +151,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Delete a project (owner only). Its chats and result folder " +
           "survive — chats become ordinary conversations, the folder stays " +
-          "browsable in X-Files.",
+          "browsable in My Files.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

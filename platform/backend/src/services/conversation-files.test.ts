@@ -152,7 +152,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     sizeBytes: 1,
     data: Buffer.from("a"),
   });
-  // sandbox uploads (x_file pulls included) are not PFS rows — never listed
+  // sandbox uploads (my_file pulls included) are not PFS rows — never listed
   await SkillSandboxReplayEventModel.appendUpload({
     sandboxId: convSandbox.id,
     userId: user.id,
@@ -161,7 +161,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     originalName: "q2.csv",
     sizeBytes: 4,
     data: Buffer.from("a,b\n"),
-    origin: "x_file",
+    origin: "my_file",
   });
 
   // a PFS file produced in some OTHER conversation

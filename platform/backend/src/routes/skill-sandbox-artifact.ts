@@ -148,7 +148,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetSkillSandboxFiles,
         description:
-          "List the calling user's persistent files (X-Files): folders and " +
+          "List the calling user's persistent files (My Files): folders and " +
           "artifact files across all conversations, plus the result folders " +
           "of projects shared with them.",
         tags: ["Skills"],

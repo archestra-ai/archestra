@@ -251,7 +251,7 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 
 exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 {
-  "description": "Save inline content directly to the user's persistent file storage (X-Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved into the project's result folder. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved into the project's result folder. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -290,11 +290,11 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "Search the user's persistent file storage (X-Files): files exported with download_file across ALL conversations, organized in flat folders, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's x_file source (by \`id\`, or by \`filename\` + \`folder\` when id is null). Requires \`sandbox:execute\`.",
+  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, organized in flat folders, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\` + \`folder\` when id is null). Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Search the user's persistent file storage (X-Files): files exported from sandboxes across ALL conversations, plus files added by hand.",
+    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations, plus files added by hand.",
     "properties": {
       "folder": {
         "description": "Restrict matches to one persistent-storage folder (exact name). Omit to search the top level and every folder.",
@@ -468,7 +468,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
           },
           {
             "additionalProperties": false,
-            "description": "Copy a file from the user's persistent storage (X-Files) into the sandbox. Find files with search_files first.",
+            "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
             "properties": {
               "filename": {
                 "description": "Exact filename of a persistent file. Use together with \`folder\`; the only way to reference files that have no id.",
@@ -486,7 +486,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
                 "type": "string",
               },
               "type": {
-                "const": "x_file",
+                "const": "my_file",
                 "type": "string",
               },
             },

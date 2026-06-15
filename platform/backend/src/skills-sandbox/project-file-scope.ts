@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { SkillSandboxFolderModel } from "@/models";
+import { FolderModel } from "@/models";
 import { SkillSandboxError } from "./types";
 
 /** The PFS scope a project imposes on every file tool used in its chats. */
@@ -39,7 +39,7 @@ export async function resolveProjectFileScope(
     .where(eq(schema.projectsTable.id, conversation.projectId));
   if (!project) return null;
 
-  const folders = await SkillSandboxFolderModel.findByIds([project.folderId]);
+  const folders = await FolderModel.findByIds([project.folderId]);
   const folder = folders.get(project.folderId);
   if (!folder) {
     throw new SkillSandboxError(

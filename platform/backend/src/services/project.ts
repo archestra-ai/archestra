@@ -1,9 +1,9 @@
 import {
+  FolderModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
   SandboxFolderExistsError,
-  SkillSandboxFolderModel,
 } from "@/models";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { validateSandboxFolderName } from "@/skills-sandbox/folder-name";
@@ -44,7 +44,7 @@ class ProjectService {
         userId: params.userId,
         name,
       });
-      const folder = await SkillSandboxFolderModel.create({
+      const folder = await FolderModel.create({
         organizationId: params.organizationId,
         userId: params.userId,
         name,
@@ -71,7 +71,7 @@ class ProjectService {
     } catch (error) {
       // roll the folder row back so a failed create leaves nothing behind
       // (no bytes exist yet; the empty directory is harmless and adoptable).
-      await SkillSandboxFolderModel.deleteById(folderId).catch(() => {});
+      await FolderModel.deleteById(folderId).catch(() => {});
       if (error instanceof ProjectNameExistsError) {
         throw new ApiError(409, error.message);
       }
@@ -86,7 +86,7 @@ class ProjectService {
     const projects = await ProjectShareModel.listAccessibleProjects(params);
     const [counts, folders] = await Promise.all([
       ProjectModel.countConversations(projects.map((p) => p.id)),
-      SkillSandboxFolderModel.findByIds(projects.map((p) => p.folderId)),
+      FolderModel.findByIds(projects.map((p) => p.folderId)),
     ]);
     return projects.map((p) => ({
       id: p.id,
@@ -109,7 +109,7 @@ class ProjectService {
     const [share, counts, folders] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
-      SkillSandboxFolderModel.findByIds([project.folderId]),
+      FolderModel.findByIds([project.folderId]),
     ]);
     const isOwner = project.userId === params.userId;
     return {
@@ -179,7 +179,7 @@ class ProjectService {
     userId: string;
   }): Promise<SandboxFileListItem[]> {
     const project = await this.requireReadable(params);
-    const folders = await SkillSandboxFolderModel.findByIds([project.folderId]);
+    const folders = await FolderModel.findByIds([project.folderId]);
     const folderName = folders.get(project.folderId)?.name;
     if (!folderName) return [];
     const { files } = await skillSandboxArtifactService.listAllForUser({
@@ -205,7 +205,7 @@ class ProjectService {
       await ProjectShareModel.listAccessibleProjects(params)
     ).filter((p) => p.userId !== params.userId);
     if (shared.length === 0) return { folders: [], files: [] };
-    const folderRows = await SkillSandboxFolderModel.findByIds(
+    const folderRows = await FolderModel.findByIds(
       shared.map((p) => p.folderId),
     );
 

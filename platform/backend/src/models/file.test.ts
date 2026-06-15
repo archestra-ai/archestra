@@ -54,7 +54,7 @@ describe("FileModel", () => {
 
     // a result folder owned by folderOwner (project-chat shape) …
     const [folder] = await db
-      .insert(schema.skillSandboxFoldersTable)
+      .insert(schema.foldersTable)
       .values({
         organizationId: org.id,
         userId: folderOwner.id,

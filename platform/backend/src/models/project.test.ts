@@ -1,8 +1,8 @@
 import {
+  FolderModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
-  SkillSandboxFolderModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -11,7 +11,7 @@ async function makeProject(params: {
   userId: string;
   name: string;
 }) {
-  const folder = await SkillSandboxFolderModel.create(params);
+  const folder = await FolderModel.create(params);
   return ProjectModel.create({ ...params, folderId: folder.id });
 }
 
@@ -67,7 +67,7 @@ describe("ProjectModel", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeProject({ organizationId: org.id, userId: user.id, name: "p" });
-    const folder2 = await SkillSandboxFolderModel.create({
+    const folder2 = await FolderModel.create({
       organizationId: org.id,
       userId: user.id,
       name: "p2",
@@ -117,7 +117,7 @@ describe("ProjectModel", () => {
       .where(eq(schema.conversationsTable.id, conv.id));
     expect(after.projectId).toBeNull();
     expect(
-      await SkillSandboxFolderModel.findByName({
+      await FolderModel.findByName({
         organizationId: org.id,
         userId: user.id,
         name: "doomed",

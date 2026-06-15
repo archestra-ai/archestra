@@ -2,11 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
-import {
-  FileModel,
-  SkillSandboxFolderModel,
-  SkillSandboxModel,
-} from "@/models";
+import { FileModel, FolderModel, SkillSandboxModel } from "@/models";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -121,7 +117,7 @@ describe("skillSandboxArtifactService", () => {
   });
 });
 
-describe("skillSandboxArtifactService.resolveXFileSource", () => {
+describe("skillSandboxArtifactService.resolveMyFileSource", () => {
   test("resolves by id, scoped to the owning user (db mode)", async ({
     makeUser,
     makeOrganization,
@@ -141,7 +137,7 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       filename: "data.txt",
     });
 
-    const resolved = await skillSandboxArtifactService.resolveXFileSource({
+    const resolved = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: user.id,
       id: artifact.id,
@@ -153,7 +149,7 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
     expect("data" in resolved && resolved.data.toString()).toBe("abc");
 
     const stranger = await makeUser({ email: "xfile-stranger@test.com" });
-    const denied = await skillSandboxArtifactService.resolveXFileSource({
+    const denied = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: stranger.id,
       id: artifact.id,
@@ -180,7 +176,7 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       filename: "report.txt",
     });
 
-    const byName = await skillSandboxArtifactService.resolveXFileSource({
+    const byName = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: user.id,
       filename: "report.txt",
@@ -193,14 +189,14 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       sandboxId: sandbox.id,
       filename: "report.txt",
     });
-    const dup = await skillSandboxArtifactService.resolveXFileSource({
+    const dup = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: user.id,
       filename: "report.txt",
     });
     expect(dup).toEqual({ error: "ambiguous" });
 
-    const missing = await skillSandboxArtifactService.resolveXFileSource({
+    const missing = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: user.id,
       filename: "nope.txt",
@@ -230,7 +226,7 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       const user = await makeUser();
       const org = await makeOrganization();
       // folders exist as rows (created by projects); the dir scan is row-driven
-      await SkillSandboxFolderModel.create({
+      await FolderModel.create({
         organizationId: org.id,
         userId: user.id,
         name: "drop",
@@ -244,7 +240,7 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
         "x,y\n1,2\n",
       );
 
-      const resolved = await skillSandboxArtifactService.resolveXFileSource({
+      const resolved = await skillSandboxArtifactService.resolveMyFileSource({
         organizationId: org.id,
         userId: user.id,
         filename: "manual.csv",

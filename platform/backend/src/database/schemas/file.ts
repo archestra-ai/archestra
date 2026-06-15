@@ -11,8 +11,8 @@ import {
 } from "drizzle-orm/pg-core";
 import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
 import conversationsTable from "./conversation";
+import foldersTable from "./folder";
 import skillSandboxesTable from "./skill-sandbox";
-import skillSandboxFoldersTable from "./skill-sandbox-folder";
 import usersTable from "./user";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -50,7 +50,7 @@ const filesTable = pgTable(
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
     /** PFS folder the file sits in; null = root. */
-    folderId: uuid("folder_id").references(() => skillSandboxFoldersTable.id, {
+    folderId: uuid("folder_id").references(() => foldersTable.id, {
       onDelete: "set null",
     }),
     /** Conversation the file was produced in, when known (chat Files panel). */

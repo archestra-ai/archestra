@@ -494,9 +494,9 @@ describe("SkillSandboxReplayEventModel (upload origin)", () => {
       originalName: "pulled.txt",
       sizeBytes: 5,
       data: Buffer.from("bytes"),
-      origin: "x_file",
+      origin: "my_file",
     });
-    expect(row?.origin).toBe("x_file");
+    expect(row?.origin).toBe("my_file");
     expect(row?.kind).toBe("upload");
   });
 });

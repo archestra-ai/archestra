@@ -1,4 +1,4 @@
-import { SkillSandboxFolderModel } from "@/models";
+import { FolderModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -47,7 +47,7 @@ describe("POST /api/projects", () => {
       visibility: null,
     });
 
-    const folder = await SkillSandboxFolderModel.findByName({
+    const folder = await FolderModel.findByName({
       organizationId,
       userId: user.id,
       name: "research",
@@ -78,7 +78,7 @@ describe("POST /api/projects", () => {
   });
 
   test("a name colliding with an existing folder is a 409 too", async () => {
-    await SkillSandboxFolderModel.create({
+    await FolderModel.create({
       organizationId,
       userId: user.id,
       name: "taken",

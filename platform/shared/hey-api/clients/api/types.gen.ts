@@ -27636,9 +27636,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
                 }> | null;
             };
         }>;
-        created: number;
+        created?: number;
         model: string;
-        object: 'chat.completion';
+        object?: string;
         server_tier?: string;
         system_fingerprint?: string | null;
         /**
@@ -28083,9 +28083,9 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
                 }> | null;
             };
         }>;
-        created: number;
+        created?: number;
         model: string;
-        object: 'chat.completion';
+        object?: string;
         server_tier?: string;
         system_fingerprint?: string | null;
         /**
@@ -31971,9 +31971,9 @@ export type GetInteractionsResponses = {
                         }> | null;
                     };
                 }>;
-                created: number;
+                created?: number;
                 model: string;
-                object: 'chat.completion';
+                object?: string;
                 server_tier?: string;
                 system_fingerprint?: string | null;
                 /**
@@ -35359,9 +35359,9 @@ export type GetInteractionResponses = {
                     }> | null;
                 };
             }>;
-            created: number;
+            created?: number;
             model: string;
-            object: 'chat.completion';
+            object?: string;
             server_tier?: string;
             system_fingerprint?: string | null;
             /**

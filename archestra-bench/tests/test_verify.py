@@ -6,6 +6,7 @@ interpreter (no deps), so a green outcome proves the harness staged everything c
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tasks import Task, Verifier
@@ -59,6 +60,34 @@ def test_output():
         assert f.read() == bytes(range(256))
 """
     outcome = run_verifier(_task(tmp_path, verifier), b"{}", artifact_bytes=bytes(range(256)))
+    assert outcome.passed, outcome.stdout
+
+
+def test_state_bytes_staged_and_readable(tmp_path: Path) -> None:
+    verifier = """
+import json, os
+def test_state():
+    state = json.load(open(os.environ["BENCH_STATE"]))
+    assert state["rest"]["/api/skills"]["data"] == [{"name": "x"}]
+    assert state["tool_calls"] == [{"name": "archestra__run_command", "input": {"command": "ls"}}]
+"""
+    state = json.dumps(
+        {
+            "rest": {"/api/skills": {"data": [{"name": "x"}]}},
+            "tool_calls": [{"name": "archestra__run_command", "input": {"command": "ls"}}],
+        }
+    ).encode("utf-8")
+    outcome = run_verifier(_task(tmp_path, verifier), b"{}", state_bytes=state)
+    assert outcome.passed, outcome.stdout
+
+
+def test_no_state_means_no_state_env(tmp_path: Path) -> None:
+    verifier = """
+import os
+def test_env():
+    assert "BENCH_STATE" not in os.environ
+"""
+    outcome = run_verifier(_task(tmp_path, verifier), b"{}")
     assert outcome.passed, outcome.stdout
 
 

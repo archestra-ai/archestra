@@ -16,7 +16,7 @@ import pytest
 
 from archestra_client import ArchestraApiError
 from eval_client import EvalClient
-from run import _resolve_artifact, _RunArtifacts
+from run import _capture_state, _resolve_artifact, _RunArtifacts
 from tasks import Task, Verifier
 
 _BINARY = bytes(range(256))
@@ -52,6 +52,13 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/chat/conversations/dup/files":
             self._json({"generated": [_generated("pi.zip"), _generated("pi.zip")], "attachments": []})
         elif self.path == "/api/chat/conversations/boom/files":
+            self.send_error(500)
+        elif self.path == "/api/skills?search=prime-counter-tok&limit=100":
+            self._json({"data": [{"name": "prime-counter-tok", "sourceType": "manual", "fileCount": 2}],
+                        "pagination": {"total": 1}})
+        elif self.path == "/api/agents/AG/tools":
+            self._json({"items": [{"name": "archestra__run_command"}]})
+        elif self.path == "/api/state-boom":
             self.send_error(500)
         else:
             self.send_error(404)
@@ -100,3 +107,26 @@ def test_resolve_artifact_backend_error_propagates(client: EvalClient, tmp_path:
     artifacts = _RunArtifacts(tmp_path / "art")
     with pytest.raises(ArchestraApiError):
         _resolve_artifact(client, "boom", _task(), b'{"artifact": "pi.zip"}', artifacts, {})
+
+
+def _state_task(rest: tuple[str, ...]) -> Task:
+    return Task(id="t", dir=Path("."), stages=(), result_schema={}, verifier=Verifier(), state_rest=rest)
+
+
+def test_capture_state_expands_paths_and_bundles(client: EvalClient, tmp_path: Path) -> None:
+    artifacts = _RunArtifacts(tmp_path / "st")
+    paths: dict = {}
+    task = _state_task(("/api/skills?search=prime-counter-{{cell}}&limit=100", "/api/agents/{{agent_id}}/tools"))
+    invocations = [{"name": "archestra__run_command", "input": {"command": "python /skills/x/count.py"}}]
+    data = _capture_state(client, task, {"cell": "tok", "agent_id": "AG"}, invocations, artifacts, paths)
+    bundle = json.loads(data)
+    assert bundle["rest"]["/api/skills?search=prime-counter-tok&limit=100"]["data"][0]["name"] == "prime-counter-tok"
+    assert bundle["rest"]["/api/agents/AG/tools"]["items"][0]["name"] == "archestra__run_command"
+    assert bundle["tool_calls"] == invocations
+    assert Path(paths["state"]).read_bytes() == data
+
+
+def test_capture_state_backend_error_propagates(client: EvalClient, tmp_path: Path) -> None:
+    artifacts = _RunArtifacts(tmp_path / "st")
+    with pytest.raises(ArchestraApiError):
+        _capture_state(client, _state_task(("/api/state-boom",)), {"cell": "x", "agent_id": "y"}, [], artifacts, {})

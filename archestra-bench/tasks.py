@@ -31,6 +31,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 import tomlconf
 
@@ -83,6 +84,7 @@ class Task:
     verifier: Verifier
     artifact_key: str | None = None  # result property naming the produced artifact filename
     max_format_attempts: int = 3  # submit_result self-correction budget
+    state_rest: tuple[str, ...] = ()  # backend REST GET paths to snapshot into BENCH_STATE
 
     @property
     def inputs_dir(self) -> Path:
@@ -121,6 +123,8 @@ def load_task(task_dir: Path) -> Task:
         raise SystemExit(f"{ctx}: max_format_attempts must be >= 1, got {max_attempts}")
 
     verifier = _verifier(tomlconf.table(data, "verifier", ctx, default={}), f"{ctx} [verifier]", task_dir)
+    state = tomlconf.table(data, "state", ctx, default={})
+    state_rest = tuple(_state_path(p, f"{ctx} [state]") for p in tomlconf.strs(state, "rest", f"{ctx} [state]"))
 
     return Task(
         id=task_id,
@@ -130,7 +134,24 @@ def load_task(task_dir: Path) -> Task:
         verifier=verifier,
         artifact_key=tomlconf.opt_str(data, "artifact_key", ctx),
         max_format_attempts=max_attempts,
+        state_rest=state_rest,
     )
+
+
+def _state_path(path: str, ctx: str) -> str:
+    """A state-capture entry must be a relative backend API path the harness GETs after the run.
+
+    Reject anything that could escape the backend or the API surface: an absolute URL (scheme/host),
+    a path outside `/api/`, or a `..` traversal. Query strings and the runtime `{{cell}}`/`{{agent_id}}`
+    placeholders are allowed -- they're substituted at capture time (see run.py)."""
+    parts = urlsplit(path)
+    if parts.scheme or parts.netloc:
+        raise SystemExit(f"{ctx}: rest path {path!r} must be a relative /api/ path, not an absolute URL")
+    if not parts.path.startswith("/api/"):
+        raise SystemExit(f"{ctx}: rest path {path!r} must start with /api/")
+    if ".." in unquote(parts.path).split("/"):  # unquote first: reject `/api/../x` and `/api/%2e%2e/x`
+        raise SystemExit(f"{ctx}: rest path {path!r} must not contain a '..' segment")
+    return path
 
 
 def _stage(row: Mapping[str, Any], ctx: str, task_dir: Path) -> Stage:

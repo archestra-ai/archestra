@@ -62,6 +62,7 @@ class ChatRunResult:
 
     text: str  # accumulated final assistant text
     tool_calls: list[str] = field(default_factory=list)  # tool names the model invoked, in order
+    tool_invocations: list[dict[str, JsonValue]] = field(default_factory=list)  # {name, input} per call
     finish_reason: str | None = None
     total_tokens: int | None = None
     stream_error: str | None = None  # an error event surfaced mid-stream (run did not finish clean)
@@ -157,6 +158,14 @@ class EvalClient(ArchestraClient):
 
     def unassign_tool(self, agent_id: str, tool_id: str) -> None:
         self._request("DELETE", f"/api/agents/{agent_id}/tools/{tool_id}")
+
+    def get_json(self, path: str) -> JsonValue:
+        """authenticated GET returning the decoded JSON body, for out-of-band state capture.
+
+        the path is a relative backend route (validated at task load, see tasks._state_path); the
+        decoded value is whatever the endpoint returns (a paginated `{data, pagination}`, an
+        `{items}` list, etc.) and is handed to the verifier verbatim as BENCH_STATE."""
+        return self._request("GET", path)
 
     # --- conversations & chat --------------------------------------------------------------
 
@@ -283,6 +292,7 @@ def _apply_chat_event(result: ChatRunResult, event: dict[str, JsonValue]) -> Non
             name = event.get("toolName")
             if isinstance(name, str):
                 result.tool_calls.append(name)
+                result.tool_invocations.append({"name": name, "input": event.get("input")})
         case "finish" | "finish-step":
             reason = event.get("finishReason")
             if isinstance(reason, str):

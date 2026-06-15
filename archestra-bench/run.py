@@ -18,6 +18,7 @@ Results are written per cell and aggregated by environment and by task.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -61,6 +62,8 @@ _DEFAULT_MODEL = "claude-sonnet-4-6"
 _DEFAULT_PROVIDER = "anthropic"
 _BENCH_MCP_NAME = "benchmark"
 _SUBMIT_TOOL_SUFFIX = "__submit_result"
+_STATE_NAME = "state.json"
+_RUNTIME_PLACEHOLDER = re.compile(r"\{\{(cell|agent_id)\}\}")
 
 _REQUIRED_TOOL_SHORT_NAMES = (
     "artifact_write",
@@ -146,7 +149,7 @@ def _run_env(
         )
         agent_id = _ensure_agent(client, env_cfg.agent_name, env_cfg.agent_system_prompt)
         client.enable_skill_defaults()
-        submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url())
+        submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url(), env_cfg.tools)
         for sref in env_cfg.skills:
             seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
         if env_cfg.mcps:
@@ -229,10 +232,11 @@ def _run_one(
     artifacts.append("conversation_created", {"conversation_id": conversation_id})
     artifacts.write_run(metadata)
 
+    runtime = {"cell": _cell_token(cell_key, model_name), "agent_id": agent_id}
     run = ChatRunResult(text="")
     stage_error: str | None = None
     for index, stage in enumerate(task.stages):
-        stage_error = _drive_stage(client, conversation_id, stage, task, run, artifacts)
+        stage_error = _drive_stage(client, conversation_id, stage, task, run, artifacts, runtime)
         if stage_error is not None:
             break
         artifacts.append("stage_complete", {"stage": index, "finish_reason": run.finish_reason})
@@ -271,7 +275,17 @@ def _run_one(
                 artifacts, metadata, run=run,
             )
 
-    outcome = run_verifier(task, submission.payload_bytes, artifact_bytes=artifact_bytes)
+    state_bytes: bytes | None = None
+    if task.state_rest:
+        try:
+            state_bytes = _capture_state(client, task, runtime, run.tool_invocations, artifacts, artifact_paths)
+        except ArchestraApiError as exc:
+            return _agent_error(
+                env_id, task, model_name, f"state capture failed: {_api_error_text(exc)}",
+                artifacts, metadata, run=run,
+            )
+
+    outcome = run_verifier(task, submission.payload_bytes, artifact_bytes=artifact_bytes, state_bytes=state_bytes)
     _save_verifier_artifacts(artifacts, artifact_paths, outcome)
     metadata["verifier_exit_code"] = outcome.exit_code
     metadata["verifier_timed_out"] = outcome.timed_out
@@ -327,6 +341,30 @@ def _resolve_artifact(
     return data
 
 
+def _capture_state(
+    client: EvalClient,
+    task: Task,
+    runtime: dict[str, str],
+    tool_invocations: list[dict[str, JsonValue]],
+    artifacts: _RunArtifacts,
+    artifact_paths: dict[str, JsonValue],
+) -> bytes:
+    """Snapshot the task's declared REST paths plus the run's tool calls into the BENCH_STATE bundle.
+
+    Each `state_rest` template is resolved against the run's `{{cell}}`/`{{agent_id}}` values, GET as
+    JSON with the privileged client, and bundled with the ordered tool invocations (name + input) so
+    the isolated verifier can assert backend state *and* what the agent actually did. A backend HTTP
+    error here is infra, not the agent's fault -- ArchestraApiError propagates to an agent_error."""
+    rest: dict[str, JsonValue] = {}
+    for template in task.state_rest:
+        path = _expand_runtime(template, runtime)
+        rest[path] = client.get_json(path)
+    bundle: dict[str, JsonValue] = {"rest": rest, "tool_calls": list(tool_invocations)}
+    data = json.dumps(bundle, allow_nan=False, sort_keys=True).encode("utf-8")
+    artifact_paths["state"] = str(artifacts.write_bytes(_STATE_NAME, data))
+    return data
+
+
 def _drive_stage(
     client: EvalClient,
     conversation_id: str,
@@ -334,6 +372,7 @@ def _drive_stage(
     task: Task,
     run: ChatRunResult,
     artifacts: _RunArtifacts,
+    runtime: dict[str, str],
 ) -> str | None:
     """Send one stage's user message and drain the chat stream to EOF, folding events into `run`.
 
@@ -346,9 +385,10 @@ def _drive_stage(
         )
         for f in stage.files
     )
+    text = _expand_runtime(stage.text, runtime)
     stream_parse_error: str | None = None
     try:
-        for record in client.stream_chat_records(conversation_id, text=stage.text, files=files):
+        for record in client.stream_chat_records(conversation_id, text=text, files=files):
             artifacts.append_stream(record)
             if record.kind == "event" and record.event is not None:
                 _apply_chat_event(run, record.event)
@@ -372,31 +412,61 @@ def _ensure_agent(client: EvalClient, name: str, system_prompt: str) -> str:
     return _require_str(created, "id")
 
 
-def _setup_agent_tools(client: EvalClient, agent_id: str, bench_url: str) -> str:
-    """Assign the built-in sandbox tools (bulk-assign) and the benchmark `submit_result` tool
-    (assigned at MCP install time, since remote MCP tools cannot be bulk-assigned) to the eval
-    agent, then assert the surface. Returns the namespaced submit_result tool name."""
-    required_ids = _resolve_required_tool_ids(client)
-    _assign_tools(client, agent_id, list(required_ids.values()))
+def _setup_agent_tools(client: EvalClient, agent_id: str, bench_url: str, extra_tools: tuple[str, ...]) -> str:
+    """Assign the base sandbox tools plus the env's extra `archestra__*` tools (bulk-assign) and the
+    benchmark `submit_result` tool (assigned at MCP install time, since remote MCP tools cannot be
+    bulk-assigned) to the eval agent, then assert the surface. Returns the submit_result tool name.
+
+    `extra_tools` is the env's allow-list: the only short names beyond the base required set the agent
+    may keep -- so a mutating skill tool survives the strip/assert guard iff the env explicitly lists
+    it."""
+    tool_ids = _resolve_tool_ids(client, (*_REQUIRED_TOOL_SHORT_NAMES, *extra_tools))
+    _assign_tools(client, agent_id, list(tool_ids.values()))
     registered = register_remote_mcp(client, name=_BENCH_MCP_NAME, server_url=bench_url, agent_ids=[agent_id])
     submit_tool, _ = _submit_tool(registered)
-    _strip_mutating_skill_tools(client, agent_id)
-    _assert_agent_tool_surface(client, agent_id, submit_tool)
+    allowed = frozenset(f"archestra__{n}" for n in extra_tools)
+    _strip_mutating_skill_tools(client, agent_id, allowed)
+    _assert_agent_tool_surface(client, agent_id, submit_tool, allowed)
     return submit_tool
 
 
-def _strip_mutating_skill_tools(client: EvalClient, agent_id: str) -> None:
-    """`enable_skill_defaults` backfills every skill tool, including `create_skill`/`update_skill`.
-    The benchmark agent may use skills but must not mutate the library, so unassign those."""
+def _tools_to_strip(allowed: frozenset[str]) -> set[str]:
+    """The mutating skill tools `enable_skill_defaults` backfills that the env did NOT allow.
+
+    The benchmark agent may *use* skills but must not mutate the library, so any mutating tool the
+    env's allow-list doesn't permit is unassigned."""
+    return {full for n in _MUTATING_SKILL_TOOL_SHORT_NAMES if (full := f"archestra__{n}") not in allowed}
+
+
+def _surface_violations(
+    present: set[str], *, required: set[str], allowed: frozenset[str], submit_tool: str
+) -> list[str]:
+    """Pure check of an assembled agent tool surface (no client): every base-required and env-allowed
+    tool must be present, the submit tool must be present, and no mutating skill tool may survive
+    unless the env allowed it."""
+    violations: list[str] = []
+    missing = sorted((required | allowed) - present)
+    if missing:
+        violations.append(f"missing required tools after assignment: {missing}")
+    if submit_tool not in present:
+        violations.append(f"benchmark tool {submit_tool!r} was not assigned/discovered")
     mutating = {f"archestra__{n}" for n in _MUTATING_SKILL_TOOL_SHORT_NAMES}
+    leaked = sorted((mutating - allowed) & present)
+    if leaked:
+        violations.append(f"can mutate the skill library via {leaked}; refusing a contaminated surface")
+    return violations
+
+
+def _strip_mutating_skill_tools(client: EvalClient, agent_id: str, allowed: frozenset[str]) -> None:
+    strip = _tools_to_strip(allowed)
     for tool in client.list_agent_tools(agent_id):
-        if tool.get("name") in mutating:
+        if tool.get("name") in strip:
             client.unassign_tool(agent_id, _require_str(tool, "id"))
 
 
-def _resolve_required_tool_ids(client: EvalClient) -> dict[str, str]:
+def _resolve_tool_ids(client: EvalClient, short_names: tuple[str, ...]) -> dict[str, str]:
     resolved: dict[str, str] = {}
-    for short_name in _REQUIRED_TOOL_SHORT_NAMES:
+    for short_name in short_names:
         exact = f"archestra__{short_name}"
         matches = [tool for tool in client.list_tools(search=exact) if tool.get("name") == exact]
         if len(matches) != 1:
@@ -414,16 +484,14 @@ def _assign_tools(client: EvalClient, agent_id: str, tool_ids: list[str]) -> Non
         raise SystemExit(f"failed to assign tools to the eval agent: {failed}")
 
 
-def _assert_agent_tool_surface(client: EvalClient, agent_id: str, submit_tool: str) -> None:
+def _assert_agent_tool_surface(
+    client: EvalClient, agent_id: str, submit_tool: str, allowed: frozenset[str]
+) -> None:
     names = {name for tool in client.list_agent_tools(agent_id) if isinstance(name := tool.get("name"), str)}
-    missing = [f"archestra__{n}" for n in _REQUIRED_TOOL_SHORT_NAMES if f"archestra__{n}" not in names]
-    if missing:
-        raise SystemExit(f"eval agent is missing required tools after assignment: {missing}")
-    if submit_tool not in names:
-        raise SystemExit(f"benchmark tool {submit_tool!r} was not assigned/discovered; refusing to run")
-    mutating = [f"archestra__{n}" for n in _MUTATING_SKILL_TOOL_SHORT_NAMES if f"archestra__{n}" in names]
-    if mutating:
-        raise SystemExit(f"eval agent can mutate the skill library via {mutating}; refusing a contaminated surface")
+    required: set[str] = {f"archestra__{n}" for n in _REQUIRED_TOOL_SHORT_NAMES}
+    violations = _surface_violations(names, required=required, allowed=allowed, submit_tool=submit_tool)
+    if violations:
+        raise SystemExit("eval agent tool surface is invalid: " + "; ".join(violations))
 
 
 def _submit_tool(registered: RegisteredMcp) -> tuple[str, str]:
@@ -614,7 +682,7 @@ def _provider_key_from_env(provider: str) -> str:
 
 def _as_provider(provider: str) -> Provider:
     # deliberately narrower than contracts.Provider: only the API-key providers the benchmark seeds.
-    allowed = ("anthropic", "openai", "gemini")
+    allowed = ("anthropic", "openai", "gemini", "openrouter")
     if provider not in allowed:
         raise SystemExit(f"unsupported provider {provider!r}; expected one of {allowed}")
     return cast(Provider, provider)
@@ -679,6 +747,24 @@ def _run_subdir(env_id: str, task_id: str, model_name: str) -> str:
 def _slug(value: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
     return slug or "run"
+
+
+def _cell_token(cell_key: str, model_name: str) -> str:
+    """A skill-name-safe token unique to one (env, task, model) cell, so resources a mutating task
+    creates never collide across a multi-model/multi-task matrix on one shared backend. A readable
+    model slug (lossy -- `a.b` and `a-b` collapse) plus a short stable hash of the full cell key,
+    which disambiguates both slug collisions and the same model reused across tasks."""
+    slug = re.sub(r"[^a-z0-9]+", "-", model_name.lower()).strip("-") or "model"
+    digest = hashlib.sha256(cell_key.encode("utf-8")).hexdigest()[:8]
+    return f"{slug}-{digest}"
+
+
+def _expand_runtime(text: str, mapping: dict[str, str]) -> str:
+    """Substitute the runtime placeholders `{{cell}}`/`{{agent_id}}` in stage text and state paths.
+
+    Distinct from the load-time `{{file:}}` expansion (tasks.py): these values are only known per cell
+    at run time. Unknown `{{...}}` tokens are left untouched."""
+    return _RUNTIME_PLACEHOLDER.sub(lambda m: mapping[m.group(1)], text)
 
 
 def _timestamp() -> str:

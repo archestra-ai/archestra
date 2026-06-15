@@ -42,6 +42,9 @@ that reads, by fixed env names the harness sets:
 - `BENCH_RESULT` — the submitted JSON result (always set).
 - `BENCH_FIXTURES` — a dir holding the task's `inputs/` and `expected/`, set iff either exists.
 - `BENCH_OUTPUT` — a file the agent produced and exported, set iff the task declares `artifact_key`.
+- `BENCH_STATE` — a JSON snapshot of backend REST state plus the run's tool calls, set iff the task
+  declares `[state].rest` (see below). For tasks whose effect is *backend state* — e.g. "did the
+  agent create a skill", "how many tools/skills have a name like X" — not a value or a file.
 
 ## Tasks
 
@@ -65,16 +68,26 @@ A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}`
 confined to the task dir) — useful for small tabular inputs when the target provider can't accept a
 staged file part (e.g. the Anthropic-compatible Kimi gateway rejects all file/document blocks).
 
+A task that grades **backend state** declares `[state].rest` — a list of relative `/api/…` GET paths.
+After the run the harness snapshots each (with the privileged client) into `BENCH_STATE` along with
+the run's ordered tool calls (`{name, input}`), so the isolated verifier can assert what the agent
+*did to Archestra* without ever touching the backend itself. State paths and stage text may use the
+runtime placeholders `{{cell}}` (a per-cell unique slug, so mutating tasks don't collide across a
+multi-model matrix on one backend) and `{{agent_id}}`, substituted at run time.
+
 ## Environments
 
 An environment is one `envs/<id>.toml` declaring `id` / `name`, an `[agent]` (name + system prompt),
 the `[[skills]]` surface (each a pinned web ref `{repo, path, ref}` — `ref` slash-free), the
-`[[mcps]]` remote servers (`{name, server_url}` — registered by URL, no auth), and `tasks` (a list
-of task-dir ids, globally unique across envs). Add a new environment by dropping another
-`envs/*.toml` — no code change.
+`[[mcps]]` remote servers (`{name, server_url}` — registered by URL, no auth), `tasks` (a list of
+task-dir ids, globally unique across envs), and an optional `tools` allow-list of extra
+`archestra__*` short names. By default the agent may *use* skills but is barred from mutating the
+skill library (`create_skill`/`update_skill` are stripped, and a surviving one aborts the run); an
+env that lists such a tool in `tools` keeps it, so only an env that opts in can author skills. Add a
+new environment by dropping another `envs/*.toml` — no code change.
 
-`basic` ships today: all skills from `anthropics/skills` + `openai/skills`, three public no-auth
-remote MCPs (DeepWiki, Microsoft Learn, Context7) as a realistic surface, and three tasks —
+`basic` ships all skills from `anthropics/skills` + `openai/skills`, three public no-auth remote MCPs
+(DeepWiki, Microsoft Learn, Context7) as a realistic surface, and three tasks —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
@@ -82,6 +95,16 @@ remote MCPs (DeepWiki, Microsoft Learn, Context7) as a realistic surface, and th
   checks both values against recorded ground truth within tolerance.
 - `median-salary` — compute the median of the salary column of a CSV inlined into the prompt (via a
   `{{file:…}}` placeholder); the verifier recomputes from the same fixture.
+
+`archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
+tool and skill catalog is the subject under test; `tools = ["create_skill"]`) with two tasks —
+
+- `author-skill` — author a skill bundling a Python script (turn 1), then load and run it to compute
+  an answer (turn 2); the verifier confirms via `BENCH_STATE` that the skill exists with a bundled
+  file *and* a `run_command` executed its mounted `/skills/<name>` path, and that the answer is right.
+- `letter-count` — count how many of the agent's tools + the instance's skills have a name containing
+  the letter 'a' exactly three times; the verifier recomputes the count from the snapshotted
+  `/api/agents/<id>/tools` + `/api/skills`, so there is no hardcoded answer.
 
 ## Lifecycle: fresh backend over shared infra
 
@@ -123,8 +146,8 @@ markdown report to a file instead of stdout.
 
 Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per env, and an
 `<env>/<task>__<model>/` subdirectory per cell with `trajectory.jsonl`, `run.json`, `submission.json`
-(the accepted bytes), `artifact.bin` (a downloaded file artifact, when any), and
-`verifier.stdout.txt` / `verifier.stderr.txt`.
+(the accepted bytes), `artifact.bin` (a downloaded file artifact, when any), `state.json` (the
+`BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
 
 ## Prerequisites
 

@@ -98,3 +98,31 @@ def test_file_placeholder_rejects_escape(tmp_path: Path) -> None:
 def test_file_placeholder_rejects_missing(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="does not exist"):
         load_task(_make_task(tmp_path, '[[stages]]\ntext = "{{file:inputs/nope.csv}}"\n'))
+
+
+def test_loads_state_rest(tmp_path: Path) -> None:
+    toml = (
+        '[[stages]]\ntext = "go"\n\n[state]\n'
+        'rest = ["/api/skills?search=x&limit=10", "/api/agents/{{agent_id}}/tools"]\n'
+    )
+    task = load_task(_make_task(tmp_path, toml))
+    assert task.state_rest == ("/api/skills?search=x&limit=10", "/api/agents/{{agent_id}}/tools")
+
+
+def test_state_rest_defaults_empty(tmp_path: Path) -> None:
+    assert load_task(_make_task(tmp_path, '[[stages]]\ntext = "go"\n')).state_rest == ()
+
+
+def test_rejects_non_api_state_path(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="must start with /api/"):
+        load_task(_make_task(tmp_path, '[[stages]]\ntext = "go"\n\n[state]\nrest = ["/health"]\n'))
+
+
+def test_rejects_absolute_url_state_path(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="relative /api/ path"):
+        load_task(_make_task(tmp_path, '[[stages]]\ntext = "go"\n\n[state]\nrest = ["http://evil/api/x"]\n'))
+
+
+def test_rejects_traversal_state_path(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="'\\.\\.' segment"):
+        load_task(_make_task(tmp_path, '[[stages]]\ntext = "go"\n\n[state]\nrest = ["/api/../secret"]\n'))

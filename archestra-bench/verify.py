@@ -12,6 +12,8 @@ the verifier reads (fixed env names, same for every task):
   - BENCH_RESULT   path to the agent's submitted JSON result (always set)
   - BENCH_FIXTURES path to a dir holding the task's `inputs/` and `expected/` (set iff either exists)
   - BENCH_OUTPUT   path to the downloaded agent artifact bytes (set iff the task produces a file)
+  - BENCH_STATE    path to a JSON snapshot of backend REST state + the run's tool calls (set iff the
+                   task declares `[state].rest`; see run.py for the bundle shape)
 
 failures are loud: if the verifier's dependency environment cannot be built, that is a hard error
 (a broken eval host), not a silent task failure.
@@ -32,10 +34,12 @@ from tasks import Task
 _PYTEST_REQ = "pytest==8.4.1"  # the harness owns the runner; tasks declare only their domain deps
 _RESULT_NAME = "result.json"
 _OUTPUT_NAME = "artifact.bin"
+_STATE_NAME = "state.json"
 _FIXTURES_DIR = "fixtures"
 _RESULT_ENV = "BENCH_RESULT"  # path to the agent's submitted result
 _FIXTURES_ENV = "BENCH_FIXTURES"  # path to the task's inputs/ + expected/ (verifier-only)
 _OUTPUT_ENV = "BENCH_OUTPUT"  # path to the agent-produced artifact bytes
+_STATE_ENV = "BENCH_STATE"  # path to the backend REST + tool-call snapshot
 
 
 @dataclass(frozen=True)
@@ -48,13 +52,18 @@ class VerifyOutcome:
 
 
 def run_verifier(
-    task: Task, report_bytes: bytes, *, artifact_bytes: bytes | None = None, timeout_s: float = 900.0
+    task: Task,
+    report_bytes: bytes,
+    *,
+    artifact_bytes: bytes | None = None,
+    state_bytes: bytes | None = None,
+    timeout_s: float = 900.0,
 ) -> VerifyOutcome:
-    """verify an agent submission (and optional produced artifact) against the task's verifier."""
+    """verify an agent submission (and optional produced artifact / state snapshot) against the task's verifier."""
     with tempfile.TemporaryDirectory(prefix="archestra-bench-verify-") as tmp:
         workdir = Path(tmp)
         python = _resolve_python(task.verifier.deps, workdir)
-        test_path, env = _stage(task, workdir, report_bytes, artifact_bytes)
+        test_path, env = _stage(task, workdir, report_bytes, artifact_bytes, state_bytes)
         return _run_pytest(test_path, env=env, python=python, timeout_s=timeout_s)
 
 
@@ -94,9 +103,9 @@ def _build_uv_env(deps: tuple[str, ...], venv_dir: Path) -> str:
 
 
 def _stage(
-    task: Task, workdir: Path, report_bytes: bytes, artifact_bytes: bytes | None
+    task: Task, workdir: Path, report_bytes: bytes, artifact_bytes: bytes | None, state_bytes: bytes | None
 ) -> tuple[Path, dict[str, str]]:
-    """write the submission (+ optional artifact), copy fixtures and the verifier file; build env."""
+    """write the submission (+ optional artifact/state), copy fixtures and the verifier file; build env."""
     env: dict[str, str] = {**task.verifier.env}
 
     result_path = workdir / _RESULT_NAME
@@ -116,6 +125,11 @@ def _stage(
         output_path = workdir / _OUTPUT_NAME
         output_path.write_bytes(artifact_bytes)
         env[_OUTPUT_ENV] = str(output_path)
+
+    if state_bytes is not None:
+        state_path = workdir / _STATE_NAME
+        state_path.write_bytes(state_bytes)
+        env[_STATE_ENV] = str(state_path)
 
     test_path = workdir / Path(task.verifier.test_file).name
     shutil.copyfile(task.dir / task.verifier.test_file, test_path)

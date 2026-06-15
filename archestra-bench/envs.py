@@ -10,6 +10,7 @@ so a misconfigured environment never degrades into a silently partial run.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ import tomlconf
 from tasks import Task, load_task
 
 _DEFAULT_SYSTEM_PROMPT = "You are an expert software engineer completing a benchmark task."
+_TOOL_SHORT_RE = re.compile(r"[a-z][a-z0-9_]*")  # archestra built-in short name (e.g. create_skill)
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class EnvConfig:
     skills: tuple[SkillRef, ...]
     mcps: tuple[Mcp, ...]
     tasks: tuple[Task, ...]
+    tools: tuple[str, ...] = ()  # extra archestra__* short names to assign (e.g. create_skill)
 
 
 def load_envs(envs_dir: Path) -> dict[str, EnvConfig]:
@@ -107,7 +110,18 @@ def _load_env(path: Path, root: Path) -> EnvConfig:
         skills=skills,
         mcps=mcps,
         tasks=tasks,
+        tools=_tool_names(tomlconf.strs(data, "tools", ctx), f"{ctx} tools"),
     )
+
+
+def _tool_names(names: list[str], ctx: str) -> tuple[str, ...]:
+    """validate each extra tool is an archestra built-in short name; reject duplicates."""
+    for name in names:
+        if not _TOOL_SHORT_RE.fullmatch(name):
+            raise SystemExit(f"{ctx}: tool {name!r} must be a lowercase archestra short name (e.g. create_skill)")
+    if len(names) != len(set(names)):
+        raise SystemExit(f"{ctx}: duplicate tool name(s) in {names}")
+    return tuple(names)
 
 
 def _skill_ref(row: Mapping[str, Any], ctx: str) -> SkillRef:

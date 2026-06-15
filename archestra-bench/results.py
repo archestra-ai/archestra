@@ -23,18 +23,6 @@ class Outcome(str, Enum):
 
 
 @dataclass(frozen=True)
-class GateResult:
-    """Fidelity gate: the task's oracle must reproduce a verifier-passing solution.
-
-    `passed is None` means the task declares no oracle, so the gate is not applicable (N/A)."""
-
-    env_id: str
-    task_id: str
-    passed: bool | None
-    detail: str
-
-
-@dataclass(frozen=True)
 class RunResult:
     """One agent attempt at a task with a specific model, in a specific environment."""
 
@@ -139,15 +127,9 @@ def _group_by(results: list[RunResult], key: Callable[[RunResult], str]) -> list
     ]
 
 
-def render_markdown(rows: list[RunResult], gate: list[GateResult] | None = None) -> str:
-    """Render the fidelity gate, the env x task x model outcome table, and the aggregation."""
+def render_markdown(rows: list[RunResult]) -> str:
+    """Render the env x task x model outcome table and the aggregation."""
     lines: list[str] = ["# Archestra benchmark results", ""]
-
-    if gate:
-        lines += ["## Fidelity gate", ""]
-        for item in sorted(gate, key=lambda g: (g.env_id, g.task_id)):
-            lines.append(f"- {_verdict(item.passed)} `{item.env_id}` / `{item.task_id}` - {item.detail}")
-        lines.append("")
 
     lines += [
         "## Pass matrix",
@@ -189,12 +171,6 @@ def _outcome_counts(rows: list[RunResult]) -> dict[str, int]:
 
 def _outcome_summary(outcomes: dict[str, int]) -> str:
     return ", ".join(f"{name}={count}" for name, count in outcomes.items()) or "-"
-
-
-def _verdict(passed: bool | None) -> str:
-    if passed is None:
-        return "N/A"
-    return "PASS" if passed else "FAIL"
 
 
 _MAX_CELL_WIDTH = 160  # keep the markdown table readable; full values live in run.json artifacts

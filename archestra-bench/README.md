@@ -1,11 +1,18 @@
 # archestra-bench
 
 A benchmark / trajectory generator for Archestra's core agentic features. Tasks are grouped into
-**environments** (`envs/<id>.toml`): a bundle of web-pinned skills, MCP fixtures, and a single agent,
-plus the tasks that run against that surface. Each environment boots its own fresh, isolated
-Archestra backend, seeds its fixtures, drives agentic chat sessions to solve its tasks, grades the
-submitted answers out of band, and tears the instance down. Results aggregate by environment and by
-task.
+**environments** (`envs/<id>.toml`): a bundle of web-pinned skills, remote MCP servers, and a single
+agent, plus the ids of the tasks that run against that surface. Each environment boots its own fresh,
+isolated Archestra backend, seeds its surface, drives agentic chat sessions to solve its tasks,
+grades the submitted answers out of band, and tears the instance down. Results aggregate by
+environment and by task.
+
+## Scope & non-goals
+
+This is an **internal product eval**: it measures whether Archestra correctly assembles a skill +
+MCP + agent surface and drives an agent through realistic, multi-stage sessions — not generic model
+capability. Chasing a public leaderboard is an explicit non-goal; the asset we invest in is native
+tasks derived from real Archestra workflows, each one permanent regression protection.
 
 ## Protocol
 
@@ -14,12 +21,13 @@ start the harness-owned benchmark MCP (submit_result) in-process
   -> for each environment:
        boot a fresh backend on a new port over a fresh, migrated database
          (reusing the dev stack's shared Postgres + Dagger engine)
-       -> seed: provider key + models, the env's web-pinned skills, its MCP fixtures,
+       -> seed: provider key + models, the env's web-pinned skills, its remote MCPs,
                 the benchmark MCP; create the env's agent and lock its tool surface
        -> for each task x model:
             drive the task's ordered conversation stages (user asks X -> corrects to Y),
             saving the streamed trajectory
-       -> read the submitted result from the benchmark MCP and verify its bytes out of band
+       -> read the submission (and, for file-producing tasks, download the produced
+          artifact) and verify out of band
        -> drop the database + kill the backend
   -> aggregate by env and by task, write artifacts
 ```
@@ -27,31 +35,53 @@ start the harness-owned benchmark MCP (submit_result) in-process
 The agent hands in its answer by calling the benchmark MCP's `submit_result` tool. That tool checks
 only the **format** of the answer (against the task's JSON-schema) and, on a malformed payload,
 returns a structured error so the model self-corrects within its own tool loop — bounded by a small
-attempt budget. Real correctness is checked **out of band** by the task's vendored verifier, which
-never enters the sandbox or the MCP, so the agent can never read or game it.
+attempt budget. Real correctness is checked **out of band** by the task's verifier, which never
+enters the sandbox or the MCP, so the agent can never read or game it. The verifier is a pytest file
+that reads, by fixed env names the harness sets:
+
+- `BENCH_RESULT` — the submitted JSON result (always set).
+- `BENCH_FIXTURES` — a dir holding the task's `inputs/` and `expected/`, set iff either exists.
+- `BENCH_OUTPUT` — a file the agent produced and exported, set iff the task declares `artifact_key`.
+
+## Tasks
+
+Each task is a self-contained directory under `tasks/<id>/`:
+
+```
+tasks/<id>/task.toml     stages, result_schema, [verifier], optional artifact_key
+tasks/<id>/verifier.py   the pytest verifier (BENCH_RESULT / BENCH_FIXTURES / BENCH_OUTPUT)
+tasks/<id>/inputs/       files staged into the sandbox; also readable by the verifier
+tasks/<id>/expected/     verifier-only ground truth; NEVER staged to the agent
+```
+
+A stage's `[[stages.files]]` may stage a file from `inputs/` (its `src` is confined to `inputs/` at
+load time, so a precomputed answer in `expected/` can never leak). A task whose deliverable is a
+**file** sets `artifact_key` to the result property naming the file the agent exported via
+`download_file`; the harness downloads that artifact and hands its bytes to the verifier as
+`BENCH_OUTPUT`. A verifier needing third-party packages lists them under `[verifier].deps` (installed
+into an ephemeral uv env); a no-dep verifier runs under the harness interpreter.
+
+A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}` placeholder (path
+confined to the task dir) — useful for small tabular inputs when the target provider can't accept a
+staged file part (e.g. the Anthropic-compatible Kimi gateway rejects all file/document blocks).
 
 ## Environments
 
-An environment is one `envs/<id>.toml` file declaring:
+An environment is one `envs/<id>.toml` declaring `id` / `name`, an `[agent]` (name + system prompt),
+the `[[skills]]` surface (each a pinned web ref `{repo, path, ref}` — `ref` slash-free), the
+`[[mcps]]` remote servers (`{name, server_url}` — registered by URL, no auth), and `tasks` (a list
+of task-dir ids, globally unique across envs). Add a new environment by dropping another
+`envs/*.toml` — no code change.
 
-- `id` / `name` and an `[agent]` (name + system prompt) — the single agent under test.
-- `[[skills]]` — the env's skill surface, each a web ref `{repo, path, ref}`. Skills are imported
-  from GitHub pinned to a commit/branch/tag (`ref` is required); nothing is vendored locally.
-- `[[mcps]]` — optional extra MCP fixtures available to the agent.
-- `[[tasks]]` — the tasks (stages, `result_schema` or `result_schema_file`, verifier) that run in
-  this env. Task ids are globally unique across all envs.
+`basic` ships today: all skills from `anthropics/skills` + `openai/skills`, three public no-auth
+remote MCPs (DeepWiki, Microsoft Learn, Context7) as a realistic surface, and three tasks —
 
-Two ship today:
-
-- `optimization` — the `bike-rebalance` SkillsBench optimization task; the agent computes in the
-  sandbox and submits its `report.json` inline. Its four skills are pinned from
-  `github.com/benchflow-ai/skillsbench`; SCIP-backed verifier with a fidelity oracle (`--gate-only`).
-- `basics` — `multistage-demo` (ask the sum, then correct to the product) and `list-stats` (read a
-  staged JSON file and compute stats). No skills or MCPs; exercises the multi-stage + submit_result +
-  verify path with zero web dependencies.
-
-Add a new environment (e.g. scientific, marketing, consumer) by dropping another `envs/*.toml` — no
-code change.
+- `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
+  it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
+- `crypto-price` — fetch BTC/SOL price at a timestamp from Yahoo Finance in the sandbox; the verifier
+  checks both values against recorded ground truth within tolerance.
+- `median-salary` — compute the median of the salary column of a CSV inlined into the prompt (via a
+  `{{file:…}}` placeholder); the verifier recomputes from the same fixture.
 
 ## Lifecycle: fresh backend over shared infra
 
@@ -78,27 +108,23 @@ Each (env, task, model) cell resolves to exactly one outcome:
 ```bash
 export ANTHROPIC_API_KEY=<key>
 
-uv run run.py                                            # every env x every task x default model
-uv run run.py --env optimization --model claude-sonnet-4-6
-uv run run.py --env basics --task multistage-demo --model claude-sonnet-4-6,other-model
-uv run run.py --env optimization --gate-only            # fidelity gate, no model needed
+uv run run.py                                          # every env x every task x default model
+uv run run.py --env basic --task median-salary --model claude-sonnet-4-6
+# benchmark a non-Anthropic model via an Anthropic-compatible gateway:
+ANTHROPIC_API_KEY=$KIMI_API_KEY uv run run.py --env basic \
+  --provider anthropic --base-url https://api.kimi.com/coding --model kimi-for-coding
 ```
 
 `--env`, `--task`, and `--model` each accept one name or a comma-separated list. `--env` defaults to
-all environments; `--task` defaults to all tasks in the selected envs and filters by task id;
-`--gate-only` skips tasks that declare no oracle. `--provider` defaults to `anthropic` (the key is
-read from `ANTHROPIC_API_KEY`). `--run-dir` overrides the artifact directory; by default artifacts go
-under `archestra-bench/experiments/run_<id>/` (gitignored). `--out` writes the markdown report to a
-file instead of stdout.
+all environments; `--task` defaults to all tasks in the selected envs and filters by task id.
+`--provider` defaults to `anthropic`; `--base-url` overrides its endpoint. `--run-dir` overrides the
+artifact directory (default `archestra-bench/experiments/run_<id>/`, gitignored); `--out` writes the
+markdown report to a file instead of stdout.
 
 Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per env, and an
-`<env>/<task>__<model>/` subdirectory per cell with:
-
-- `trajectory.jsonl` — parsed chat stream events plus ignored/parse-error records and errors.
-- `run.json` — metadata: env/model/conversation ids, outcome, finish reason, token/tool counts,
-  format attempts, verifier result, artifact paths.
-- `submission.json` — the accepted result bytes (when one was submitted).
-- `verifier.stdout.txt` / `verifier.stderr.txt` — verifier process output (when verification ran).
+`<env>/<task>__<model>/` subdirectory per cell with `trajectory.jsonl`, `run.json`, `submission.json`
+(the accepted bytes), `artifact.bin` (a downloaded file artifact, when any), and
+`verifier.stdout.txt` / `verifier.stderr.txt`.
 
 ## Prerequisites
 
@@ -113,14 +139,5 @@ Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.lo
 ```bash
 uv run --group dev ruff check .
 uv run --group dev ty check
-```
-
-## Smoke
-
-A real end-to-end run of the simplest environment (boot → seed → multi-stage chat → submit → verify).
-Needs the dev stack up and a funded key; it exits non-zero unless the run passes:
-
-```bash
-export ANTHROPIC_API_KEY=<key>
-uv run run.py --env basics --task multistage-demo --model claude-haiku-4-5-20251001
+uv run --group dev pytest                 # harness behavior tests (no live backend needed)
 ```

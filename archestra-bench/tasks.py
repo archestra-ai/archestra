@@ -2,165 +2,199 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""task model + adaptation: turn a benchmark task definition into upload-ready, send-ready pieces.
+"""Self-contained benchmark task model + loader.
+
+A task lives in its own directory:
+
+    tasks/<id>/task.toml     declarative definition (stages, result schema, verifier, artifact)
+    tasks/<id>/verifier.py   pytest verifier, run out of band against the submission
+    tasks/<id>/inputs/       files staged into the agent's sandbox (also readable by the verifier)
+    tasks/<id>/expected/     verifier-only ground truth; NEVER staged to the agent
 
 A task is an ordered list of conversation **stages** (a "user asks X" turn, then optional "user
-corrects to Y" turns). The agent solves the task with whatever tools/skills its environment provides
-and hands in its answer by calling the benchmark MCP's `submit_result` tool -- so a task also
-declares the JSON-schema that answer must match (`result_schema`).
+corrects to Y" turns). The agent solves it with whatever tools/skills its environment provides and
+hands in its answer by calling the benchmark MCP's `submit_result` tool -- so a task declares the
+JSON-schema that answer must match (`result_schema`).
 
-Skills and MCP fixtures are declared at the **environment** level (see envs.py), not per task. A
-task may still seed its own MCP fixtures via `mcps`.
+A task whose deliverable is a *file* (not a JSON value) sets `artifact_key`: the result property
+naming the file the agent exported via `download_file`. The harness downloads that artifact and
+hands its bytes to the verifier as `BENCH_OUTPUT` (see run.py / verify.py).
 
-The verifier + oracle assets are NOT staged anywhere the agent can reach -- they run in the harness
-against the submitted bytes (anti-cheating). `adapt_task` is pure given an UpstreamFs reader.
+The verifier assets are never staged anywhere the agent can reach. Staged files are confined to
+`inputs/` at load time, so a precomputed answer in `expected/` can never leak to the agent.
 """
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Protocol
+from typing import Any
 
-# placeholder the oracle's path remap uses for the gate's working dir; verify.py fills it in
-# at run time (the oracle hardcodes an absolute root we cannot know until the gate dir exists).
-WORKDIR_TOKEN = "{WORKDIR}"
+import tomlconf
 
-
-@dataclass(frozen=True)
-class TextReplacement:
-    """an ordered literal substitution applied to instruction text (path remap, etc.)."""
-
-    frm: str
-    to: str
+_FILE_PLACEHOLDER = re.compile(r"\{\{file:([^}]+)\}\}")
 
 
 @dataclass(frozen=True)
 class StagedFile:
     """an input file the agent is allowed to see, delivered as a chat file-part on its stage.
 
-    `dest` is the sandbox path the file auto-stages to; the stage message references it."""
+    `src` is a relative path under the task's `inputs/` dir; `dest` is the absolute sandbox path it
+    auto-stages to (the stage message references it)."""
 
-    upstream: str  # path relative to the task's upstream/ dir
-    dest: str  # absolute sandbox path it lands at (under /home/sandbox/attachments)
+    src: str
+    dest: str
     mime_type: str = "application/octet-stream"
 
 
 @dataclass(frozen=True)
-class StageSpec:
-    """one user turn. The message is `instruction_file` (read + replaced), then `text` appended.
+class Stage:
+    """one user turn: `text` is the message, `files` are delivered with it as chat file-parts.
 
-    `files` are delivered with this turn as chat file-parts; later stages model the user changing
-    or refining their ask within the same conversation."""
+    Later stages model the user changing or refining their ask within the same conversation."""
 
-    text: str = ""
-    instruction_file: str | None = None  # markdown file relative to upstream/
+    text: str
     files: tuple[StagedFile, ...] = ()
-    text_replacements: tuple[TextReplacement, ...] = ()
 
 
 @dataclass(frozen=True)
-class McpFixture:
-    """an extra MCP server the agent may use, seeded as a remote catalog item (by URL)."""
+class Verifier:
+    """how the harness verifies the submission, OUT of band (never staged where the agent can reach).
 
-    name: str
-    server_url: str
+    The verifier runs as a pytest file in an ephemeral uv env. It reads the submission from
+    `BENCH_RESULT`, optional fixtures from `BENCH_FIXTURES` (a dir with `inputs/` and `expected/`
+    subdirectories), and an optional downloaded artifact from `BENCH_OUTPUT` (see verify.py)."""
 
-
-@dataclass(frozen=True)
-class VerifierSpec:
-    """how the harness verifies the agent's submitted result, OUT of band (never staged anywhere
-    the agent can reach).
-
-    the verifier and oracle run locally in an ephemeral uv env. the verifier reads the submitted
-    result and the task's input data via env knobs the upstream test exposes."""
-
-    deps: tuple[str, ...]  # pip-style requirements for the ephemeral uv env
-    test_file: str  # pytest file, relative to upstream/
-    data_file: str  # input data, relative to upstream/ (the verifier's ground truth input)
-    report_env: str  # env var the test reads the agent's submitted result path from
-    data_env: str  # env var the test reads the data path from
+    deps: tuple[str, ...] = ()  # pip-style requirements for the ephemeral uv env
+    test_file: str = "verifier.py"  # pytest file, relative to the task dir
     env: dict[str, str] = field(default_factory=dict)  # extra env (time limits, etc.)
-    # the oracle reproduces a known-good report for the fidelity gate. it hardcodes upstream
-    # paths, so `oracle_replacements` remaps them onto the gate's working dir at run time.
-    oracle_file: str | None = None  # oracle script, relative to upstream/
-    oracle_replacements: tuple[TextReplacement, ...] = ()
 
 
 @dataclass(frozen=True)
-class TaskConfig:
-    """declarative description of one benchmark task."""
+class Task:
+    """declarative description of one benchmark task, loaded from `tasks/<id>/task.toml`."""
 
     id: str
-    upstream_dir: Path  # absolute path to the task's upstream/ dir
-    stages: tuple[StageSpec, ...]
+    dir: Path  # absolute path to the task's directory
+    stages: tuple[Stage, ...]
     result_schema: dict[str, Any]  # JSON-schema the submitted result must match
-    verifier: VerifierSpec
-    mcps: tuple[McpFixture, ...] = ()
+    verifier: Verifier
+    artifact_key: str | None = None  # result property naming the produced artifact filename
     max_format_attempts: int = 3  # submit_result self-correction budget
 
-
-@dataclass(frozen=True)
-class AdaptedFile:
-    dest: str
-    content: bytes
-    mime_type: str
+    @property
+    def inputs_dir(self) -> Path:
+        return self.dir / "inputs"
 
     @property
-    def filename(self) -> str:
-        return PurePosixPath(self.dest).name
+    def expected_dir(self) -> Path:
+        return self.dir / "expected"
 
 
-@dataclass(frozen=True)
-class AdaptedStage:
-    message: str
-    files: tuple[AdaptedFile, ...]
+_DEFAULT_MAX_FORMAT_ATTEMPTS = 3
 
 
-@dataclass(frozen=True)
-class AdaptedTask:
-    """a task's stages rendered to upload-ready bytes, paired with its source `config`."""
+def load_task(task_dir: Path) -> Task:
+    """Parse `task_dir/task.toml` into a Task; validate loudly (id, schema, staged-file confinement)."""
+    task_id = task_dir.name
+    ctx = f"task {task_id!r}"
+    if not tomlconf.is_slug(task_id):
+        raise SystemExit(f"{ctx}: task dir name must be lowercase alphanumeric with dashes (slug-safe)")
+    toml_path = task_dir / "task.toml"
+    if not toml_path.is_file():
+        raise SystemExit(f"{ctx}: missing {toml_path}")
+    data = tomlconf.parse_toml(toml_path)
 
-    config: TaskConfig
-    stages: tuple[AdaptedStage, ...]
+    stage_rows = tomlconf.rows(data, "stages", ctx)
+    if not stage_rows:
+        raise SystemExit(f"{ctx}: task declares no stages")
+    stages = tuple(_stage(row, ctx, task_dir) for row in stage_rows)
 
+    schema = tomlconf.table(data, "result_schema", ctx)
+    if not isinstance(schema, dict):
+        raise SystemExit(f"{ctx}: result_schema must be a table")
 
-class UpstreamFs(Protocol):
-    """read access to a task's vendored upstream/ tree."""
+    max_attempts = tomlconf.req_int(data, "max_format_attempts", ctx, default=_DEFAULT_MAX_FORMAT_ATTEMPTS)
+    if max_attempts < 1:
+        raise SystemExit(f"{ctx}: max_format_attempts must be >= 1, got {max_attempts}")
 
-    def read(self, rel_path: str) -> bytes: ...
+    verifier = _verifier(tomlconf.table(data, "verifier", ctx, default={}), f"{ctx} [verifier]", task_dir)
 
-
-def apply_replacements(text: str, replacements: tuple[TextReplacement, ...]) -> str:
-    """apply ordered literal substitutions; later replacements see earlier output."""
-    for r in replacements:
-        text = text.replace(r.frm, r.to)
-    return text
-
-
-def adapt_task(config: TaskConfig, fs: UpstreamFs) -> AdaptedTask:
-    return AdaptedTask(config=config, stages=tuple(_adapt_stage(stage, fs) for stage in config.stages))
-
-
-class FsUpstream:
-    """filesystem-backed UpstreamFs rooted at a task's vendored upstream/ dir."""
-
-    def __init__(self, upstream_dir: Path) -> None:
-        self._root = upstream_dir
-
-    def read(self, rel_path: str) -> bytes:
-        return (self._root / rel_path).read_bytes()
-
-
-def _adapt_stage(stage: StageSpec, fs: UpstreamFs) -> AdaptedStage:
-    parts: list[str] = []
-    if stage.instruction_file is not None:
-        body = apply_replacements(fs.read(stage.instruction_file).decode("utf-8"), stage.text_replacements)
-        parts.append(body)
-    if stage.text:
-        parts.append(apply_replacements(stage.text, stage.text_replacements))
-    message = "\n\n".join(parts)
-    files = tuple(
-        AdaptedFile(dest=f.dest, content=fs.read(f.upstream), mime_type=f.mime_type) for f in stage.files
+    return Task(
+        id=task_id,
+        dir=task_dir,
+        stages=stages,
+        result_schema=dict(schema),
+        verifier=verifier,
+        artifact_key=tomlconf.opt_str(data, "artifact_key", ctx),
+        max_format_attempts=max_attempts,
     )
-    return AdaptedStage(message=message, files=files)
+
+
+def _stage(row: Mapping[str, Any], ctx: str, task_dir: Path) -> Stage:
+    text = _expand_files(tomlconf.req_str(row, "text", ctx), task_dir, ctx)
+    files = tuple(_staged_file(f, ctx, task_dir / "inputs") for f in tomlconf.rows(row, "files", ctx))
+    return Stage(text=text, files=files)
+
+
+def _expand_files(text: str, task_dir: Path, ctx: str) -> str:
+    """Expand `{{file:<relpath>}}` placeholders with the referenced file's text content.
+
+    Used to inline a fixture (e.g. a CSV) into the prompt for providers/tasks that cannot stage a
+    file into the sandbox. The path is confined to the task dir so a task can never inline an
+    out-of-tree file."""
+    base = task_dir.resolve()
+
+    def repl(match: re.Match[str]) -> str:
+        rel = match.group(1).strip()
+        target = (task_dir / rel).resolve()
+        if target != base and base not in target.parents:
+            raise SystemExit(f"{ctx}: file placeholder {rel!r} escapes the task dir")
+        if not target.is_file():
+            raise SystemExit(f"{ctx}: file placeholder {rel!r} does not exist")
+        return target.read_text(encoding="utf-8")
+
+    return _FILE_PLACEHOLDER.sub(repl, text)
+
+
+def _staged_file(row: Mapping[str, Any], ctx: str, inputs_dir: Path) -> StagedFile:
+    src = tomlconf.req_str(row, "src", ctx)
+    _check_under_inputs(src, inputs_dir, ctx)
+    return StagedFile(
+        src=src,
+        dest=tomlconf.req_str(row, "dest", ctx),
+        mime_type=tomlconf.req_str(row, "mime_type", ctx, default="application/octet-stream"),
+    )
+
+
+def _check_under_inputs(src: str, inputs_dir: Path, ctx: str) -> None:
+    """A staged source must resolve to an existing file strictly under `inputs/` -- never an
+    absolute path or a `..` escape into the verifier-only `expected/` dir or out of the task tree."""
+    if PurePosixPath(src).is_absolute() or src.startswith("/"):
+        raise SystemExit(f"{ctx}: staged file src {src!r} must be relative (under inputs/)")
+    base = inputs_dir.resolve()
+    target = (inputs_dir / src).resolve()
+    if target != base and base not in target.parents:
+        raise SystemExit(f"{ctx}: staged file src {src!r} escapes inputs/")
+    if not target.is_file():
+        raise SystemExit(f"{ctx}: staged file {inputs_dir / src} does not exist")
+
+
+def _verifier(tbl: Mapping[str, Any], ctx: str, task_dir: Path) -> Verifier:
+    defaults = Verifier()
+    test_file = tomlconf.req_str(tbl, "test_file", ctx, default=defaults.test_file)
+    if PurePosixPath(test_file).is_absolute() or test_file.startswith("/"):
+        raise SystemExit(f"{ctx}: test_file {test_file!r} must be relative (under the task dir)")
+    base = task_dir.resolve()
+    target = (task_dir / test_file).resolve()
+    if target != base and base not in target.parents:
+        raise SystemExit(f"{ctx}: test_file {test_file!r} escapes the task dir")
+    if not target.is_file():
+        raise SystemExit(f"{ctx}: verifier {task_dir / test_file} does not exist")
+    return Verifier(
+        deps=tuple(tomlconf.strs(tbl, "deps", ctx)),
+        test_file=test_file,
+        env=tomlconf.str_map(tbl, "env", ctx),
+    )

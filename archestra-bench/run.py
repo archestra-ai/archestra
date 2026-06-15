@@ -4,15 +4,16 @@ The harness starts the harness-owned benchmark MCP (`submit_result`) in-process,
 selected environment (see envs.py):
   - boots a fresh backend on a new port over a fresh, migrated database, reusing the dev stack's
     shared Postgres + Dagger engine (see lifecycle.py);
-  - seeds an LLM provider key + models, the env's web-pinned skills, its MCP fixtures, and the
+  - seeds an LLM provider key + models, the env's web-pinned skills, its remote MCP servers, and the
     benchmark MCP, then creates the env's agent and locks its tool surface;
   - drives each task's multi-stage conversation per model, capturing the trajectory;
-  - reads the submitted result from the benchmark MCP and verifies its bytes out of band;
+  - reads the submission (and, for file-producing tasks, downloads the produced artifact) and
+    verifies out of band;
   - tears the instance down.
 Results are written per cell and aggregated by environment and by task.
 
   export ANTHROPIC_API_KEY=<key>
-  uv run run.py --env optimization --model claude-sonnet-4-6
+  uv run run.py --env basic --model claude-sonnet-4-6
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 # reuse the migration-kit zero-dependency client by importing it off sys.path (no extraction).
@@ -41,7 +42,7 @@ from contracts import JsonValue, Provider
 from envs import EnvConfig, load_envs
 from eval_client import ChatRunResult, ChatStreamRecord, EvalClient, FilePart, _apply_chat_event
 from lifecycle import Instance
-from results import GateResult, Outcome, RunResult, aggregate, build_report, render_markdown
+from results import Outcome, RunResult, aggregate, build_report, render_markdown
 from seeding import (
     RegisteredMcp,
     ResolvedModel,
@@ -50,8 +51,8 @@ from seeding import (
     seed_mcp_fixtures,
     seed_skill_ref,
 )
-from tasks import AdaptedStage, AdaptedTask, FsUpstream, McpFixture, TaskConfig, adapt_task
-from verify import VerifyOutcome, run_gate, run_verifier
+from tasks import Stage, Task
+from verify import VerifyOutcome, run_verifier
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,6 @@ def main(
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
     base_url: str | None = None,
-    gate_only: bool = False,
     out: str | None = None,
     run_dir: str | None = None,
 ) -> int:
@@ -90,16 +90,6 @@ def main(
     Anthropic-compatible gateway (Moonshot/Kimi) to benchmark a non-Anthropic model."""
     selected = _select_envs(load_envs(_ENVS_DIR), env, task)
     models = _normalize_models(model)
-
-    if gate_only:
-        gate = [_run_fidelity_gate(env_cfg.id, config) for env_cfg, configs in selected for config in configs]
-        _write_report(render_markdown([], gate), out)
-        # only oracle-bearing tasks are gradeable; a selection with no gradeable gate (all N/A)
-        # has verified nothing, so it must not exit 0.
-        applicable = [g for g in gate if g.passed is not None]
-        if not applicable:
-            logger.warning("no selected task has an oracle; nothing to gate")
-        return 0 if applicable and all(g.passed for g in applicable) else 1
 
     api_key = _provider_key_from_env(provider)
     run_id = _run_id()
@@ -137,7 +127,7 @@ def main(
 def _run_env(
     *,
     env_cfg: EnvConfig,
-    configs: list[TaskConfig],
+    configs: list[Task],
     bench_mcp: BenchmarkMcp,
     root_run_dir: Path,
     run_id: str,
@@ -159,12 +149,12 @@ def _run_env(
         submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url())
         for sref in env_cfg.skills:
             seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
-        adapteds = [adapt_task(config, FsUpstream(config.upstream_dir)) for config in configs]
-        _seed_env_mcps(client, agent_id, env_cfg, adapteds)
+        if env_cfg.mcps:
+            seed_mcp_fixtures(client, env_cfg.mcps, agent_ids=[agent_id])
 
-        for adapted in adapteds:
+        for task in configs:
             for model_name in models:
-                logger.info("running %s / %s / %s", env_cfg.id, adapted.config.id, model_name)
+                logger.info("running %s / %s / %s", env_cfg.id, task.id, model_name)
                 results.append(
                     _run_one(
                         client=client,
@@ -173,7 +163,7 @@ def _run_env(
                         root_run_dir=root_run_dir,
                         env_id=env_cfg.id,
                         agent_id=agent_id,
-                        adapted=adapted,
+                        task=task,
                         model_name=model_name,
                         resolved=resolved[model_name],
                     )
@@ -192,16 +182,16 @@ def _run_one(
     root_run_dir: Path,
     env_id: str,
     agent_id: str,
-    adapted: AdaptedTask,
+    task: Task,
     model_name: str,
     resolved: ResolvedModel,
 ) -> RunResult:
-    cell_key = f"{env_id}/{adapted.config.id}/{model_name}"
-    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, adapted.config.id, model_name))
+    cell_key = f"{env_id}/{task.id}/{model_name}"
+    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, task.id, model_name))
     artifact_paths: dict[str, JsonValue] = {}
     metadata: dict[str, JsonValue] = {
         "env_id": env_id,
-        "task_id": adapted.config.id,
+        "task_id": task.id,
         "model": model_name,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
@@ -209,7 +199,7 @@ def _run_one(
         "conversation_id": None,
         "started_at": _timestamp(),
         "finished_at": None,
-        "stage_count": len(adapted.stages),
+        "stage_count": len(task.stages),
         "outcome": None,
         "finish_reason": None,
         "tool_call_count": 0,
@@ -222,9 +212,7 @@ def _run_one(
     }
     artifacts.write_run(metadata)
 
-    bench_mcp.begin_task(
-        task_key=cell_key, schema=adapted.config.result_schema, max_attempts=adapted.config.max_format_attempts
-    )
+    bench_mcp.begin_task(task_key=cell_key, schema=task.result_schema, max_attempts=task.max_format_attempts)
 
     try:
         conversation = client.create_conversation(
@@ -234,7 +222,7 @@ def _run_one(
             chat_api_key_id=resolved.api_key_id,
         )
     except ArchestraApiError as exc:
-        return _agent_error(env_id, adapted, model_name, _api_error_text(exc), artifacts, metadata, run=None)
+        return _agent_error(env_id, task, model_name, _api_error_text(exc), artifacts, metadata, run=None)
 
     conversation_id = _require_str(conversation, "id")
     metadata["conversation_id"] = conversation_id
@@ -243,8 +231,8 @@ def _run_one(
 
     run = ChatRunResult(text="")
     stage_error: str | None = None
-    for index, stage in enumerate(adapted.stages):
-        stage_error = _drive_stage(client, conversation_id, stage, run, artifacts)
+    for index, stage in enumerate(task.stages):
+        stage_error = _drive_stage(client, conversation_id, stage, task, run, artifacts)
         if stage_error is not None:
             break
         artifacts.append("stage_complete", {"stage": index, "finish_reason": run.finish_reason})
@@ -258,20 +246,32 @@ def _run_one(
     submission = bench_mcp.take_submission(cell_key)
     if isinstance(submission, SubmissionFormatFailed):
         return _finish(
-            env_id, adapted, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
+            env_id, task, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
             format_attempts=submission.attempts,
         )
     if submission is None:
         if stage_error is not None:
-            return _agent_error(env_id, adapted, model_name, stage_error, artifacts, metadata, run=run)
-        return _finish(env_id, adapted, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0)
+            return _agent_error(env_id, task, model_name, stage_error, artifacts, metadata, run=run)
+        return _finish(env_id, task, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0)
 
     assert isinstance(submission, SubmissionAccepted)
     metadata["format_attempts"] = submission.attempts
     report_path = artifacts.write_bytes("submission.json", submission.payload_bytes)
     artifact_paths["submission"] = str(report_path)
 
-    outcome = run_verifier(adapted.config.verifier, adapted.config.upstream_dir, submission.payload_bytes)
+    artifact_bytes: bytes | None = None
+    if task.artifact_key is not None:
+        try:
+            artifact_bytes = _resolve_artifact(
+                client, conversation_id, task, submission.payload_bytes, artifacts, artifact_paths
+            )
+        except ArchestraApiError as exc:
+            return _agent_error(
+                env_id, task, model_name, f"artifact retrieval failed: {_api_error_text(exc)}",
+                artifacts, metadata, run=run,
+            )
+
+    outcome = run_verifier(task, submission.payload_bytes, artifact_bytes=artifact_bytes)
     _save_verifier_artifacts(artifacts, artifact_paths, outcome)
     metadata["verifier_exit_code"] = outcome.exit_code
     metadata["verifier_timed_out"] = outcome.timed_out
@@ -279,7 +279,7 @@ def _run_one(
         logger.info("  verifier failed (exit %s)", outcome.exit_code)
     return _finish(
         env_id,
-        adapted,
+        task,
         model_name,
         Outcome.PASSED if outcome.passed else Outcome.FAILED,
         run,
@@ -289,20 +289,66 @@ def _run_one(
     )
 
 
+def _resolve_artifact(
+    client: EvalClient,
+    conversation_id: str,
+    task: Task,
+    payload_bytes: bytes,
+    artifacts: _RunArtifacts,
+    artifact_paths: dict[str, JsonValue],
+) -> bytes | None:
+    """Download the artifact the submission names via `task.artifact_key`.
+
+    Returns None (and logs the reason) when the agent did not deliver the named file -- a missing
+    key or a name that matches zero or multiple generated artifacts -- so the verifier fails cleanly
+    on a missing BENCH_OUTPUT. A backend HTTP error listing/downloading is NOT the agent's fault;
+    it raises ArchestraApiError, which the caller records as an agent_error (not a graded FAILED)."""
+    assert task.artifact_key is not None
+    result = json.loads(payload_bytes)
+    filename = result.get(task.artifact_key) if isinstance(result, dict) else None
+    if not isinstance(filename, str):
+        artifacts.append_error("artifact_missing", f"submission has no string {task.artifact_key!r}")
+        return None
+    files = client.list_conversation_files(conversation_id)
+    generated = files.get("generated")
+    rows = generated if isinstance(generated, list) else []
+    matches = [g for g in rows if isinstance(g, dict) and g.get("name") == filename]
+    if len(matches) != 1:
+        artifacts.append_error(
+            "artifact_missing", f"expected exactly one generated artifact named {filename!r}, found {len(matches)}"
+        )
+        return None
+    content_url = matches[0].get("contentUrl")
+    if not isinstance(content_url, str):
+        artifacts.append_error("artifact_missing", f"generated artifact {filename!r} has no contentUrl")
+        return None
+    data = client.download_file_bytes(content_url)
+    artifact_paths["artifact"] = str(artifacts.write_bytes("artifact.bin", data))
+    return data
+
+
 def _drive_stage(
     client: EvalClient,
     conversation_id: str,
-    stage: AdaptedStage,
+    stage: Stage,
+    task: Task,
     run: ChatRunResult,
     artifacts: _RunArtifacts,
 ) -> str | None:
     """Send one stage's user message and drain the chat stream to EOF, folding events into `run`.
 
     Returns an error string if the chat stream itself errored, else None."""
-    files = tuple(FilePart(filename=f.filename, mime_type=f.mime_type, data=f.content) for f in stage.files)
+    files = tuple(
+        FilePart(
+            filename=PurePosixPath(f.dest).name,
+            mime_type=f.mime_type,
+            data=(task.inputs_dir / f.src).read_bytes(),
+        )
+        for f in stage.files
+    )
     stream_parse_error: str | None = None
     try:
-        for record in client.stream_chat_records(conversation_id, text=stage.message, files=files):
+        for record in client.stream_chat_records(conversation_id, text=stage.text, files=files):
             artifacts.append_stream(record)
             if record.kind == "event" and record.event is not None:
                 _apply_chat_event(run, record.event)
@@ -348,24 +394,6 @@ def _strip_mutating_skill_tools(client: EvalClient, agent_id: str) -> None:
             client.unassign_tool(agent_id, _require_str(tool, "id"))
 
 
-def _seed_env_mcps(
-    client: EvalClient, agent_id: str, env_cfg: EnvConfig, adapteds: list[AdaptedTask]
-) -> None:
-    """Register the env's fixture MCPs (env-level plus every task's), deduped by name, once -- so the
-    agent runs against the env's full surface and a fixture is never registered twice."""
-    fixtures: dict[str, McpFixture] = {}
-    for mcp in (*env_cfg.mcps, *(m for adapted in adapteds for m in adapted.config.mcps)):
-        existing = fixtures.get(mcp.name)
-        if existing is not None and existing.server_url != mcp.server_url:
-            raise SystemExit(
-                f"env {env_cfg.id!r}: MCP name {mcp.name!r} maps to two URLs "
-                f"({existing.server_url} and {mcp.server_url})"
-            )
-        fixtures.setdefault(mcp.name, mcp)
-    if fixtures:
-        seed_mcp_fixtures(client, tuple(fixtures.values()), agent_ids=[agent_id])
-
-
 def _resolve_required_tool_ids(client: EvalClient) -> dict[str, str]:
     resolved: dict[str, str] = {}
     for short_name in _REQUIRED_TOOL_SHORT_NAMES:
@@ -405,21 +433,6 @@ def _submit_tool(registered: RegisteredMcp) -> tuple[str, str]:
             return name, _require_str(tool, "id")
     got = [t.get("name") for t in registered.tools]
     raise SystemExit(f"benchmark MCP exposed no {_SUBMIT_TOOL_SUFFIX} tool; got {got}")
-
-
-# === fidelity gate ===
-
-
-def _run_fidelity_gate(env_id: str, config: TaskConfig) -> GateResult:
-    if config.verifier.oracle_file is None:
-        return GateResult(env_id=env_id, task_id=config.id, passed=None, detail="no oracle; gate not applicable")
-    outcome = run_gate(config.verifier, config.upstream_dir)
-    detail = (
-        "oracle reproduces a verifier-passing solution"
-        if outcome.passed
-        else f"oracle output failed the verifier (exit {outcome.exit_code})"
-    )
-    return GateResult(env_id=env_id, task_id=config.id, passed=outcome.passed, detail=detail)
 
 
 # === artifacts ===
@@ -477,7 +490,7 @@ class _RunArtifacts:
 
 def _agent_error(
     env_id: str,
-    adapted: AdaptedTask,
+    task: Task,
     model_name: str,
     error: str,
     artifacts: _RunArtifacts,
@@ -487,14 +500,14 @@ def _agent_error(
 ) -> RunResult:
     artifacts.append_error("agent_error", error)
     return _finish(
-        env_id, adapted, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
+        env_id, task, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
         format_attempts=0, agent_error=error,
     )
 
 
 def _finish(
     env_id: str,
-    adapted: AdaptedTask,
+    task: Task,
     model_name: str,
     outcome: Outcome,
     run: ChatRunResult | None,
@@ -511,14 +524,14 @@ def _finish(
     artifacts.write_run(metadata)
     return RunResult(
         env_id=env_id,
-        task_id=adapted.config.id,
+        task_id=task.id,
         model=model_name,
         outcome=outcome,
         finish_reason=run.finish_reason if run else None,
         tool_call_count=len(run.tool_calls) if run else 0,
         total_tokens=run.total_tokens if run else None,
         agent_error=agent_error,
-        stage_count=len(adapted.stages),
+        stage_count=len(task.stages),
         format_attempts=format_attempts,
         artifact_dir=str(artifacts.path),
     )
@@ -538,7 +551,7 @@ def _select_envs(
     envs: dict[str, EnvConfig],
     env: str | list[str] | tuple[str, ...] | None,
     task: str | list[str] | tuple[str, ...] | None,
-) -> list[tuple[EnvConfig, list[TaskConfig]]]:
+) -> list[tuple[EnvConfig, list[Task]]]:
     """Resolve the `--env`/`--task` filters to (env, its selected tasks) pairs.
 
     `env` defaults to all envs; `task` (a global filter) defaults to all tasks in the chosen envs.
@@ -553,7 +566,7 @@ def _select_envs(
         chosen = [envs[name] for name in env_names]
 
     task_names = _split_names(task)
-    selected: list[tuple[EnvConfig, list[TaskConfig]]] = []
+    selected: list[tuple[EnvConfig, list[Task]]] = []
     matched: set[str] = set()
     for env_cfg in chosen:
         if task_names is None:
@@ -623,7 +636,7 @@ def _write_run_config(
     run_dir: Path,
     *,
     run_id: str,
-    selected: list[tuple[EnvConfig, list[TaskConfig]]],
+    selected: list[tuple[EnvConfig, list[Task]]],
     provider: str,
     base_url: str | None,
     models: list[str],
@@ -705,7 +718,6 @@ def cli(
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
     base_url: str | None = None,
-    gate_only: bool = False,
     out: str | None = None,
     run_dir: str | None = None,
 ) -> None:
@@ -724,7 +736,7 @@ def cli(
     raise SystemExit(
         main(
             env=env, task=task, model=model, provider=provider, base_url=base_url,
-            gate_only=gate_only, out=out, run_dir=run_dir,
+            out=out, run_dir=run_dir,
         )
     )
 

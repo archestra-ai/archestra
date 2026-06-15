@@ -21,8 +21,8 @@ from archestra_client import (
     LlmKeyCreate,
 )
 from contracts import JsonValue, Provider, Scope
+from envs import Mcp
 from eval_client import EvalClient
-from tasks import McpFixture
 
 logger = logging.getLogger(__name__)
 
@@ -77,19 +77,20 @@ def ensure_provider_and_models(
 
 
 def seed_skill_ref(
-    client: EvalClient, *, repo: str, path: str | None, ref: str, cap: int = 10, scope: Scope = "org"
+    client: EvalClient, *, repo: str, path: str | None, ref: str, cap: int | None = None, scope: Scope = "org"
 ) -> list[str]:
     """Import an environment's skills from a public GitHub repo, pinned to `ref` (commit/branch/tag).
 
-    Discovers the skills under `path` at the pinned ref and imports up to `cap` of them. A ref that
-    resolves to no skills is a hard error -- a misconfigured environment, not a degraded run."""
+    Discovers the skills under `path` at the pinned ref and imports up to `cap` of them (None = all).
+    A ref that resolves to no skills is a hard error -- a misconfigured environment, not a degraded
+    run."""
     discovered = client.discover_github_skills(repo, path=path, ref=ref)
     paths = [p for s in discovered if isinstance(p := s.get("skillPath"), str)]
     if not paths:
         where = f"{repo}@{ref}" + (f" under {path!r}" if path else "")
         raise SystemExit(f"no skills discovered in {where}; refusing to run a misconfigured environment")
-    selected = paths[:cap]
-    if len(paths) > cap:
+    selected = paths if cap is None else paths[:cap]
+    if cap is not None and len(paths) > cap:
         logger.info("importing %d of %d skills from %s@%s (capped)", cap, len(paths), repo, ref)
     client.import_github_skills(repo, selected, scope=scope, ref=ref)
     logger.info("imported %d skills from %s@%s", len(selected), repo, ref)
@@ -115,9 +116,9 @@ def register_remote_mcp(
 
 
 def seed_mcp_fixtures(
-    client: EvalClient, mcps: tuple[McpFixture, ...], *, scope: Scope = "org", agent_ids: list[str] | None = None
+    client: EvalClient, mcps: tuple[Mcp, ...], *, scope: Scope = "org", agent_ids: list[str] | None = None
 ) -> list[RegisteredMcp]:
-    """Seed a task's fixture MCP servers (extra tools the agent may use), via the same path the
+    """Seed an environment's remote MCP servers (extra tools the agent may use), via the same path the
     benchmark MCP uses, assigning their tools to `agent_ids` at install time."""
     registered: list[RegisteredMcp] = []
     for fixture in mcps:

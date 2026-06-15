@@ -1,15 +1,20 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""harness-side verification: run a task's vendored verifier (and oracle) OUT of the sandbox.
+"""harness-side verification: run a task's verifier OUT of the sandbox.
 
-the agent's output is downloaded from the conversation's sandbox and verified here, in an
-isolated temp dir, by the upstream pytest verifier running in an ephemeral uv environment. the
-verifier and oracle assets never enter the sandbox, so the agent cannot read or game them.
+the agent's submission (and, for file-producing tasks, a downloaded artifact) is verified here, in
+an isolated temp dir, by the task's pytest verifier running in an ephemeral uv environment. the
+verifier assets never enter the sandbox, so the agent cannot read or game them.
 
-failures are loud: if the verifier's dependency environment cannot be built, that is a hard
-error (a broken eval host), not a silent task failure.
+the verifier reads (fixed env names, same for every task):
+  - BENCH_RESULT   path to the agent's submitted JSON result (always set)
+  - BENCH_FIXTURES path to a dir holding the task's `inputs/` and `expected/` (set iff either exists)
+  - BENCH_OUTPUT   path to the downloaded agent artifact bytes (set iff the task produces a file)
+
+failures are loud: if the verifier's dependency environment cannot be built, that is a hard error
+(a broken eval host), not a silent task failure.
 """
 
 from __future__ import annotations
@@ -22,10 +27,15 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from tasks import WORKDIR_TOKEN, TextReplacement, VerifierSpec, apply_replacements
+from tasks import Task
 
-_REPORT_NAME = "report.json"
-_DATA_NAME = "data.json"
+_PYTEST_REQ = "pytest==8.4.1"  # the harness owns the runner; tasks declare only their domain deps
+_RESULT_NAME = "result.json"
+_OUTPUT_NAME = "artifact.bin"
+_FIXTURES_DIR = "fixtures"
+_RESULT_ENV = "BENCH_RESULT"  # path to the agent's submitted result
+_FIXTURES_ENV = "BENCH_FIXTURES"  # path to the task's inputs/ + expected/ (verifier-only)
+_OUTPUT_ENV = "BENCH_OUTPUT"  # path to the agent-produced artifact bytes
 
 
 @dataclass(frozen=True)
@@ -37,51 +47,25 @@ class VerifyOutcome:
     timed_out: bool
 
 
-def run_verifier(spec: VerifierSpec, upstream_dir: Path, report_bytes: bytes,
-                 *, timeout_s: float = 900.0) -> VerifyOutcome:
-    """verify an agent-produced report against the task's ground-truth verifier."""
+def run_verifier(
+    task: Task, report_bytes: bytes, *, artifact_bytes: bytes | None = None, timeout_s: float = 900.0
+) -> VerifyOutcome:
+    """verify an agent submission (and optional produced artifact) against the task's verifier."""
     with tempfile.TemporaryDirectory(prefix="archestra-bench-verify-") as tmp:
         workdir = Path(tmp)
-        python = _resolve_python(spec.deps, workdir)
-        test_path, env = _stage(spec, upstream_dir, workdir, report_bytes)
-        return _run_pytest(test_path, env=env, python=python, timeout_s=timeout_s)
-
-
-def run_gate(spec: VerifierSpec, upstream_dir: Path, *, timeout_s: float = 900.0) -> VerifyOutcome:
-    """fidelity gate: run the task's oracle to produce a known-good report, then verify it.
-
-    proves the task + verifier are sound (a correct solution passes) independent of any agent.
-    raises if the task declares no oracle."""
-    if spec.oracle_file is None:
-        raise ValueError("task has no oracle to run a fidelity gate against")
-    with tempfile.TemporaryDirectory(prefix="archestra-bench-gate-") as tmp:
-        workdir = Path(tmp)
-        python = _resolve_python(spec.deps, workdir)
-        report_bytes = _run_oracle(spec, upstream_dir, workdir, python=python, timeout_s=timeout_s)
-        test_path, env = _stage(spec, upstream_dir, workdir, report_bytes)
+        python = _resolve_python(task.verifier.deps, workdir)
+        test_path, env = _stage(task, workdir, report_bytes, artifact_bytes)
         return _run_pytest(test_path, env=env, python=python, timeout_s=timeout_s)
 
 
 # === internal ===
 
 
-def _render_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path) -> str:
-    """the oracle script with its hardcoded paths remapped onto the gate's working dir."""
-    if spec.oracle_file is None:
-        raise ValueError("task has no oracle")
-    text = (upstream_dir / spec.oracle_file).read_text(encoding="utf-8")
-    replacements = tuple(
-        TextReplacement(frm=r.frm, to=r.to.replace(WORKDIR_TOKEN, str(workdir)))
-        for r in spec.oracle_replacements
-    )
-    return apply_replacements(text, replacements)
-
-
 def _resolve_python(deps: tuple[str, ...], workdir: Path) -> str:
     """the interpreter to verify with: an ephemeral uv env for tasks with deps, else this one.
 
-    a task with no deps (e.g. the `basics` env) runs under the current interpreter, so a no-dep
-    verifier needs neither uv nor network."""
+    a task with no deps runs under the current interpreter, so a no-dep verifier needs neither uv
+    nor network."""
     if not deps:
         return sys.executable
     return _build_uv_env(deps, workdir / ".venv")
@@ -98,8 +82,10 @@ def _build_uv_env(deps: tuple[str, ...], venv_dir: Path) -> str:
     if create.returncode != 0:
         raise RuntimeError(f"failed to create verifier venv: {create.stderr.strip()}")
     python = str(venv_dir / "bin" / "python")
+    # always install pytest: it is the harness's runner, not a task dependency. tasks declare only
+    # their domain libs, so an isolated verifier env still has pytest to launch under.
     install = subprocess.run(
-        ["uv", "pip", "install", "--python", python, *deps],
+        ["uv", "pip", "install", "--python", python, _PYTEST_REQ, *deps],
         capture_output=True, text=True,
     )
     if install.returncode != 0:
@@ -107,25 +93,36 @@ def _build_uv_env(deps: tuple[str, ...], venv_dir: Path) -> str:
     return python
 
 
-def _stage(spec: VerifierSpec, upstream_dir: Path, workdir: Path,
-           report_bytes: bytes) -> tuple[Path, dict[str, str]]:
-    """write the report + copy the data and test files into the isolated workdir; build env."""
-    report_path = workdir / _REPORT_NAME
-    report_path.write_bytes(report_bytes)
-    data_path = workdir / _DATA_NAME
-    shutil.copyfile(upstream_dir / spec.data_file, data_path)
-    test_path = workdir / Path(spec.test_file).name
-    shutil.copyfile(upstream_dir / spec.test_file, test_path)
-    env = {
-        spec.report_env: str(report_path),
-        spec.data_env: str(data_path),
-        **spec.env,
-    }
+def _stage(
+    task: Task, workdir: Path, report_bytes: bytes, artifact_bytes: bytes | None
+) -> tuple[Path, dict[str, str]]:
+    """write the submission (+ optional artifact), copy fixtures and the verifier file; build env."""
+    env: dict[str, str] = {**task.verifier.env}
+
+    result_path = workdir / _RESULT_NAME
+    result_path.write_bytes(report_bytes)
+    env[_RESULT_ENV] = str(result_path)
+
+    fixtures_root = workdir / _FIXTURES_DIR
+    staged_any = False
+    for sub, source in (("inputs", task.inputs_dir), ("expected", task.expected_dir)):
+        if source.is_dir():
+            shutil.copytree(source, fixtures_root / sub)
+            staged_any = True
+    if staged_any:
+        env[_FIXTURES_ENV] = str(fixtures_root)
+
+    if artifact_bytes is not None:
+        output_path = workdir / _OUTPUT_NAME
+        output_path.write_bytes(artifact_bytes)
+        env[_OUTPUT_ENV] = str(output_path)
+
+    test_path = workdir / Path(task.verifier.test_file).name
+    shutil.copyfile(task.dir / task.verifier.test_file, test_path)
     return test_path, env
 
 
-def _run_pytest(test_path: Path, *, env: dict[str, str], python: str,
-                timeout_s: float) -> VerifyOutcome:
+def _run_pytest(test_path: Path, *, env: dict[str, str], python: str, timeout_s: float) -> VerifyOutcome:
     """run pytest on a single file; exit 0 is a pass, any nonzero is a fail."""
     # drop host vars that would let the surrounding environment change verifier behavior: the
     # import path and any injected pytest/coverage state. keeps the verdict reproducible.
@@ -150,32 +147,6 @@ def _run_pytest(test_path: Path, *, env: dict[str, str], python: str,
         passed=proc.returncode == 0, exit_code=proc.returncode,
         stdout=proc.stdout, stderr=proc.stderr, timed_out=False,
     )
-
-
-def _run_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path, *,
-                python: str, timeout_s: float) -> bytes:
-    """run the remapped oracle to produce report.json in the gate workdir; return its bytes."""
-
-    shutil.copyfile(upstream_dir / spec.data_file, workdir / _DATA_NAME)
-    script = _render_oracle(spec, upstream_dir, workdir)
-    script_path = workdir / "oracle.sh"
-    script_path.write_text(script, encoding="utf-8")
-    proc = subprocess.run(
-        ["bash", str(script_path)],
-        cwd=str(workdir), env={**os.environ, "PATH": _python_path_env(python)},
-        capture_output=True, text=True, timeout=timeout_s,
-    )
-    report_path = workdir / _REPORT_NAME
-    if proc.returncode != 0 or not report_path.exists():
-        raise RuntimeError(
-            f"oracle did not produce {_REPORT_NAME} (exit {proc.returncode}): {proc.stderr.strip()}"
-        )
-    return report_path.read_bytes()
-
-
-def _python_path_env(python: str) -> str:
-    """prepend the verifier interpreter's dir to PATH so the oracle's `python3` resolves to it."""
-    return f"{Path(python).parent}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
 def _coerce_text(value: str | bytes | None) -> str:

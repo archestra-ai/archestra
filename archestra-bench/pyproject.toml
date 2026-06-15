@@ -20,10 +20,17 @@ dependencies = [
 [tool.uv]
 package = false
 
+[tool.pytest.ini_options]
+# the bench modules live flat at the root; the migration-kit client is imported off sys.path
+# (run.py adds it at runtime; tests need it on the path at import time too).
+pythonpath = [".", "../migration-kit/scripts"]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "ty==0.0.44",
     "ruff==0.15.16",
+    "pytest==8.4.1",
 ]
 
 [tool.ty.environment]
@@ -37,6 +44,7 @@ extra-paths = ["../migration-kit/scripts"]
 include = [
     "eval_client.py",
     "tasks.py",
+    "tomlconf.py",
     "envs.py",
     "results.py",
     "verify.py",
@@ -61,4 +69,4 @@ select = ["F", "E", "I"]
 
 [tool.ruff.lint.isort]
 # imported by filename off sys.path -- treat as first-party so import ordering is stable.
-known-first-party = ["archestra_client", "contracts", "eval_client", "tasks", "envs", "results", "verify", "lifecycle", "seeding", "benchmark_mcp"]
+known-first-party = ["archestra_client", "contracts", "eval_client", "tasks", "tomlconf", "envs", "results", "verify", "lifecycle", "seeding", "benchmark_mcp"]

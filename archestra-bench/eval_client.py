@@ -114,19 +114,30 @@ class EvalClient(ArchestraClient):
         return [s for s in skills if isinstance(s, dict)] if isinstance(skills, list) else []
 
     def import_github_skills(
-        self, repo_url: str, skill_paths: list[str], *, scope: str = "org", ref: str | None = None
+        self, repo_url: str, skill_paths: list[str], *, scope: str = "org", ref: str | None = None,
+        timeout_s: float = 600.0,
     ) -> dict[str, JsonValue]:
         """import the named skills from a public GitHub repo into the skill library, optionally
-        pinned to a commit/branch/tag `ref` (see `discover_github_skills`)."""
+        pinned to a commit/branch/tag `ref` (see `discover_github_skills`).
+
+        the backend fetches every skill's files from GitHub synchronously, so importing a whole
+        library takes minutes -- well past the client's default 30s. raise the timeout for this one
+        call (restored after) so a large import does not spuriously time out, while other calls keep
+        failing fast."""
         body: dict[str, JsonValue] = {
             "repoUrl": _pin_repo_url(repo_url, ref),
             "skillPaths": skill_paths,
             "scope": scope,
         }
-        return require_dict(
-            self._request("POST", "/api/skills/github/import", json_body=body),
-            ctx="POST /api/skills/github/import",
-        )
+        prev_timeout = self.timeout
+        self.timeout = max(prev_timeout, timeout_s)
+        try:
+            return require_dict(
+                self._request("POST", "/api/skills/github/import", json_body=body),
+                ctx="POST /api/skills/github/import",
+            )
+        finally:
+            self.timeout = prev_timeout
 
     def list_agent_tools(self, agent_id: str) -> list[dict[str, JsonValue]]:
         return _items(self._request("GET", f"/api/agents/{agent_id}/tools"))
@@ -173,6 +184,34 @@ class EvalClient(ArchestraClient):
             "trigger": "submit-message",
         }
         yield from self._stream_chat_records(body, timeout_s)
+
+    # --- conversation files ----------------------------------------------------------------
+
+    def list_conversation_files(self, conversation_id: str) -> dict[str, JsonValue]:
+        """list a conversation's files: `generated` (artifacts the agent exported via download_file)
+        and `attachments` (files the user staged). Each entry carries a `name` and `contentUrl`."""
+        return require_dict(
+            self._request("GET", f"/api/chat/conversations/{conversation_id}/files"),
+            ctx=f"GET /api/chat/conversations/{conversation_id}/files",
+        )
+
+    def download_file_bytes(self, content_url: str, *, timeout_s: float = 120.0) -> bytes:
+        """raw authenticated GET returning the response body untouched as bytes.
+
+        bypasses ArchestraClient._request/_decode_body (which coerces a non-JSON body to text and
+        would corrupt binary artifacts) so a zip/gif/xlsx is returned byte-exact."""
+        url = self._url(content_url)
+        headers = {"Accept-Encoding": "identity"}
+        if self._auth:
+            headers["Authorization"] = self._auth
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with self._opener.open(req, timeout=timeout_s) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as exc:
+            raise ArchestraApiError("GET", url, exc.code, _read_error_body(exc)) from exc
+        except OSError as exc:
+            raise ArchestraApiError("GET", url, 0, f"{type(exc).__name__}: {exc}") from exc
 
     # --- internal --------------------------------------------------------------------------
 

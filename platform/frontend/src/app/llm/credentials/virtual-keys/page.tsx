@@ -382,7 +382,7 @@ function OwnerSelectField({
 
   return (
     <div className="space-y-2">
-      <Label>Owner</Label>
+      <Label>Person</Label>
       <UserSearchableSelect
         value={value}
         onValueChange={onChange}

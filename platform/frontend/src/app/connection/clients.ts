@@ -634,6 +634,46 @@ export COPILOT_MODEL="<model-name>"`,
     },
   },
   {
+    id: "windmill",
+    label: "Windmill",
+    sub: "Workflow automation",
+    tileBg: "#f8fafc",
+    iconOverride: { bg: "#1e293b", fg: "#fff", glyph: "W" },
+    mcp: {
+      kind: "custom",
+      supportedAuth: "token",
+      configFile: "Windmill script",
+      language: "typescript",
+      steps: [
+        {
+          title: "Install the @modelcontextprotocol/sdk in your script",
+          body: "Add the dependency to your Windmill script or flow.",
+          language: "bash",
+          code: "npm install @modelcontextprotocol/sdk",
+        },
+        {
+          title: "Connect to the Archestra Gateway",
+          body: "Use the Client from the SDK to connect to your gateway URL.",
+          language: "typescript",
+          buildCommand: ({ url, token }) => `import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+
+const transport = new SSEClientTransport(
+  new URL("${url}")
+);
+
+const client = new Client(
+  { name: "windmill-client", version: "1.0.0" },
+  { capabilities: {} }
+);
+
+await client.connect(transport);`,
+        },
+      ],
+    },
+    proxy: { kind: "generic" },
+  },
+  {
     id: "generic",
     label: "Any Client",
     sub: "Generic instructions",

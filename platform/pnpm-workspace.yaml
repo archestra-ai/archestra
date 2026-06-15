@@ -5,6 +5,7 @@ packages:
   - "shared"
   - "archestra-rs/sandbox-rs"
   - "e2e-tests"
+  - "mcp-windmill-apps-server"
 
 catalog:
   ai: ^6.0.193

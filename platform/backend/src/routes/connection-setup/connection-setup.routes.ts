@@ -10,7 +10,7 @@ import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
-import { getConnectionBaseUrlSources } from "@/config";
+import config, { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
 import {
   AgentModel,
@@ -68,6 +68,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "deepseek",
     "xai",
     "cerebras",
+    "github-copilot",
   ],
 };
 
@@ -421,6 +422,17 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
+      // Passthrough Copilot setups run the GitHub device flow inside the
+      // script; virtual-key setups resolve the stored token server-side.
+      githubCopilot:
+        setup.provider === "github-copilot" &&
+        setup.proxyAuth === "provider-key"
+          ? {
+              tokenExchangeUrl: config.llm["github-copilot"].tokenExchangeUrl,
+              deviceAuthBaseUrl: config.llm["github-copilot"].deviceAuthBaseUrl,
+              clientId: config.llm["github-copilot"].clientId,
+            }
+          : null,
     };
   }
 

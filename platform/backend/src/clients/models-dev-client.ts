@@ -402,6 +402,8 @@ class ModelsDevClient {
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
       azure: ["azure/"],
+      // Not synced via models.dev (subscription-dependent /models endpoint)
+      "github-copilot": [],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

@@ -115,6 +115,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
@@ -497,22 +498,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
           user: { id: user.id, email: user.email, name: user.name },
           callback: async () => {
-            // Create LLM model using shared service
-            // Pass conversationId as sessionId to group all requests in this chat session
-            // Pass agent's llmApiKeyId so it can be used without user access check
-            const { model } = await createLLMModelForAgent({
-              organizationId,
-              userId: user.id,
-              agentId,
-              model: selectedModel,
-              provider,
-              conversationId,
-              externalAgentId,
-              sessionId: conversationId,
-              source: "chat",
-              agentLlmApiKeyId: agent.llmApiKeyId,
-            });
-
             // Build the model-bound copy of the history: slash-command skill
             // injection (both org flags must be on — the injected block
             // references load_skill) followed by normalization. The original
@@ -520,17 +505,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const skillSlashCommandsActive =
               !!organization?.skillSlashCommandsEnabled &&
               !!organization?.skillToolsEnabled;
-            const normalizedMessagesForLLM = normalizeChatMessages(
-              skillSlashCommandsActive
-                ? await injectSkillActivation({
-                    messages: messages as ChatMessage[],
-                    organizationId,
-                    userId: user.id,
-                    agentId: conversation.agentId ?? undefined,
-                    conversationId,
-                  })
-                : (messages as ChatMessage[]),
-            );
+            const messagesWithSkill = skillSlashCommandsActive
+              ? await injectSkillActivation({
+                  messages: messages as ChatMessage[],
+                  organizationId,
+                  userId: user.id,
+                  agentId: conversation.agentId ?? undefined,
+                  conversationId,
+                })
+              : (messages as ChatMessage[]);
+
+            // Render-loop diagnostics from owned MCP App renders ride the last
+            // user message's metadata; inject them (delimited, framed as
+            // untrusted) so the model can fix the app via update_app. No-op
+            // when absent or when the apps feature is off.
+            const messagesForLLM =
+              await injectAppDiagnostics(messagesWithSkill);
+
+            // Normalize chat history before replaying it to the model.
+            // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+            // and strips heavy image/browser payloads that would otherwise bloat context.
+            const normalizedMessagesForLLM =
+              normalizeChatMessages(messagesForLLM);
 
             // Perplexity does NOT support tool calling - it has built-in web search instead
             // @see https://docs.perplexity.ai/api-reference/chat-completions-post
@@ -628,6 +624,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
               execute: async ({ writer }) => {
                 chatMcpElicitation.setWriter(writer);
+
+                // Create the LLM model here, inside execute, so a credential
+                // failure (e.g. a per-user provider like GitHub Copilot the user
+                // hasn't connected) flows through onError → mapProviderError and
+                // reaches the client as a structured ProviderAuthRequired error
+                // (the inline connect card) rather than a generic server error.
+                // Pass agent's llmApiKeyId so it's used without a user access
+                // check; pass conversationId as sessionId to group the session.
+                const { model } = await createLLMModelForAgent({
+                  organizationId,
+                  userId: user.id,
+                  agentId,
+                  model: selectedModel,
+                  provider,
+                  conversationId,
+                  externalAgentId,
+                  sessionId: conversationId,
+                  source: "chat",
+                  agentLlmApiKeyId: agent.llmApiKeyId,
+                });
 
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.

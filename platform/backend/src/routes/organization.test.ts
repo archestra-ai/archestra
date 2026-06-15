@@ -137,6 +137,53 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/connection-settings - default provider keys", () => {
+    test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { "github-copilot": key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toMatch(/per-user/);
+    });
+
+    test("accepts a non-per-user provider default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Anthropic",
+        provider: "anthropic",
+        scope: "org",
+        userId: null,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { anthropic: key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+    });
+  });
+
   describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
     test("rejects enabling slash commands while skill tools are off", async () => {
       const response = await app.inject({

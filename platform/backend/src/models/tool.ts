@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
@@ -34,6 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
@@ -1124,16 +1126,25 @@ class ToolModel {
       }
     }
 
-    // Remove stale tools that no longer exist in the Archestra tool definitions
-    // FK constraints use onDelete: "cascade" so related records are cleaned up automatically
+    // Remove stale tools that no longer exist in the Archestra tool definitions.
+    // FK constraints use onDelete: "cascade" so related records are cleaned up
+    // automatically — which is also why a feature-flagged-off built-in must NOT
+    // be treated as stale: `archestraToolNames` only lists the tools enabled
+    // this boot, so deleting rows missing from it would wipe a disabled
+    // feature's tools (apps, sandbox) and cascade away every agent/conversation
+    // assignment. A built-in is stale only when its short name is gone from the
+    // full registry; flag-gating governs visibility, not catalog reconciliation.
+    const knownBuiltInShortNames = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
 
-    const staleTools = allCatalogTools.filter(
-      (t) => !archestraToolNames.has(t.name),
-    );
+    const staleTools = allCatalogTools.filter((t) => {
+      if (archestraToolNames.has(t.name)) return false;
+      const shortName = extractArchestraBuiltInShortName(t.name);
+      return shortName === null || !knownBuiltInShortNames.has(shortName);
+    });
     if (staleTools.length > 0) {
       await db.delete(schema.toolsTable).where(
         inArray(
@@ -1163,7 +1174,10 @@ class ToolModel {
   static async backfillSkillToolsToOrgAgents(
     organizationId: string,
   ): Promise<number> {
-    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId);
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
     if (toolIds.length === 0) return 0;
 
     const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
@@ -1209,6 +1223,57 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when an MCP App built-in tool is
+   * created for the first time on this seed run, assign just those new tools to
+   * every existing agent in every org.
+   *
+   * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
+   * agents that predate a tool's introduction (e.g. existing agents when
+   * read_app/edit_app are added) would otherwise never receive it. Apps are a
+   * global feature (`ARCHESTRA_APPS_ENABLED`), not a per-org opt-in, so this
+   * spans all orgs. Idempotent: only the newly-created short names are assigned,
+   * via `createManyIfNotExists`.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewAppToolsToEnabledOrgs(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    if (!config.apps.enabled) return;
+
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newAppShortNames = APP_ARCHESTRA_TOOL_SHORT_NAMES.filter(
+      (shortName) => createdShortNames.has(shortName),
+    );
+    if (newAppShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newAppShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newAppShortNames,
+        },
+        "Backfilled new MCP App tools to org agents",
+      );
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *
@@ -1222,31 +1287,64 @@ class ToolModel {
     const organization = await OrganizationModel.getById(organizationId);
     if (!organization?.skillToolsEnabled) return;
 
-    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId, {
-      organization,
-    });
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      { organization },
+    );
     if (toolIds.length === 0) return;
 
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 
-  private static async getSkillToolIdsForOrg(
+  /**
+   * Assign the MCP App management tools to a single agent when the apps
+   * feature is enabled. No-op otherwise.
+   *
+   * Called from `AgentModel.create` so new agents can build and use apps by
+   * default. With the feature dark the app tools are not even seeded, so
+   * there is nothing to assign.
+   */
+  static async assignAppToolsToAgent(
+    agentId: string,
     organizationId: string,
+  ): Promise<void> {
+    if (!config.apps.enabled) return;
+
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      APP_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  private static async getToolIdsForOrgByShortNames(
+    organizationId: string,
+    shortNames: readonly ArchestraToolShortName[],
     options?: { organization?: Organization | null },
   ): Promise<string[]> {
     const organization =
       options?.organization ??
       (await OrganizationModel.getById(organizationId));
     archestraMcpBranding.syncFromOrganization(organization);
-    const skillToolNames = SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
+    const toolNames = shortNames.map((shortName) =>
       archestraMcpBranding.getToolName(shortName),
     );
 
-    const skillTools = await db
+    // pinned to the Archestra catalog: a non-built-in tool that happens to
+    // share a built-in's prefixed name must never be auto-assigned
+    const tools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, skillToolNames));
-    return skillTools.map((tool) => tool.id);
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+    return tools.map((tool) => tool.id);
   }
 
   static async syncArchestraBuiltInCatalog(params: {
@@ -1442,6 +1540,146 @@ class ToolModel {
       .limit(1);
 
     return mcpTools;
+  }
+
+  /**
+   * Resolve upstream tool names to rows assignable to an MCP App, scoped to
+   * the caller's organization (a tool is reachable when its catalog entry
+   * belongs to the org or is a global, org-less entry). Archestra built-ins
+   * are excluded — apps reach the data store through `archestra.storage`, and
+   * the management tools are not app-dispatchable. The catalog join also
+   * guarantees a non-null catalogId, which app dispatch requires.
+   */
+  static async findAppAssignableToolsByNames(
+    organizationId: string,
+    names: readonly string[],
+  ): Promise<
+    Array<{ id: string; name: string; clonedPendingDiscovery: boolean }>
+  > {
+    if (names.length === 0) return [];
+    return await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.toolsTable.name, [...names]),
+          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * By-id counterpart of {@link findAppAssignableToolsByNames}: resolves a tool
+   * only within the caller's organization (catalog-backed, org-owned or global).
+   * A tool from another org — or a non-catalog/built-in tool — returns null, so
+   * the raw-id assignment endpoint cannot attach (or probe for) foreign tools.
+   */
+  static async findAppAssignableToolById(
+    organizationId: string,
+    toolId: string,
+  ): Promise<Tool | null> {
+    const [row] = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.id, toolId),
+          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      )
+      .limit(1);
+    return row?.tool ?? null;
+  }
+
+  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  static async getMcpToolsAssignedToApp(
+    toolNames: string[],
+    appId: string,
+  ): Promise<McpToolAssignment[]> {
+    if (toolNames.length === 0) {
+      return [];
+    }
+
+    return await db
+      .select({
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.appToolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      );
+  }
+
+  /** App-owner counterpart of {@link getMcpToolsAssignedToAgentBySuffix}. */
+  static async getMcpToolsAssignedToAppBySuffix(
+    toolNameSuffix: string,
+    appId: string,
+  ) {
+    const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolNameSuffix}`;
+
+    return await db
+      .select({
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.appToolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      )
+      .limit(1);
   }
 
   /**

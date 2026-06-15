@@ -32,10 +32,25 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => true,
 }));
 
+const { availableKeysMock, createKeyMock } = vi.hoisted(() => ({
+  availableKeysMock: vi.fn(),
+  createKeyMock: vi.fn(),
+}));
+
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useAvailableLlmProviderApiKeys: () => ({
-    data: [{ provider: "anthropic" }, { provider: "bedrock" }],
+  useAvailableLlmProviderApiKeys: () => availableKeysMock(),
+  useCreateLlmProviderApiKey: () => ({
+    mutateAsync: createKeyMock,
+    isPending: false,
   }),
+}));
+
+vi.mock("@/components/github-copilot-sign-in", () => ({
+  GithubCopilotSignIn: ({ onToken }: { onToken: (token: string) => void }) => (
+    <button type="button" onClick={() => onToken("gho_test")}>
+      Sign in with GitHub
+    </button>
+  ),
 }));
 
 function findClient(id: string) {
@@ -75,6 +90,10 @@ function renderPanel(
 beforeEach(() => {
   vi.clearAllMocks();
   hasPermissionsMock.mockReturnValue({ data: true });
+  availableKeysMock.mockReturnValue({
+    data: [{ provider: "anthropic" }, { provider: "bedrock" }],
+  });
+  createKeyMock.mockResolvedValue({ id: "key-1" });
   fetchSkillsMock.mockResolvedValue(["s1", "s2"]);
   createSetupMock.mockResolvedValue({
     id: "setup-1",
@@ -163,5 +182,66 @@ describe("ConnectCommandPanel", () => {
       ),
     );
     expect(fetchSkillsMock).not.toHaveBeenCalled();
+  });
+
+  describe("per-user provider (GitHub Copilot)", () => {
+    it("shows a connect gate instead of the command when the user has no Copilot key", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      expect(
+        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      ).toBeInTheDocument();
+      // No command is generated until the user connects their own account.
+      expect(createSetupMock).not.toHaveBeenCalled();
+    });
+
+    it("creates a personal key when the user connects", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      const user = userEvent.setup();
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      await user.click(
+        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      );
+
+      await waitFor(() =>
+        expect(createKeyMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            scope: "personal",
+            apiKey: "gho_test",
+          }),
+        ),
+      );
+    });
+
+    it("generates the command normally once a Copilot key exists", async () => {
+      availableKeysMock.mockReturnValue({
+        data: [{ provider: "github-copilot" }],
+      });
+      renderPanel({
+        client: findClient("copilot-cli"),
+        urlProvider: "github-copilot",
+      });
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: "github-copilot",
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+      expect(
+        screen.queryByRole("button", { name: /Sign in with GitHub/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

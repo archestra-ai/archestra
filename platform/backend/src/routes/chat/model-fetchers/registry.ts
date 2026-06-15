@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
@@ -113,6 +116,12 @@ async function getProviderApiKey(params: {
     if (secretValue) {
       return secretValue as string;
     }
+  }
+
+  // Per-user providers (GitHub Copilot) must never use the shared env token —
+  // even for model listing it would be one account's token for everyone.
+  if (providerRequiresPerUserCredential(provider)) {
+    return null;
   }
 
   return getProviderEnvApiKey(provider) ?? null;

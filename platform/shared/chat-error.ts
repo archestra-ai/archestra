@@ -272,6 +272,12 @@ export enum ChatErrorCode {
   NetworkError = "network_error",
   /** Provider finished cleanly but produced no content - retryable */
   EmptyResponse = "empty_response",
+  /**
+   * The provider needs a per-user credential the acting user hasn't linked yet
+   * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
+   * to link their account rather than showing a generic key error.
+   */
+  ProviderAuthRequired = "provider_auth_required",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -299,6 +305,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.EmptyResponse]:
     "The model ended its turn without a reply. Rephrasing your message may help.",
+  [ChatErrorCode.ProviderAuthRequired]:
+    "Connect your account to use this model.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 
@@ -333,6 +341,15 @@ export interface ChatErrorResponse {
   usageLimitExceeded?: boolean;
   /** The usage-limit entity that blocked the request, when known */
   usageLimitEntityType?: string;
+  /**
+   * Present with code `ProviderAuthRequired`: tells the UI which per-user
+   * provider the acting user must link, so it can render a "Connect <provider>"
+   * prompt (and, where supported, open the link flow) instead of a key error.
+   */
+  authAction?: {
+    provider: SupportedProvider;
+    providerLabel: string;
+  };
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -357,6 +374,12 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   spanId: z.string().optional(),
   usageLimitExceeded: z.boolean().optional(),
   usageLimitEntityType: z.string().optional(),
+  authAction: z
+    .object({
+      provider: SupportedProvidersSchema,
+      providerLabel: z.string(),
+    })
+    .optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

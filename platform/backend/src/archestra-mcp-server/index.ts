@@ -15,6 +15,15 @@ import config from "@/config";
 import { ToolModel } from "@/models";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
+import {
+  toolEntries as appDataToolEntries,
+  tools as appDataTools,
+} from "./app-data";
+import {
+  toolEntries as appLlmToolEntries,
+  tools as appLlmTools,
+} from "./app-llm";
+import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
@@ -97,7 +106,18 @@ const toolEntries: Partial<
   ...runToolEntries,
   ...skillToolEntries,
   ...sandboxToolEntries,
+  ...appToolEntries,
+  ...appDataToolEntries,
+  ...appLlmToolEntries,
 };
+
+// App tools are registered above so they remain unit-testable, but when the
+// feature is dark they must not be dispatchable even by exact name.
+const appToolFullNames = new Set<string>([
+  ...Object.keys(appToolEntries),
+  ...Object.keys(appDataToolEntries),
+  ...Object.keys(appLlmToolEntries),
+]);
 
 export function getArchestraMcpTools() {
   const tools = [
@@ -115,6 +135,9 @@ export function getArchestraMcpTools() {
     ...runToolTools,
     ...skillTools,
     ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    ...(config.apps.enabled
+      ? [...appTools, ...appDataTools, ...appLlmTools]
+      : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -173,6 +196,17 @@ export async function executeArchestraTool(
     ? toolEntries[resolvedToolName as ArchestraToolFullName]
     : undefined;
   if (!toolEntry) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+
+  if (
+    !config.apps.enabled &&
+    resolvedToolName &&
+    appToolFullNames.has(resolvedToolName)
+  ) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,

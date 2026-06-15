@@ -1,6 +1,7 @@
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -187,6 +188,8 @@ async function createVirtualApiKey(params: {
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
+    scope: body.scope,
+    userId: user.id,
   });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
@@ -248,6 +251,8 @@ async function updateVirtualApiKey(params: {
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
+    scope: body.scope,
+    userId: user.id,
   });
 
   const updatedVirtualKey = await VirtualApiKeyModel.update({
@@ -356,8 +361,10 @@ async function validateVirtualKeyScope(params: {
 async function validateProviderApiKeys(params: {
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
+  scope: ResourceVisibilityScope;
+  userId: string;
 }): Promise<void> {
-  const { mappings, organizationId } = params;
+  const { mappings, organizationId, scope, userId } = params;
   if (mappings.length === 0) {
     return;
   }
@@ -386,6 +393,26 @@ async function validateProviderApiKeys(params: {
         400,
         `Provider API key "${apiKey.name}" is for provider "${apiKey.provider}", not "${mapping.provider}".`,
       );
+    }
+
+    // Per-user-credential providers (GitHub Copilot) are individual tokens. A
+    // virtual key is itself a shareable secret, so it may only wrap a per-user
+    // key when it is the user's OWN personal key in their OWN personal virtual
+    // key, and never bundled with other providers (a shared model-router key
+    // would expose one user's token to everyone routing through it).
+    if (providerRequiresPerUserCredential(mapping.provider)) {
+      if (scope !== "personal" || mappings.length > 1) {
+        throw new ApiError(
+          400,
+          `${mapping.provider} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
+        );
+      }
+      if (apiKey.scope !== "personal" || apiKey.userId !== userId) {
+        throw new ApiError(
+          403,
+          `You can only map your own personal ${mapping.provider} key.`,
+        );
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import { fetchCerebrasModels } from "./cerebras";
 import { fetchCohereModels } from "./cohere";
 import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
+import { fetchGithubCopilotModels } from "./github-copilot";
 import { fetchGroqModels } from "./groq";
 import { fetchMinimaxModels } from "./minimax";
 import { fetchMistralModels } from "./mistral";
@@ -26,6 +27,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   cohere: fetchCohereModels,
   deepseek: fetchDeepSeekModels,
   gemini: fetchGeminiModels,
+  "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
   minimax: fetchMinimaxModels,
   mistral: fetchMistralModels,

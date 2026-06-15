@@ -2,12 +2,14 @@
 
 import {
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Check, CircleDashed, Copy, Loader2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,7 +27,10 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
-import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  useAvailableLlmProviderApiKeys,
+  useCreateLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
@@ -151,12 +156,32 @@ export function ConnectCommandPanel({
   // needs no key (the user brings their own at runtime).
   const providers = useMemo(() => {
     if (proxyAuth !== "virtual-key") return supportedProviders;
-    return supportedProviders.filter((p) => configuredProviders.has(p));
+    // Per-user providers (GitHub Copilot) stay selectable even without a key:
+    // the user connects their own account inline, after which a personal
+    // virtual key is minted. Other providers need a pre-existing key.
+    return supportedProviders.filter(
+      (p) => configuredProviders.has(p) || providerRequiresPerUserCredential(p),
+    );
   }, [supportedProviders, proxyAuth, configuredProviders]);
   const provider =
     urlProvider && providers.includes(urlProvider)
       ? urlProvider
       : (providers[0] ?? null);
+
+  // GitHub Copilot is per-user: it can only run through a personal virtual key,
+  // never the passthrough device flow, and the user must connect their own
+  // account before a command can be generated.
+  const providerIsPerUser =
+    !!provider && providerRequiresPerUserCredential(provider);
+  const needsPerUserConnect =
+    providerIsPerUser && !configuredProviders.has(provider);
+
+  // Force virtual-key auth for per-user providers (no passthrough tab).
+  useEffect(() => {
+    if (providerIsPerUser && proxyAuth !== "virtual-key") {
+      setProxyAuth("virtual-key");
+    }
+  }, [providerIsPerUser, proxyAuth]);
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The selected proxy may exist without a usable provider (e.g. virtual-key
@@ -167,6 +192,9 @@ export function ConnectCommandPanel({
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
+  // Creating the personal key invalidates the available-keys query, so once the
+  // user connects, `configuredProviders` updates and the command auto-generates.
+  const createPerUserKey = useCreateLlmProviderApiKey();
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
     null,
   );
@@ -228,12 +256,14 @@ export function ConnectCommandPanel({
   useEffect(() => {
     setResult(null);
     setFailed(false);
-    if (!hasAnything) return;
+    // Don't try to generate a command until the user has connected their
+    // per-user account — the backend would reject it (no key to mint from).
+    if (!hasAnything || needsPerUserConnect) return;
     const timer = setTimeout(() => {
       void runGeneration(inputsKey);
     }, 350);
     return () => clearTimeout(timer);
-  }, [inputsKey, hasAnything, runGeneration]);
+  }, [inputsKey, hasAnything, needsPerUserConnect, runGeneration]);
 
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
@@ -282,22 +312,36 @@ export function ConnectCommandPanel({
       )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
-          <Tabs
-            value={proxyAuth}
-            onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
-          >
-            <TabsList>
-              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
-              <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <p className="text-xs text-muted-foreground">
-            {proxyAuth === "provider-key"
-              ? "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
-              : providers.length === 0
-                ? "No provider has a key to mint a virtual key from. Add a provider key, or use your provider key."
-                : "A virtual key is created for you and wired into the command."}
-          </p>
+          {/* Per-user providers (GitHub Copilot) can't use passthrough — their
+              raw token must never be embedded in a shared command — so only the
+              virtual-key path is offered. */}
+          {providerIsPerUser ? (
+            <p className="text-xs text-muted-foreground">
+              {providerDisplayNames[provider]} runs through a personal virtual
+              key — connect your own account below.
+            </p>
+          ) : (
+            <>
+              <Tabs
+                value={proxyAuth}
+                onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
+              >
+                <TabsList>
+                  <TabsTrigger value="provider-key">
+                    Your provider key
+                  </TabsTrigger>
+                  <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="text-xs text-muted-foreground">
+                {proxyAuth === "provider-key"
+                  ? "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                  : providers.length === 0
+                    ? "No provider has a key to mint a virtual key from. Add a provider key, or use your provider key."
+                    : "A virtual key is created for you and wired into the command."}
+              </p>
+            </>
+          )}
         </div>
       </EditorField>
     </div>
@@ -451,12 +495,32 @@ export function ConnectCommandPanel({
                 ))}
               </div>
             )}
-            <CommandLine
-              command={result?.command ?? null}
-              pending={isPending || (!result && !failed)}
-              failed={failed}
-              onRetry={() => runGeneration(inputsKey)}
-            />
+            {needsPerUserConnect && provider ? (
+              <PerUserConnectGate
+                providerLabel={providerDisplayNames[provider]}
+                pending={createPerUserKey.isPending}
+                onToken={async (token) => {
+                  try {
+                    await createPerUserKey.mutateAsync({
+                      name: providerDisplayNames[provider],
+                      provider,
+                      apiKey: token,
+                      scope: "personal",
+                    });
+                    // availableKeys invalidates → the command auto-generates.
+                  } catch {
+                    // handleApiError already surfaced the failure (e.g. no seat)
+                  }
+                }}
+              />
+            ) : (
+              <CommandLine
+                command={result?.command ?? null}
+                pending={isPending || (!result && !failed)}
+                failed={failed}
+                onRetry={() => runGeneration(inputsKey)}
+              />
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -549,6 +613,34 @@ function CommandLine({
       <pre className="m-0 overflow-x-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
         {command}
       </pre>
+    </div>
+  );
+}
+
+/**
+ * Shown in place of the command when a per-user provider (GitHub Copilot) is
+ * selected but the user hasn't connected their own account yet. Connecting
+ * creates their personal key; the command then auto-generates.
+ */
+function PerUserConnectGate({
+  providerLabel,
+  pending,
+  onToken,
+}: {
+  providerLabel: string;
+  pending: boolean;
+  onToken: (token: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-3 px-5 py-4">
+      <p className="text-[13px] text-[#e5e7eb]">
+        Connect your {providerLabel} account to generate the command — it runs
+        through your own personal virtual key, so your token never leaves the
+        server.
+      </p>
+      <div>
+        <GithubCopilotSignIn disabled={pending} onToken={onToken} />
+      </div>
     </div>
   );
 }

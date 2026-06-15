@@ -2010,6 +2010,13 @@
       "when": 1781294131210,
       "tag": "0286_glamorous_the_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1781344711260,
+      "tag": "0287_mcp_apps",
+      "breakpoints": true
     }
   ]
 }

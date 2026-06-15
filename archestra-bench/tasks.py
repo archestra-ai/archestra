@@ -119,12 +119,10 @@ class AdaptedStage:
 
 @dataclass(frozen=True)
 class AdaptedTask:
-    id: str
+    """a task's stages rendered to upload-ready bytes, paired with its source `config`."""
+
+    config: TaskConfig
     stages: tuple[AdaptedStage, ...]
-    mcps: tuple[McpFixture, ...]
-    result_schema: dict[str, Any]
-    verifier: VerifierSpec
-    max_format_attempts: int
 
 
 class UpstreamFs(Protocol):
@@ -141,15 +139,7 @@ def apply_replacements(text: str, replacements: tuple[TextReplacement, ...]) -> 
 
 
 def adapt_task(config: TaskConfig, fs: UpstreamFs) -> AdaptedTask:
-    stages = tuple(_adapt_stage(stage, fs) for stage in config.stages)
-    return AdaptedTask(
-        id=config.id,
-        stages=stages,
-        mcps=config.mcps,
-        result_schema=config.result_schema,
-        verifier=config.verifier,
-        max_format_attempts=config.max_format_attempts,
-    )
+    return AdaptedTask(config=config, stages=tuple(_adapt_stage(stage, fs) for stage in config.stages))
 
 
 class FsUpstream:

@@ -37,7 +37,6 @@ class ResolvedModel:
 
 @dataclass(frozen=True)
 class RegisteredMcp:
-    server_id: str
     tools: tuple[dict[str, JsonValue], ...]
 
 
@@ -112,7 +111,7 @@ def register_remote_mcp(
     tools = tuple(client.list_mcp_server_tools(server_id))
     if not tools:
         raise SystemExit(f"MCP server {name!r} registered but exposed no tools; refusing to run")
-    return RegisteredMcp(server_id=server_id, tools=tools)
+    return RegisteredMcp(tools=tools)
 
 
 def seed_mcp_fixtures(

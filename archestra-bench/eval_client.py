@@ -20,6 +20,7 @@ the capabilities the migration client doesn't need but the eval does:
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -191,28 +192,35 @@ class EvalClient(ArchestraClient):
         except OSError as exc:
             raise ArchestraApiError("POST", url, 0, f"{type(exc).__name__}: {exc}") from exc
         with resp:
-            for raw in resp:
-                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                payload = _sse_data_payload(line)
-                if payload is None:
-                    if line:
-                        yield ChatStreamRecord(kind="ignored", raw=line, reason="non-data line")
-                    continue
-                if payload == "[DONE]":
-                    yield ChatStreamRecord(kind="ignored", raw=line, reason="done")
-                    continue
-                if payload == "":
-                    yield ChatStreamRecord(kind="ignored", raw=line, reason="empty data payload")
-                    continue
-                try:
-                    event = json.loads(payload)
-                except json.JSONDecodeError as exc:
-                    yield ChatStreamRecord(kind="parse_error", raw=line, reason=str(exc))
-                    continue
-                if isinstance(event, dict):
-                    yield ChatStreamRecord(kind="event", event=event)
-                else:
-                    yield ChatStreamRecord(kind="ignored", raw=line, reason="non-object JSON payload")
+            try:
+                for raw in resp:
+                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                    payload = _sse_data_payload(line)
+                    if payload is None:
+                        if line:
+                            yield ChatStreamRecord(kind="ignored", raw=line, reason="non-data line")
+                        continue
+                    if payload == "[DONE]":
+                        yield ChatStreamRecord(kind="ignored", raw=line, reason="done")
+                        continue
+                    if payload == "":
+                        yield ChatStreamRecord(kind="ignored", raw=line, reason="empty data payload")
+                        continue
+                    try:
+                        event = json.loads(payload)
+                    except json.JSONDecodeError as exc:
+                        yield ChatStreamRecord(kind="parse_error", raw=line, reason=str(exc))
+                        continue
+                    if isinstance(event, dict):
+                        yield ChatStreamRecord(kind="event", event=event)
+                    else:
+                        yield ChatStreamRecord(kind="ignored", raw=line, reason="non-object JSON payload")
+            except (OSError, http.client.HTTPException) as exc:
+                # the stream dropped mid-read (connection reset, truncated chunk, timeout); surface it
+                # like an open failure so _drive_stage records one agent_error cell, not a batch crash.
+                raise ArchestraApiError(
+                    "POST", url, 0, f"chat stream interrupted: {type(exc).__name__}: {exc}"
+                ) from exc
 
 
 def _sse_data_payload(line: str) -> str | None:

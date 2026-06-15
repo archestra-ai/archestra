@@ -53,7 +53,6 @@ class Instance:
     log_path: Path
     ready_timeout_s: float = 300.0
     base_url: str = field(init=False, default="")
-    api_key: str = field(init=False, default="")
     client: EvalClient = field(init=False)
     _proc: subprocess.Popen[bytes] | None = field(init=False, default=None)
     _db_name: str = field(init=False, default="")
@@ -149,10 +148,10 @@ class Instance:
         email = self._env.get("ARCHESTRA_AUTH_ADMIN_EMAIL", _DEFAULT_ADMIN_EMAIL)
         password = self._env.get("ARCHESTRA_AUTH_ADMIN_PASSWORD", _DEFAULT_ADMIN_PASSWORD)
         self.client.sign_in(email, password)
-        # a short, fixed label: better-auth's apiKey plugin caps the name at 32 chars
-        # (maximumNameLength default), and the run+env identity already lives in the db name and
-        # log path. each fresh db holds exactly one key, so the name needs no run_id.
-        self.api_key = self.client.mint_api_key("archestra-bench")
+        # mint_api_key switches the client from session/cookie auth to api-key auth for every
+        # subsequent request. a short, fixed label: better-auth's apiKey plugin caps the name at 32
+        # chars (maximumNameLength default), and each fresh db holds exactly one key.
+        self.client.mint_api_key("archestra-bench")
 
     # === teardown steps ===
 

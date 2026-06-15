@@ -124,6 +124,8 @@ def _mcp(row: Mapping[str, Any], ctx: str) -> McpFixture:
 def _task(row: Mapping[str, Any], root: Path, env_ctx: str) -> TaskConfig:
     task_id = _str(row, "id", f"{env_ctx} [[tasks]]")
     ctx = f"{env_ctx} task {task_id!r}"
+    if not _is_slug(task_id):
+        raise SystemExit(f"{ctx}: task id must be lowercase alphanumeric with dashes (slug-safe)")
     upstream_dir = (root / _str(row, "upstream_dir", ctx)).resolve()
     if not upstream_dir.is_dir():
         raise SystemExit(f"{ctx}: upstream_dir {upstream_dir} does not exist")

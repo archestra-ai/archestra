@@ -162,9 +162,9 @@ def _run_env(
         adapteds = [adapt_task(config, FsUpstream(config.upstream_dir)) for config in configs]
         _seed_env_mcps(client, agent_id, env_cfg, adapteds)
 
-        for config, adapted in zip(configs, adapteds):
+        for adapted in adapteds:
             for model_name in models:
-                logger.info("running %s / %s / %s", env_cfg.id, adapted.id, model_name)
+                logger.info("running %s / %s / %s", env_cfg.id, adapted.config.id, model_name)
                 results.append(
                     _run_one(
                         client=client,
@@ -174,7 +174,6 @@ def _run_env(
                         env_id=env_cfg.id,
                         agent_id=agent_id,
                         adapted=adapted,
-                        config=config,
                         model_name=model_name,
                         resolved=resolved[model_name],
                     )
@@ -194,15 +193,15 @@ def _run_one(
     env_id: str,
     agent_id: str,
     adapted: AdaptedTask,
-    config: TaskConfig,
     model_name: str,
     resolved: ResolvedModel,
 ) -> RunResult:
-    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, adapted.id, model_name))
+    cell_key = f"{env_id}/{adapted.config.id}/{model_name}"
+    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, adapted.config.id, model_name))
     artifact_paths: dict[str, JsonValue] = {}
     metadata: dict[str, JsonValue] = {
         "env_id": env_id,
-        "task_id": adapted.id,
+        "task_id": adapted.config.id,
         "model": model_name,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
@@ -223,12 +222,14 @@ def _run_one(
     }
     artifacts.write_run(metadata)
 
-    bench_mcp.begin_task(schema=adapted.result_schema, max_attempts=adapted.max_format_attempts)
+    bench_mcp.begin_task(
+        task_key=cell_key, schema=adapted.config.result_schema, max_attempts=adapted.config.max_format_attempts
+    )
 
     try:
         conversation = client.create_conversation(
             agent_id,
-            title=f"{env_id}/{adapted.id}/{model_name}",
+            title=cell_key,
             model_id=resolved.model_id,
             chat_api_key_id=resolved.api_key_id,
         )
@@ -254,7 +255,7 @@ def _run_one(
 
     # classify by submission first: a well-formed answer captured before a later stage's stream
     # error is still gradeable. agent_error is only for a run that errored without ever submitting.
-    submission = bench_mcp.take_submission()
+    submission = bench_mcp.take_submission(cell_key)
     if isinstance(submission, SubmissionFormatFailed):
         return _finish(
             env_id, adapted, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
@@ -270,7 +271,7 @@ def _run_one(
     report_path = artifacts.write_bytes("submission.json", submission.payload_bytes)
     artifact_paths["submission"] = str(report_path)
 
-    outcome = run_verifier(config.verifier, config.upstream_dir, submission.payload_bytes)
+    outcome = run_verifier(adapted.config.verifier, adapted.config.upstream_dir, submission.payload_bytes)
     _save_verifier_artifacts(artifacts, artifact_paths, outcome)
     metadata["verifier_exit_code"] = outcome.exit_code
     metadata["verifier_timed_out"] = outcome.timed_out
@@ -353,7 +354,7 @@ def _seed_env_mcps(
     """Register the env's fixture MCPs (env-level plus every task's), deduped by name, once -- so the
     agent runs against the env's full surface and a fixture is never registered twice."""
     fixtures: dict[str, McpFixture] = {}
-    for mcp in (*env_cfg.mcps, *(m for adapted in adapteds for m in adapted.mcps)):
+    for mcp in (*env_cfg.mcps, *(m for adapted in adapteds for m in adapted.config.mcps)):
         existing = fixtures.get(mcp.name)
         if existing is not None and existing.server_url != mcp.server_url:
             raise SystemExit(
@@ -510,7 +511,7 @@ def _finish(
     artifacts.write_run(metadata)
     return RunResult(
         env_id=env_id,
-        task_id=adapted.id,
+        task_id=adapted.config.id,
         model=model_name,
         outcome=outcome,
         finish_reason=run.finish_reason if run else None,

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import socket
 import threading
 import time
@@ -27,6 +28,8 @@ import uvicorn
 from jsonschema import Draft202012Validator
 from jsonschema.protocols import Validator
 from mcp.server.fastmcp import FastMCP
+
+logger = logging.getLogger(__name__)
 
 TOOL_NAME = "submit_result"
 
@@ -52,6 +55,7 @@ Submission = SubmissionAccepted | SubmissionFormatFailed | None
 
 @dataclass
 class _TaskContext:
+    task_key: str
     validator: Validator
     max_attempts: int
     attempts: int = 0
@@ -77,8 +81,9 @@ class BenchmarkMcp:
 
         @self._mcp.tool(name=TOOL_NAME)
         def submit_result(result: dict[str, Any]) -> str:
-            """Submit your final answer for grading. The result must match the schema in your task
-            instructions. If the format is wrong you will get a description of the problem; fix it
+            """Submit your final answer for grading. Pass it as the `result` argument: a single JSON
+            object matching the format described in your task instructions. Do not write a file --
+            call this tool. If the format is wrong you will get a description of the problem; fix it
             and call this tool again."""
             return self._handle_submit(result)
 
@@ -115,19 +120,31 @@ class BenchmarkMcp:
     def base_url(self) -> str:
         return f"http://{self._host}:{self._port}/mcp"
 
-    def begin_task(self, *, schema: dict[str, Any], max_attempts: int) -> None:
+    def begin_task(self, *, task_key: str, schema: dict[str, Any], max_attempts: int) -> None:
         """Open a fresh context for the next conversation. Validates the schema itself up front."""
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
         Draft202012Validator.check_schema(schema)
         with self._lock:
-            self._ctx = _TaskContext(validator=Draft202012Validator(schema), max_attempts=max_attempts)
+            self._ctx = _TaskContext(
+                task_key=task_key, validator=Draft202012Validator(schema), max_attempts=max_attempts
+            )
 
-    def take_submission(self) -> Submission:
+    def take_submission(self, task_key: str) -> Submission:
+        """Read the outcome for `task_key` and close the context (`_ctx = None`).
+
+        The key guards orchestrator/task identity: a wrong-key read returns None, never another task's
+        result. Closing means a late submission arriving *between* tasks hits the inactive-task path
+        rather than a stale context. A straggler landing *during* the next task's window is still
+        recorded by `_handle_submit` -- the tool call carries no task id, so closing that needs
+        conversation-scoped tool identity (out of scope here)."""
         with self._lock:
             ctx = self._ctx
-            if ctx is None:
+            if ctx is None or ctx.task_key != task_key:
+                if ctx is not None:
+                    logger.warning("take_submission(%r) but active task is %r; ignoring", task_key, ctx.task_key)
                 return None
+            self._ctx = None
             if ctx.accepted is not None:
                 return SubmissionAccepted(payload_bytes=ctx.accepted, attempts=ctx.attempts)
             if ctx.failed:

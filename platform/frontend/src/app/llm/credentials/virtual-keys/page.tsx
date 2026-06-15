@@ -390,7 +390,7 @@ function OwnerSelectField({
         placeholder="Yourself"
         onSearchQueryChange={setSearch}
         emptyMessage={isSearching ? "Searching…" : "No matching users found."}
-        hint="Pick a teammate to create this key on their behalf. Leave empty to own it yourself."
+        hint="Pick a user to create this key on their behalf. Leave empty to own it yourself."
       />
     </div>
   );

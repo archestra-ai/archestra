@@ -533,6 +533,24 @@ export const getConnectionBaseUrlSources = (): string[] => {
   return sources;
 };
 
+/**
+ * Absolute origin the backend serves its `/_sandbox/*` assets on. Used to build
+ * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
+ * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
+ * base there). Prefers the canonical `ARCHESTRA_API_BASE_URL` (first entry),
+ * falling back to the local API origin. Never derived from request headers —
+ * those are spoofable (see request-origin.ts), and this URL is handed to the
+ * browser as a script source.
+ * @public — consumed by the owned-app SDK injection
+ */
+export const getAppAssetBaseOrigin = (): string => {
+  const first = process.env.ARCHESTRA_API_BASE_URL?.trim()
+    .split(",")[0]
+    ?.trim();
+  const origin = first || `http://127.0.0.1:${getPortFromUrl()}`;
+  return origin.replace(/\/+$/, "");
+};
+
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 

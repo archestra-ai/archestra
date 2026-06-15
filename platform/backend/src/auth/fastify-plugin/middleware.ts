@@ -93,6 +93,7 @@ export class Authnz {
   private shouldSkipAuthCheck = async ({
     url,
     method,
+    headers,
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
@@ -128,6 +129,13 @@ export class Authnz {
       url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // MCP app runtime: external MCP clients authenticate with a Bearer token
+      // validated in-route (like the MCP gateway). Cookie/session requests from
+      // Archestra's own frontend carry no Bearer header and fall through to the
+      // normal session auth below, so that path is unchanged.
+      (url.startsWith("/api/mcp/app/") &&
+        typeof headers.authorization === "string" &&
+        /^Bearer\s+/i.test(headers.authorization)) ||
       // Public skill marketplace git endpoint: token in URL, no session
       url === config.skillMarketplace.endpoint ||
       url.startsWith(`${config.skillMarketplace.endpoint}/`) ||

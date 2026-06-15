@@ -15,6 +15,8 @@ assert.equal(typeof escapeAngleBrackets, "function");
 const out = prepareAppEnvelope(
   "<html><head></head><body></body></html>",
   JSON.stringify({ user: { id: "u1", name: "Alice" }, tools: [] }),
+  "",
+  "",
 );
 assert.ok(out.includes('"user":{"id":"u1","name":"Alice"}'));
 assert.ok(out.includes('src="/_sandbox/archestra-app-sdk.js"'));

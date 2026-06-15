@@ -160,14 +160,25 @@ document.addEventListener("securitypolicyviolation", function(e) {\
  * Used for srcdoc loading where HTTP headers aren't available.
  */
 function injectCSP(html, cspValue) {
-  var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
   var violationListener = buildViolationListenerScript();
-  // Expose the served SDK URL so the injected Apps SDK can import it (apps
-  // themselves never touch it). APP_SDK_URL is
-  // location.origin-derived (no user input), but JSON-encode defensively so it
-  // can never break out of the inline script.
-  var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
-  var injection = cspMeta + sdkGlobal + violationListener;
+  var injection;
+  // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
+  // envelope (app-sdk-injection.ts), so they work identically here and in a
+  // foreign host. The proxy must NOT add a second CSP for them — a differing
+  // policy would intersect and break the render — so it only adds the violation
+  // listener. External MCP-UI apps have no such envelope and get the full proxy
+  // CSP + SDK-URL injection.
+  if (html.indexOf("data-archestra-app-bootstrap") !== -1) {
+    injection = violationListener;
+  } else {
+    var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+    // Expose the served SDK URL so the injected Apps SDK can import it (apps
+    // themselves never touch it). APP_SDK_URL is
+    // location.origin-derived (no user input), but JSON-encode defensively so it
+    // can never break out of the inline script.
+    var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
+    injection = cspMeta + sdkGlobal + violationListener;
+  }
 
   // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
   // serve-time SDK injection (app-sdk-injection.ts) exactly: both chains

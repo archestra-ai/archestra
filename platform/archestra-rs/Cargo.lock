@@ -1924,6 +1924,7 @@ version = "1.2.50"
 dependencies = [
  "base64 0.22.1",
  "dagger-sdk",
+ "eyre",
  "futures-util",
  "napi",
  "napi-derive",

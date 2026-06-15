@@ -3,18 +3,25 @@
 //! chain. all `dagger_sdk` usage is contained in this module.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
+use dagger_sdk::core::DAGGER_ENGINE_VERSION;
+use dagger_sdk::core::cli_session::DaggerSessionProc;
+use dagger_sdk::core::connect_params::ConnectParams;
+use dagger_sdk::core::downloader::Downloader;
 use dagger_sdk::core::gql_client::GraphQlExtension;
-use dagger_sdk::core::graphql_client::GraphQLError;
-use dagger_sdk::errors::DaggerError;
+use dagger_sdk::core::graphql_client::{DefaultGraphQLClient, GraphQLError};
+use dagger_sdk::errors::{ConnectError, DaggerError};
 use dagger_sdk::{
-    Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, ReturnType,
-    connect_opts,
+    Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, Query,
+    ReturnType,
 };
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 use tokio::sync::{OnceCell, mpsc, oneshot};
 use tracing::Span;
 
@@ -245,17 +252,6 @@ impl SandboxBackend for DaggerBackend {
     }
 }
 
-/// The runner host a spawn pins into the process-global env: the explicitly
-/// requested host, else the snapshotted process default — so a `None` spawn (the
-/// default session re-spawning after a teardown) restores the real default rather
-/// than a host a prior `Some` spawn left pinned. `None` means unset the env.
-fn resolve_runner_target<'a>(
-    requested: Option<&'a str>,
-    default: Option<&'a str>,
-) -> Option<&'a str> {
-    requested.or(default)
-}
-
 /// The Dagger runner host for a runtime target: `Default` -> `None` (use the
 /// process-default engine), an environment -> its engine's `kube-pod://` address.
 /// `environment_id` / `namespace` were validated (UUID / RFC1123 label) at the
@@ -274,44 +270,156 @@ fn runtime_target_host(target: &RuntimeTarget) -> Option<String> {
     }
 }
 
+/// The `dagger session` CLI arguments, pinned to the protocol dagger-sdk 0.21
+/// speaks. Kept pure so a test asserts the exact vector — an SDK bump that
+/// changed it would then fail loudly rather than silently break the handshake.
+fn session_args(workdir: &Path) -> Vec<String> {
+    vec![
+        "session".to_string(),
+        "--workdir".to_string(),
+        workdir.to_string_lossy().into_owned(),
+        "--label".to_string(),
+        "dagger.io/sdk.name:rust".to_string(),
+        "--label".to_string(),
+        format!("dagger.io/sdk.version:{DAGGER_ENGINE_VERSION}"),
+    ]
+}
+
+/// Build the `dagger session` child command. The per-environment runner host is
+/// set on **this child only** (never the parent process env); `None` leaves it
+/// unset so the child inherits the parent's default engine.
+fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) -> Command {
+    let mut cmd = Command::new(cli);
+    cmd.args(session_args(workdir))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(host) = runner_host {
+        cmd.env("_EXPERIMENTAL_DAGGER_RUNNER_HOST", host);
+    }
+    cmd
+}
+
+/// Spawn the `dagger session` CLI child and read its `ConnectParams` handshake —
+/// a faithful reimplementation of dagger-sdk's private `CliSession::get_conn`,
+/// pinned to `=0.21.0`. The ordering is load-bearing: take stdout/stderr off the
+/// child, build the session handle (which owns the shutdown broadcast — there is
+/// no `Drop`), then drain both pipes in background tasks until teardown, parsing
+/// the first JSON line as `ConnectParams`.
+async fn spawn_and_read_connect_params(
+    mut cmd: Command,
+) -> eyre::Result<(ConnectParams, DaggerSessionProc)> {
+    let mut child = cmd.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| eyre::eyre!("could not acquire stdout from the dagger session"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| eyre::eyre!("could not acquire stderr from the dagger session"))?;
+    let session: DaggerSessionProc = child.into();
+
+    let (sender, mut receiver) = mpsc::channel::<ConnectParams>(1);
+    let mut stdout_shutdown = session.subscribe_shutdown();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stdout).lines();
+        loop {
+            tokio::select! {
+                line = lines.next_line() => match line {
+                    Ok(Some(line)) => match serde_json::from_str::<ConnectParams>(&line) {
+                        Ok(conn) => {
+                            let _ = sender.send(conn).await;
+                        }
+                        Err(_) => tracing::debug!(line, "dagger session stdout"),
+                    },
+                    Ok(None) | Err(_) => break,
+                },
+                _ = stdout_shutdown.recv() => break,
+            }
+        }
+    });
+
+    let mut stderr_shutdown = session.subscribe_shutdown();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        loop {
+            tokio::select! {
+                line = lines.next_line() => match line {
+                    Ok(Some(line)) => tracing::debug!(line, "dagger session stderr"),
+                    Ok(None) | Err(_) => break,
+                },
+                _ = stderr_shutdown.recv() => break,
+            }
+        }
+    });
+
+    let conn = receiver
+        .recv()
+        .await
+        .ok_or_else(|| eyre::eyre!("the dagger session exited before reporting connect params"))?;
+    Ok((conn, session))
+}
+
+/// Connect to a Dagger engine and drive `f` for the connection's lifetime,
+/// setting the runner host on the spawned CLI **child** only — never the parent
+/// process env. `runner_host = None` lets the child inherit the parent's default
+/// host. This owns the thin glue `dagger_sdk::connect_opts` would run (pinned to
+/// `=0.21.0`), so a per-environment host is bound to one child at spawn instead
+/// of mutated into process-global, non-synchronized state.
+async fn connect_target<F, Fut>(
+    cfg: Config,
+    runner_host: Option<&str>,
+    f: F,
+) -> std::result::Result<(), ConnectError>
+where
+    F: FnOnce(DaggerConn) -> Fut,
+    Fut: std::future::Future<Output = eyre::Result<()>>,
+{
+    let cli = match env::var("_EXPERIMENTAL_DAGGER_CLI_BIN") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => Downloader::new(DAGGER_ENGINE_VERSION.into())
+            .get_cli()
+            .await
+            .map_err(|e| ConnectError::FailedToConnect(e.into()))?,
+    };
+    let workdir =
+        std::fs::canonicalize("/").map_err(|e| ConnectError::FailedToConnect(e.into()))?;
+
+    let cmd = build_session_command(&cli, &workdir, runner_host);
+
+    let (conn, proc) = spawn_and_read_connect_params(cmd)
+        .await
+        .map_err(ConnectError::FailedToConnect)?;
+    let proc = Arc::new(proc);
+
+    let client = Query {
+        proc: Some(proc.clone()),
+        selection: Default::default(),
+        graphql_client: Arc::new(DefaultGraphQLClient::new(&conn, &cfg)),
+    };
+
+    let outcome = f(client).await;
+    // `DaggerSessionProc` has no `Drop`, so shut down on both success and error
+    // to avoid leaking the reader tasks and a zombie `dagger session` child.
+    let _ = proc.shutdown().await;
+    outcome.map_err(ConnectError::DaggerContext)
+}
+
 /// connect to the Dagger engine and drive the generic actor loop for the
 /// connection's lifetime. this is the one place the Dagger backend is selected.
 ///
-/// `runner_host`, when set, targets a specific engine (e.g. a per-environment
-/// `kube-pod://…`). dagger-sdk 0.21 only reads the runner host from the
-/// process-global `_EXPERIMENTAL_DAGGER_RUNNER_HOST` env at CLI-spawn time, so we
-/// serialize spawns and pin that env until the session reports ready (by which
-/// point the CLI subprocess has captured it). `None` uses the process default.
+/// `target` selects the engine: `Default` uses the process-default runner host,
+/// an environment its own `kube-pod://…` (resolved here so that address never
+/// crosses the generic API). The host is set on the spawned CLI child only, so
+/// distinct environments connect concurrently with no process-global env mutation.
 pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
     tracing::info!(target = ?target, "spawning dagger session");
-    static SPAWN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    // The process default runner host, snapshotted once before any spawn mutates
-    // the env, so a `Default` spawn (e.g. the default session re-spawning after a
-    // teardown) restores the real default rather than inheriting whatever host a
-    // prior environment spawn pinned.
-    static DEFAULT_RUNNER_HOST: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-
-    // Hold the lock until the session reports ready (or we abort it below), so the
-    // dagger CLI subprocess has captured the pinned host before a concurrent spawn
-    // can re-pin it.
-    let _env_guard = SPAWN_ENV_LOCK.lock().await;
-    let default_host =
-        DEFAULT_RUNNER_HOST.get_or_init(|| std::env::var("_EXPERIMENTAL_DAGGER_RUNNER_HOST").ok());
-    // Resolve the domain target to a runner host here, in the Dagger backend, so
-    // the `kube-pod://` address is never carried across the generic API.
-    let desired_host = runtime_target_host(&target);
-    let pinned = resolve_runner_target(desired_host.as_deref(), default_host.as_deref());
-    // SAFETY: serialized by SPAWN_ENV_LOCK; read only by the connect below (the
-    // dagger CLI subprocess) before this spawn reports ready or is aborted.
-    unsafe {
-        match pinned {
-            Some(host) => std::env::set_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST", host),
-            None => std::env::remove_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST"),
-        }
-    }
     let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
+
+    let runner_host = runtime_target_host(&target);
 
     let connect_task = tokio::spawn(async move {
         let cfg = Config::builder()
@@ -320,7 +428,7 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
             .build();
         let mut ready_tx = Some(ready_tx);
         let mut fail_tx = Some(fail_tx);
-        let result = connect_opts(cfg, move |client| async move {
+        let result = connect_target(cfg, runner_host.as_deref(), move |client| async move {
             if let Some(tx) = ready_tx.take() {
                 let _ = tx.send(());
             }
@@ -367,10 +475,8 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
             fault: EngineFault::Unreachable,
         }),
     };
-    // A timed-out or failed connect must not outlive the env lock: abort it here,
-    // still holding `_env_guard`, so its in-flight dagger CLI can't end up spawned
-    // against a runner host a later spawn re-pins once we release the guard. On
-    // success the task is the session actor loop, so it is left running.
+    // On timeout or failure, abort the connect task so a stuck or half-open
+    // session can't linger; on success it is the session actor loop and stays.
     if outcome.is_err() {
         connect_task.abort();
     }
@@ -777,28 +883,64 @@ fn parse_sdk_exit_code(message: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
     use dagger_sdk::core::gql_client::GraphQLErrorMessage;
 
     #[test]
-    fn runner_target_prefers_requested_over_default() {
+    fn dagger_session_args_match_the_pinned_protocol() {
         assert_eq!(
-            resolve_runner_target(Some("kube-pod://env-a"), Some("tcp://127.0.0.1:1234")),
-            Some("kube-pod://env-a"),
+            session_args(Path::new("/")),
+            vec![
+                "session".to_string(),
+                "--workdir".to_string(),
+                "/".to_string(),
+                "--label".to_string(),
+                "dagger.io/sdk.name:rust".to_string(),
+                "--label".to_string(),
+                "dagger.io/sdk.version:0.21.0".to_string(),
+            ]
         );
     }
 
     #[test]
-    fn runner_target_falls_back_to_snapshotted_default_for_none() {
-        assert_eq!(
-            resolve_runner_target(None, Some("tcp://127.0.0.1:1234")),
-            Some("tcp://127.0.0.1:1234"),
-        );
+    fn connect_params_parse_from_a_session_stdout_line() {
+        let conn: ConnectParams =
+            serde_json::from_str(r#"{"port":12345,"session_token":"tok"}"#).unwrap();
+        assert_eq!(conn.port, 12345);
+        assert_eq!(conn.session_token, "tok");
     }
 
     #[test]
-    fn runner_target_is_none_when_neither_set() {
-        assert_eq!(resolve_runner_target(None, None), None);
+    fn session_command_pins_runner_host_on_the_child_only_for_environments() {
+        let cli = Path::new("/usr/local/bin/dagger");
+        let host = "kube-pod://dagger-engine-env-a-0?namespace=ns&container=dagger-engine";
+
+        // an environment target pins the runner host on the child command, never
+        // the parent process env — the tenant-isolation boundary this fix exists for.
+        let env_cmd = build_session_command(cli, Path::new("/"), Some(host));
+        let runner_override = env_cmd
+            .as_std()
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"));
+        assert_eq!(
+            runner_override,
+            Some((
+                OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"),
+                Some(OsStr::new(host))
+            ))
+        );
+
+        // the default target sets no override, so the child inherits the parent's
+        // default engine rather than a host a sibling environment pinned.
+        let default_cmd = build_session_command(cli, Path::new("/"), None);
+        assert!(
+            default_cmd
+                .as_std()
+                .get_envs()
+                .all(|(key, _)| key != OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"))
+        );
     }
 
     #[test]

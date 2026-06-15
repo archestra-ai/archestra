@@ -20,6 +20,7 @@ telemetry = [
 [dependencies]
 base64 = "0.22"
 dagger-sdk = "=0.21.0"
+eyre = "0.6"
 futures-util = "0.3"
 napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }
@@ -37,7 +38,14 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
 opentelemetry-appender-tracing = { version = "0.32", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
+tokio = { version = "1", features = [
+    "sync",
+    "rt",
+    "macros",
+    "time",
+    "process",
+    "io-util",
+] }
 tracing = "0.1"
 tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", default-features = false, features = [

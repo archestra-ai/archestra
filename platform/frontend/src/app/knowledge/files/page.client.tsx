@@ -513,9 +513,38 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
       {file.embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 animate-spin" />
       )}
-      {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
+      <span className="capitalize">{file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}</span>
     </Badge>
   );
+
+  const getEmbeddingErrorMessage = (error: string | null) => {
+    switch (error) {
+      case "rate_limit":
+        return "Rate limits exceeded";
+      case "api_key_error":
+        return "API key error (401, 403)";
+      case "model_not_found":
+        return "Model configured, but not found";
+      case "api_server_error":
+        return "API server error (50x)";
+      case "dimensions_mismatch":
+        return "Dimensions mismatch";
+      case "unknown_failure":
+        return "Unknown failure";
+      default:
+        return error;
+    }
+  };
+
+  if (file.embeddingStatus === "failed" && file.embeddingError) {
+    return (
+      <TruncatedTooltip content={getEmbeddingErrorMessage(file.embeddingError)}>
+        {badge}
+      </TruncatedTooltip>
+    );
+  }
+
+  return badge;
 }
 
 function VisibilityBadge({ file }: { file: KnowledgeFile }) {

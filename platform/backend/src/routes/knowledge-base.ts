@@ -1757,6 +1757,7 @@ async function enrichKnowledgeFiles(params: {
     createdAt: file.createdAt.toISOString(),
     processingStatus: file.processingStatus,
     processingError: file.processingError ?? null,
+    embeddingError: file.embeddingError ?? null,
     embeddingStatus: docByFileId.get(file.id)?.embeddingStatus ?? "pending",
     assignedAgents: (agentIdsByConnector.get(file.connectorId) ?? []).flatMap(
       (id) => {

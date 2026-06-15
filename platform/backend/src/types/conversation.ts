@@ -1,3 +1,4 @@
+import { SupportedProvidersSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -17,6 +18,17 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
+// Override selectedProvider to use the proper enum type
+// For select schema, it's nullable (matches DB schema)
+const selectExtendedFields = {
+  selectedProvider: SupportedProvidersSchema.nullable(),
+};
+
+// For insert/update schema, selectedProvider is optional
+const insertUpdateExtendedFields = {
+  selectedProvider: SupportedProvidersSchema.optional(),
+};
+
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
 ).extend({
@@ -35,10 +47,12 @@ export const SelectConversationSchema = createSelectSchema(
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),
+  ...selectExtendedFields,
 });
 
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,
+  insertUpdateExtendedFields,
 )
   .omit({
     id: true,
@@ -53,6 +67,7 @@ export const InsertConversationSchema = createInsertSchema(
 
 export const UpdateConversationSchema = createUpdateSchema(
   schema.conversationsTable,
+  insertUpdateExtendedFields,
 )
   .pick({
     title: true,

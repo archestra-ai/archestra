@@ -21397,6 +21397,8 @@ export type GetChatConversationsResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -21552,6 +21554,8 @@ export type CreateChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -21789,6 +21793,8 @@ export type GetChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -21948,6 +21954,8 @@ export type UpdateChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -22452,6 +22460,8 @@ export type ForkChatConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -22708,6 +22718,8 @@ export type CompactChatConversationResponses = {
             agentId: string | null;
             chatApiKeyId: string | null;
             title: string | null;
+            selectedModel: string;
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             modelId: string | null;
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -23134,6 +23146,8 @@ export type GetSharedConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -23289,6 +23303,8 @@ export type ForkSharedConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -23446,6 +23462,8 @@ export type GenerateChatConversationTitleResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -23602,6 +23620,8 @@ export type UpdateChatMessageResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -54265,6 +54285,8 @@ export type CreateScheduleTriggerRunConversationResponses = {
         agentId: string | null;
         chatApiKeyId: string | null;
         title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         modelId: string | null;
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;

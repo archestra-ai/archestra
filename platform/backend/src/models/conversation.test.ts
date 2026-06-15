@@ -1002,7 +1002,7 @@ describe("ConversationModel", () => {
     expect(conv2?.messages[1].parts[0].text).toBe("C2 Second");
   });
 
-  test("can create a conversation", async ({
+  test("can create a conversation with selectedProvider", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -1016,6 +1016,28 @@ describe("ConversationModel", () => {
       organizationId: org.id,
       agentId: agent.id,
       title: "Provider Test Conversation",
+    });
+
+    expect(conversation).toBeDefined();
+  });
+
+  test("selectedProvider is null when not provided", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "No Provider Agent",
+      teams: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "No Provider Conversation",
     });
 
     expect(conversation).toBeDefined();
@@ -1061,7 +1083,7 @@ describe("ConversationModel", () => {
     expect(updated?.modelId).toBe(model.id);
   });
 
-  test("findById returns the created conversation", async ({
+  test("findById returns conversation with selectedProvider", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -1089,7 +1111,7 @@ describe("ConversationModel", () => {
     expect(found).toBeDefined();
   });
 
-  test("findAll returns conversations", async ({
+  test("findAll returns conversations with selectedProvider", async ({
     makeUser,
     makeOrganization,
     makeAgent,

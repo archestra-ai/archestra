@@ -213174,6 +213174,9 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "ownerId": {
+                    "type": "string"
                   }
                 },
                 "required": [

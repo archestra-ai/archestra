@@ -10,6 +10,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import {
   LlmProviderApiKeyModel,
+  MemberModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -42,7 +43,15 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
     .min(1, "At least one provider API key is required"),
 });
 
-const CreateVirtualApiKeyBodySchema = CreateOrUpdateVirtualApiKeyBodySchema;
+const CreateVirtualApiKeyBodySchema =
+  CreateOrUpdateVirtualApiKeyBodySchema.extend({
+    /**
+     * Owner the key is created on behalf of. Defaults to the creator. Setting
+     * it to a different user requires llmVirtualKey:admin and that user must
+     * belong to the organization.
+     */
+    ownerId: z.string().optional(),
+  });
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -162,7 +171,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default virtualApiKeysRoutes;
 
 async function createVirtualApiKey(params: {
-  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  body: z.infer<typeof CreateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
@@ -176,6 +185,12 @@ async function createVirtualApiKey(params: {
     TeamModel.getUserTeamIds(user.id),
     userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
   ]);
+  const ownerId = await resolveKeyOwner({
+    requestedOwnerId: body.ownerId,
+    creatorId: user.id,
+    organizationId,
+    isAdmin: isVirtualKeyAdmin,
+  });
   await validateVirtualKeyScope({
     scope: body.scope,
     teamIds: body.teams,
@@ -195,7 +210,7 @@ async function createVirtualApiKey(params: {
       name: body.name,
       expiresAt: body.expiresAt ?? null,
       scope: body.scope,
-      authorId: user.id,
+      authorId: ownerId,
       teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
     });
@@ -255,7 +270,9 @@ async function updateVirtualApiKey(params: {
     name: body.name,
     expiresAt: body.expiresAt ?? null,
     scope: body.scope,
-    authorId: user.id,
+    // Preserve the key's owner; an edit must not transfer it to the editor
+    // (e.g. an admin editing a key minted on behalf of another user).
+    authorId: accessContext.authorId,
     teamIds: body.teams,
     providerApiKeys: body.providerApiKeys,
   });
@@ -299,6 +316,36 @@ async function deleteVirtualApiKey(params: {
 
   await VirtualApiKeyModel.delete(id);
   return { success: true };
+}
+
+async function resolveKeyOwner(params: {
+  requestedOwnerId: string | undefined;
+  creatorId: string;
+  organizationId: string;
+  isAdmin: boolean;
+}): Promise<string> {
+  const { requestedOwnerId, creatorId, organizationId, isAdmin } = params;
+
+  if (!requestedOwnerId || requestedOwnerId === creatorId) {
+    return creatorId;
+  }
+
+  if (!isAdmin) {
+    throw new ApiError(
+      403,
+      "You need llmVirtualKey:admin permission to create a virtual key for another user",
+    );
+  }
+
+  const member = await MemberModel.getByUserId(
+    requestedOwnerId,
+    organizationId,
+  );
+  if (!member) {
+    throw new ApiError(404, "User is not a member of this organization");
+  }
+
+  return requestedOwnerId;
 }
 
 async function validateVirtualKeyScope(params: {

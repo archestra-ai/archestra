@@ -43,6 +43,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import { UserSearchableSelect } from "@/components/user-searchable-select";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -51,6 +52,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useMembersPaginated } from "@/lib/member.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
@@ -309,6 +311,7 @@ export default function VirtualKeysPage() {
         visibilityOptions={visibilityOptions}
         teams={teams}
         canReadTeams={!!canReadTeams}
+        isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       />
 
       <EditVirtualKeyDialog
@@ -330,6 +333,54 @@ export default function VirtualKeysPage() {
   );
 }
 
+function OwnerSelectField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (userId: string) => void;
+}) {
+  const { data: session } = useSession();
+  const { data: membersData } = useMembersPaginated({ limit: 100, offset: 0 });
+
+  const users = useMemo(() => {
+    const fetched = membersData?.data ?? [];
+    const selfId = session?.user?.id;
+    const hasSelf = !!selfId && fetched.some((m) => m.userId === selfId);
+    const self =
+      selfId && !hasSelf
+        ? [
+            {
+              userId: selfId,
+              name: session?.user?.name ?? null,
+              email: session?.user?.email ?? null,
+            },
+          ]
+        : [];
+    return [
+      ...self,
+      ...fetched.map((member) => ({
+        userId: member.userId,
+        name: member.name,
+        email: member.email,
+      })),
+    ];
+  }, [membersData, session]);
+
+  return (
+    <div className="space-y-2">
+      <Label>Owner</Label>
+      <UserSearchableSelect
+        value={value}
+        onValueChange={onChange}
+        users={users}
+        placeholder="Select a user"
+        hint="The key belongs to this user and its usage is attributed to them."
+      />
+    </div>
+  );
+}
+
 function CreateVirtualKeyDialog({
   open,
   onOpenChange,
@@ -338,6 +389,7 @@ function CreateVirtualKeyDialog({
   visibilityOptions,
   teams,
   canReadTeams,
+  isVirtualKeyAdmin,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -346,10 +398,14 @@ function CreateVirtualKeyDialog({
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
+  isVirtualKeyAdmin: boolean;
 }) {
   const createMutation = useCreateVirtualApiKey();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? "";
 
   const [newKeyName, setNewKeyName] = useState("");
+  const [ownerId, setOwnerId] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [scope, setScope] = useState<VirtualKeyScope>(
     getDefaultVirtualKeyScope(visibilityOptions),
@@ -376,8 +432,14 @@ function CreateVirtualKeyDialog({
       setScope(getDefaultVirtualKeyScope(visibilityOptions));
       setTeamIds([]);
       setProviderApiKeyIds({});
+      setOwnerId("");
     }
   }, [open, defaultExpirationSeconds, visibilityOptions]);
+
+  // Admins can mint a personal key on behalf of another org member; for
+  // everyone else the key always belongs to the creator.
+  const showOwnerField = isVirtualKeyAdmin && scope === "personal";
+  const effectiveOwnerId = ownerId || currentUserId;
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
@@ -391,6 +453,7 @@ function CreateVirtualKeyDialog({
           scope,
           teams: scope === "team" ? teamIds : [],
           providerApiKeys,
+          ownerId: showOwnerField ? effectiveOwnerId || undefined : undefined,
         },
       });
       setNewKeyName("");
@@ -408,6 +471,8 @@ function CreateVirtualKeyDialog({
     newKeyName,
     scope,
     teamIds,
+    showOwnerField,
+    effectiveOwnerId,
   ]);
 
   return (
@@ -469,6 +534,13 @@ function CreateVirtualKeyDialog({
                 canReadTeams={canReadTeams}
                 visibilityOptions={visibilityOptions}
               />
+
+              {showOwnerField && (
+                <OwnerSelectField
+                  value={effectiveOwnerId}
+                  onChange={setOwnerId}
+                />
+              )}
 
               <div className="space-y-2">
                 <ExpirationDateTimeField

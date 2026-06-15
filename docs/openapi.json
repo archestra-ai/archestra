@@ -74431,33 +74431,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "selectedModel": {
-                        "type": "string"
-                      },
-                      "selectedProvider": {
-                        "nullable": true,
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure",
-                          "github-copilot"
-                        ]
-                      },
                       "modelId": {
                         "nullable": true,
                         "type": "string",
@@ -74823,8 +74796,6 @@
                       "agentId",
                       "chatApiKeyId",
                       "title",
-                      "selectedModel",
-                      "selectedProvider",
                       "modelId",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
@@ -75159,33 +75130,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -75551,8 +75495,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -75864,33 +75806,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -76256,8 +76171,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -76610,33 +76523,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -77002,8 +76888,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -78823,33 +78707,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -79215,8 +79072,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -79895,33 +79750,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "selectedModel": {
-                          "type": "string"
-                        },
-                        "selectedProvider": {
-                          "nullable": true,
-                          "type": "string",
-                          "enum": [
-                            "openai",
-                            "gemini",
-                            "anthropic",
-                            "bedrock",
-                            "cohere",
-                            "cerebras",
-                            "mistral",
-                            "perplexity",
-                            "groq",
-                            "xai",
-                            "openrouter",
-                            "vllm",
-                            "ollama",
-                            "zhipuai",
-                            "deepseek",
-                            "minimax",
-                            "azure",
-                            "github-copilot"
-                          ]
-                        },
                         "modelId": {
                           "nullable": true,
                           "type": "string",
@@ -80287,8 +80115,6 @@
                         "agentId",
                         "chatApiKeyId",
                         "title",
-                        "selectedModel",
-                        "selectedProvider",
                         "modelId",
                         "hasCustomToolSelection",
                         "hooksDebugEnabled",
@@ -81556,33 +81382,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -81951,8 +81750,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -82285,33 +82082,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -82677,8 +82447,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -83006,33 +82774,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -83398,8 +83139,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -83737,33 +83476,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -84129,8 +83841,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -206628,33 +206338,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "selectedModel": {
-                      "type": "string"
-                    },
-                    "selectedProvider": {
-                      "nullable": true,
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot"
-                      ]
-                    },
                     "modelId": {
                       "nullable": true,
                       "type": "string",
@@ -207020,8 +206703,6 @@
                     "agentId",
                     "chatApiKeyId",
                     "title",
-                    "selectedModel",
-                    "selectedProvider",
                     "modelId",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",

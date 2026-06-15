@@ -816,8 +816,6 @@ describe("persistNewMessages", () => {
         userId: user.id,
         organizationId: organization.id,
         agentId: agent.id,
-        selectedModel: "gpt-4o",
-        selectedProvider: "openai",
       });
 
       // First request: the user message is persisted early, then the

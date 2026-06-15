@@ -124,8 +124,6 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     agentId: "agent-a",
     chatApiKeyId: "key-openai",
     title: "Test",
-    selectedModel: "gpt-4o",
-    selectedProvider: "openai",
     modelId: null,
     hasCustomToolSelection: false,
     hooksDebugEnabled: false,

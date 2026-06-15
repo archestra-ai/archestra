@@ -823,6 +823,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`** - Shows the per-environment sandbox binding selector on the agent form, letting an agent's code sandbox run on a deployment environment's dedicated Dagger engine under that environment's egress policy. When off, the selector is hidden. Requires the code runtime and Kubernetes.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
   - Default: `false`
   - Values: `true`, `false`

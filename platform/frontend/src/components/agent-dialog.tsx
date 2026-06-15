@@ -596,8 +596,10 @@ export function AgentDialog({
   });
   // Sandbox environment binding (internal agents only): the agent's code sandbox
   // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
+  // Gated behind a feature flag (off by default) until the per-env runtime ships.
+  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
   const { data: environmentsData } = useEnvironments(
-    open && agentType === "agent",
+    open && agentType === "agent" && !!agentEnvironmentsEnabled,
   );
   const environments = environmentsData?.environments ?? [];
   // Assigning a restricted environment needs environment:deploy-to-restricted
@@ -1321,32 +1323,35 @@ export function AgentDialog({
               )}
 
               {/* Sandbox Environment (Agent only): binds the agent's code
-                  sandbox to a per-environment Dagger engine + egress policy */}
-              {isInternalAgent && accessibleEnvironments.length > 0 && (
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <Label>Environment</Label>
-                  <Select
-                    value={environmentId ?? "none"}
-                    onValueChange={(value) =>
-                      setEnvironmentId(value === "none" ? null : value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Default runtime" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        Default runtime (no environment)
-                      </SelectItem>
-                      {accessibleEnvironments.map((env) => (
-                        <SelectItem key={env.id} value={env.id}>
-                          {env.name}
+                  sandbox to a per-environment Dagger engine + egress policy.
+                  Feature-flagged off by default. */}
+              {isInternalAgent &&
+                agentEnvironmentsEnabled &&
+                accessibleEnvironments.length > 0 && (
+                  <div className="rounded-lg border bg-card p-4 space-y-2">
+                    <Label>Environment</Label>
+                    <Select
+                      value={environmentId ?? "none"}
+                      onValueChange={(value) =>
+                        setEnvironmentId(value === "none" ? null : value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default runtime" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          Default runtime (no environment)
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                        {accessibleEnvironments.map((env) => (
+                          <SelectItem key={env.id} value={env.id}>
+                            {env.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (

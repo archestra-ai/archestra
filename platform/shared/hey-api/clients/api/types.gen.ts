@@ -25410,6 +25410,7 @@ export type GetConfigResponses = {
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             agentSkillsEnabled: boolean;
+            agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';

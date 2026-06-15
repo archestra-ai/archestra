@@ -89633,6 +89633,9 @@
                         "agentSkillsEnabled": {
                           "type": "boolean"
                         },
+                        "agentEnvironmentsEnabled": {
+                          "type": "boolean"
+                        },
                         "appsEnabled": {
                           "type": "boolean"
                         },
@@ -89727,6 +89730,7 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "agentSkillsEnabled",
+                        "agentEnvironmentsEnabled",
                         "appsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",

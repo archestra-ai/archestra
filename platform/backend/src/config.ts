@@ -790,6 +790,8 @@ const config = {
   },
   agents: {
     skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
+    environmentsEnabled:
+      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {

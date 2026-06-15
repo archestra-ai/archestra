@@ -136,6 +136,71 @@ describe("StatisticsModel", () => {
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
+
+    test("counts team members per team instead of per organization", async ({
+      makeAgent,
+      makeInteraction,
+      makeMember,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const users = await Promise.all([
+        makeUser(),
+        makeUser(),
+        makeUser(),
+        makeUser(),
+      ]);
+
+      await Promise.all(users.map((user) => makeMember(user.id, org.id)));
+
+      const teamAlpha = await makeTeam(org.id, users[0].id, {
+        name: "Team Alpha",
+      });
+      const teamBeta = await makeTeam(org.id, users[0].id, {
+        name: "Team Beta",
+      });
+
+      await makeTeamMember(teamAlpha.id, users[0].id);
+      await Promise.all(
+        users.slice(1).map((user) => makeTeamMember(teamBeta.id, user.id)),
+      );
+
+      const alphaAgent = await makeAgent({
+        organizationId: org.id,
+        teams: [teamAlpha.id],
+      });
+      const betaAgent = await makeAgent({
+        organizationId: org.id,
+        teams: [teamBeta.id],
+      });
+
+      await makeInteraction(alphaAgent.id, {
+        inputTokens: 100,
+        outputTokens: 50,
+      });
+      await makeInteraction(betaAgent.id, {
+        inputTokens: 300,
+        outputTokens: 80,
+      });
+
+      const stats = await StatisticsModel.getTeamStatistics(
+        "24h",
+        users[0].id,
+        true,
+      );
+
+      expect(
+        Object.fromEntries(
+          stats.map((team) => [team.teamName, team.members] as const),
+        ),
+      ).toMatchObject({
+        "Team Alpha": 1,
+        "Team Beta": 3,
+      });
+    });
   });
 
   describe("getAgentStatistics", () => {

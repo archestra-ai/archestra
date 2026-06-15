@@ -55,6 +55,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sRuntime: z.boolean(),
               sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
+              appsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -102,6 +103,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
+          appsEnabled: config.apps.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -139,6 +141,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          "github-copilot": config.llm["github-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });

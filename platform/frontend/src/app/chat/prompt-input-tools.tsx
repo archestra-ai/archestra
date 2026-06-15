@@ -86,6 +86,17 @@ export interface ChatPromptInputToolsProps {
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
+  /**
+   * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
+   * the viewer hasn't connected. Keep the agent's model selected (no auto-swap)
+   * so sending surfaces an inline connect prompt instead of silently switching.
+   */
+  agentRequiresPerUserConnect?: boolean;
+  /**
+   * Server-resolved model name to show in the read-only chip when the agent's
+   * per-user model isn't in the viewer's available models (avoids a raw UUID).
+   */
+  agentModelDisplayName?: string;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -112,6 +123,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect = false,
+  agentModelDisplayName,
   textareaRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
@@ -267,6 +280,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             ? currentConversationChatApiKeyId
                             : initialApiKeyId
                         }
+                        suppressAutoSelect={agentRequiresPerUserConnect}
+                        fallbackModelName={agentModelDisplayName}
                       />
                     </div>
                   </>
@@ -418,6 +433,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     ? currentConversationChatApiKeyId
                     : initialApiKeyId
                 }
+                suppressAutoSelect={agentRequiresPerUserConnect}
+                fallbackModelName={agentModelDisplayName}
               />
               {modelSource && (
                 <Badge

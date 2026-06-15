@@ -653,6 +653,20 @@ const deepseekConfig = makeOpenAiCompatibleToolConfig({
   model: "deepseek-chat",
 });
 
+// The proxy exchanges the bearer (a GitHub OAuth token) at the WireMock token
+// exchange stub, which echoes it back with an "exchanged-" prefix — the chat
+// stubs match on `contains`, so stub selection by bearer still works while
+// proving the proxy swapped tokens.
+const githubCopilotConfig: ToolInvocationTestConfig = {
+  ...makeOpenAiCompatibleToolConfig({
+    providerName: "GitHubCopilot",
+    endpoint: (agentId) => `/v1/github-copilot/${agentId}/chat/completions`,
+    model: "gpt-4o",
+  }),
+  // keep the slug aligned with the provider id used in the WireMock stub names
+  providerSlug: "github-copilot",
+};
+
 const bedrockConfig: ToolInvocationTestConfig = {
   providerName: "Bedrock",
   providerSlug: "bedrock",
@@ -768,6 +782,7 @@ const testConfigsMap = {
   zhipuai: zhipuaiConfig,
   minimax: minimaxConfig,
   deepseek: deepseekConfig,
+  "github-copilot": githubCopilotConfig,
   bedrock: bedrockConfig,
   openrouter: openrouterConfig,
   perplexity: null, // Perplexity does not support tool calling

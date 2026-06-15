@@ -2,7 +2,7 @@
 // wrappers (MCP gateway tools vs agent delegation tools), their approval and
 // hook pipelines, error handling, metric emission, and tool-cache gating.
 // Mocks sit only at process boundaries: the MCP SDK client (gateway transport),
-// mcpClient.executeToolCall (gateway network call), executeA2AMessage
+// mcpClient.executeToolCallForOwner (gateway network call), executeA2AMessage
 // (child-agent execution), hookDispatcherService.fire (hook scripts run in
 // Dagger sandbox containers), the browser-stream feature (browser pods), and
 // the external-IdP session token resolver (IdP network call).
@@ -36,7 +36,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 
 vi.mock("@/clients/mcp-client", () => ({
   default: {
-    executeToolCall: vi.fn(),
+    executeToolCallForOwner: vi.fn(),
   },
 }));
 
@@ -153,7 +153,7 @@ beforeEach(
       makeToolPolicy,
     };
     vi.restoreAllMocks();
-    vi.mocked(mcpClient.executeToolCall).mockReset();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
     mockExecuteA2AMessage.mockReset();
     vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   },
@@ -300,13 +300,15 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
         return { decision: "proceed", runs: [] };
       });
     const metricsSpy = vi.spyOn(metrics.mcp, "reportMcpToolCall");
-    vi.mocked(mcpClient.executeToolCall).mockImplementation(async () => {
-      callOrder.push("gateway");
-      return {
-        content: [{ type: "text", text: "external result" }],
-        isError: false,
-      } as never;
-    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      async () => {
+        callOrder.push("gateway");
+        return {
+          content: [{ type: "text", text: "external result" }],
+          isError: false,
+        } as never;
+      },
+    );
 
     const tools = await chatClient.getChatMcpTools(baseParams);
     const result = await tools.extsrv__fetch_data.execute?.(
@@ -348,7 +350,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       "Tool call blocked by a PreToolUse hook",
     );
     expect(toolResultContent(result)).toContain("policy says no");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     expect(fireSpy).toHaveBeenCalledTimes(1);
     expect(metricsSpy).toHaveBeenCalledTimes(1);
     expect(metricsSpy).toHaveBeenCalledWith(
@@ -367,7 +369,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
           ? { decision: "block", reason: "be careful", runs: [] }
           : { decision: "proceed", runs: [] },
     );
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValue({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
       content: [{ type: "text", text: "external result" }],
       isError: false,
     } as never);
@@ -467,7 +469,7 @@ describe("getChatMcpTools approval gating", () => {
         execOptions("call-5"),
       ),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("run_tool proposes a grant approval only for an accessible-but-unassigned target", async () => {

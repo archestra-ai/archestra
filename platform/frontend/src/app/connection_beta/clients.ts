@@ -397,22 +397,34 @@ requires_openai_auth = true`,
         "deepseek",
         "xai",
         "cerebras",
+        "github-copilot",
       ],
-      build: ({ providerLabel, url }) => ({
+      build: ({ provider, providerLabel, url }) => ({
         kind: "steps",
         steps: [
+          ...(provider === "github-copilot"
+            ? [
+                {
+                  title: "Get your GitHub OAuth token",
+                  body: 'GitHub Copilot has no static API keys — the proxy authenticates upstream with the GitHub OAuth token of an account that has a Copilot subscription. The Copilot CLI stores one in ~/.config/github-copilot/apps.json ("oauth_token"); the generated setup script obtains it for you automatically (reusing that file or running the GitHub sign-in flow).',
+                },
+              ]
+            : []),
           {
             title: "Export Copilot provider settings",
-            body: `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
-            language: "bash",
+            body:
+              provider === "github-copilot"
+                ? 'COPILOT_PROVIDER_TYPE stays "openai" because Copilot speaks the OpenAI-compatible protocol; the API key is your GitHub OAuth token (or a virtual key mapped to a stored GitHub Copilot key).'
+                : `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
+            language: "bash" as const,
             code: `export COPILOT_PROVIDER_TYPE="openai"
 export COPILOT_PROVIDER_BASE_URL="${url}"
-export COPILOT_PROVIDER_API_KEY="<your-archestra-virtual-key>"
+export COPILOT_PROVIDER_API_KEY="${provider === "github-copilot" ? "<your-github-oauth-token>" : "<your-archestra-virtual-key>"}"
 export COPILOT_MODEL="<model-name>"`,
           },
           {
             title: "Verify the proxy",
-            language: "bash",
+            language: "bash" as const,
             code: `copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
           },
         ],
@@ -501,6 +513,7 @@ export COPILOT_MODEL="<model-name>"`,
         "zhipuai",
         "minimax",
         "azure",
+        "github-copilot",
       ],
       build: ({ provider, providerLabel, url, tokenPlaceholder }) => {
         if (provider === "bedrock") {

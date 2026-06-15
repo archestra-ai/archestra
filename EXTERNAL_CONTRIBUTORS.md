@@ -599,3 +599,13 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Moliqun
 - @andrefeix
 - @sanchal-coder
+- @rahulrajesh21
+- @hieuluongxuan
+- @Bhavya-Jain5
+- @harsha7123
+- @Kyzgor
+- @vedjaw
+- @abdrassulov
+- @XananasX7
+- @ambientclaw-commits
+- @anurag629

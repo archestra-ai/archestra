@@ -44,6 +44,21 @@ export interface SetupScriptProxySection {
   virtualKey: string | null;
   /** Display name of the virtual key, for revocation guidance. */
   virtualKeyName: string | null;
+  /**
+   * GitHub OAuth endpoints for the in-script device flow. Required when
+   * provider is "github-copilot" in passthrough mode: Copilot has no static
+   * API keys, so the script obtains the user's GitHub OAuth token locally
+   * (reusing the Copilot CLI's stored token when one works, otherwise running
+   * the device flow) and the token never leaves the machine.
+   */
+  githubCopilot?: {
+    /** Exchange endpoint used to verify a token has an active Copilot seat. */
+    tokenExchangeUrl: string;
+    /** Host serving /login/device/code and /login/oauth/access_token. */
+    deviceAuthBaseUrl: string;
+    /** GitHub App client id for the device flow. */
+    clientId: string;
+  } | null;
 }
 
 export interface SetupScriptSkillsSection {
@@ -535,8 +550,11 @@ copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
 
   if (ctx.proxy) {
-    // A piped script cannot export into the caller's shell; print the lines.
-    sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
+    if (ctx.proxy.provider === "github-copilot" && !ctx.proxy.virtualKey) {
+      sections.push(copilotGithubLinkSection(ctx.proxy));
+    } else {
+      // A piped script cannot export into the caller's shell; print the lines.
+      sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
 Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:
@@ -549,6 +567,7 @@ Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the 
   }
   export COPILOT_MODEL="<model-name>"
 ARCHESTRA_COPILOT`);
+    }
   }
 
   if (ctx.skills) {
@@ -559,6 +578,156 @@ fi`);
   }
 
   return sections;
+}
+
+/**
+ * GitHub Copilot in passthrough mode: there is no static API key — the proxy
+ * expects the user's long-lived GitHub OAuth token as the bearer. The script
+ * obtains one locally and prints it in the export lines, so the token never
+ * leaves the machine:
+ *  1. reuse a token the Copilot CLI / VS Code already stored in
+ *     ~/.config/github-copilot/{apps,hosts}.json — but only if Copilot's token
+ *     exchange accepts it (valid + active Copilot seat);
+ *  2. otherwise run the GitHub device flow (RFC 8628): show a code, poll
+ *     until the user authorizes in the browser, honoring interval/slow_down
+ *     with a hard deadline from expires_in.
+ * The token is never passed as argv to external commands (curl reads it via
+ * stdin config / request bodies via stdin).
+ */
+function copilotGithubLinkSection(proxy: SetupScriptProxySection): string {
+  const gh = proxy.githubCopilot;
+  if (!gh) {
+    throw new Error(
+      "github-copilot passthrough proxy section requires githubCopilot device-flow configuration",
+    );
+  }
+
+  const deviceCodeUrl = `${gh.deviceAuthBaseUrl.replace(/\/+$/, "")}/login/device/code`;
+  const accessTokenUrl = `${gh.deviceAuthBaseUrl.replace(/\/+$/, "")}/login/oauth/access_token`;
+  const deviceRequestBody = JSON.stringify({
+    client_id: gh.clientId,
+    scope: "read:user",
+  });
+
+  return `say 'Linking your GitHub Copilot subscription'
+ARCHESTRA_GHCP_TOKEN=""
+
+# Probe the Copilot token exchange: succeeds only for a valid GitHub token on
+# an account with an active Copilot seat. Token goes via stdin, never argv.
+ghcp_validate() {
+  [ -n "$1" ] || return 1
+  printf 'header = "authorization: token %s"\\n' "$1" | curl -fsS -o /dev/null \\
+    --connect-timeout 10 --max-time 30 -K - \\
+    -H 'accept: application/json' \\
+    -H 'editor-version: vscode/1.99.0' \\
+    -H 'copilot-integration-id: vscode-chat' \\
+    ${sh(gh.tokenExchangeUrl)} 2>/dev/null
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+  cat <<'ARCHESTRA_GHCP_MANUAL'
+python3 not found — skipping the automatic GitHub sign-in.
+Sign in manually instead: run the Copilot CLI once and complete its login,
+then use the "oauth_token" value from ~/.config/github-copilot/apps.json
+as COPILOT_PROVIDER_API_KEY below.
+ARCHESTRA_GHCP_MANUAL
+else
+  # 1. Reuse a GitHub token already stored by the Copilot CLI / VS Code.
+  ghcp_candidates="$(python3 - "$HOME/.config/github-copilot/apps.json" "$HOME/.config/github-copilot/hosts.json" <<'ARCHESTRA_GHCP_PY'
+import json, sys
+seen = []
+for path in sys.argv[1:]:
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        continue
+    if not isinstance(data, dict):
+        continue
+    for value in data.values():
+        if isinstance(value, dict):
+            token = value.get("oauth_token")
+            if isinstance(token, str) and token and token not in seen:
+                seen.append(token)
+print("\\n".join(seen))
+ARCHESTRA_GHCP_PY
+)" || ghcp_candidates=""
+  for ghcp_candidate in $ghcp_candidates; do
+    if ghcp_validate "$ghcp_candidate"; then
+      ARCHESTRA_GHCP_TOKEN="$ghcp_candidate"
+      echo "Re-using the GitHub token stored by the Copilot CLI on this machine."
+      break
+    fi
+  done
+
+  # 2. No usable stored token: run the GitHub device flow.
+  if [ -z "$ARCHESTRA_GHCP_TOKEN" ]; then
+    ghcp_device="$(printf '%s' ${sh(deviceRequestBody)} | curl -fsS --connect-timeout 10 --max-time 30 \\
+      -X POST -H 'accept: application/json' -H 'content-type: application/json' \\
+      --data @- ${sh(deviceCodeUrl)})" || {
+      echo "error: could not reach GitHub to start the device flow." >&2
+      exit 1
+    }
+    ghcp_field() { printf '%s' "$ghcp_device" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$1',''))"; }
+    ghcp_device_code="$(ghcp_field device_code)"
+    ghcp_user_code="$(ghcp_field user_code)"
+    ghcp_verification_uri="$(ghcp_field verification_uri)"
+    ghcp_interval="$(ghcp_field interval)"
+    ghcp_expires_in="$(ghcp_field expires_in)"
+    [ -n "$ghcp_interval" ] || ghcp_interval=5
+    [ -n "$ghcp_expires_in" ] || ghcp_expires_in=900
+    if [ -z "$ghcp_device_code" ]; then
+      echo "error: GitHub did not return a device code." >&2
+      exit 1
+    fi
+    ghcp_deadline=$(( $(date +%s) + ghcp_expires_in ))
+    echo
+    printf '  Open:        %s\\n' "$ghcp_verification_uri"
+    printf '  Enter code:  %s\\n' "$ghcp_user_code"
+    echo
+    echo 'Waiting for you to authorize in the browser...'
+    while [ -z "$ARCHESTRA_GHCP_TOKEN" ]; do
+      if [ "$(date +%s)" -ge "$ghcp_deadline" ]; then
+        echo "error: timed out waiting for GitHub authorization — re-run this command to try again." >&2
+        exit 1
+      fi
+      sleep "$ghcp_interval"
+      ghcp_poll="$(printf '{"client_id":"%s","device_code":"%s","grant_type":"urn:ietf:params:oauth:grant-type:device_code"}' ${sh(gh.clientId)} "$ghcp_device_code" | \\
+        curl -sS --connect-timeout 10 --max-time 30 \\
+          -X POST -H 'accept: application/json' -H 'content-type: application/json' \\
+          --data @- ${sh(accessTokenUrl)})" || continue
+      ghcp_token="$(printf '%s' "$ghcp_poll" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token","") or "")' 2>/dev/null)" || ghcp_token=""
+      if [ -n "$ghcp_token" ]; then
+        ARCHESTRA_GHCP_TOKEN="$ghcp_token"
+        break
+      fi
+      ghcp_error="$(printf '%s' "$ghcp_poll" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("error",""))' 2>/dev/null)" || ghcp_error=""
+      case "$ghcp_error" in
+        # keep polling on pending and on transient/parse hiccups
+        authorization_pending|"") ;;
+        slow_down) ghcp_interval=$((ghcp_interval + 5)) ;;
+        *) echo "error: GitHub sign-in failed: $ghcp_error" >&2; exit 1 ;;
+      esac
+    done
+    echo "GitHub account linked."
+    if ! ghcp_validate "$ARCHESTRA_GHCP_TOKEN"; then
+      echo "error: this GitHub account does not appear to have an active Copilot subscription." >&2
+      exit 1
+    fi
+  fi
+fi
+
+say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
+echo
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:'
+printf '  export COPILOT_PROVIDER_TYPE="openai"\\n'
+printf '  export COPILOT_PROVIDER_BASE_URL="%s"\\n' ${sh(proxy.url)}
+if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
+  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
+else
+  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' '<your-github-oauth-token>'
+fi
+printf '  export COPILOT_MODEL="<model-name>"\\n'`;
 }
 
 // ===================================================================

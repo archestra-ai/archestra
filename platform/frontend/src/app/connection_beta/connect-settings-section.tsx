@@ -2,6 +2,7 @@
 
 import {
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -318,49 +319,65 @@ export function ConnectSettingsSection() {
                 ) : (
                   <div className="grid gap-2">
                     {[...providerKeysByProvider.entries()].map(
-                      ([provider, keys]) => (
-                        <div
-                          key={provider}
-                          className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <ProviderIcon
-                              provider={provider as SupportedProvider}
-                            />
-                            <span className="truncate text-sm">
-                              {providerDisplayNames[
-                                provider as SupportedProvider
-                              ] ?? provider}
-                            </span>
-                          </div>
-                          <SingleSelectCombobox
-                            className="w-full"
-                            value={
-                              defaultProviderKeys[provider] ?? DEFAULT_VALUE
-                            }
-                            onChange={(value) =>
-                              setDefaultProviderKeys((prev) => {
-                                const next = { ...prev };
-                                if (value === DEFAULT_VALUE) {
-                                  delete next[provider];
-                                } else {
-                                  next[provider] = value;
+                      ([provider, keys]) => {
+                        // Per-user providers (GitHub Copilot) can't have a
+                        // shared default — each user connects their own account
+                        // at setup time (and the backend rejects such a default
+                        // on save). Show the row read-only so it's discoverable
+                        // and explained rather than silently missing.
+                        const isPerUser = providerRequiresPerUserCredential(
+                          provider as SupportedProvider,
+                        );
+                        return (
+                          <div
+                            key={provider}
+                            className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <ProviderIcon
+                                provider={provider as SupportedProvider}
+                              />
+                              <span className="truncate text-sm">
+                                {providerDisplayNames[
+                                  provider as SupportedProvider
+                                ] ?? provider}
+                              </span>
+                            </div>
+                            {isPerUser ? (
+                              <span className="text-xs text-muted-foreground">
+                                Per-user — each user connects their own account
+                              </span>
+                            ) : (
+                              <SingleSelectCombobox
+                                className="w-full"
+                                value={
+                                  defaultProviderKeys[provider] ?? DEFAULT_VALUE
                                 }
-                                return next;
-                              })
-                            }
-                            options={[
-                              { value: DEFAULT_VALUE, label: "Automatic" },
-                              ...keys.map((key) => ({
-                                value: key.id,
-                                label: key.name,
-                              })),
-                            ]}
-                            searchPlaceholder="Search keys…"
-                            disabled={locked}
-                          />
-                        </div>
-                      ),
+                                onChange={(value) =>
+                                  setDefaultProviderKeys((prev) => {
+                                    const next = { ...prev };
+                                    if (value === DEFAULT_VALUE) {
+                                      delete next[provider];
+                                    } else {
+                                      next[provider] = value;
+                                    }
+                                    return next;
+                                  })
+                                }
+                                options={[
+                                  { value: DEFAULT_VALUE, label: "Automatic" },
+                                  ...keys.map((key) => ({
+                                    value: key.id,
+                                    label: key.name,
+                                  })),
+                                ]}
+                                searchPlaceholder="Search keys…"
+                                disabled={locked}
+                              />
+                            )}
+                          </div>
+                        );
+                      },
                     )}
                   </div>
                 )}

@@ -2,6 +2,7 @@ import {
   DEFAULT_MODELS,
   isCompleteModelSelection,
   type ModelSelection,
+  providerRequiresPerUserCredential,
   resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -196,7 +197,14 @@ export async function resolveConfiguredAgentLlm(agent: {
     }
 
     let apiKey: string | undefined;
-    if (apiKeyRecord.secretId) {
+    // For per-user providers (GitHub Copilot) the attached key is the agent
+    // owner's personal token — never hand it to another user. Leave apiKey
+    // undefined so resolveAgentLlmOrDefault falls through to per-user
+    // resolution for the acting user.
+    if (
+      apiKeyRecord.secretId &&
+      !providerRequiresPerUserCredential(apiKeyRecord.provider)
+    ) {
       const secret = await getSecretValueForLlmProviderApiKey(
         apiKeyRecord.secretId,
       );
@@ -310,7 +318,11 @@ async function resolveDefaultLlmSelection(params: {
   const fallback = resolveDefaultLlmFromEnv();
   return {
     provider: fallback.provider,
-    apiKey: getProviderEnvApiKey(fallback.provider),
+    // Per-user providers must never use the shared env token (it would be one
+    // account's token for everyone).
+    apiKey: providerRequiresPerUserCredential(fallback.provider)
+      ? undefined
+      : getProviderEnvApiKey(fallback.provider),
     modelName: fallback.model,
     baseUrl: null,
   };
@@ -373,7 +385,12 @@ function resolveDefaultLlmFromEnv(): {
   provider: SupportedProvider;
 } {
   for (const provider of SupportedProvidersSchema.options) {
-    if (getProviderEnvApiKey(provider)) {
+    // Skip per-user providers: their env token is shared and must not back a
+    // system default (it would also resolve to no usable key downstream).
+    if (
+      getProviderEnvApiKey(provider) &&
+      !providerRequiresPerUserCredential(provider)
+    ) {
       return { model: DEFAULT_MODELS[provider], provider };
     }
   }

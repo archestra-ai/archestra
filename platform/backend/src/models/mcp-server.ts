@@ -392,6 +392,47 @@ class McpServerModel {
       .where(inArray(schema.mcpServersTable.id, ids));
   }
 
+  /**
+   * Resolve a server only within an organization. `mcp_server` has no org
+   * column, so org membership is inferred exactly like {@link findByIdForAudit}
+   * (team-in-org OR owner-is-member OR a legacy unowned+teamless system row).
+   * Foreign-org servers return null — used to org-scope app tool assignment.
+   */
+  static async findByIdInOrg(
+    id: string,
+    organizationId: string,
+  ): Promise<McpServer | null> {
+    const [row] = await db
+      .select({ server: schema.mcpServersTable })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    return row?.server ?? null;
+  }
+
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
     return await db
       .select()

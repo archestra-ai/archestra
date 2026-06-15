@@ -1,9 +1,12 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   DocsPage,
+  getArchestraAppResourceUri,
+  getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
   parseFullToolName,
   type ResourceVisibilityScope,
@@ -106,9 +109,11 @@ import { AssignedCredentialUnavailableTool } from "./assigned-credential-unavail
 import { AuthRequiredTool } from "./auth-required-tool";
 import {
   extractFileAttachments,
+  extractOwnedAppRender,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
+  resolveRunToolTargetName,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
 import { EditableAssistantMessage } from "./editable-assistant-message";
@@ -155,6 +160,8 @@ interface ChatMessagesProps {
     partIndex: number;
     text: string;
   }) => Promise<void>;
+  /** Re-run the original prompt after the user connects a per-user provider. */
+  onProviderConnected?: () => void;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -217,6 +224,7 @@ export function ChatMessages({
   isLoadingConversation = false,
   onMessagesUpdate,
   onRegenerateUserMessage,
+  onProviderConnected,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -259,6 +267,12 @@ export function ChatMessages({
         getToolName(TOOL_SWAP_AGENT_SHORT_NAME),
         getToolName(TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME),
         getToolName(TOOL_TODO_WRITE_SHORT_NAME),
+        // Owned-app management tools render the app inline; compact grouping
+        // would swallow their parts before MessageTool sees them.
+        ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
+          getArchestraToolFullName(shortName),
+          getToolName(shortName),
+        ]),
       ]),
     [getToolName],
   );
@@ -508,6 +522,7 @@ export function ChatMessages({
                     agentName={agentName}
                     selectedModel={selectedModel}
                     modelSource={modelSource}
+                    onProviderConnected={onProviderConnected}
                   />
                 );
               }
@@ -1337,6 +1352,7 @@ export function ChatMessages({
                 agentName={agentName}
                 selectedModel={selectedModel}
                 modelSource={modelSource}
+                onProviderConnected={onProviderConnected}
               />
             )}
             {pendingToolCalls.map((toolCall) => (
@@ -1696,13 +1712,27 @@ const MessageTool = memo(
             tool_args?: Record<string, unknown>;
           } | null)
         : null;
-    const mcpAppToolName = runToolInput?.tool_name ?? toolName;
+    const mcpAppToolName = resolveRunToolTargetName(part, toolName, {
+      getToolShortName,
+    });
     const mcpAppToolInput =
       runToolInput?.tool_args ?? (part.input as Record<string, unknown>);
 
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+
+    // Owned-app management result (create/update/render_app): mount the
+    // app-bound runtime from structuredContent.id. Standard UI resources,
+    // errors, and denials take priority — those results keep their text.
+    const ownedApp =
+      !uiResourceUri && !errorText && part.state !== "output-denied"
+        ? extractOwnedAppRender({
+            toolName: mcpAppToolName,
+            output: rawOutput,
+            getToolShortName,
+          })
+        : null;
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -1854,7 +1884,7 @@ const MessageTool = memo(
     ) : null;
 
     // MCP App tools: compact circle + canvas below (no collapsible wrapper)
-    if (uiResourceUri && !isApprovalRequested && !errorText) {
+    if ((uiResourceUri || ownedApp) && !isApprovalRequested && !errorText) {
       const compactState = getCompactToolState({ part, toolResultPart });
       const shortName = parseFullToolName(toolName).toolName.replace(/_/g, " ");
       const iconInfo = toolIconMap?.get(toolName);
@@ -1927,24 +1957,36 @@ const MessageTool = memo(
           )}
           {agentId && (
             <div className="mt-3">
-              <McpAppSection
-                uiResourceUri={uiResourceUri}
-                agentId={agentId}
-                toolName={mcpAppToolName}
-                toolCallId={part.toolCallId}
-                toolInput={mcpAppToolInput}
-                rawOutput={mcpOutput}
-                preloadedResource={
-                  earlyToolUiData?.html
-                    ? {
-                        html: earlyToolUiData.html,
-                        csp: earlyToolUiData.csp,
-                        permissions: earlyToolUiData.permissions,
-                      }
-                    : undefined
-                }
-                onSendMessage={onSendMessage}
-              />
+              {uiResourceUri ? (
+                <McpAppSection
+                  uiResourceUri={uiResourceUri}
+                  agentId={agentId}
+                  toolName={mcpAppToolName}
+                  toolCallId={part.toolCallId}
+                  toolInput={mcpAppToolInput}
+                  rawOutput={mcpOutput}
+                  preloadedResource={
+                    earlyToolUiData?.html
+                      ? {
+                          html: earlyToolUiData.html,
+                          csp: earlyToolUiData.csp,
+                          permissions: earlyToolUiData.permissions,
+                        }
+                      : undefined
+                  }
+                  onSendMessage={onSendMessage}
+                />
+              ) : ownedApp ? (
+                <McpAppSection
+                  uiResourceUri={getArchestraAppResourceUri(ownedApp.appId)}
+                  appId={ownedApp.appId}
+                  appVersion={ownedApp.latestVersion}
+                  agentId={agentId}
+                  toolName={mcpAppToolName}
+                  toolCallId={part.toolCallId}
+                  onSendMessage={onSendMessage}
+                />
+              ) : null}
             </div>
           )}
         </div>

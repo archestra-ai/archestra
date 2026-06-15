@@ -131,6 +131,8 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -618,6 +620,8 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             onResetModelOverride={onResetModelOverride}
+            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            agentModelDisplayName={agentModelDisplayName}
             textareaRef={textareaRef}
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
@@ -675,6 +679,8 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: ArchestraPromptInputProps) => {
   const handleProviderFileError = useCallback(
     (err: {
@@ -729,6 +735,8 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          agentModelDisplayName={agentModelDisplayName}
         />
       </PromptInputProvider>
     </div>

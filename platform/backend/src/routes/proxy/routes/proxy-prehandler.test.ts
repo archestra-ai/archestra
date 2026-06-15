@@ -48,6 +48,7 @@ describe("createProxyPreHandler", () => {
     rewritePrefix?: string;
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
+    rejectUnhandledPaths?: boolean;
   }) {
     const {
       apiPrefix,
@@ -55,6 +56,7 @@ describe("createProxyPreHandler", () => {
       rewritePrefix,
       providerName,
       skipErrorResponse,
+      rejectUnhandledPaths,
     } = params;
     const upstream = `http://localhost:${upstreamPort}`;
 
@@ -73,6 +75,7 @@ describe("createProxyPreHandler", () => {
         providerName,
         rewritePrefix,
         skipErrorResponse,
+        rejectUnhandledPaths,
       }),
     });
 
@@ -316,6 +319,46 @@ describe("createProxyPreHandler", () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.object).toBe("list");
+    });
+
+    test("rejectUnhandledPaths: 400s unsupported paths instead of forwarding upstream", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/github-copilot",
+        endpointSuffix: "/chat/completions",
+        providerName: "GitHubCopilot",
+        rejectUnhandledPaths: true,
+      });
+
+      // An unsupported endpoint (e.g. /responses) must be rejected, not proxied
+      // — forwarding would leak the raw GitHub token upstream.
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/github-copilot/responses",
+        headers: { "content-type": "application/json" },
+        payload: { model: "gpt-5.3-codex", input: "hi" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.message).toContain("/chat/completions and /models");
+    });
+
+    test("rejectUnhandledPaths: still 400s the chat/completions suffix (custom-handled)", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/github-copilot",
+        endpointSuffix: "/chat/completions",
+        providerName: "GitHubCopilot",
+        rejectUnhandledPaths: true,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/github-copilot/chat/completions",
+        headers: { "content-type": "application/json" },
+        payload: { model: "gpt-4o", messages: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 });

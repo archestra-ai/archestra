@@ -18,6 +18,7 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import { NoSuchToolError } from "ai";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
@@ -29,6 +30,22 @@ import {
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
+});
+
+describe("mapProviderError - per-user provider auth required", () => {
+  it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
+    const result = mapProviderError(
+      new LlmProviderAuthRequiredError("github-copilot"),
+      "github-copilot",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.authAction).toEqual({
+      provider: "github-copilot",
+      providerLabel: "GitHub Copilot",
+    });
+  });
 });
 
 // =============================================================================
@@ -1764,6 +1781,28 @@ describe("ProviderError", () => {
       isRetryable: true,
       usageLimitExceeded: true,
       usageLimitEntityType: "organization",
+    });
+  });
+
+  it("preserves authAction so the connect card renders in slim chat mode", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.ProviderAuthRequired,
+        message: "Connect your GitHub Copilot account to use this model.",
+        isRetryable: false,
+        authAction: {
+          provider: "github-copilot",
+          providerLabel: "GitHub Copilot",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: "Connect your GitHub Copilot account to use this model.",
+      isRetryable: false,
+      authAction: {
+        provider: "github-copilot",
+        providerLabel: "GitHub Copilot",
+      },
     });
   });
 });

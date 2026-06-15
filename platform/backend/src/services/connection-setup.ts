@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
+} from "@archestra/shared";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
@@ -38,23 +41,38 @@ export async function ensureConnectionVirtualKey(params: {
     preferredProviderKeyId,
   } = params;
 
-  const providerApiKey =
-    (await resolvePreferredProviderKey({
-      preferredProviderKeyId,
-      organizationId,
-      provider,
-    })) ??
-    (await LlmProviderApiKeyModel.getCurrentApiKey({
-      organizationId,
-      userId,
-      userTeamIds,
-      provider,
-      conversationId: null,
-    }));
+  // Per-user providers (GitHub Copilot): the connection virtual key must wrap
+  // the connecting user's OWN personal key — never an admin-configured or
+  // org/team-shared default, which would hand one account's credential to
+  // everyone. getCurrentApiKey already resolves only the acting user's personal
+  // key for per-user providers, so skip the admin-default precedence entirely.
+  const isPerUser = providerRequiresPerUserCredential(provider);
+  const providerApiKey = isPerUser
+    ? await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId,
+        userId,
+        userTeamIds,
+        provider,
+        conversationId: null,
+      })
+    : ((await resolvePreferredProviderKey({
+        preferredProviderKeyId,
+        organizationId,
+        provider,
+      })) ??
+      (await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId,
+        userId,
+        userTeamIds,
+        provider,
+        conversationId: null,
+      })));
   if (!providerApiKey) {
     throw new ApiError(
       400,
-      `No ${provider} API key is configured for your account, teams, or organization. Ask an admin to add one under LLM provider keys.`,
+      isPerUser
+        ? `Connect your own ${provider} account before generating a setup command — each user links their own.`
+        : `No ${provider} API key is configured for your account, teams, or organization. Ask an admin to add one under LLM provider keys.`,
     );
   }
 

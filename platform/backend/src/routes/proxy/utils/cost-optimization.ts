@@ -19,6 +19,7 @@ import type {
   CommonMcpToolDefinition,
   DeepSeek,
   Gemini,
+  GithubCopilot,
   Groq,
   Minimax,
   Mistral,
@@ -46,6 +47,7 @@ type ProviderMessages = {
   xai: Xai.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
   deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
+  "github-copilot": GithubCopilot.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

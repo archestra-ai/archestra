@@ -2,7 +2,7 @@ import { mkdtemp, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
-import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
+import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -22,20 +22,33 @@ async function seedSandbox(params: { organizationId: string; userId: string }) {
   });
 }
 
+function basename(p: string): string {
+  return p.split("/").filter(Boolean).pop() ?? "file";
+}
+
 async function seedArtifact(params: {
-  sandboxId: string;
+  sandboxId?: string;
   userId: string;
   organizationId: string;
   mimeType: string;
   data: Buffer;
   path?: string;
+  folderId?: string | null;
+  folderName?: string | null;
+  /** Storage namespace owner; defaults to the author. */
+  namespaceUserId?: string;
 }) {
-  return await SkillSandboxFileModel.createArtifact({
-    sandboxId: params.sandboxId,
+  const path = params.path ?? "/sandbox/skills/example/out.png";
+  return await FileModel.create({
+    organizationId: params.organizationId,
     userId: params.userId,
-    path: params.path ?? "/sandbox/skills/example/out.png",
+    namespaceUserId: params.namespaceUserId ?? params.userId,
+    conversationId: null,
+    sandboxId: params.sandboxId ?? null,
+    folderId: params.folderId ?? null,
+    folderName: params.folderName ?? null,
+    filename: basename(path),
     mimeType: params.mimeType,
-    originalName: null,
     sizeBytes: params.data.byteLength,
     data: params.data,
   });
@@ -410,16 +423,16 @@ describe("project folder cross-user access", () => {
     const folder = (
       await SkillSandboxFolderModel.findByIds([project.folderId])
     ).get(project.folderId);
-    const produced = await SkillSandboxFileModel.createArtifact({
+    const produced = await seedArtifact({
       sandboxId: memberSandbox.id,
-      userId: user.id, // folder owner's namespace
-      path: "/sandbox/member-output.txt",
+      userId: member.id, // author
+      namespaceUserId: user.id, // folder owner's namespace
+      organizationId,
       mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 6,
       data: Buffer.from("member"),
+      path: "/sandbox/member-output.txt",
       folderId: project.folderId,
-      folderName: folder?.name,
+      folderName: folder?.name ?? null,
     });
 
     // listing: the folder owner's X-Files include it
@@ -468,14 +481,13 @@ describe("project folder cross-user access", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const artifact = await SkillSandboxFileModel.createArtifact({
+    const artifact = await seedArtifact({
       sandboxId: ownerSandbox.id,
       userId: owner.id,
-      path: "/sandbox/secret.txt",
+      organizationId,
       mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 6,
       data: Buffer.from("secret"),
+      path: "/sandbox/secret.txt",
       folderId: project.folderId,
       folderName: "notmine",
     });
@@ -520,14 +532,13 @@ describe("project folder cross-user access", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const artifact = await SkillSandboxFileModel.createArtifact({
+    const artifact = await seedArtifact({
       sandboxId: ownerSandbox.id,
       userId: owner.id,
-      path: "/sandbox/shared.txt",
+      organizationId,
       mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 6,
       data: Buffer.from("shared"),
+      path: "/sandbox/shared.txt",
       folderId: project.folderId,
       folderName: "teamshared",
     });
@@ -619,9 +630,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     expect(del.statusCode).toBe(200);
 
-    expect(
-      await SkillSandboxFileModel.findArtifactById(artifact.id),
-    ).toBeNull();
+    expect(await FileModel.findById(artifact.id)).toBeNull();
     const bytes = await app.inject({
       method: "GET",
       url: `/api/skill-sandbox/artifacts/${artifact.id}`,
@@ -646,14 +655,14 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const produced = await SkillSandboxFileModel.createArtifact({
+    const produced = await seedArtifact({
       sandboxId: memberSandbox.id,
-      userId: user.id,
-      path: "/sandbox/member.txt",
+      userId: member.id, // author
+      namespaceUserId: user.id, // folder owner's namespace
+      organizationId,
       mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 1,
       data: Buffer.from("x"),
+      path: "/sandbox/member.txt",
       folderId: project.folderId,
       folderName: "deletable",
     });
@@ -678,9 +687,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       url: `/api/skill-sandbox/artifacts/${produced.id}`,
     });
     expect(del.statusCode).toBe(200);
-    expect(
-      await SkillSandboxFileModel.findArtifactById(produced.id),
-    ).toBeNull();
+    expect(await FileModel.findById(produced.id)).toBeNull();
   });
 
   test("filesystem mode: deleting removes the file from disk", async () => {

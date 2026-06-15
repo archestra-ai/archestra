@@ -143,32 +143,36 @@ describe("GET /api/projects/:id/files", () => {
       teamIds: [],
     });
 
-    const { SkillSandboxFileModel, SkillSandboxModel } = await import(
-      "@/models"
-    );
+    const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId: owner.id,
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
+    await FileModel.create({
+      organizationId,
       userId: owner.id,
-      path: "/sandbox/in-folder.txt",
-      mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 2,
-      data: Buffer.from("in"),
+      namespaceUserId: owner.id,
+      conversationId: null,
+      sandboxId: sandbox.id,
       folderId: project.folderId,
       folderName: "filed",
-    });
-    await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      userId: owner.id,
-      path: "/sandbox/elsewhere.txt",
+      filename: "in-folder.txt",
       mimeType: "text/plain",
-      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("in"),
+    });
+    await FileModel.create({
+      organizationId,
+      userId: owner.id,
+      namespaceUserId: owner.id,
+      conversationId: null,
+      sandboxId: sandbox.id,
+      folderId: null,
+      folderName: null,
+      filename: "elsewhere.txt",
+      mimeType: "text/plain",
       sizeBytes: 3,
       data: Buffer.from("out"),
     });

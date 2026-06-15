@@ -1,7 +1,7 @@
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import FileModel from "@/models/file";
 import SkillSandboxModel from "@/models/skill-sandbox";
-import SkillSandboxFileModel from "@/models/skill-sandbox-file";
 import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
@@ -28,10 +28,15 @@ test("conversationFilesService.list groups generated + attachments with basename
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const artifact = await SkillSandboxFileModel.createArtifact({
-    sandboxId: sandbox.id,
+  const artifact = await FileModel.create({
+    organizationId: org.id,
     userId: user.id,
-    path: "/home/sandbox/sub/chart.png",
+    namespaceUserId: user.id,
+    conversationId: conv.id,
+    sandboxId: sandbox.id,
+    folderId: null,
+    folderName: null,
+    filename: "chart.png",
     mimeType: "image/png",
     sizeBytes: 3,
     data: Buffer.from("abc"),
@@ -134,10 +139,15 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const ownOutput = await SkillSandboxFileModel.createArtifact({
-    sandboxId: convSandbox.id,
+  const ownOutput = await FileModel.create({
+    organizationId: org.id,
     userId: user.id,
-    path: "/home/sandbox/here.txt",
+    namespaceUserId: user.id,
+    conversationId: conv.id,
+    sandboxId: convSandbox.id,
+    folderId: null,
+    folderName: null,
+    filename: "here.txt",
     mimeType: "text/plain",
     sizeBytes: 1,
     data: Buffer.from("a"),
@@ -161,10 +171,15 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const elsewhere = await SkillSandboxFileModel.createArtifact({
-    sandboxId: otherSandbox.id,
+  const elsewhere = await FileModel.create({
+    organizationId: org.id,
     userId: user.id,
-    path: "/home/sandbox/elsewhere.txt",
+    namespaceUserId: user.id,
+    conversationId: null,
+    sandboxId: otherSandbox.id,
+    folderId: null,
+    folderName: null,
+    filename: "elsewhere.txt",
     mimeType: "text/plain",
     sizeBytes: 1,
     data: Buffer.from("b"),
@@ -227,21 +242,29 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const inFolder = await SkillSandboxFileModel.createArtifact({
-    sandboxId: ownerSandbox.id,
+  const inFolder = await FileModel.create({
+    organizationId: org.id,
     userId: owner.id,
-    path: "/home/sandbox/result.txt",
+    namespaceUserId: owner.id,
+    conversationId: null,
+    sandboxId: ownerSandbox.id,
+    folderId: project.folderId,
+    folderName: "filespanel",
+    filename: "result.txt",
     mimeType: "text/plain",
     sizeBytes: 2,
     data: Buffer.from("in"),
-    folderId: project.folderId,
-    folderName: "filespanel",
   });
   // the owner's personal root file must stay invisible in a project chat
-  await SkillSandboxFileModel.createArtifact({
-    sandboxId: ownerSandbox.id,
+  await FileModel.create({
+    organizationId: org.id,
     userId: owner.id,
-    path: "/home/sandbox/personal.txt",
+    namespaceUserId: owner.id,
+    conversationId: null,
+    sandboxId: ownerSandbox.id,
+    folderId: null,
+    folderName: null,
+    filename: "personal.txt",
     mimeType: "text/plain",
     sizeBytes: 3,
     data: Buffer.from("out"),

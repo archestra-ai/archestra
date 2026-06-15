@@ -3,20 +3,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
 import {
-  SkillSandboxFileModel,
+  FileModel,
   SkillSandboxFolderModel,
   SkillSandboxModel,
 } from "@/models";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-async function seed(userId: string, sandboxId: string, filename: string) {
-  return SkillSandboxFileModel.createArtifact({
-    sandboxId,
-    userId,
-    path: `/s/${filename}`,
+async function seed(params: {
+  organizationId: string;
+  userId: string;
+  sandboxId: string;
+  filename: string;
+  conversationId?: string | null;
+}) {
+  return FileModel.create({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    namespaceUserId: params.userId,
+    conversationId: params.conversationId ?? null,
+    sandboxId: params.sandboxId,
+    folderId: null,
+    folderName: null,
+    filename: params.filename,
     mimeType: "text/plain",
-    originalName: null,
     sizeBytes: 3,
     data: Buffer.from("abc"),
   });
@@ -42,7 +52,13 @@ describe("skillSandboxArtifactService", () => {
       conversationId: conv.id,
       defaultCwd: "/sandbox",
     });
-    await seed(user.id, sandbox.id, "a.txt");
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      sandboxId: sandbox.id,
+      filename: "a.txt",
+      conversationId: conv.id,
+    });
 
     const items = await skillSandboxArtifactService.listForConversation({
       organizationId: org.id,
@@ -81,7 +97,12 @@ describe("skillSandboxArtifactService", () => {
         conversationId: null,
         defaultCwd: "/sandbox",
       });
-      await seed(user.id, sandbox.id, "out.txt");
+      await seed({
+        organizationId: org.id,
+        userId: user.id,
+        sandboxId: sandbox.id,
+        filename: "out.txt",
+      });
 
       const { folders, files } =
         await skillSandboxArtifactService.listAllForUser({
@@ -113,7 +134,12 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const artifact = await seed(user.id, sandbox.id, "data.txt");
+    const artifact = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      sandboxId: sandbox.id,
+      filename: "data.txt",
+    });
 
     const resolved = await skillSandboxArtifactService.resolveXFileSource({
       organizationId: org.id,
@@ -147,7 +173,12 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    await seed(user.id, sandbox.id, "report.txt");
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      sandboxId: sandbox.id,
+      filename: "report.txt",
+    });
 
     const byName = await skillSandboxArtifactService.resolveXFileSource({
       organizationId: org.id,
@@ -156,7 +187,12 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
     });
     expect("data" in byName && byName.data.toString()).toBe("abc");
 
-    await seed(user.id, sandbox.id, "report.txt");
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      sandboxId: sandbox.id,
+      filename: "report.txt",
+    });
     const dup = await skillSandboxArtifactService.resolveXFileSource({
       organizationId: org.id,
       userId: user.id,

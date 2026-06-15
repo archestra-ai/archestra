@@ -10,8 +10,8 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
+  FileModel,
   SkillSandboxConversationGoneError,
-  SkillSandboxFileModel,
   SkillSandboxModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -695,20 +695,14 @@ const registry = defineArchestraTools([
         );
       }
 
-      // the artifact row needs a sandbox: resolve/create the conversation's
-      // default — a pure DB row; nothing is ever materialized for this tool.
-      const resolved = await resolveTarget({
-        target: undefined,
-        userCtx: guard.userCtx,
-        context,
-      });
-      if ("error" in resolved) return errorResult(resolved.error);
-
       let scope: ProjectFileScope | null;
       try {
         scope = await resolveProjectFileScope(context.conversationId);
       } catch (error) {
-        return handleRuntimeError(error, resolved.sandboxId, "save_result");
+        if (error instanceof SkillSandboxError) {
+          return errorResult(error.message);
+        }
+        throw error;
       }
 
       const mimeType = resolveArtifactMime({
@@ -716,21 +710,21 @@ const registry = defineArchestraTools([
         claimed: args.mimeType,
       });
       try {
-        const row = await SkillSandboxFileModel.createArtifact({
-          sandboxId: resolved.sandboxId,
-          userId: scope?.folderOwnerUserId ?? guard.userCtx.userId,
-          path: `${SKILL_SANDBOX_HOME}/${filename}`,
-          mimeType,
-          originalName: filename,
-          sizeBytes: data.byteLength,
-          data,
+        const row = await FileModel.create({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+          namespaceUserId: scope?.folderOwnerUserId ?? guard.userCtx.userId,
+          conversationId: context.conversationId ?? null,
           folderId: scope?.folderId ?? null,
           folderName: scope?.folderName ?? null,
+          filename,
+          mimeType,
+          sizeBytes: data.byteLength,
+          data,
         });
 
         logger.info(
           {
-            sandboxId: resolved.sandboxId,
             fileId: row.id,
             sizeBytes: row.sizeBytes,
             projectScoped: !!scope,
@@ -754,7 +748,10 @@ const registry = defineArchestraTools([
           ].join("\n"),
         );
       } catch (error) {
-        return handleRuntimeError(error, resolved.sandboxId, "save_result");
+        if (error instanceof SkillSandboxError) {
+          return errorResult(error.message);
+        }
+        throw error;
       }
     },
   }),

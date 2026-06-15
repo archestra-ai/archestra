@@ -1,16 +1,15 @@
 import {
+  FileModel,
   ProjectModel,
   ProjectShareModel,
-  SkillSandboxFileModel,
   SkillSandboxFolderModel,
-  SkillSandboxModel,
 } from "@/models";
 import type {
+  PersistedFile,
   SandboxFileListItem,
   SandboxFolderListItem,
-  SkillSandboxFile,
 } from "@/types";
-import { getSandboxFileStorage, storageFilename } from "./file-storage";
+import { getSandboxFileStorage } from "./file-storage";
 import { SandboxFileMissingError } from "./file-storage-filesystem";
 
 /** Bytes + metadata of a PFS file resolved for sandbox upload. */
@@ -27,18 +26,18 @@ type XFileResolutionError = {
 
 /**
  * The user's persistent file system (PFS / X-Files): listing, folders, and
- * byte access for the upload path. Row enumeration stays in the models; the
+ * byte access for the upload path. Rows live in the `files` table; the
  * storage router decides what a listing means per backend (db = the rows;
  * filesystem = the on-disk directory tree).
  */
 class SkillSandboxArtifactService {
-  /** Surface A: artifacts produced in one conversation (all downloadable). */
+  /** Surface A: files produced in one conversation (all downloadable). */
   async listForConversation(params: {
     organizationId: string;
     userId: string;
     conversationId: string;
   }): Promise<SandboxFileListItem[]> {
-    const rows = await SkillSandboxFileModel.listUserArtifacts(params);
+    const rows = await FileModel.listByConversation(params);
     return rows.map((row) => ({
       id: row.id,
       filename: row.filename,
@@ -59,7 +58,7 @@ class SkillSandboxArtifactService {
     files: SandboxFileListItem[];
   }> {
     const [rows, folderRows] = await Promise.all([
-      SkillSandboxFileModel.listUserArtifacts(params),
+      FileModel.listForUser(params),
       SkillSandboxFolderModel.listByUser(params),
     ]);
     return getSandboxFileStorage().listUserFiles({
@@ -70,32 +69,24 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Fetch an artifact the caller may access: the producing sandbox's owner,
-   * or the owner of the folder the artifact sits in (project folders collect
-   * results from every project member's chats). With
-   * `allowSharedProjectRead`, members of a project shared with the caller may
-   * also fetch files in its result folder — byte reads only; deletion keeps
-   * the stricter rule. Null for "not found" AND "not yours" alike, so 404s
-   * can't probe other users' ids.
+   * Fetch a file the caller may access: its author, the owner of the folder
+   * it sits in (project folders collect results from every project member's
+   * chats), or — with `allowSharedProjectRead` — a member of the project
+   * sharing that folder (byte reads only; deletion keeps the stricter rule).
+   * Null for "not found" AND "not yours" alike, so 404s can't probe ids.
    */
   async getArtifactForUser(params: {
     artifactId: string;
     organizationId: string;
     userId: string;
     allowSharedProjectRead?: boolean;
-  }): Promise<SkillSandboxFile | null> {
-    const artifact = await SkillSandboxFileModel.findArtifactById(
-      params.artifactId,
-    );
-    if (!artifact) return null;
-    const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
-    if (!sandbox || sandbox.organizationId !== params.organizationId) {
-      return null;
-    }
-    if (sandbox.userId !== params.userId) {
-      const folder = artifact.folderId
-        ? (await SkillSandboxFolderModel.findByIds([artifact.folderId])).get(
-            artifact.folderId,
+  }): Promise<PersistedFile | null> {
+    const file = await FileModel.findById(params.artifactId);
+    if (!file || file.organizationId !== params.organizationId) return null;
+    if (file.userId !== params.userId) {
+      const folder = file.folderId
+        ? (await SkillSandboxFolderModel.findByIds([file.folderId])).get(
+            file.folderId,
           )
         : undefined;
       if (!folder || folder.organizationId !== params.organizationId) {
@@ -113,27 +104,26 @@ class SkillSandboxArtifactService {
         if (!canAccess) return null;
       }
     }
-    return artifact;
+    return file;
   }
 
   /**
-   * Delete an artifact: the row first (the DB is authoritative — a row whose
-   * bytes outlive it merely resurfaces as a non-downloadable orphan in
-   * filesystem mode), then the external bytes, best-effort. Same access rule
-   * as reading: sandbox owner or folder owner.
+   * Delete a file: the row first (the DB is authoritative — a row whose bytes
+   * outlive it merely resurfaces as a non-downloadable orphan in filesystem
+   * mode), then the external bytes, best-effort. Author or folder owner only.
    */
   async deleteArtifactForUser(params: {
     artifactId: string;
     organizationId: string;
     userId: string;
   }): Promise<boolean> {
-    const artifact = await this.getArtifactForUser(params);
-    if (!artifact) return false;
-    await SkillSandboxFileModel.deleteArtifactById(artifact.id);
+    const file = await this.getArtifactForUser(params);
+    if (!file) return false;
+    await FileModel.deleteById(file.id);
     await getSandboxFileStorage()
       .delete({
-        provider: artifact.storageProvider,
-        objectKey: artifact.objectKey,
+        provider: file.storageProvider,
+        objectKey: file.objectKey,
       })
       .catch(() => {});
     return true;
@@ -143,9 +133,8 @@ class SkillSandboxArtifactService {
    * Resolve an `x_file` upload source — a reference to a PFS file by row id or
    * by location (`filename` + optional `folder`) — to its bytes. Location
    * resolution goes through the same listing the user sees, so it reaches
-   * orphans (filesystem files with no row) too; a duplicated filename (possible
-   * in db mode, where names aren't unique) is reported as ambiguous rather than
-   * picking one silently.
+   * orphans (filesystem files with no row) too; a duplicated filename is
+   * reported as ambiguous rather than picking one silently.
    */
   async resolveXFileSource(params: {
     organizationId: string;
@@ -153,11 +142,6 @@ class SkillSandboxArtifactService {
     id?: string;
     filename?: string;
     folder?: string;
-    /**
-     * Project file scope (project chats only). When set, only files inside
-     * the project folder resolve — and they resolve from the FOLDER OWNER's
-     * namespace, authorized by project membership rather than file ownership.
-     */
     scope?: {
       folderId: string;
       folderName: string;
@@ -167,28 +151,23 @@ class SkillSandboxArtifactService {
     const scope = params.scope ?? null;
 
     if (params.id) {
-      const artifact = await SkillSandboxFileModel.findArtifactById(params.id);
-      if (!artifact) return { error: "not_found" };
-      const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
-      if (!sandbox || sandbox.organizationId !== params.organizationId) {
+      const file = await FileModel.findById(params.id);
+      if (!file || file.organizationId !== params.organizationId) {
         return { error: "not_found" };
       }
       if (scope) {
         // in a project chat the folder is the boundary, not file ownership.
-        if (artifact.folderId !== scope.folderId) {
+        if (file.folderId !== scope.folderId) {
           return { error: "outside_project_folder" };
         }
-      } else if (sandbox.userId !== params.userId) {
+      } else if (file.userId !== params.userId) {
         return { error: "not_found" };
       }
       try {
         return {
-          data: await getSandboxFileStorage().get(artifact),
-          mimeType: artifact.mimeType,
-          originalName: storageFilename({
-            originalName: artifact.originalName,
-            path: artifact.path,
-          }),
+          data: await getSandboxFileStorage().get(file),
+          mimeType: file.mimeType,
+          originalName: file.filename,
         };
       } catch (error) {
         if (error instanceof SandboxFileMissingError) {
@@ -217,11 +196,11 @@ class SkillSandboxArtifactService {
 
     try {
       if (match.id) {
-        const artifact = await SkillSandboxFileModel.findArtifactById(match.id);
-        if (!artifact) return { error: "not_found" };
+        const file = await FileModel.findById(match.id);
+        if (!file) return { error: "not_found" };
         return {
-          data: await getSandboxFileStorage().get(artifact),
-          mimeType: artifact.mimeType,
+          data: await getSandboxFileStorage().get(file),
+          mimeType: file.mimeType,
           originalName: match.filename,
         };
       }

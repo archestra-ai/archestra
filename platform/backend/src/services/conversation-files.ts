@@ -1,6 +1,5 @@
-import { basename } from "node:path";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import SkillSandboxFileModel from "@/models/skill-sandbox-file";
+import FileModel from "@/models/file";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
@@ -23,7 +22,7 @@ class ConversationFilesService {
     requestingUserId: string;
   }): Promise<ConversationFilesResponse> {
     const [artifacts, attachments, accessibleScope] = await Promise.all([
-      SkillSandboxFileModel.listArtifactMetadataByConversationId(params),
+      FileModel.listMetadataByConversationId(params),
       ConversationAttachmentModel.findByConversationIdWithoutData(
         params.conversationId,
       ),
@@ -38,7 +37,7 @@ class ConversationFilesService {
     return {
       generated: artifacts.map((a) => ({
         id: a.id,
-        name: basename(a.path),
+        name: a.filename,
         mimeType: a.mimeType,
         contentUrl: `/api/skill-sandbox/artifacts/${a.id}`,
         createdAt: a.createdAt.toISOString(),

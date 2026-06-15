@@ -10,8 +10,8 @@ import config from "@/config";
 import {
   ConversationAttachmentModel,
   ConversationModel,
+  FileModel,
   SkillModel,
-  SkillSandboxFileModel,
   SkillSandboxFolderModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
@@ -890,12 +890,16 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    return SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
+    return FileModel.create({
+      organizationId,
       userId,
-      path: `/home/sandbox/${filename}`,
+      namespaceUserId: userId,
+      conversationId: null,
+      sandboxId: sandbox.id,
+      folderId: null,
+      folderName: null,
+      filename,
       mimeType: "text/plain",
-      originalName: null,
       sizeBytes: content.length,
       data: Buffer.from(content),
     });
@@ -951,12 +955,16 @@ describe("PFS tools (search_files, x_file source, download_file folder)", () => 
         conversationId: null,
         defaultCwd: "/home/sandbox",
       });
-      await SkillSandboxFileModel.createArtifact({
-        sandboxId: strangerSandbox.id,
+      await FileModel.create({
+        organizationId,
         userId: stranger.id,
-        path: "/home/sandbox/theirs.txt",
+        namespaceUserId: stranger.id,
+        conversationId: null,
+        sandboxId: strangerSandbox.id,
+        folderId: null,
+        folderName: null,
+        filename: "theirs.txt",
         mimeType: "text/plain",
-        originalName: null,
         sizeBytes: 1,
         data: Buffer.from("x"),
       });
@@ -1179,9 +1187,9 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
     expect(out.folder).toBeNull();
     expect(out.downloadUrl).toBe(`/api/skill-sandbox/artifacts/${out.fileId}`);
 
-    const { SkillSandboxFileModel } = await import("@/models");
-    const row = await SkillSandboxFileModel.findArtifactById(out.fileId);
-    expect(row?.kind).toBe("artifact");
+    const { FileModel } = await import("@/models");
+    const row = await FileModel.findById(out.fileId);
+    expect(row).not.toBeNull();
     expect(row?.folderId).toBeNull();
   });
 
@@ -1196,8 +1204,8 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
     const out = structuredOf<{ fileId: string; folder: string }>(result);
     expect(out.folder).toBe("save-here");
 
-    const { SkillSandboxFileModel } = await import("@/models");
-    const row = await SkillSandboxFileModel.findArtifactById(out.fileId);
+    const { FileModel } = await import("@/models");
+    const row = await FileModel.findById(out.fileId);
     expect(row?.folderId).toBe(project.folderId);
   });
 
@@ -1227,32 +1235,36 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
 
   test("search_files in a project chat sees only the project folder", async () => {
     const { project, ctx } = await makeProjectChatCtx("searchable");
-    const { SkillSandboxFileModel, SkillSandboxModel } = await import(
-      "@/models"
-    );
+    const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId,
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
+    await FileModel.create({
+      organizationId,
       userId,
-      path: "/home/sandbox/inside.txt",
-      mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 2,
-      data: Buffer.from("in"),
+      namespaceUserId: userId,
+      conversationId: null,
+      sandboxId: sandbox.id,
       folderId: project.folderId,
       folderName: "searchable",
-    });
-    await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      userId,
-      path: "/home/sandbox/outside.txt",
+      filename: "inside.txt",
       mimeType: "text/plain",
-      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("in"),
+    });
+    await FileModel.create({
+      organizationId,
+      userId,
+      namespaceUserId: userId,
+      conversationId: null,
+      sandboxId: sandbox.id,
+      folderId: null,
+      folderName: null,
+      filename: "outside.txt",
+      mimeType: "text/plain",
       sizeBytes: 3,
       data: Buffer.from("out"),
     });
@@ -1280,32 +1292,36 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
 
   test("x_file uploads in a project chat are confined to the project folder", async () => {
     const { project, ctx } = await makeProjectChatCtx("confined");
-    const { SkillSandboxFileModel, SkillSandboxModel } = await import(
-      "@/models"
-    );
+    const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId,
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    const inside = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
+    const inside = await FileModel.create({
+      organizationId,
       userId,
-      path: "/home/sandbox/in.txt",
-      mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 2,
-      data: Buffer.from("in"),
+      namespaceUserId: userId,
+      conversationId: null,
+      sandboxId: sandbox.id,
       folderId: project.folderId,
       folderName: "confined",
-    });
-    const outside = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      userId,
-      path: "/home/sandbox/out.txt",
+      filename: "in.txt",
       mimeType: "text/plain",
-      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("in"),
+    });
+    const outside = await FileModel.create({
+      organizationId,
+      userId,
+      namespaceUserId: userId,
+      conversationId: null,
+      sandboxId: sandbox.id,
+      folderId: null,
+      folderName: null,
+      filename: "out.txt",
+      mimeType: "text/plain",
       sizeBytes: 3,
       data: Buffer.from("out"),
     });

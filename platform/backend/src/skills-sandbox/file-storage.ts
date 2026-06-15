@@ -3,7 +3,7 @@ import type {
   SandboxArtifactRow,
   SandboxFileListItem,
   SandboxFolderListItem,
-  SkillSandboxFile,
+  StoredBlobRow,
 } from "@/types";
 import {
   FilesystemSandboxFileStorage,
@@ -44,7 +44,7 @@ interface SandboxFileStorage {
   }): Promise<StoredSandboxBlob>;
 
   /** Read a file row's bytes, normalized to a Buffer. */
-  get(file: SkillSandboxFile): Promise<Buffer>;
+  get(file: StoredBlobRow): Promise<Buffer>;
 
   /**
    * Remove a file's externally-stored bytes. Resolves per blob like `get`
@@ -127,7 +127,7 @@ class DbSandboxFileStorage implements SandboxFileStorage {
     return { provider: "db", objectKey: null, dbData: params.data };
   }
 
-  async get(file: SkillSandboxFile): Promise<Buffer> {
+  async get(file: StoredBlobRow): Promise<Buffer> {
     if (file.data == null) {
       throw new Error(
         `sandbox file ${file.id} has storage_provider 'db' but no data bytes`,
@@ -205,7 +205,7 @@ class SandboxFileStorageRouter implements SandboxFileStorage {
     return dbProvider.put(params);
   }
 
-  async get(file: SkillSandboxFile): Promise<Buffer> {
+  async get(file: StoredBlobRow): Promise<Buffer> {
     if (file.storageProvider === "filesystem") {
       return this.getFilesystem().get(file);
     }

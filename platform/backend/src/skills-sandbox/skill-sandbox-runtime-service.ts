@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
+  FileModel,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -18,7 +19,7 @@ import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-read
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
-import { getSandboxFileStorage } from "./file-storage";
+import { getSandboxFileStorage, storageFilename } from "./file-storage";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -224,18 +225,20 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof SkillSandboxFileModel.createArtifact>>;
+      let row: Awaited<ReturnType<typeof FileModel.create>>;
       try {
-        row = await SkillSandboxFileModel.createArtifact({
+        row = await FileModel.create({
+          organizationId: sandbox.organizationId,
+          userId: sandbox.userId,
+          namespaceUserId: params.folderOwnerUserId ?? sandbox.userId,
+          conversationId: sandbox.conversationId,
           sandboxId: params.sandboxId,
-          userId: params.folderOwnerUserId ?? sandbox.userId,
-          path: resolvedPath,
-          mimeType,
-          originalName: null,
-          sizeBytes: data.byteLength,
-          data,
           folderId: params.folder?.id ?? null,
           folderName: params.folder?.name ?? null,
+          filename: storageFilename({ originalName: null, path: resolvedPath }),
+          mimeType,
+          sizeBytes: data.byteLength,
+          data,
         });
       } catch (dbError) {
         throw new SkillSandboxError(
@@ -246,7 +249,7 @@ class SkillSandboxRuntimeService {
       return {
         artifactId: row.id,
         sandboxId: params.sandboxId,
-        path: row.path,
+        path: resolvedPath,
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
         stagingNotices,

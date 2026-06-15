@@ -17,7 +17,7 @@ import type {
   SandboxArtifactRow,
   SandboxFileListItem,
   SandboxFolderListItem,
-  SkillSandboxFile,
+  StoredBlobRow,
 } from "@/types";
 import { mimeFromExtension } from "./mime-from-extension";
 
@@ -93,7 +93,7 @@ export class FilesystemSandboxFileStorage {
     }
   }
 
-  async get(file: SkillSandboxFile): Promise<Buffer> {
+  async get(file: StoredBlobRow): Promise<Buffer> {
     if (!file.objectKey) {
       throw new Error(
         `sandbox file ${file.id} has storage_provider 'filesystem' but no object key`,

@@ -62,7 +62,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const inlineSafe = isInlineSafeImageMime(artifact.mimeType);
-      const filename = safeFilenameFromPath(artifact.path);
+      const filename = safeFilenameFromPath(artifact.filename);
       const disposition = inlineSafe
         ? `inline; filename="${filename}"`
         : `attachment; filename="${filename}"`;

@@ -25,6 +25,7 @@ export * from "./conversation-share";
 export * from "./dual-llm";
 export * from "./enterprise-managed-credentials";
 export * from "./environment";
+export * from "./file";
 export * from "./github-app-config";
 export * from "./hook";
 export * from "./identity-provider";

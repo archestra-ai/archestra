@@ -386,6 +386,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "user's own PFS folder names; file organization, no admin signal",
   },
+  filesTable: {
+    audited: false,
+    reason:
+      "user's own PFS files; download_file/save_result outputs, no admin signal",
+  },
   skillSandboxReplayEventsTable: {
     audited: false,
     reason: "child of sandbox; append-only ordered replay log",

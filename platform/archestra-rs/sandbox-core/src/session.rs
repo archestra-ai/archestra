@@ -1,5 +1,5 @@
-//! the backend-agnostic actor. owns a pool of session handles keyed by Dagger
-//! runner host (so per-environment engines each get their own warm session), the
+//! the backend-agnostic actor. owns a pool of session handles keyed by runtime
+//! target (so per-environment engines each get their own warm session), the
 //! request channel, concurrency back-pressure, and panic recovery. it dispatches
 //! every message to a `Backend` without knowing which runtime backs it; the
 //! Dagger-specific connect/warm/materialise logic lives in `crate::backends`.
@@ -140,7 +140,7 @@ async fn current(target: &RuntimeTarget) -> Result<Arc<SessionHandle>> {
         .get_or_init(|| async { Mutex::new(HashMap::new()) })
         .await;
 
-    // pick up either the live handle or a shared in-flight spawn for this host;
+    // pick up either the live handle or a shared in-flight spawn for this target;
     // release the lock before awaiting so concurrent callers don't block on each
     // other. capture the generation so the post-await install can detect a
     // concurrent invalidation that retired this spawn's lineage.

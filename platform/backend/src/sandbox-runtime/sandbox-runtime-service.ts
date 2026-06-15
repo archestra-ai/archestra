@@ -56,9 +56,9 @@ interface RunCommandParams extends LimitOverrides {
   timeoutSeconds: number;
   replayEntries?: ReplayEntry[];
   /**
-   * Optional Dagger runner host (a per-environment engine, `kube-pod://…`). When
-   * set, the native session pool runs this command on that engine; omitted uses
-   * the process-default engine.
+   * The environment isolation target. When set, the native session pool runs
+   * this command on that environment's engine; omitted uses the process-default
+   * engine.
    */
   environment?: EnvironmentTarget;
 }
@@ -82,7 +82,7 @@ interface ReadArtifactParams extends LimitOverrides {
   defaultCwd: string;
   replayEntries?: ReplayEntry[];
   /**
-   * Optional Dagger runner host. Artifact extraction replays the recorded
+   * The environment isolation target. Artifact extraction replays the recorded
    * commands, so it must run on the same per-environment engine the sandbox ran
    * on (else the replay bypasses the environment's egress policy).
    */

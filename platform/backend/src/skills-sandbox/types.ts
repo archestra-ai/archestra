@@ -36,9 +36,10 @@ export interface RunCommandParams {
   /** Caller-requested wall-clock cap in seconds; clamped to the configured maximum. */
   timeoutSeconds?: number;
   /**
-   * Optional Dagger runner host for the agent's environment engine
-   * (`kube-pod://…`). Omitted runs on the process-default engine. Resolved by
-   * the MCP tool from the agent's `environmentId`.
+   * The agent's environment isolation target. Omitted runs on the
+   * process-default engine; otherwise the sandbox-core backend builds that
+   * environment's engine address from it. Resolved by the MCP tool from the
+   * agent's `environmentId`.
    */
   environment?: EnvironmentTarget;
 }
@@ -71,9 +72,9 @@ export interface ExportArtifactParams {
   path: string;
   mimeType?: string;
   /**
-   * Optional Dagger runner host for the agent's environment engine. Artifact
-   * extraction replays the recorded commands, so it must target the same engine
-   * the sandbox ran on. Resolved by the MCP tool from the agent's `environmentId`.
+   * The agent's environment isolation target. Artifact extraction replays the
+   * recorded commands, so it must target the same engine the sandbox ran on.
+   * Resolved by the MCP tool from the agent's `environmentId`.
    */
   environment?: EnvironmentTarget;
 }

@@ -1,15 +1,15 @@
 """Verify the submitted BTC/SOL prices against recorded ground truth within tolerance.
 
 Reads BENCH_RESULT (submitted JSON) and BENCH_FIXTURES/expected/expected.json (ground truth fetched
-at authoring time, never staged to the agent). Tolerance absorbs exact-minute vs hourly-candle and
-intraday-source differences.
+at authoring time, never staged to the agent). Tolerance allows harmless rounding of the requested
+Yahoo Finance 1h Close value, not nearby candles or alternate fields.
 """
 
 import json
 import os
 from pathlib import Path
 
-_TOLERANCE = 0.03  # ±3%
+_TOLERANCE = 0.005  # ±0.5%
 
 
 def _load(env_var: str, *rel: str) -> dict:
@@ -28,5 +28,5 @@ def test_prices_match() -> None:
     expected = _load("BENCH_FIXTURES", "expected", "expected.json")
     for key in ("btc_usd", "sol_usd"):
         assert _close(result[key], expected[key]), (
-            f"{key}: submitted {result[key]} not within {_TOLERANCE:.0%} of {expected[key]}"
+            f"{key}: submitted {result[key]} not within {_TOLERANCE:.1%} of {expected[key]}"
         )

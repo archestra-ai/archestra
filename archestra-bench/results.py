@@ -28,6 +28,7 @@ class RunResult:
 
     env_id: str
     task_id: str
+    provider: str
     model: str
     outcome: Outcome
     finish_reason: str | None
@@ -44,14 +45,14 @@ class RunResult:
 
 
 def build_report(results: list[RunResult]) -> list[RunResult]:
-    """Sort results and reject duplicate (env, task, model) cells."""
-    seen: set[tuple[str, str, str]] = set()
+    """Sort results and reject duplicate (env, task, provider, model) cells."""
+    seen: set[tuple[str, str, str, str]] = set()
     for result in results:
-        key = (result.env_id, result.task_id, result.model)
+        key = (result.env_id, result.task_id, result.provider, result.model)
         if key in seen:
             raise ValueError(f"duplicate result for {key}")
         seen.add(key)
-    return sorted(results, key=lambda result: (result.env_id, result.task_id, result.model))
+    return sorted(results, key=lambda result: (result.env_id, result.task_id, result.provider, result.model))
 
 
 @dataclass(frozen=True)
@@ -134,13 +135,13 @@ def render_markdown(rows: list[RunResult]) -> str:
     lines += [
         "## Pass matrix",
         "",
-        "| env | task | model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |",
+        "| env | task | provider/model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |",
         "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row.env_id} | {row.task_id} | {row.model} | {row.outcome.value} | {_cell(row.finish_reason)} | "
-            f"{row.tool_call_count} | {_cell(row.total_tokens)} | {row.stage_count} | "
+            f"| {row.env_id} | {row.task_id} | {row.provider}/{row.model} | {row.outcome.value} | "
+            f"{_cell(row.finish_reason)} | {row.tool_call_count} | {_cell(row.total_tokens)} | {row.stage_count} | "
             f"{row.format_attempts} | {_cell(row.agent_error)} | {_cell(row.artifact_dir)} |"
         )
 

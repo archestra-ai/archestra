@@ -84,6 +84,11 @@ class EvalClient(ArchestraClient):
     def __enter__(self) -> "EvalClient":
         return self
 
+    def sibling(self) -> "EvalClient":
+        """A fresh client to the same backend + auth, so concurrent lanes sharing one backend don't
+        share a single client's mutable state (its timeout, cookie jar, and opener)."""
+        return EvalClient(self.base_url, api_key=self._auth, timeout=self.timeout)
+
     # --- models ----------------------------------------------------------------------------
 
     def list_models(self) -> list[dict[str, JsonValue]]:

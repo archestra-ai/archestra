@@ -83,11 +83,14 @@ the `[[skills]]` surface (each a pinned web ref `{repo, path, ref}` — `ref` sl
 task-dir ids, globally unique across envs), and an optional `tools` allow-list of extra
 `archestra__*` short names. By default the agent may *use* skills but is barred from mutating the
 skill library (`create_skill`/`update_skill` are stripped, and a surviving one aborts the run); an
-env that lists such a tool in `tools` keeps it, so only an env that opts in can author skills. Add a
-new environment by dropping another `envs/*.toml` — no code change.
+env that lists such a tool in `tools` keeps it, so only an env that opts in can author skills. An
+optional `share_backend = true` lets all of an env's lanes share one backend (seeded once) — only safe
+for envs whose tasks never mutate shared backend state; a mutating env stays isolated (the default), a
+fresh backend per lane. Add a new environment by dropping another `envs/*.toml` — no code change.
 
 `basic` ships all skills from `anthropics/skills` + `openai/skills`, three public no-auth remote MCPs
-(DeepWiki, Microsoft Learn, Context7) as a realistic surface, and three tasks —
+(DeepWiki, Microsoft Learn, Context7) as a realistic surface, `share_backend = true` (its tasks are
+read-only against backend state), and three tasks —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
@@ -119,12 +122,13 @@ the benchmark database is dropped.
 
 ## Outcomes
 
-Each (env, task, model) cell resolves to exactly one outcome:
+Each (env, task, provider, model) cell resolves to exactly one outcome:
 
 - `passed` / `failed` — a well-formed result was submitted and the verifier accepted / rejected it.
 - `format_failed` — the agent submitted but never matched the schema within the attempt budget.
 - `no_submission` — the run finished without ever calling `submit_result`.
-- `agent_error` — the chat run errored before a result could be graded.
+- `agent_error` — the chat run errored before a result could be graded (an `infra:`-prefixed
+  `agent_error` is a backend/boot failure for that lane, not a model failure — sibling lanes continue).
 
 ## Run
 
@@ -136,18 +140,27 @@ uv run run.py --env basic --task median-salary --model claude-sonnet-4-6
 # benchmark a non-Anthropic model via an Anthropic-compatible gateway:
 ANTHROPIC_API_KEY=$KIMI_API_KEY uv run run.py --env basic \
   --provider anthropic --base-url https://api.kimi.com/coding --model kimi-for-coding
+# multi-provider sweep, 3 lanes concurrently (Kimi via the anthropic-compatible gateway):
+ANTHROPIC_API_KEY=$KIMI_API_KEY GEMINI_API_KEY=... OPENROUTER_API_KEY=... uv run run.py --env basic \
+  --lanes "anthropic:kimi-for-coding,gemini:gemini-3-flash-preview,openrouter:vendor/model:free" \
+  --base-url "anthropic=https://api.kimi.com/coding" --max-workers 3
 ```
 
-`--env`, `--task`, and `--model` each accept one name or a comma-separated list. `--env` defaults to
-all environments; `--task` defaults to all tasks in the selected envs and filters by task id.
-`--provider` defaults to `anthropic`; `--base-url` overrides its endpoint. `--run-dir` overrides the
-artifact directory (default `archestra-bench/experiments/run_<id>/`, gitignored); `--out` writes the
-markdown report to a file instead of stdout.
+`--env` and `--task` each accept one name or a comma-separated list (default: all). A **lane** is a
+`(provider, model)` pair; the sweep is `env x lane`. Lanes come from `--lanes`
+(`provider:model,...` — the model tail may contain `:`, e.g. an OpenRouter `:free` suffix) or the
+back-compat `--provider` + `--model` form (mutually exclusive with `--lanes`). `--base-url` overrides a
+provider's endpoint: a bare URL for a single-provider sweep, or `provider=url[,...]` to point one
+provider at a gateway while others use defaults (each provider's key is read from `<PROVIDER>_API_KEY`).
+`--max-workers` runs that many lanes concurrently (default 1 = serial); tasks within a lane stay serial.
+`--run-dir` overrides the artifact directory (default `archestra-bench/experiments/run_<id>/`,
+gitignored); `--out` writes the markdown report to a file instead of stdout.
 
-Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per env, and an
-`<env>/<task>__<model>/` subdirectory per cell with `trajectory.jsonl`, `run.json`, `submission.json`
-(the accepted bytes), `artifact.bin` (a downloaded file artifact, when any), `state.json` (the
-`BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
+Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per shared env (or
+`<env>__<lane>.backend.log` per isolated lane), and an `<env>/<task>__<lane>/` subdirectory per cell
+(`<lane>` is a collision-proof `provider_model-<hash>` slug) with `trajectory.jsonl`, `run.json`,
+`submission.json` (the accepted bytes), `artifact.bin` (a downloaded file artifact, when any),
+`state.json` (the `BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
 
 ## Prerequisites
 

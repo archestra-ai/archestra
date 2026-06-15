@@ -55,6 +55,11 @@ class EnvConfig:
     mcps: tuple[Mcp, ...]
     tasks: tuple[Task, ...]
     tools: tuple[str, ...] = ()  # extra archestra__* short names to assign (e.g. create_skill)
+    # when true, all lanes of this env share one backend (seeded once); each lane still gets its own
+    # agent + benchmark MCP. Only safe for envs whose tasks do NOT mutate shared backend state -- a
+    # mutating env (e.g. one that creates/counts skills) must stay isolated (default) so concurrent
+    # lanes never desync. See run.py's lane execution.
+    share_backend: bool = False
 
 
 def load_envs(envs_dir: Path) -> dict[str, EnvConfig]:
@@ -111,6 +116,7 @@ def _load_env(path: Path, root: Path) -> EnvConfig:
         mcps=mcps,
         tasks=tasks,
         tools=_tool_names(tomlconf.strs(data, "tools", ctx), f"{ctx} tools"),
+        share_backend=tomlconf.opt_bool(data, "share_backend", ctx),
     )
 
 

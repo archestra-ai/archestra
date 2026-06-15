@@ -20,6 +20,13 @@ def test_real_envs_parse_with_tool_surface() -> None:
     assert {t.id for t in api.tasks} == {"author-skill", "letter-count"}
 
 
+def test_share_backend_flag() -> None:
+    envs = load_envs(_ENVS)
+    # clean, skill-heavy env opts into a shared backend; the mutating self-API env stays isolated.
+    assert envs["basic"].share_backend is True
+    assert envs["archestra-api"].share_backend is False
+
+
 def test_tool_names_rejects_non_short_name() -> None:
     with pytest.raises(SystemExit, match="archestra short name"):
         _tool_names(["Create-Skill"], "ctx")

@@ -61,6 +61,13 @@ def opt_int(d: Mapping[str, Any], key: str, ctx: str) -> int | None:
     return value
 
 
+def opt_bool(d: Mapping[str, Any], key: str, ctx: str, *, default: bool = False) -> bool:
+    value = d.get(key, default)
+    if not isinstance(value, bool):
+        raise SystemExit(f"{ctx}: {key!r} must be a boolean, got {type(value).__name__}")
+    return value
+
+
 def table(d: Mapping[str, Any], key: str, ctx: str, *, default: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
     value = d.get(key, default)
     if value is None:

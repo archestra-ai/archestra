@@ -6,18 +6,27 @@ selected environment (see envs.py):
     shared Postgres + Dagger engine (see lifecycle.py);
   - seeds an LLM provider key + models, the env's web-pinned skills, its remote MCP servers, and the
     benchmark MCP, then creates the env's agent and locks its tool surface;
-  - drives each task's multi-stage conversation per model, capturing the trajectory;
+  - drives each task's multi-stage conversation per lane (a (provider, model) pair), capturing the
+    trajectory;
   - reads the submission (and, for file-producing tasks, downloads the produced artifact) and
     verifies out of band;
   - tears the instance down.
 Results are written per cell and aggregated by environment and by task.
 
+The sweep is `env x lane`. Lanes run concurrently up to `--max-workers` (default 1 = serial); each
+lane runs its env's tasks serially against its own benchmark MCP + agent. A clean env can share one
+backend across its lanes (`share_backend` in its toml); a mutating env keeps a backend per lane.
+
   export ANTHROPIC_API_KEY=<key>
   uv run run.py --env basic --model claude-sonnet-4-6
+  # multi-provider sweep, 3 lanes at once (Kimi via the anthropic-compatible gateway):
+  uv run run.py --lanes "anthropic:kimi-for-coding,gemini:gemini-3-flash-preview,openrouter:x/y:free" \
+      --base-url "anthropic=https://api.kimi.com/coding" --max-workers 3
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -26,6 +35,7 @@ import re
 import signal
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -36,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "migration-kit" 
 
 import coloredlogs
 import fire
+from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from archestra_client import AgentCreate, ArchestraApiError
 from benchmark_mcp import BenchmarkMcp, SubmissionAccepted, SubmissionFormatFailed
@@ -75,6 +87,98 @@ _REQUIRED_TOOL_SHORT_NAMES = (
     "load_skill",
 )
 _MUTATING_SKILL_TOOL_SHORT_NAMES = ("create_skill", "update_skill")
+_DEFAULT_MAX_WORKERS = 1  # serial by default; parallelism is explicit opt-in via --max-workers
+
+
+@dataclass(frozen=True)
+class Lane:
+    """one (provider, model) pair the sweep runs; combined with each env to form the parallel units."""
+
+    provider: str
+    model: str
+
+    @property
+    def slug(self) -> str:
+        """A unique, name-safe slug for this lane's agent / MCP catalog / log / artifact dir. The
+        readable `provider_model` slug is lossy (`a/b` and `a_b` collapse), so a short hash of the raw
+        `provider:model` is appended -- otherwise two distinct lanes could share an agent (and thus a
+        benchmark MCP), misattributing submissions."""
+        digest = hashlib.sha256(f"{self.provider}:{self.model}".encode()).hexdigest()[:8]
+        return f"{_slug(f'{self.provider}_{self.model}')}-{digest}"
+
+
+@dataclass(frozen=True)
+class EnvPlan:
+    """one env plus the lanes to run against it (the full lane set) and whether they share a backend."""
+
+    env: EnvConfig
+    tasks: tuple[Task, ...]
+    lanes: tuple[Lane, ...]
+
+    @property
+    def share_backend(self) -> bool:
+        return self.env.share_backend
+
+
+def _parse_lanes(
+    lanes: str | list[str] | tuple[str, ...] | None,
+    provider: str,
+    model: str | list[str] | tuple[str, ...] | None,
+) -> list[Lane]:
+    """Resolve the lane set. `--lanes` (comma list of `provider:model`) is mutually exclusive with the
+    back-compat `--provider`/`--model` form; passing `--lanes` together with an explicit `--model` is a
+    loud error rather than a silent override."""
+    specs = _split_names(lanes)
+    if specs is None:
+        return [Lane(provider=_as_provider(provider), model=m) for m in _normalize_models(model)]
+    if model is not None:
+        raise SystemExit("--lanes is mutually exclusive with --model/--provider; pass one or the other")
+    parsed: list[Lane] = []
+    for spec in specs:
+        head, sep, tail = spec.partition(":")  # split on the FIRST colon -- model may contain ':' (e.g. ':free')
+        if not sep or not head or not tail:
+            raise SystemExit(f"lane {spec!r} must be 'provider:model' (e.g. anthropic:claude-sonnet-4-6)")
+        parsed.append(Lane(provider=_as_provider(head), model=tail))
+    if len(parsed) != len({(lane.provider, lane.model) for lane in parsed}):
+        raise SystemExit(f"duplicate lanes are not allowed: {specs}")
+    return parsed
+
+
+def _base_urls(base_url: str | None, providers: set[str]) -> dict[str, str | None]:
+    """Resolve the per-provider base-url override. A bare URL applies to the sole provider (ambiguous
+    with more than one); a `provider=url` comma-map assigns per provider, leaving the rest on their
+    default endpoint. Lets e.g. a Kimi gateway (`anthropic=...`) run beside native `gemini` lanes."""
+    if base_url is None:
+        return {}
+    if "=" not in base_url:
+        if len(providers) != 1:
+            raise SystemExit(
+                f"--base-url with no 'provider=' prefix is ambiguous across providers {sorted(providers)}; "
+                "use 'provider=url[,provider=url]'"
+            )
+        return {next(iter(providers)): base_url}
+    resolved: dict[str, str | None] = {}
+    for pair in base_url.split(","):
+        name, sep, url = pair.partition("=")
+        name, url = name.strip(), url.strip()
+        if not sep or not name or not url:
+            raise SystemExit(f"--base-url entry {pair!r} must be 'provider=url'")
+        provider = _as_provider(name)
+        if provider not in providers:
+            raise SystemExit(
+                f"--base-url targets provider {provider!r} which has no lane; lanes use {sorted(providers)}"
+            )
+        resolved[provider] = url
+    return resolved
+
+
+def _build_run_plan(selected: list[tuple[EnvConfig, list[Task]]], lanes: list[Lane]) -> list[EnvPlan]:
+    """Fan every lane over every selected env -> one EnvPlan per env (carrying its share_backend flag)."""
+    return [EnvPlan(env=env, tasks=tuple(tasks), lanes=tuple(lanes)) for env, tasks in selected]
+
+
+def _lane_models(lanes: tuple[Lane, ...], provider: str) -> list[str]:
+    return [lane.model for lane in lanes if lane.provider == provider]
 
 
 def main(
@@ -85,39 +189,36 @@ def main(
     base_url: str | None = None,
     out: str | None = None,
     run_dir: str | None = None,
+    lanes: str | list[str] | tuple[str, ...] | None = None,
+    max_workers: int = _DEFAULT_MAX_WORKERS,
 ) -> int:
-    """Run the benchmark. `env`, `task`, and `model` each take one name or a comma-separated list.
+    """Run the benchmark sweep: each selected env x lane, where a lane is a (provider, model) pair.
 
-    `env` defaults to every environment; `task` defaults to every task in the selected envs.
-    `base_url` overrides the provider's default endpoint -- e.g. point `anthropic` at an
-    Anthropic-compatible gateway (Moonshot/Kimi) to benchmark a non-Anthropic model."""
+    `env`/`task` filter the matrix (one name or comma list each). Lanes come from `--lanes`
+    (`provider:model,...`) or the back-compat `--provider` + `--model` form (mutually exclusive).
+    `--base-url` overrides a provider's endpoint -- a bare URL for a single-provider sweep, or
+    `provider=url[,...]` to point one provider (e.g. an Anthropic-compatible Kimi gateway) at a gateway
+    while others use defaults. `--max-workers` runs that many lanes concurrently (default 1 = serial);
+    each lane runs its env's tasks serially against its own benchmark MCP + agent."""
+    if max_workers < 1:
+        raise SystemExit(f"--max-workers must be >= 1, got {max_workers}")
     selected = _select_envs(load_envs(_ENVS_DIR), env, task)
-    models = _normalize_models(model)
+    lane_list = _parse_lanes(lanes, provider, model)
+    providers = {lane.provider for lane in lane_list}
+    base_url_map = _base_urls(base_url, providers)
+    api_keys = {p: _provider_key_from_env(p) for p in providers}
 
-    api_key = _provider_key_from_env(provider)
     run_id = _run_id()
     root_run_dir = Path(run_dir) if run_dir else _default_run_dir(run_id)
     root_run_dir.mkdir(parents=True, exist_ok=True)
+    plan = _build_run_plan(selected, lane_list)
     _write_run_config(
-        root_run_dir, run_id=run_id, selected=selected, provider=provider, base_url=base_url, models=models
+        root_run_dir, run_id=run_id, selected=selected, lanes=lane_list,
+        base_urls=base_url_map, max_workers=max_workers,
     )
 
-    results: list[RunResult] = []
-    with BenchmarkMcp(server_name=_BENCH_MCP_NAME) as bench_mcp:
-        for env_cfg, configs in selected:
-            results.extend(
-                _run_env(
-                    env_cfg=env_cfg,
-                    configs=configs,
-                    bench_mcp=bench_mcp,
-                    root_run_dir=root_run_dir,
-                    run_id=run_id,
-                    provider=provider,
-                    api_key=api_key,
-                    base_url=base_url,
-                    models=models,
-                )
-            )
+    ctx = _RunCtx(root_run_dir=root_run_dir, run_id=run_id, api_keys=api_keys, base_urls=base_url_map)
+    results = _execute_plan(plan, ctx, max_workers=max_workers)
 
     report = render_markdown(build_report(results))
     _write_report(report, out)
@@ -127,51 +228,220 @@ def main(
     return 0 if all(r.verifier_passed for r in results) else 1
 
 
-def _run_env(
-    *,
-    env_cfg: EnvConfig,
-    configs: list[Task],
-    bench_mcp: BenchmarkMcp,
-    root_run_dir: Path,
-    run_id: str,
-    provider: str,
-    api_key: str,
-    base_url: str | None,
-    models: list[str],
-) -> list[RunResult]:
-    """Boot one fresh instance for an environment, seed its surface once, run its tasks x models."""
-    results: list[RunResult] = []
-    log_path = root_run_dir / f"{_slug(env_cfg.id)}.backend.log"
-    with Instance(_repo_root(), run_id=f"{run_id}-{env_cfg.id}", log_path=log_path) as instance:
-        client = instance.client
-        resolved = ensure_provider_and_models(
-            client, provider=_as_provider(provider), api_key=api_key, base_url=base_url, models=models
-        )
-        agent_id = _ensure_agent(client, env_cfg.agent_name, env_cfg.agent_system_prompt)
-        client.enable_skill_defaults()
-        submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url(), env_cfg.tools)
-        for sref in env_cfg.skills:
-            seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
-        if env_cfg.mcps:
-            seed_mcp_fixtures(client, env_cfg.mcps, agent_ids=[agent_id])
+# === lane execution ===
 
-        for task in configs:
-            for model_name in models:
-                logger.info("running %s / %s / %s", env_cfg.id, task.id, model_name)
-                results.append(
-                    _run_one(
-                        client=client,
-                        bench_mcp=bench_mcp,
-                        submit_tool=submit_tool,
-                        root_run_dir=root_run_dir,
-                        env_id=env_cfg.id,
-                        agent_id=agent_id,
-                        task=task,
-                        model_name=model_name,
-                        resolved=resolved[model_name],
-                    )
-                )
-    return results
+
+@dataclass(frozen=True)
+class _RunCtx:
+    """Run-wide config threaded into every lane unit."""
+
+    root_run_dir: Path
+    run_id: str
+    api_keys: dict[str, str]
+    base_urls: dict[str, str | None]
+
+
+def _execute_plan(plan: list[EnvPlan], ctx: _RunCtx, *, max_workers: int) -> list[RunResult]:
+    """Build one work unit per (env, lane) and run them on joblib's threading backend, bounded by
+    `max_workers`. joblib preserves submission order, so flattening the results is deterministic
+    regardless of completion order.
+
+    Shared-backend envs are booted + seeded serially up front and registered on an ExitStack, so a
+    mid-sequence boot failure still tears down already-booted instances, and Ctrl+C (propagating out of
+    the Parallel call) unwinds the stack rather than stranding a backend. Isolated-env lanes own their
+    backend inside the worker thread."""
+    units: list[Callable[[], list[RunResult]]] = []
+    with contextlib.ExitStack() as stack:
+        for env_plan in plan:
+            builder = _shared_env_units if env_plan.share_backend else _isolated_env_units
+            units.extend(builder(env_plan, ctx, stack))
+        total = len(units)
+        n_jobs = min(max_workers, total) or 1
+        logger.info("running %d lane unit(s) across %d env(s) with up to %d worker(s)", total, len(plan), n_jobs)
+        generator = Parallel(n_jobs=n_jobs, backend="threading", return_as="generator")(
+            delayed(unit)() for unit in units
+        )
+        results: list[RunResult] = []
+        for lane_results in tqdm(generator, total=total, desc="lanes", unit="lane"):
+            results.extend(lane_results)
+        return results
+
+
+def _shared_env_units(
+    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack
+) -> list[Callable[[], list[RunResult]]]:
+    """Boot + seed one backend for the env (serial, up front), create a per-lane agent + benchmark MCP,
+    and return one thunk per lane that drives that lane's tasks against the shared backend."""
+    env = env_plan.env
+    log_path = ctx.root_run_dir / f"{_slug(env.id)}.backend.log"
+    instance = stack.enter_context(Instance(_repo_root(), run_id=f"{ctx.run_id}-{env.id}", log_path=log_path))
+    client = instance.client
+    resolved = _resolve_env_providers(client, env_plan.lanes, ctx)
+    client.enable_skill_defaults()
+    for sref in env.skills:
+        seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
+    setups: list[tuple[Lane, str, str, BenchmarkMcp]] = []
+    for lane in env_plan.lanes:
+        mcp = stack.enter_context(BenchmarkMcp(server_name=f"{_BENCH_MCP_NAME}-{lane.slug}"))
+        agent_id, submit_tool = _setup_lane_agent(client, env, lane, mcp)
+        setups.append((lane, agent_id, submit_tool, mcp))
+    if env.mcps:  # one pass assigning the env's remote MCP tools to every lane agent (no dup catalog items)
+        seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id for _, agent_id, _, _ in setups])
+    return [
+        _lane_unit(
+            env, env_plan.tasks, lane, ctx,
+            _shared_lane_body(
+                client, env, env_plan.tasks, lane, mcp, submit_tool, agent_id,
+                ctx.root_run_dir, resolved[lane.provider][lane.model],
+            ),
+        )
+        for lane, agent_id, submit_tool, mcp in setups
+    ]
+
+
+def _shared_lane_body(
+    client: EvalClient,
+    env: EnvConfig,
+    tasks: tuple[Task, ...],
+    lane: Lane,
+    mcp: BenchmarkMcp,
+    submit_tool: str,
+    agent_id: str,
+    root_run_dir: Path,
+    resolved: ResolvedModel,
+) -> Callable[[list[RunResult]], None]:
+    def body(out: list[RunResult]) -> None:
+        # own client per lane so concurrent lanes never share one client's mutable state on the
+        # shared backend (the agent + MCP were already set up on the shared client, serially).
+        with client.sibling() as lane_client:
+            _run_lane(lane_client, env, tasks, lane, mcp, submit_tool, agent_id, root_run_dir, resolved, out)
+
+    return body
+
+
+def _isolated_env_units(
+    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack
+) -> list[Callable[[], list[RunResult]]]:
+    """One thunk per lane; each boots + seeds + tears down its own backend inside the worker thread, so
+    lanes never share mutable backend state (required for mutating envs)."""
+    env = env_plan.env
+    return [
+        _lane_unit(env, env_plan.tasks, lane, ctx, _isolated_lane_body(env, env_plan.tasks, lane, ctx))
+        for lane in env_plan.lanes
+    ]
+
+
+def _isolated_lane_body(
+    env: EnvConfig, tasks: tuple[Task, ...], lane: Lane, ctx: _RunCtx
+) -> Callable[[list[RunResult]], None]:
+    def body(out: list[RunResult]) -> None:
+        log_path = ctx.root_run_dir / f"{_slug(env.id)}__{lane.slug}.backend.log"
+        with (
+            Instance(_repo_root(), run_id=f"{ctx.run_id}-{env.id}-{lane.slug}", log_path=log_path) as instance,
+            BenchmarkMcp(server_name=f"{_BENCH_MCP_NAME}-{lane.slug}") as mcp,
+        ):
+            client = instance.client
+            resolved = _resolve_env_providers(client, (lane,), ctx)
+            client.enable_skill_defaults()
+            for sref in env.skills:
+                seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
+            agent_id, submit_tool = _setup_lane_agent(client, env, lane, mcp)
+            if env.mcps:
+                seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id])
+            model = resolved[lane.provider][lane.model]
+            _run_lane(client, env, tasks, lane, mcp, submit_tool, agent_id, ctx.root_run_dir, model, out)
+
+    return body
+
+
+def _resolve_env_providers(
+    client: EvalClient, lanes: tuple[Lane, ...], ctx: _RunCtx
+) -> dict[str, dict[str, ResolvedModel]]:
+    """Register each distinct provider's key + models on `client`, keyed provider -> model -> resolved."""
+    return {
+        provider: ensure_provider_and_models(
+            client, provider=_as_provider(provider), api_key=ctx.api_keys[provider],
+            base_url=ctx.base_urls.get(provider), models=_lane_models(lanes, provider),
+        )
+        for provider in {lane.provider for lane in lanes}
+    }
+
+
+def _lane_unit(
+    env: EnvConfig, tasks: tuple[Task, ...], lane: Lane, ctx: _RunCtx, body: Callable[[list[RunResult]], None]
+) -> Callable[[], list[RunResult]]:
+    """Wrap a lane body so an infra failure (boot/seed/setup) is logged and turned into an `infra:`
+    AGENT_ERROR result per not-yet-run task -- isolating the failure so sibling lanes keep going and
+    leaving a per-cell record so no `(env,task,provider,model)` cell silently vanishes from the run."""
+
+    def run() -> list[RunResult]:
+        out: list[RunResult] = []
+        try:
+            body(out)
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 -- per-lane isolation; KeyboardInterrupt still propagates
+            # SystemExit too: seeding/model-sync raise it (e.g. a model that never syncs), and one bad
+            # lane must not abort the whole sweep -- it becomes an infra: result like any boot failure.
+            logger.exception("lane %s / %s:%s aborted (infra)", env.id, lane.provider, lane.model)
+            done = {result.task_id for result in out}
+            out.extend(_infra_failed(env, task, lane, ctx.root_run_dir, exc) for task in tasks if task.id not in done)
+        return out
+
+    return run
+
+
+def _run_lane(
+    client: EvalClient,
+    env: EnvConfig,
+    tasks: tuple[Task, ...],
+    lane: Lane,
+    mcp: BenchmarkMcp,
+    submit_tool: str,
+    agent_id: str,
+    root_run_dir: Path,
+    resolved: ResolvedModel,
+    out: list[RunResult],
+) -> None:
+    """Run the lane's tasks serially against its own MCP + agent, appending each result to `out` (so a
+    mid-lane failure keeps the results already produced)."""
+    for task in tasks:
+        logger.info("running %s / %s / %s:%s", env.id, task.id, lane.provider, lane.model)
+        out.append(
+            _run_one(
+                client=client,
+                bench_mcp=mcp,
+                submit_tool=submit_tool,
+                root_run_dir=root_run_dir,
+                env_id=env.id,
+                lane=lane,
+                agent_id=agent_id,
+                task=task,
+                resolved=resolved,
+            )
+        )
+
+
+def _infra_failed(env: EnvConfig, task: Task, lane: Lane, root_run_dir: Path, exc: BaseException) -> RunResult:
+    """Persist a minimal per-cell record (run.json + a trajectory line) for a cell whose lane failed
+    before it could run, and return an AGENT_ERROR result tagged `infra:`."""
+    error = f"infra: {exc}"
+    subdir = root_run_dir / _run_subdir(env.id, task.id, lane)
+    subdir.mkdir(parents=True, exist_ok=True)
+    stamp = _timestamp()
+    metadata: dict[str, JsonValue] = {
+        "env_id": env.id, "task_id": task.id, "provider": lane.provider, "model": lane.model,
+        "outcome": Outcome.AGENT_ERROR.value, "agent_error": error, "finished_at": stamp,
+    }
+    (subdir / "run.json").write_text(
+        json.dumps(metadata, allow_nan=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    with (subdir / "trajectory.jsonl").open("a", encoding="utf-8") as handle:
+        json.dump({"sequence": 1, "timestamp": stamp, "kind": "infra_error", "error": error}, handle, sort_keys=True)
+        handle.write("\n")
+    return RunResult(
+        env_id=env.id, task_id=task.id, provider=lane.provider, model=lane.model,
+        outcome=Outcome.AGENT_ERROR, finish_reason=None, tool_call_count=0, total_tokens=None,
+        agent_error=error, stage_count=len(task.stages), format_attempts=0, artifact_dir=str(subdir),
+    )
 
 
 # === per-cell run ===
@@ -184,17 +454,19 @@ def _run_one(
     submit_tool: str,
     root_run_dir: Path,
     env_id: str,
+    lane: Lane,
     agent_id: str,
     task: Task,
-    model_name: str,
     resolved: ResolvedModel,
 ) -> RunResult:
-    cell_key = f"{env_id}/{task.id}/{model_name}"
-    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, task.id, model_name))
+    provider, model_name = lane.provider, lane.model
+    cell_key = f"{env_id}/{task.id}/{provider}/{model_name}"
+    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, task.id, lane))
     artifact_paths: dict[str, JsonValue] = {}
     metadata: dict[str, JsonValue] = {
         "env_id": env_id,
         "task_id": task.id,
+        "provider": provider,
         "model": model_name,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
@@ -215,6 +487,35 @@ def _run_one(
     }
     artifacts.write_run(metadata)
 
+    # the cell is the per-cell robustness boundary: an unexpected error here (e.g. a non-API exception
+    # from the verifier subprocess, or a malformed conversation payload) finalizes THIS cell as an
+    # infra: agent_error using its own artifacts, so it never propagates to clobber a sibling cell.
+    try:
+        return _grade_cell(
+            client, bench_mcp, submit_tool, env_id, lane, agent_id, task, resolved,
+            artifacts, metadata, artifact_paths, cell_key,
+        )
+    except Exception as exc:  # noqa: BLE001 -- per-cell boundary; KeyboardInterrupt still propagates
+        return _agent_error(env_id, provider, task, model_name, f"infra: {exc}", artifacts, metadata, run=None)
+
+
+def _grade_cell(
+    client: EvalClient,
+    bench_mcp: BenchmarkMcp,
+    submit_tool: str,
+    env_id: str,
+    lane: Lane,
+    agent_id: str,
+    task: Task,
+    resolved: ResolvedModel,
+    artifacts: _RunArtifacts,
+    metadata: dict[str, JsonValue],
+    artifact_paths: dict[str, JsonValue],
+    cell_key: str,
+) -> RunResult:
+    """Drive one cell's conversation and grade it. May raise; `_run_one` is the boundary that turns an
+    unexpected error into a clean per-cell agent_error."""
+    provider, model_name = lane.provider, lane.model
     bench_mcp.begin_task(task_key=cell_key, schema=task.result_schema, max_attempts=task.max_format_attempts)
 
     try:
@@ -225,7 +526,7 @@ def _run_one(
             chat_api_key_id=resolved.api_key_id,
         )
     except ArchestraApiError as exc:
-        return _agent_error(env_id, task, model_name, _api_error_text(exc), artifacts, metadata, run=None)
+        return _agent_error(env_id, provider, task, model_name, _api_error_text(exc), artifacts, metadata, run=None)
 
     conversation_id = _require_str(conversation, "id")
     metadata["conversation_id"] = conversation_id
@@ -250,13 +551,15 @@ def _run_one(
     submission = bench_mcp.take_submission(cell_key)
     if isinstance(submission, SubmissionFormatFailed):
         return _finish(
-            env_id, task, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
+            env_id, provider, task, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
             format_attempts=submission.attempts,
         )
     if submission is None:
         if stage_error is not None:
-            return _agent_error(env_id, task, model_name, stage_error, artifacts, metadata, run=run)
-        return _finish(env_id, task, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0)
+            return _agent_error(env_id, provider, task, model_name, stage_error, artifacts, metadata, run=run)
+        return _finish(
+            env_id, provider, task, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0
+        )
 
     assert isinstance(submission, SubmissionAccepted)
     metadata["format_attempts"] = submission.attempts
@@ -271,7 +574,7 @@ def _run_one(
             )
         except ArchestraApiError as exc:
             return _agent_error(
-                env_id, task, model_name, f"artifact retrieval failed: {_api_error_text(exc)}",
+                env_id, provider, task, model_name, f"artifact retrieval failed: {_api_error_text(exc)}",
                 artifacts, metadata, run=run,
             )
 
@@ -281,7 +584,7 @@ def _run_one(
             state_bytes = _capture_state(client, task, runtime, run.tool_invocations, artifacts, artifact_paths)
         except ArchestraApiError as exc:
             return _agent_error(
-                env_id, task, model_name, f"state capture failed: {_api_error_text(exc)}",
+                env_id, provider, task, model_name, f"state capture failed: {_api_error_text(exc)}",
                 artifacts, metadata, run=run,
             )
 
@@ -293,6 +596,7 @@ def _run_one(
         logger.info("  verifier failed (exit %s)", outcome.exit_code)
     return _finish(
         env_id,
+        provider,
         task,
         model_name,
         Outcome.PASSED if outcome.passed else Outcome.FAILED,
@@ -412,17 +716,31 @@ def _ensure_agent(client: EvalClient, name: str, system_prompt: str) -> str:
     return _require_str(created, "id")
 
 
-def _setup_agent_tools(client: EvalClient, agent_id: str, bench_url: str, extra_tools: tuple[str, ...]) -> str:
+def _setup_lane_agent(client: EvalClient, env: EnvConfig, lane: Lane, mcp: BenchmarkMcp) -> tuple[str, str]:
+    """Create (idempotently) this lane's own agent and wire it to this lane's own benchmark MCP, so a
+    lane's submissions land on its own server -- the per-lane isolation that lets lanes run concurrently
+    without the no-task-id `submit_result` being misattributed. Returns (agent_id, submit_tool)."""
+    agent_id = _ensure_agent(client, f"{env.agent_name}-{lane.slug}", env.agent_system_prompt)
+    submit_tool = _setup_agent_tools(
+        client, agent_id, mcp.base_url(), env.tools, mcp_name=f"{_BENCH_MCP_NAME}-{lane.slug}"
+    )
+    return agent_id, submit_tool
+
+
+def _setup_agent_tools(
+    client: EvalClient, agent_id: str, bench_url: str, extra_tools: tuple[str, ...], *, mcp_name: str = _BENCH_MCP_NAME
+) -> str:
     """Assign the base sandbox tools plus the env's extra `archestra__*` tools (bulk-assign) and the
     benchmark `submit_result` tool (assigned at MCP install time, since remote MCP tools cannot be
     bulk-assigned) to the eval agent, then assert the surface. Returns the submit_result tool name.
 
     `extra_tools` is the env's allow-list: the only short names beyond the base required set the agent
     may keep -- so a mutating skill tool survives the strip/assert guard iff the env explicitly lists
-    it."""
+    it. `mcp_name` is the benchmark MCP's catalog name; lanes sharing a backend must pass a unique name
+    to avoid colliding on one catalog item."""
     tool_ids = _resolve_tool_ids(client, (*_REQUIRED_TOOL_SHORT_NAMES, *extra_tools))
     _assign_tools(client, agent_id, list(tool_ids.values()))
-    registered = register_remote_mcp(client, name=_BENCH_MCP_NAME, server_url=bench_url, agent_ids=[agent_id])
+    registered = register_remote_mcp(client, name=mcp_name, server_url=bench_url, agent_ids=[agent_id])
     submit_tool, _ = _submit_tool(registered)
     allowed = frozenset(f"archestra__{n}" for n in extra_tools)
     _strip_mutating_skill_tools(client, agent_id, allowed)
@@ -558,6 +876,7 @@ class _RunArtifacts:
 
 def _agent_error(
     env_id: str,
+    provider: str,
     task: Task,
     model_name: str,
     error: str,
@@ -568,13 +887,14 @@ def _agent_error(
 ) -> RunResult:
     artifacts.append_error("agent_error", error)
     return _finish(
-        env_id, task, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
+        env_id, provider, task, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
         format_attempts=0, agent_error=error,
     )
 
 
 def _finish(
     env_id: str,
+    provider: str,
     task: Task,
     model_name: str,
     outcome: Outcome,
@@ -593,6 +913,7 @@ def _finish(
     return RunResult(
         env_id=env_id,
         task_id=task.id,
+        provider=provider,
         model=model_name,
         outcome=outcome,
         finish_reason=run.finish_reason if run else None,
@@ -705,19 +1026,20 @@ def _write_run_config(
     *,
     run_id: str,
     selected: list[tuple[EnvConfig, list[Task]]],
-    provider: str,
-    base_url: str | None,
-    models: list[str],
+    lanes: list[Lane],
+    base_urls: dict[str, str | None],
+    max_workers: int,
 ) -> None:
     config: dict[str, JsonValue] = {
         "run_id": run_id,
         "started_at": _timestamp(),
         "environments": [
-            {"id": env_cfg.id, "tasks": [t.id for t in tasks]} for env_cfg, tasks in selected
+            {"id": env_cfg.id, "tasks": [t.id for t in tasks], "share_backend": env_cfg.share_backend}
+            for env_cfg, tasks in selected
         ],
-        "provider": provider,
-        "base_url": base_url,
-        "models": models,
+        "lanes": [{"provider": lane.provider, "model": lane.model} for lane in lanes],
+        "base_urls": dict(sorted(base_urls.items())),
+        "max_workers": max_workers,
         "git_commit": _git_commit(),
     }
     (run_dir / "config.json").write_text(
@@ -740,8 +1062,8 @@ def _write_report(report: str, out: str | None) -> None:
         print(report)
 
 
-def _run_subdir(env_id: str, task_id: str, model_name: str) -> str:
-    return f"{_slug(env_id)}/{_slug(task_id)}__{_slug(model_name)}"
+def _run_subdir(env_id: str, task_id: str, lane: Lane) -> str:
+    return f"{_slug(env_id)}/{_slug(task_id)}__{lane.slug}"
 
 
 def _slug(value: str) -> str:
@@ -750,10 +1072,10 @@ def _slug(value: str) -> str:
 
 
 def _cell_token(cell_key: str, model_name: str) -> str:
-    """A skill-name-safe token unique to one (env, task, model) cell, so resources a mutating task
-    creates never collide across a multi-model/multi-task matrix on one shared backend. A readable
+    """A skill-name-safe token unique to one (env, task, provider, model) cell, so resources a mutating
+    task creates never collide across a multi-lane/multi-task matrix on one shared backend. A readable
     model slug (lossy -- `a.b` and `a-b` collapse) plus a short stable hash of the full cell key,
-    which disambiguates both slug collisions and the same model reused across tasks."""
+    which disambiguates both slug collisions and the same model reused across tasks/providers."""
     slug = re.sub(r"[^a-z0-9]+", "-", model_name.lower()).strip("-") or "model"
     digest = hashlib.sha256(cell_key.encode("utf-8")).hexdigest()[:8]
     return f"{slug}-{digest}"
@@ -806,6 +1128,8 @@ def cli(
     base_url: str | None = None,
     out: str | None = None,
     run_dir: str | None = None,
+    lanes: str | list[str] | tuple[str, ...] | None = None,
+    max_workers: int = _DEFAULT_MAX_WORKERS,
 ) -> None:
     """Fire entrypoint that preserves `main`'s integer exit code."""
     coloredlogs.install(
@@ -822,7 +1146,7 @@ def cli(
     raise SystemExit(
         main(
             env=env, task=task, model=model, provider=provider, base_url=base_url,
-            out=out, run_dir=run_dir,
+            out=out, run_dir=run_dir, lanes=lanes, max_workers=max_workers,
         )
     )
 

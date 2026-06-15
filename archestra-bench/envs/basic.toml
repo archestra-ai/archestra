@@ -2,6 +2,11 @@ id = "basic"
 name = "Basic"
 tasks = ["pi-gif-zip", "crypto-price", "median-salary"]
 
+# These tasks are read-only against backend state (they run sandbox code + download artifacts, never
+# mutating the skill/tool catalog), and the skill surface is large + web-pinned -- so seed one backend
+# once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
+share_backend = true
+
 [agent]
 system_prompt = """You are an expert software engineer working inside a sandboxed environment. You can run shell commands, install packages, read staged files, and use any installed skills. When a task is complete, hand in your answer by calling the submit_result tool."""
 

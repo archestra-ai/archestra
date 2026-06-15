@@ -8,8 +8,25 @@ survive, and the runtime expander must substitute only `{{cell}}`/`{{agent_id}}`
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from run import _cell_token, _expand_runtime, _surface_violations, _tools_to_strip
+import pytest
+
+from envs import EnvConfig
+from results import Outcome, RunResult, build_report
+from run import (
+    Lane,
+    _base_urls,
+    _build_run_plan,
+    _cell_token,
+    _expand_runtime,
+    _lane_unit,
+    _parse_lanes,
+    _RunCtx,
+    _surface_violations,
+    _tools_to_strip,
+)
+from tasks import Task, Verifier
 
 _BASE = frozenset(
     {
@@ -80,3 +97,186 @@ def test_cell_token_unique_per_cell() -> None:
     assert _cell_token("e/t1/m", "m") != _cell_token("e/t2/m", "m")
     # models that slug identically still differ, via the hash of the full cell key
     assert _cell_token("e/t/a.b", "a.b") != _cell_token("e/t/a-b", "a-b")
+
+
+# === lanes ===
+
+
+def test_parse_lanes_back_compat_from_provider_and_model() -> None:
+    lanes = _parse_lanes(None, "anthropic", "claude-opus-4-8,claude-sonnet-4-6")
+    assert lanes == [Lane("anthropic", "claude-opus-4-8"), Lane("anthropic", "claude-sonnet-4-6")]
+
+
+def test_parse_lanes_explicit_pairs() -> None:
+    lanes = _parse_lanes("anthropic:claude-opus-4-8,gemini:gemini-3-flash-preview", "anthropic", None)
+    assert lanes == [Lane("anthropic", "claude-opus-4-8"), Lane("gemini", "gemini-3-flash-preview")]
+
+
+def test_parse_lanes_splits_on_first_colon_so_model_may_contain_colon() -> None:
+    # OpenRouter free models look like `vendor/model:free` -- the model tail keeps its own colon.
+    assert _parse_lanes("openrouter:deepseek/deepseek-chat-v3.1:free", "anthropic", None) == [
+        Lane("openrouter", "deepseek/deepseek-chat-v3.1:free")
+    ]
+
+
+def test_parse_lanes_rejects_lanes_with_model() -> None:
+    with pytest.raises(SystemExit, match="mutually exclusive"):
+        _parse_lanes("anthropic:claude-opus-4-8", "anthropic", "claude-sonnet-4-6")
+
+
+def test_parse_lanes_rejects_malformed_spec() -> None:
+    with pytest.raises(SystemExit, match="provider:model"):
+        _parse_lanes("anthropic-claude", "anthropic", None)
+
+
+def test_parse_lanes_rejects_duplicate_lanes() -> None:
+    with pytest.raises(SystemExit, match="duplicate"):
+        _parse_lanes("anthropic:m,anthropic:m", "anthropic", None)
+
+
+def test_parse_lanes_rejects_unknown_provider() -> None:
+    with pytest.raises(SystemExit, match="unsupported provider"):
+        _parse_lanes("acme:m", "anthropic", None)
+
+
+# === base urls ===
+
+
+def test_base_urls_none_is_empty() -> None:
+    assert _base_urls(None, {"anthropic"}) == {}
+
+
+def test_base_urls_bare_applies_to_sole_provider() -> None:
+    assert _base_urls("https://api.kimi.com/coding", {"anthropic"}) == {"anthropic": "https://api.kimi.com/coding"}
+
+
+def test_base_urls_bare_rejected_when_multiple_providers() -> None:
+    with pytest.raises(SystemExit, match="ambiguous"):
+        _base_urls("https://x", {"anthropic", "gemini"})
+
+
+def test_base_urls_per_provider_map() -> None:
+    resolved = _base_urls("anthropic=https://api.kimi.com/coding", {"anthropic", "gemini"})
+    assert resolved == {"anthropic": "https://api.kimi.com/coding"}  # gemini omitted -> default endpoint
+
+
+def test_base_urls_map_rejects_absent_provider() -> None:
+    with pytest.raises(SystemExit, match="no lane"):
+        _base_urls("openai=https://x", {"anthropic"})
+
+
+def test_base_urls_map_rejects_malformed_entry() -> None:
+    with pytest.raises(SystemExit, match="provider=url"):
+        _base_urls("anthropic=", {"anthropic"})
+
+
+# === run plan ===
+
+
+def _env(env_id: str, *, share_backend: bool) -> EnvConfig:
+    return EnvConfig(
+        id=env_id, name=env_id, agent_name=f"{env_id}-agent", agent_system_prompt="p",
+        skills=(), mcps=(), tasks=(), share_backend=share_backend,
+    )
+
+
+def test_build_run_plan_fans_lanes_over_envs_and_carries_flag() -> None:
+    shared, isolated = _env("basic", share_backend=True), _env("api", share_backend=False)
+    lanes = [Lane("anthropic", "m1"), Lane("gemini", "m2")]
+    plan = _build_run_plan([(shared, []), (isolated, [])], lanes)
+    assert [p.env.id for p in plan] == ["basic", "api"]
+    assert all(tuple(p.lanes) == tuple(lanes) for p in plan)
+    assert [p.share_backend for p in plan] == [True, False]
+
+
+# === report determinism ===
+
+
+def _result(provider: str, model: str) -> RunResult:
+    return RunResult(
+        env_id="e", task_id="t", provider=provider, model=model, outcome=Outcome.PASSED,
+        finish_reason=None, tool_call_count=0, total_tokens=None, agent_error=None,
+        stage_count=1, format_attempts=0, artifact_dir=None,
+    )
+
+
+def test_build_report_keys_on_provider_so_same_model_two_providers_coexist() -> None:
+    # out-of-order input -> sorted by (env, task, provider, model); two providers of one model don't collide.
+    rows = build_report([_result("openrouter", "m"), _result("anthropic", "m")])
+    assert [(r.provider, r.model) for r in rows] == [("anthropic", "m"), ("openrouter", "m")]
+
+
+def test_build_report_rejects_true_duplicate_cell() -> None:
+    with pytest.raises(ValueError, match="duplicate result"):
+        build_report([_result("anthropic", "m"), _result("anthropic", "m")])
+
+
+# === lane slug uniqueness ===
+
+
+def test_lane_slug_disambiguates_models_that_slug_identically() -> None:
+    # both readable slugs collapse to `openrouter_x_y_free`; the appended hash keeps them distinct,
+    # so two real lanes never share an agent / benchmark MCP / artifact dir (which would misattribute).
+    a, b = Lane("openrouter", "x/y:free"), Lane("openrouter", "x_y_free")
+    assert a.slug != b.slug
+    assert re.fullmatch(r"[A-Za-z0-9._-]+", a.slug)  # safe for an agent name / catalog name / dir
+
+
+# === lane failure isolation ===
+
+
+def _task(task_id: str) -> Task:
+    return Task(id=task_id, dir=Path("."), stages=(), result_schema={}, verifier=Verifier())
+
+
+def _env_cfg() -> EnvConfig:
+    return EnvConfig(
+        id="e", name="e", agent_name="e-agent", agent_system_prompt="p", skills=(), mcps=(), tasks=(),
+    )
+
+
+def test_lane_unit_turns_an_exception_into_infra_results_for_all_tasks(tmp_path: Path) -> None:
+    ctx = _RunCtx(root_run_dir=tmp_path, run_id="r", api_keys={}, base_urls={})
+    tasks = (_task("t1"), _task("t2"))
+    lane = Lane("gemini", "g")
+
+    def boom(_out: list[RunResult]) -> None:
+        raise RuntimeError("backend exited early")
+
+    results = _lane_unit(_env_cfg(), tasks, lane, ctx, boom)()  # must NOT raise -- isolation
+    assert [r.task_id for r in results] == ["t1", "t2"]
+    assert all(r.outcome is Outcome.AGENT_ERROR and (r.agent_error or "").startswith("infra:") for r in results)
+    # a per-cell record is persisted for every task, so no cell silently vanishes from the run dir
+    for task in tasks:
+        cell = tmp_path / "e" / f"{task.id}__{lane.slug}"
+        assert (cell / "run.json").is_file() and (cell / "trajectory.jsonl").is_file()
+
+
+def test_lane_unit_isolates_systemexit_too(tmp_path: Path) -> None:
+    # ensure_provider_and_models raises SystemExit for a model that never syncs; one bad lane must
+    # not abort the whole sweep -- it becomes infra results like any other lane failure.
+    ctx = _RunCtx(root_run_dir=tmp_path, run_id="r", api_keys={}, base_urls={})
+
+    def never_syncs(_out: list[RunResult]) -> None:
+        raise SystemExit("models never synced")
+
+    results = _lane_unit(_env_cfg(), (_task("t1"),), Lane("gemini", "g"), ctx, never_syncs)()
+    assert [r.outcome for r in results] == [Outcome.AGENT_ERROR]
+
+
+def test_lane_unit_preserves_partial_results_and_fills_only_missing(tmp_path: Path) -> None:
+    ctx = _RunCtx(root_run_dir=tmp_path, run_id="r", api_keys={}, base_urls={})
+    tasks = (_task("t1"), _task("t2"))
+    done = RunResult(
+        env_id="e", task_id="t1", provider="gemini", model="g", outcome=Outcome.PASSED,
+        finish_reason="stop", tool_call_count=0, total_tokens=None, agent_error=None,
+        stage_count=0, format_attempts=0, artifact_dir=None,
+    )
+
+    def half(out: list[RunResult]) -> None:
+        out.append(done)  # t1 already graded
+        raise RuntimeError("crashed before t2")
+
+    results = _lane_unit(_env_cfg(), tasks, Lane("gemini", "g"), ctx, half)()
+    assert results[0] is done  # the real t1 result is kept, not clobbered
+    assert results[1].task_id == "t2" and results[1].outcome is Outcome.AGENT_ERROR

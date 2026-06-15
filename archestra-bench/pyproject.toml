@@ -12,9 +12,11 @@ requires-python = ">=3.11"
 dependencies = [
     "coloredlogs==15.0.1",
     "fire==0.7.1",
+    "joblib>=1.5.3",
     "jsonschema==4.26.0",
     "mcp==1.27.2",
     "psycopg[binary]==3.3.4",
+    "tqdm>=4.68.2",
 ]
 
 [tool.uv]

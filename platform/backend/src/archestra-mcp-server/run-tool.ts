@@ -10,6 +10,7 @@ import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import { agentOwner } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
@@ -193,13 +194,13 @@ const registry = defineArchestraTools([
       const toolCallId = `run-tool-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 9)}`;
-      const result = await mcpClient.executeToolCall(
+      const result = await mcpClient.executeToolCallForOwner(
         {
           id: toolCallId,
           name: resolvedName,
           arguments: toolInput,
         },
-        context.agentId,
+        agentOwner(context.agentId),
         context.tokenAuth,
         // mcp-client scopes per-conversation sessions (e.g. browser contexts)
         // by this key; headless executions use their isolation key so

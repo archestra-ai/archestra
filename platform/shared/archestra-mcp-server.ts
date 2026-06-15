@@ -117,6 +117,21 @@ export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
+// MCP Apps — authoring/management (chat) + per-app data store (app runtime).
+export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
+export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
+export const TOOL_RENDER_APP_SHORT_NAME = "render_app";
+export const TOOL_READ_APP_SHORT_NAME = "read_app";
+export const TOOL_UPDATE_APP_SHORT_NAME = "update_app";
+export const TOOL_EDIT_APP_SHORT_NAME = "edit_app";
+export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
+export const TOOL_PREVIEW_APP_TOOL_SHORT_NAME = "preview_app_tool";
+export const TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME = "get_app_diagnostics";
+export const TOOL_APP_DATA_GET_SHORT_NAME = "app_data_get";
+export const TOOL_APP_DATA_SET_SHORT_NAME = "app_data_set";
+export const TOOL_APP_DATA_LIST_SHORT_NAME = "app_data_list";
+export const TOOL_APP_DATA_DELETE_SHORT_NAME = "app_data_delete";
+export const TOOL_APP_LLM_COMPLETE_SHORT_NAME = "llm_complete";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -189,6 +204,20 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_DELETE_APP_SHORT_NAME,
+  TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+  TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+  TOOL_APP_DATA_GET_SHORT_NAME,
+  TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_APP_DATA_LIST_SHORT_NAME,
+  TOOL_APP_DATA_DELETE_SHORT_NAME,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =
@@ -368,6 +397,25 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * MCP App management tools — assigned to new agents by default when the apps
+ * feature (`ARCHESTRA_APPS_ENABLED`) is on, so "build me an app" works
+ * without per-agent setup. delete_app completes the lifecycle but stays
+ * search-gated in `search_and_run_only` mode (see
+ * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
+ */
+export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
+  TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+  TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_DELETE_APP_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
  * Code-execution sandbox tools. Gated by `sandbox:execute` and only seeded when
  * the sandbox feature is on; unlike other built-ins they participate in the
  * `search_tools`/`run_tool` first-use auto-assignment relaxation (see
@@ -393,12 +441,25 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
  * and file-transfer path behind `search_tools`/`run_tool` would make the common
- * runtime flow depend on deferred tool loading.
+ * runtime flow depend on deferred tool loading. App tools stay top-level
+ * because "build me an app" intents compete with the model's default of
+ * writing code in the reply — the model won't search for a capability it
+ * doesn't know exists, so the create/read/edit/render authoring surface stays
+ * top-level. delete_app stays behind search (destructive, never
+ * intent-time-critical); preview_app_tool and get_app_diagnostics likewise —
+ * they are follow-up steps the create/edit tool descriptions name explicitly,
+ * so the model reaches them via run_tool once it is already building.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
@@ -408,6 +469,38 @@ export function isAlwaysExposedArchestraToolShortName(
   shortName: string,
 ): boolean {
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
+ * App-management tools whose successful result identifies a single owned MCP
+ * App (`structuredContent.id`). Chat mounts the app-bound runtime inline for
+ * these, so their results must keep `structuredContent` through the chat
+ * serialization path. `list_apps`/`delete_app`/`read_app` deliberately excluded
+ * — they render nothing (`read_app` returns source, not a new head to show).
+ */
+export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isAppRenderingArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
+ * Synthetic resource URI for an owned app's HTML. The app-bound MCP server
+ * ignores the requested URI and always serves the head version, but hosts
+ * need a stable identifier for the runtime's resource fetch and re-keying.
+ */
+export function getArchestraAppResourceUri(appId: string): string {
+  return `ui://archestra-app/${appId}`;
 }
 
 export function isArchestraMcpServerTool(

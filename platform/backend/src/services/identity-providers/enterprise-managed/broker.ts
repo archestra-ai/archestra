@@ -8,7 +8,7 @@ import {
   extractProviderErrorMessage,
 } from "@/services/identity-providers/enterprise-managed/exchange";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
-import type { EnterpriseManagedCredentialConfig } from "@/types";
+import type { EnterpriseManagedCredentialConfig, ToolOwner } from "@/types";
 
 export type ResolvedEnterpriseTransportCredential = {
   headerName: string;
@@ -17,7 +17,7 @@ export type ResolvedEnterpriseTransportCredential = {
 };
 
 export async function resolveEnterpriseTransportCredential(params: {
-  agentId: string;
+  owner: ToolOwner;
   tokenAuth?: TokenAuthContext;
   enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
 }): Promise<ResolvedEnterpriseTransportCredential | null> {
@@ -27,14 +27,15 @@ export async function resolveEnterpriseTransportCredential(params: {
   }
 
   const assertion = await resolveEnterpriseAssertion({
-    agentId: params.agentId,
+    owner: params.owner,
     identityProviderId: config.identityProviderId,
     tokenAuth: params.tokenAuth,
   });
   if (!assertion) {
     logger.warn(
       {
-        agentId: params.agentId,
+        ownerType: params.owner.type,
+        ownerId: params.owner.id,
         identityProviderId: config.identityProviderId,
         userId: params.tokenAuth?.userId,
       },

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
@@ -56,7 +56,9 @@ import type {
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
   McpToolAssignment,
+  ToolOwner,
 } from "@/types";
+import { agentOwner } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -91,7 +93,7 @@ export class McpServerConnectionTimeoutError extends Error {
 
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
- * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ * Caught by executeToolCallForOwner to trigger a transparent retry with a fresh session.
  */
 class StaleSessionError extends Error {
   constructor(connectionKey: string) {
@@ -328,11 +330,15 @@ class McpClient {
   }
 
   /**
-   * Execute a single tool call against its assigned MCP server
+   * Execute a single tool call against its assigned MCP server on behalf of a
+   * tool owner (agent or app). The owner selects which assignment table gates
+   * the call, scopes the connection/credential caches, and is recorded on the
+   * audit row; everything else (target resolution, secrets, transport) is
+   * owner-independent.
    */
-  async executeToolCall(
+  async executeToolCallForOwner(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
     tokenAuth?: TokenAuthContext,
     options?: {
       conversationId?: string;
@@ -350,7 +356,7 @@ class McpClient {
         : undefined;
 
     // Validate and get tool metadata
-    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    const validationResult = await this.validateAndGetTool(toolCall, owner);
     if ("error" in validationResult) {
       return validationResult.error;
     }
@@ -362,7 +368,7 @@ class McpClient {
       await this.determineTargetMcpServerIdForCatalogItem({
         tool,
         toolCall,
-        agentId,
+        owner,
         tokenAuth,
         catalogItem,
       });
@@ -379,7 +385,7 @@ class McpClient {
     ) {
       return this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
         mcpServerName,
         authInfo,
@@ -395,7 +401,7 @@ class McpClient {
       effectiveEnterpriseManagedConfig !== null;
     const enterpriseTransportCredential = usesEnterpriseManagedCredential
       ? await this.resolveCachedEnterpriseTransportCredential({
-          agentId,
+          owner,
           tokenAuth,
           enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
         })
@@ -412,7 +418,7 @@ class McpClient {
         );
       return this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         authError.message,
         mcpServerName,
         authInfo,
@@ -423,7 +429,7 @@ class McpClient {
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
-      agentId,
+      owner,
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
@@ -431,16 +437,36 @@ class McpClient {
     const { secrets, secretId, serverState } = secretsResult;
 
     // Build connection cache key using the resolved target server ID.
-    // When conversationId is provided, each (agent, conversation) gets its own connection
-    // to enable per-session browser context isolation with streamable-http transport.
-    // When authenticated via external IdP, each user gets their own connection
-    // since the JWT is propagated to the underlying MCP server per-user.
+    // Agents: when conversationId is provided, each (agent, conversation) gets
+    // its own connection for per-session browser context isolation.
+    // Apps: keyed by (app, viewing user, session) so one app's upstream session
+    // never leaks across users or browser sessions.
+    // When authenticated via external IdP, each user additionally gets its own
+    // connection since the JWT is propagated to the underlying server per-user.
     const externalIdpUserId = tokenAuth?.isExternalIdp
       ? tokenAuth.userId
       : undefined;
-    let connectionKey = options?.conversationId
-      ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
-      : `${catalogItem.id}:${targetMcpServerId}`;
+    let connectionKey: string;
+    if (owner.type === "agent") {
+      connectionKey = options?.conversationId
+        ? `${catalogItem.id}:${targetMcpServerId}:${owner.id}:${options.conversationId}`
+        : `${catalogItem.id}:${targetMcpServerId}`;
+    } else {
+      // An app call must carry the viewing user (session auth). Without one we
+      // must never collapse distinct callers onto a shared literal — that would
+      // let them reuse each other's persisted upstream session. Isolate the call
+      // with a per-request nonce instead, and surface the misuse.
+      let userSegment = tokenAuth?.userId;
+      if (!userSegment) {
+        userSegment = `anon:${randomUUID()}`;
+        logger.warn(
+          { appId: owner.id, catalogId: catalogItem.id },
+          "App tool call has no viewing user; isolating the connection per-request",
+        );
+      }
+      const sessionSegment = options?.conversationId ?? "default";
+      connectionKey = `${catalogItem.id}:${targetMcpServerId}:app:${owner.id}:${userSegment}:${sessionSegment}`;
+    }
     if (externalIdpUserId) {
       connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
     }
@@ -475,7 +501,7 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
@@ -533,7 +559,7 @@ class McpClient {
           const result = await client.readResource({ uri: resourceUri });
           return await this.createSuccessResult({
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             content: [
               {
@@ -578,7 +604,7 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
@@ -605,7 +631,7 @@ class McpClient {
           );
           return await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             authError.message,
             mcpServerName,
             authInfo,
@@ -616,7 +642,7 @@ class McpClient {
         // Apply template and return
         return await this.createSuccessResult({
           toolCall,
-          agentId,
+          owner,
           mcpServerName,
           content: result.content as ContentBlock[],
           isError: !!result.isError,
@@ -743,7 +769,7 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
@@ -810,7 +836,7 @@ class McpClient {
                 );
               return await this.createErrorResult(
                 toolCall,
-                agentId,
+                owner,
                 assignmentError.message,
                 mcpServerName,
                 authInfo,
@@ -825,7 +851,7 @@ class McpClient {
             );
             return await this.createErrorResult(
               toolCall,
-              agentId,
+              owner,
               authError.message,
               mcpServerName,
               authInfo,
@@ -840,7 +866,7 @@ class McpClient {
           );
           return await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             authError.message,
             mcpServerName,
             authInfo,
@@ -850,7 +876,7 @@ class McpClient {
 
         return await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           errorMessage,
           mcpServerName,
           authInfo,
@@ -1137,7 +1163,7 @@ class McpClient {
    */
   private async validateAndGetTool(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1146,11 +1172,11 @@ class McpClient {
       }
     | { error: CommonToolResult }
   > {
-    // Get MCP tool from agent-assigned tools
-    let mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
-      [toolCall.name],
-      agentId,
-    );
+    // Get the MCP tool from the owner's assigned tools (agent_tools or app_tools).
+    let mcpTools =
+      owner.type === "agent"
+        ? await ToolModel.getMcpToolsAssignedToAgent([toolCall.name], owner.id)
+        : await ToolModel.getMcpToolsAssignedToApp([toolCall.name], owner.id);
 
     // Fallback: if the name has no server prefix (no MCP_SERVER_TOOL_NAME_SEPARATOR), try finding a tool
     // that ends with "__<name>". This handles MCP App iframes calling oncalltool
@@ -1160,10 +1186,16 @@ class McpClient {
       mcpTools.length === 0 &&
       !toolCall.name.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)
     ) {
-      mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
-        toolCall.name,
-        agentId,
-      );
+      mcpTools =
+        owner.type === "agent"
+          ? await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+              toolCall.name,
+              owner.id,
+            )
+          : await ToolModel.getMcpToolsAssignedToAppBySuffix(
+              toolCall.name,
+              owner.id,
+            );
       if (mcpTools.length > 0) {
         // Use the full prefixed name for downstream execution but don't mutate the caller's object.
         toolCall = { ...toolCall, name: mcpTools[0].toolName };
@@ -1177,7 +1209,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           message,
           "unknown",
           undefined,
@@ -1196,7 +1228,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Tool is missing catalogId",
           tool.catalogName || "unknown",
         ),
@@ -1209,7 +1241,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           `No catalog item found for tool catalog ID ${tool.catalogId}`,
           tool.catalogName || "unknown",
         ),
@@ -1224,11 +1256,11 @@ class McpClient {
   private async getSecretsForMcpServer({
     targetMcpServerId,
     toolCall,
-    agentId,
+    owner,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
   }): Promise<
     | {
         secrets: Record<string, unknown>;
@@ -1242,7 +1274,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           "unknown",
         ),
@@ -1303,12 +1335,12 @@ class McpClient {
     tool,
     tokenAuth,
     toolCall,
-    agentId,
+    owner,
     catalogItem,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
   }): Promise<
@@ -1330,7 +1362,7 @@ class McpClient {
         return {
           error: await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             "An MCP server installation is required for statically assigned MCP tools.",
             fallbackName,
           ),
@@ -1373,7 +1405,7 @@ class McpClient {
         return {
           error: await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             fallbackName,
           ),
@@ -1392,7 +1424,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           fallbackName,
         ),
@@ -1402,7 +1434,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Dynamic team credential is enabled but tool has no catalogId.",
           fallbackName,
         ),
@@ -1520,7 +1552,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           fallbackName,
         ),
@@ -1554,7 +1586,7 @@ class McpClient {
     return {
       error: await this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         authError.message,
         fallbackName,
         undefined,
@@ -1985,7 +2017,7 @@ class McpClient {
    */
   private async createErrorResult(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
     error: string,
     mcpServerName: string = "unknown",
     authInfo?: {
@@ -2014,7 +2046,7 @@ class McpClient {
     };
 
     await this.persistToolCall(
-      agentId,
+      owner,
       mcpServerName,
       toolCall,
       errorResult,
@@ -2028,7 +2060,7 @@ class McpClient {
    */
   private async createSuccessResult(opts: {
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     mcpServerName: string;
     content: ContentBlock[];
     isError: boolean;
@@ -2038,7 +2070,7 @@ class McpClient {
   }): Promise<CommonToolResult> {
     const {
       toolCall,
-      agentId,
+      owner,
       mcpServerName,
       content,
       isError,
@@ -2057,7 +2089,7 @@ class McpClient {
     };
 
     await this.persistToolCall(
-      agentId,
+      owner,
       mcpServerName,
       toolCall,
       toolResult,
@@ -2077,7 +2109,7 @@ class McpClient {
     catalogId: string;
     connectionKey: string;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     mcpServerName: string;
     catalogItem: InternalMcpCatalog;
     targetMcpServerId: string;
@@ -2095,7 +2127,7 @@ class McpClient {
       catalogId,
       connectionKey,
       toolCall,
-      agentId,
+      owner,
       mcpServerName,
       catalogItem,
       targetMcpServerId,
@@ -2195,7 +2227,7 @@ class McpClient {
         );
         return await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           authError.message,
           mcpServerName,
           undefined,
@@ -2205,7 +2237,7 @@ class McpClient {
 
       return await this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         retryErrorMsg,
         mcpServerName,
       );
@@ -2441,7 +2473,7 @@ class McpClient {
    * Truncates large tool results to prevent excessive storage.
    */
   private async persistToolCall(
-    agentId: string,
+    owner: ToolOwner,
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
@@ -2458,7 +2490,9 @@ class McpClient {
 
     try {
       const savedToolCall = await McpToolCallModel.create({
-        agentId,
+        ownerType: owner.type,
+        agentId: owner.type === "agent" ? owner.id : null,
+        appId: owner.type === "app" ? owner.id : null,
         mcpServerName,
         method: "tools/call",
         toolCall,
@@ -2928,7 +2962,7 @@ class McpClient {
     const secretResult = await this.getSecretsForMcpServer({
       targetMcpServerId: server.id,
       toolCall: { id: "resource-read", name: "read", arguments: {} },
-      agentId,
+      owner: agentOwner(agentId),
     });
 
     if ("error" in secretResult) {
@@ -3031,7 +3065,7 @@ class McpClient {
               name: tool.toolName,
               arguments: {},
             },
-            agentId,
+            owner: agentOwner(agentId),
             catalogItem,
           });
         if ("error" in targetResult) continue;
@@ -3044,7 +3078,7 @@ class McpClient {
           catalogItem.enterpriseManagedConfig != null;
         const enterpriseTransportCredential = usesEnterpriseManagedCredential
           ? await this.resolveCachedEnterpriseTransportCredential({
-              agentId,
+              owner: agentOwner(agentId),
               tokenAuth,
               enterpriseManagedConfig:
                 catalogItem.enterpriseManagedConfig ?? null,
@@ -3057,7 +3091,7 @@ class McpClient {
         const secretResult = await this.getSecretsForMcpServer({
           targetMcpServerId,
           toolCall: { id: "list-op", name: tool.toolName, arguments: {} },
-          agentId,
+          owner: agentOwner(agentId),
         });
         if ("error" in secretResult) continue;
 
@@ -3185,7 +3219,7 @@ class McpClient {
   }
 
   private async resolveCachedEnterpriseTransportCredential(params: {
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
@@ -3210,7 +3244,7 @@ class McpClient {
   }
 
   private buildEnterpriseCredentialCacheKey(params: {
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): string | null {
@@ -3219,7 +3253,8 @@ class McpClient {
     }
 
     return JSON.stringify({
-      agentId: params.agentId,
+      ownerType: params.owner.type,
+      ownerId: params.owner.id,
       identityProviderId: params.enterpriseManagedConfig.identityProviderId,
       resourceIdentifier: params.enterpriseManagedConfig.resourceIdentifier,
       requestedIssuer: params.enterpriseManagedConfig.requestedIssuer,

@@ -115,6 +115,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
@@ -520,17 +521,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const skillSlashCommandsActive =
               !!organization?.skillSlashCommandsEnabled &&
               !!organization?.skillToolsEnabled;
-            const normalizedMessagesForLLM = normalizeChatMessages(
-              skillSlashCommandsActive
-                ? await injectSkillActivation({
-                    messages: messages as ChatMessage[],
-                    organizationId,
-                    userId: user.id,
-                    agentId: conversation.agentId ?? undefined,
-                    conversationId,
-                  })
-                : (messages as ChatMessage[]),
-            );
+            const messagesWithSkill = skillSlashCommandsActive
+              ? await injectSkillActivation({
+                  messages: messages as ChatMessage[],
+                  organizationId,
+                  userId: user.id,
+                  agentId: conversation.agentId ?? undefined,
+                  conversationId,
+                })
+              : (messages as ChatMessage[]);
+
+            // Render-loop diagnostics from owned MCP App renders ride the last
+            // user message's metadata; inject them (delimited, framed as
+            // untrusted) so the model can fix the app via update_app. No-op
+            // when absent or when the apps feature is off.
+            const messagesForLLM =
+              await injectAppDiagnostics(messagesWithSkill);
+
+            // Normalize chat history before replaying it to the model.
+            // This dedupes repeated tool parts, drops dangling interrupted tool calls,
+            // and strips heavy image/browser payloads that would otherwise bloat context.
+            const normalizedMessagesForLLM =
+              normalizeChatMessages(messagesForLLM);
 
             // Perplexity does NOT support tool calling - it has built-in web search instead
             // @see https://docs.perplexity.ai/api-reference/chat-completions-post

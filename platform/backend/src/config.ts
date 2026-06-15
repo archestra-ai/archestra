@@ -1151,6 +1151,14 @@ const config = {
       ),
     },
   },
+  /**
+   * user-authored MCP Apps — first-class apps created inside Archestra (from
+   * chat or the /apps page), backed by a per-app data store and assignable
+   * tools. Ships dark: off by default until the feature is ready to surface.
+   */
+  apps: {
+    enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
+  },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },

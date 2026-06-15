@@ -316,6 +316,9 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
+          # Generate the full Archestra MCP tool catalog (incl. flag-gated app
+          # tools) so codegen matches the committed docs; mirrors values-ci.yaml.
+          ARCHESTRA_APPS_ENABLED: "true"
         run: |
           set -e
 
@@ -495,13 +498,13 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Build sandbox-rs musl smoke target
+      - name: Build rust-napi musl smoke target
         if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
-          target: sandbox-rs-musl-smoke
+          target: rust-napi-musl-smoke
           # amd64 only: this is a smoke build, and building arm64 here runs under
           # QEMU emulation, which makes the Rust release compile 2-3x slower.
           platforms: linux/amd64

@@ -1,9 +1,12 @@
 import {
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
+  getArchestraToolFullName,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
@@ -366,5 +369,46 @@ describe("Archestra Tools Dynamic Assignment", () => {
       (t) => t.name,
     );
     expect(names).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
+  });
+
+  test("AgentModel.create assigns app tools when the apps feature is enabled", async ({
+    makeAgent,
+  }) => {
+    const appsConfig = config.apps as { enabled: boolean };
+    const originalAppsEnabled = appsConfig.enabled;
+    appsConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ name: "Apps Agent" });
+
+      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      for (const shortName of APP_ARCHESTRA_TOOL_SHORT_NAMES) {
+        expect(names).toContain(getArchestraToolFullName(shortName));
+      }
+    } finally {
+      appsConfig.enabled = originalAppsEnabled;
+    }
+  });
+
+  test("AgentModel.create assigns no app tools when the apps feature is disabled", async ({
+    makeAgent,
+  }) => {
+    const appsConfig = config.apps as { enabled: boolean };
+    const originalAppsEnabled = appsConfig.enabled;
+    // seed with the feature on so the app tools exist in the catalog — the
+    // config gate itself must prevent the assignment
+    appsConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      appsConfig.enabled = false;
+      const agent = await makeAgent({ name: "No Apps Agent" });
+
+      const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(toolIds).toHaveLength(0);
+    } finally {
+      appsConfig.enabled = originalAppsEnabled;
+    }
   });
 });

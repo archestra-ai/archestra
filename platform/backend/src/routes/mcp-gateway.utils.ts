@@ -68,13 +68,14 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import type {
-  AgentAccessContext,
-  AgentType,
-  CommonToolCall,
-  SelectTeamToken,
-  SelectUserToken,
-  ToolExposureMode,
+import {
+  type AgentAccessContext,
+  type AgentType,
+  agentOwner,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  type ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -481,9 +482,9 @@ export async function createAgentServer(
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCall(
+            const r = await mcpClient.executeToolCallForOwner(
               toolCall,
-              agentId,
+              agentOwner(agentId),
               tokenAuth,
               {
                 elicitationHandler: async (request) => {
@@ -1560,7 +1561,10 @@ async function buildSearchToolsDescription(
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }

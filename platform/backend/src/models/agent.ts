@@ -271,6 +271,10 @@ class AgentModel {
     // "Enable and create a new skill" empty-state action.
     await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
 
+    // Auto-assign the MCP App management tools when the apps feature is
+    // enabled, so new agents can build and use apps without per-agent setup.
+    await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0

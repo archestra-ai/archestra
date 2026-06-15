@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -135,6 +136,16 @@ export async function syncBuiltInAgents(): Promise<void> {
       systemPrompt: CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
+      description:
+        "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
+      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       } as const,
     },
   ];
@@ -329,6 +340,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 

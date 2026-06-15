@@ -36,6 +36,12 @@ class ProcessedEmailModel {
     }
   }
 
+  static async deleteByMessageId(messageId: string): Promise<void> {
+    await db
+      .delete(schema.processedEmailsTable)
+      .where(eq(schema.processedEmailsTable.messageId, messageId));
+  }
+
   /**
    * Check if an email has been processed.
    * Note: For deduplication, prefer tryMarkAsProcessed() which is atomic.

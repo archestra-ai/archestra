@@ -796,33 +796,39 @@ ${formattedHistory}
   // userId is determined by security mode:
   // - private: actual user ID from email lookup
   // - internal/public: "system" (anonymous)
-  const result = await startActiveChatSpan({
-    agentName: agent.name,
-    agentId,
-    teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
-    userTeams: emailUser
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId: emailUser.id,
+  let result: Awaited<ReturnType<typeof executeA2AMessage>>;
+  try {
+    result = await startActiveChatSpan({
+      agentName: agent.name,
+      agentId,
+      teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+      userTeams: emailUser
+        ? await TeamModel.getTeamLabelInfoForUser({
+            userId: emailUser.id,
+            organizationId: organization,
+          })
+        : [],
+      routeCategory: RouteCategory.EMAIL,
+      triggerSource: "email",
+      user: emailUser
+        ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
+        : null,
+      callback: async () => {
+        return executeA2AMessage({
+          agentId,
+          message,
           organizationId: organization,
-        })
-      : [],
-    routeCategory: RouteCategory.EMAIL,
-    triggerSource: "email",
-    user: emailUser
-      ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
-      : null,
-    callback: async () => {
-      return executeA2AMessage({
-        agentId,
-        message,
-        organizationId: organization,
-        userId,
-        sessionId: buildEmailSessionId(email.conversationId),
-        source: "email",
-        attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
-      });
-    },
-  });
+          userId,
+          sessionId: buildEmailSessionId(email.conversationId),
+          source: "email",
+          attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
+        });
+      },
+    });
+  } catch (error) {
+    await ProcessedEmailModel.deleteByMessageId(email.messageId);
+    throw error;
+  }
 
   logger.info(
     {

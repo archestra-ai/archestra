@@ -558,6 +558,58 @@ describe("processIncomingEmail", () => {
     await processIncomingEmail(email, mockProvider);
     expect(vi.mocked(executeA2AMessage)).not.toHaveBeenCalled();
   });
+
+  test("reprocesses an email after a transient execution failure", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const internalAgent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = internalAgent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: "test-transient-msg-1",
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Hello, agent!",
+      receivedAt: new Date(),
+    };
+
+    vi.mocked(executeA2AMessage).mockRejectedValueOnce(
+      new Error("LLM provider returned 429"),
+    );
+    await expect(processIncomingEmail(email, mockProvider)).rejects.toThrow();
+
+    vi.mocked(executeA2AMessage).mockClear();
+    await processIncomingEmail(email, mockProvider);
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("email deduplication helpers", () => {

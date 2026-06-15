@@ -38,6 +38,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
 | Skills | `read`, `create`, `update`, `delete`, `team-admin` |
+| Apps | `read`, `create`, `update`, `delete`, `team-admin` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
@@ -83,6 +84,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete` |
+| Apps | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
@@ -136,6 +138,12 @@ The following table lists all available permissions that can be assigned to cust
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
+| `app:read` | View and run MCP Apps within your scope (org, your teams, your own) |
+| `app:create` | Create new MCP Apps |
+| `app:update` | Modify MCP Apps, their tools, and their team assignments |
+| `app:delete` | Delete MCP Apps |
+| `app:team-admin` | Manage team assignments for MCP Apps |
+| `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
 | `auditLog:read` | View the organization-wide audit log of administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |

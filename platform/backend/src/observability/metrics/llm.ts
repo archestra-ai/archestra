@@ -53,6 +53,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
+  "github-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

@@ -157,7 +157,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_ARTIFACT_WRITE_SHORT_NAME,
     title: "Write Artifact",
     description:
-      "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
+      "Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. Markdown only: never write HTML pages or interactive apps here; when the user asks for an app, tool, or interactive UI and a create_app tool is available, use that instead. Each call completely replaces the existing artifact content. " +
       "Mermaid diagrams: Use ```mermaid blocks. " +
       "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
     schema: z

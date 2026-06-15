@@ -12,6 +12,8 @@ import {
   InteractionSourceSchema,
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
+  providerDisplayNames,
+  providerRequiresPerUserCredential,
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -479,6 +481,29 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] using keyless stored provider key configuration`,
       );
     }
+  }
+
+  // Per-user providers (e.g. GitHub Copilot) require the acting user's own
+  // linked credential. When none resolved, fail fast with an actionable error
+  // pointing at the connect flow — rather than forwarding a keyless request
+  // that the upstream would reject with a generic 401. `internal_code` gives
+  // first-party clients a machine-readable signal (mirrors
+  // ChatErrorCode.ProviderAuthRequired); the connect URL is in the message so
+  // generic OpenAI/Anthropic clients surface something actionable too.
+  if (providerRequiresPerUserCredential(providerName) && !apiKey) {
+    const providerLabel = providerDisplayNames[providerName];
+    const connectUrl = `${config.frontendBaseUrl}/settings`;
+    logger.info(
+      { providerName },
+      `[${providerName}Proxy] no per-user credential for acting user; returning provider_auth_required`,
+    );
+    return reply.status(401).send({
+      error: {
+        message: `${providerLabel} isn't connected for your account. Connect it at ${connectUrl} then retry your request.`,
+        type: "api_authentication_error",
+        internal_code: "provider_auth_required",
+      },
+    });
   }
 
   // 5. Enforce authentication for keyless providers on external requests

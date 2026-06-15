@@ -1658,8 +1658,8 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, tool.id);
 
-    const executeToolCallSpy = vi
-      .spyOn(mcpClient, "executeToolCall")
+    const executeToolCallForOwnerSpy = vi
+      .spyOn(mcpClient, "executeToolCallForOwner")
       .mockResolvedValueOnce({
         id: "call_123",
         name: "workspace__create_event",
@@ -1696,7 +1696,7 @@ describe("createAgentServer tools/list", () => {
         { sendRequest },
       );
 
-      const options = executeToolCallSpy.mock.calls.at(-1)?.[3];
+      const options = executeToolCallForOwnerSpy.mock.calls.at(-1)?.[3];
       const elicitationHandler = options?.elicitationHandler;
       expect(elicitationHandler).toBeTypeOf("function");
 
@@ -1730,7 +1730,7 @@ describe("createAgentServer tools/list", () => {
         content: { title: "Team sync" },
       });
     } finally {
-      executeToolCallSpy.mockRestore();
+      executeToolCallForOwnerSpy.mockRestore();
     }
   });
 });

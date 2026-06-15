@@ -14,9 +14,10 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -25,6 +26,18 @@ import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
+
+// these suites assert exact assigned-tool sets after agent creation; pin the
+// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
+// auto-assigned app tools into them (app-tool assignment is covered in
+// tool-archestra-assignment.test.ts)
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = false;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -2973,6 +2986,33 @@ describe("ToolModel", () => {
         ARCHESTRA_MCP_CATALOG_ID,
       );
       expect(secondRun).toEqual([]);
+    });
+
+    test("keeps a feature-flagged-off built-in but prunes a truly-removed one", async () => {
+      // The suite pins config.apps.enabled = false, so getArchestraMcpTools()
+      // omits app tools. A pre-existing app-tool row must survive reseed (the
+      // definition still exists, the feature is merely dark); a row whose short
+      // name is gone from the registry is the only kind that is genuinely stale.
+      archestraMcpBranding.syncFromOrganization(null);
+      const catalogId = randomUUID();
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const flaggedOffName = "archestra__create_app";
+      const removedName = "archestra__obsolete_tool";
+      await db.insert(schema.toolsTable).values([
+        { name: flaggedOffName, parameters: {}, catalogId, agentId: null },
+        { name: removedName, parameters: {}, catalogId, agentId: null },
+      ]);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const survivors = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalogId));
+      const names = new Set(survivors.map((t) => t.name));
+      expect(names.has(flaggedOffName)).toBe(true);
+      expect(names.has(removedName)).toBe(false);
     });
 
     test("rejects a duplicate built-in tool row at the database level", async () => {

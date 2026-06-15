@@ -125,7 +125,13 @@ vi.mock("@/components/chat/todo-write-tool", () => ({
 }));
 
 vi.mock("@/components/chat/mcp-app-container", () => ({
-  McpAppSection: () => null,
+  McpAppSection: (props: { uiResourceUri: string; appId?: string }) => (
+    <div
+      data-testid="mcp-app-section"
+      data-app-id={props.appId ?? ""}
+      data-uri={props.uiResourceUri}
+    />
+  ),
   McpToolOutput: null,
 }));
 
@@ -1324,5 +1330,158 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText(/Please re-authenticate by visiting this URL/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("owned-app inline rendering", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+  const appOutput = {
+    content: `Created app "To Do App" (${APP_ID}).`,
+    structuredContent: { id: APP_ID, name: "To Do App" },
+  };
+
+  function renderAppToolPart(partOverrides: Record<string, unknown>) {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__create_app",
+            toolCallId: "call-app-1",
+            state: "output-available",
+            input: { name: "To Do App", html: "<h1>hi</h1>" },
+            output: appOutput,
+            ...partOverrides,
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+  }
+
+  it.each([
+    "create_app",
+    "update_app",
+    "render_app",
+  ])("mounts the app-bound runtime for a branded %s result", (shortName) => {
+    renderAppToolPart({ type: `tool-sparky__${shortName}` });
+
+    const section = screen.getByTestId("mcp-app-section");
+    expect(section).toHaveAttribute("data-app-id", APP_ID);
+    expect(section).toHaveAttribute("data-uri", `ui://archestra-app/${APP_ID}`);
+  });
+
+  it.each([
+    "sparky__create_app",
+    "create_app",
+  ])("mounts the app-bound runtime for a run_tool dispatch targeting %s", (targetName) => {
+    renderAppToolPart({
+      type: "tool-sparky__run_tool",
+      input: {
+        tool_name: targetName,
+        tool_args: { name: "To Do App", html: "<h1>hi</h1>" },
+      },
+    });
+
+    expect(screen.getByTestId("mcp-app-section")).toHaveAttribute(
+      "data-app-id",
+      APP_ID,
+    );
+  });
+
+  it("does not mount for a foreign-prefix create_app result", () => {
+    renderAppToolPart({ type: "tool-other__create_app" });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("does not mount for list_apps", () => {
+    renderAppToolPart({
+      type: "tool-sparky__list_apps",
+      output: {
+        content: "1 app",
+        structuredContent: { apps: [appOutput.structuredContent] },
+      },
+    });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("does not mount when the id is not a UUID", () => {
+    renderAppToolPart({
+      output: { content: "ok", structuredContent: { id: "not-a-uuid" } },
+    });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("keeps the error text and does not mount for an error result", () => {
+    renderAppToolPart({
+      state: "output-error",
+      errorText: "Error: html exceeds the limit",
+      output: undefined,
+    });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("does not mount while approval is requested", () => {
+    renderAppToolPart({
+      state: "approval-requested",
+      approval: { id: "approval-1" },
+      output: undefined,
+    });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("is not swallowed by compact grouping next to compact-eligible tools", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call-plain-1",
+            state: "output-available",
+            input: { q: "a" },
+            output: { content: "results" },
+          },
+          {
+            type: "tool-sparky__create_app",
+            toolCallId: "call-app-1",
+            state: "output-available",
+            input: { name: "To Do App", html: "<h1>hi</h1>" },
+            output: appOutput,
+          },
+          {
+            type: "tool-google__search",
+            toolCallId: "call-plain-2",
+            state: "output-available",
+            input: { q: "b" },
+            output: { content: "results" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-app-section")).toHaveAttribute(
+      "data-app-id",
+      APP_ID,
+    );
   });
 });

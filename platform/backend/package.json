@@ -47,6 +47,7 @@
     "@ai-sdk/xai": "^3.0.67",
     "@anthropic-ai/sdk": "^0.78.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
+    "@archestra/app-runtime-rs": "workspace:*",
     "@archestra/sandbox-rs": "workspace:*",
     "@archestra/shared": "workspace:*",
     "@aws-crypto/sha256-js": "^5.2.0",

@@ -50,6 +50,8 @@ archestra:
     ARCHESTRA_BEDROCK_BASE_URL: "http://e2e-tests-wiremock:8080/bedrock"
     ARCHESTRA_PERPLEXITY_BASE_URL: "http://e2e-tests-wiremock:8080/perplexity/v1"
     ARCHESTRA_DEEPSEEK_BASE_URL: "http://e2e-tests-wiremock:8080/deepseek"
+    ARCHESTRA_GITHUB_COPILOT_BASE_URL: "http://e2e-tests-wiremock:8080/github-copilot"
+    ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL: "http://e2e-tests-wiremock:8080/github/copilot_internal/v2/token"
     ARCHESTRA_MINIMAX_BASE_URL: "http://e2e-tests-wiremock:8080/minimax/v1"
     ARCHESTRA_AZURE_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/azure/openai/deployments/test-deployment"
     ARCHESTRA_AZURE_OPENAI_API_VERSION: "2024-02-01"
@@ -69,6 +71,7 @@ archestra:
     ARCHESTRA_CHAT_BEDROCK_API_KEY: test-key
     ARCHESTRA_CHAT_PERPLEXITY_API_KEY: test-key
     ARCHESTRA_CHAT_DEEPSEEK_API_KEY: test-key
+    ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY: test-key
     ARCHESTRA_CHAT_MINIMAX_API_KEY: test-key
     ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY: test-key
     ARCHESTRA_METRICS_SECRET: "foo-bar"
@@ -80,6 +83,8 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
+    # Enable user-authored MCP Apps for the apps e2e suite
+    ARCHESTRA_APPS_ENABLED: "true"
     # Disable better-auth rate limit for e2e tests
     ARCHESTRA_AUTH_RATE_LIMIT_DISABLED: "true"
     # Add Keycloak as trusted origin for SSO e2e tests (OIDC discovery URL validation)

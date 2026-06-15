@@ -76,6 +76,85 @@ describe("POST /api/llm-virtual-keys", () => {
     });
   });
 
+  test("per-user provider (github-copilot): allows a personal self-mapped virtual key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "gho_self" } });
+    const copilotKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "My Copilot VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("per-user provider: rejects org-scoped or model-router virtual keys containing it", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
+    const copilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      copilotSecret.id,
+      { provider: "github-copilot", scope: "personal", userId: user.id },
+    );
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", scope: "org" },
+    );
+
+    // Org-scoped (shared) virtual key wrapping the per-user key → rejected
+    const orgScoped = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Shared Copilot VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+        ],
+        scope: "org",
+        teams: [],
+      },
+    });
+    expect(orgScoped.statusCode).toBe(400);
+    expect(orgScoped.json().error.message).toContain("per-user");
+
+    // Multi-provider (model-router) bundle containing the per-user key → rejected
+    const bundle = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Router VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+      },
+    });
+    expect(bundle.statusCode).toBe(400);
+    expect(bundle.json().error.message).toContain("per-user");
+  });
+
   test("POST /api/llm-virtual-keys allows llmVirtualKey admins to assign any team", async ({
     makeLlmProviderApiKey,
     makeSecret,

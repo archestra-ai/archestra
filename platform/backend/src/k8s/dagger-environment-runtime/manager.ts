@@ -2,6 +2,7 @@ import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type * as k8s from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import {
   createK8sClients,
@@ -136,10 +137,14 @@ class DaggerEnvironmentRuntimeManager {
     const effectivePolicy =
       await this.resolveEngineEffectivePolicy(environment);
     const capabilities = (await getK8sCapabilities()).networkPolicy;
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      clients.coreApi,
+    );
     const policies = buildDaggerEgressPolicies({
       environmentId: environment.id,
       effectivePolicy,
       capabilities,
+      clusterDnsIps,
     });
     const policyName = constructManagedNetworkPolicyName(
       daggerEngineDeploymentName(environment.id),

@@ -44,19 +44,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
-  UserSearchableSelect,
-  type UserSelectOption,
-} from "@/components/user-searchable-select";
-import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useMembersPaginated } from "@/lib/member.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
@@ -66,6 +60,7 @@ import {
   useUpdateVirtualApiKey,
 } from "@/lib/virtual-api-keys.query";
 import { useSetCredentialsAction } from "../layout";
+import { OwnerSelectField, shouldShowOwnerField } from "./owner-select-field";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -337,65 +332,6 @@ export default function VirtualKeysPage() {
   );
 }
 
-function OwnerSelectField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (userId: string) => void;
-}) {
-  const { data: session } = useSession();
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 250);
-  const { data: membersData, isFetching } = useMembersPaginated({
-    limit: 50,
-    offset: 0,
-    name: debouncedSearch || undefined,
-  });
-  // True while the typed query is still debouncing or its fetch is in flight,
-  // so the dropdown shows "Searching…" instead of a premature "no results".
-  const isSearching = search !== debouncedSearch || isFetching;
-
-  // Accumulate every other member we've seen so a chosen owner stays
-  // selectable even when a later search filters them out. The signed-in user
-  // is excluded — picking yourself is the default (an empty selection).
-  const [knownUsers, setKnownUsers] = useState<
-    Record<string, UserSelectOption>
-  >({});
-  useEffect(() => {
-    const selfId = session?.user?.id;
-    setKnownUsers((prev) => {
-      const next = { ...prev };
-      for (const member of membersData?.data ?? []) {
-        if (member.userId === selfId) continue;
-        next[member.userId] = {
-          userId: member.userId,
-          name: member.name,
-          email: member.email,
-        };
-      }
-      return next;
-    });
-  }, [membersData, session]);
-
-  const users = useMemo(() => Object.values(knownUsers), [knownUsers]);
-
-  return (
-    <div className="space-y-2">
-      <Label>Person</Label>
-      <UserSearchableSelect
-        value={value}
-        onValueChange={onChange}
-        users={users}
-        placeholder="Yourself"
-        onSearchQueryChange={setSearch}
-        emptyMessage={isSearching ? "Searching…" : "No matching users found."}
-        hint="Pick a user to create this key on their behalf. Leave empty to own it yourself."
-      />
-    </div>
-  );
-}
-
 function CreateVirtualKeyDialog({
   open,
   onOpenChange,
@@ -451,7 +387,7 @@ function CreateVirtualKeyDialog({
 
   // Admins can mint a personal key on behalf of another org member; left
   // unset, the key belongs to the creator.
-  const showOwnerField = isVirtualKeyAdmin && scope === "personal";
+  const showOwnerField = shouldShowOwnerField(isVirtualKeyAdmin, scope);
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;

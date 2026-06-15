@@ -520,4 +520,38 @@ describe("POST /api/llm-virtual-keys", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().authorId).toBe(user.id);
   });
+
+  test("admins cannot assign ownership to a member of another organization", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    makeMember,
+    makeOrganization,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser();
+    await makeMember(outsider.id, otherOrg.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Cross-org key",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: outsider.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain(
+      "User is not a member of this organization",
+    );
+  });
 });

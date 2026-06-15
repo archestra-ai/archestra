@@ -1,10 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import config from "@/config";
-import { FileModel, FolderModel, SkillSandboxModel } from "@/models";
+import { FileModel, SkillSandboxModel } from "@/models";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 
 async function seed(params: {
   organizationId: string;
@@ -67,52 +63,38 @@ describe("skillSandboxArtifactService", () => {
     expect(items[0].id).toBeTruthy();
   });
 
-  describe("listAllForUser (filesystem mode)", () => {
-    const original = { ...config.skillsSandbox.fileStorage };
-    let fsRoot: string;
-    beforeEach(async () => {
-      fsRoot = await mkdtemp(join(tmpdir(), "xfiles-svc-"));
-      config.skillsSandbox.fileStorage.provider = "filesystem";
-      config.skillsSandbox.fileStorage.path = fsRoot;
+  test("listAllForUser returns the user's files as downloadable items", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
     });
-    afterEach(async () => {
-      config.skillsSandbox.fileStorage.provider = original.provider;
-      config.skillsSandbox.fileStorage.path = original.path;
-      await rm(fsRoot, { recursive: true, force: true });
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      sandboxId: sandbox.id,
+      filename: "out.txt",
     });
 
-    test("returns the user's on-disk artifacts as downloadable items", async ({
-      makeUser,
-      makeOrganization,
-    }) => {
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const sandbox = await SkillSandboxModel.create({
+    const { folders, files } = await skillSandboxArtifactService.listAllForUser(
+      {
         organizationId: org.id,
         userId: user.id,
-        conversationId: null,
-        defaultCwd: "/sandbox",
-      });
-      await seed({
-        organizationId: org.id,
-        userId: user.id,
-        sandboxId: sandbox.id,
-        filename: "out.txt",
-      });
+      },
+    );
 
-      const { folders, files } =
-        await skillSandboxArtifactService.listAllForUser({
-          organizationId: org.id,
-          userId: user.id,
-        });
-
-      expect(folders).toEqual([]);
-      expect(files).toHaveLength(1);
-      expect(files[0]).toMatchObject({
-        filename: "out.txt",
-        downloadable: true,
-        folder: null,
-      });
+    expect(folders).toEqual([]);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({
+      filename: "out.txt",
+      downloadable: true,
+      folder: null,
     });
   });
 });
@@ -202,55 +184,5 @@ describe("skillSandboxArtifactService.resolveMyFileSource", () => {
       filename: "nope.txt",
     });
     expect(missing).toEqual({ error: "not_found" });
-  });
-
-  describe("filesystem mode", () => {
-    const original = { ...config.skillsSandbox.fileStorage };
-    let fsRoot: string;
-
-    beforeEach(async () => {
-      fsRoot = await mkdtemp(join(tmpdir(), "xfile-resolve-"));
-      config.skillsSandbox.fileStorage.provider = "filesystem";
-      config.skillsSandbox.fileStorage.path = fsRoot;
-    });
-    afterEach(async () => {
-      config.skillsSandbox.fileStorage.provider = original.provider;
-      config.skillsSandbox.fileStorage.path = original.path;
-      await rm(fsRoot, { recursive: true, force: true });
-    });
-
-    test("resolves an orphan (hand-dropped file, no row) by filename + folder", async ({
-      makeUser,
-      makeOrganization,
-    }) => {
-      const user = await makeUser();
-      const org = await makeOrganization();
-      // folders exist as rows (created by projects); the dir scan is row-driven
-      await FolderModel.create({
-        organizationId: org.id,
-        userId: user.id,
-        name: "drop",
-      });
-      const { mkdir, writeFile } = await import("node:fs/promises");
-      await mkdir(join(fsRoot, "projects", user.email, "drop"), {
-        recursive: true,
-      });
-      await writeFile(
-        join(fsRoot, "projects", user.email, "drop", "manual.csv"),
-        "x,y\n1,2\n",
-      );
-
-      const resolved = await skillSandboxArtifactService.resolveMyFileSource({
-        organizationId: org.id,
-        userId: user.id,
-        filename: "manual.csv",
-        folder: "drop",
-      });
-      expect(resolved).toMatchObject({
-        mimeType: "text/csv",
-        originalName: "manual.csv",
-      });
-      expect("data" in resolved && resolved.data.toString()).toBe("x,y\n1,2\n");
-    });
   });
 });

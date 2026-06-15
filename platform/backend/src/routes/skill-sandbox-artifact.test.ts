@@ -1,7 +1,3 @@
-import { mkdtemp, rm, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import config from "@/config";
 import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -197,54 +193,6 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     // the header stays parseable. wrapping quotes around filename are fine.
     expect(cd).toMatch(/^attachment; filename="[^"\\]*"$/);
     expect(cd).toContain(".pdf");
-  });
-
-  describe("SandboxFileMissingError → 404", () => {
-    let fsRoot: string;
-    const original = { ...config.skillsSandbox.fileStorage };
-
-    beforeEach(async () => {
-      fsRoot = await mkdtemp(join(tmpdir(), "sandbox-art-404-"));
-      config.skillsSandbox.fileStorage.provider = "filesystem";
-      config.skillsSandbox.fileStorage.path = fsRoot;
-    });
-
-    afterEach(async () => {
-      config.skillsSandbox.fileStorage.provider = original.provider;
-      config.skillsSandbox.fileStorage.path = original.path;
-      await rm(fsRoot, { recursive: true, force: true });
-    });
-
-    test("returns 404 with 'Artifact data is no longer available' when the backing file is deleted", async () => {
-      const sandbox = await seedSandbox({
-        organizationId,
-        userId: user.id,
-      });
-      const artifact = await seedArtifact({
-        sandboxId: sandbox.id,
-        userId: user.id,
-        organizationId,
-        mimeType: "text/plain",
-        data: Buffer.from("soon deleted"),
-        path: "/sandbox/skills/example/ephemeral.txt",
-      });
-      // confirm the artifact was written as filesystem-mode
-      expect(artifact.storageProvider).toBe("filesystem");
-      if (!artifact.objectKey) throw new Error("expected filesystem objectKey");
-
-      // remove the backing file from disk to simulate operator deletion
-      await unlink(join(fsRoot, artifact.objectKey));
-
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
-      });
-
-      expect(response.statusCode).toBe(404);
-      expect(
-        response.json<{ error: { message: string } }>().error.message,
-      ).toBe("Artifact data is no longer available");
-    });
   });
 });
 
@@ -688,37 +636,5 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     expect(del.statusCode).toBe(200);
     expect(await FileModel.findById(produced.id)).toBeNull();
-  });
-
-  test("filesystem mode: deleting removes the file from disk", async () => {
-    const fsRoot = await mkdtemp(join(tmpdir(), "delete-fs-"));
-    const original = { ...config.skillsSandbox.fileStorage };
-    config.skillsSandbox.fileStorage.provider = "filesystem";
-    config.skillsSandbox.fileStorage.path = fsRoot;
-    try {
-      const sandbox = await seedSandbox({ organizationId, userId: user.id });
-      const artifact = await seedArtifact({
-        sandboxId: sandbox.id,
-        userId: user.id,
-        organizationId,
-        mimeType: "text/plain",
-        data: Buffer.from("on disk"),
-        path: "/sandbox/disk.txt",
-      });
-      expect(artifact.objectKey).toBe(`${user.email}/disk.txt`);
-
-      const del = await app.inject({
-        method: "DELETE",
-        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
-      });
-      expect(del.statusCode).toBe(200);
-
-      const { readdir } = await import("node:fs/promises");
-      expect(await readdir(join(fsRoot, user.email))).toEqual([]);
-    } finally {
-      config.skillsSandbox.fileStorage.provider = original.provider;
-      config.skillsSandbox.fileStorage.path = original.path;
-      await rm(fsRoot, { recursive: true, force: true });
-    }
   });
 });

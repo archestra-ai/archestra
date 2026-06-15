@@ -9,8 +9,7 @@ import type {
   SandboxFileListItem,
   SandboxFolderListItem,
 } from "@/types";
-import { getSandboxFileStorage } from "./file-storage";
-import { SandboxFileMissingError } from "./file-storage-filesystem";
+import { FileBytesMissingError, getFileBytesStorage } from "./file-storage";
 
 /** Bytes + metadata of a PFS file resolved for sandbox upload. */
 type ResolvedMyFile = {
@@ -26,9 +25,8 @@ type MyFileResolutionError = {
 
 /**
  * The user's persistent file system (PFS / My Files): listing, folders, and
- * byte access for the upload path. Rows live in the `files` table; the
- * storage router decides what a listing means per backend (db = the rows;
- * filesystem = the on-disk directory tree).
+ * byte access for the upload path. Rows live in the `files` table; a listing
+ * is simply the rows (Postgres-only byte storage).
  */
 class SkillSandboxArtifactService {
   /** Surface A: files produced in one conversation (all downloadable). */
@@ -49,7 +47,7 @@ class SkillSandboxArtifactService {
     }));
   }
 
-  /** Surface B: the user's whole PFS; backend hidden behind the router. */
+  /** Surface B: the user's whole PFS — the rows are the listing. */
   async listAllForUser(params: {
     organizationId: string;
     userId: string;
@@ -61,11 +59,22 @@ class SkillSandboxArtifactService {
       FileModel.listForUser(params),
       FolderModel.listByUser(params),
     ]);
-    return getSandboxFileStorage().listUserFiles({
-      userId: params.userId,
-      rows,
-      folderRows,
-    });
+    return {
+      folders: folderRows.map((f) => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.createdAt,
+      })),
+      files: rows.map((row) => ({
+        id: row.id,
+        filename: row.filename,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+        createdAt: row.createdAt,
+        downloadable: true,
+        folder: row.folderName,
+      })),
+    };
   }
 
   /**
@@ -106,9 +115,9 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Delete a file: the row first (the DB is authoritative — a row whose bytes
-   * outlive it merely resurfaces as a non-downloadable orphan in filesystem
-   * mode), then the external bytes, best-effort. Author or folder owner only.
+   * Delete a file: the row first (the DB is authoritative), then any external
+   * bytes, best-effort (a no-op under Postgres storage — the bytes die with
+   * the row). Author or folder owner only.
    */
   async deleteArtifactForUser(params: {
     artifactId: string;
@@ -118,7 +127,7 @@ class SkillSandboxArtifactService {
     const file = await this.getArtifactForUser(params);
     if (!file) return false;
     await FileModel.deleteById(file.id);
-    await getSandboxFileStorage()
+    await getFileBytesStorage()
       .delete({
         provider: file.storageProvider,
         objectKey: file.objectKey,
@@ -128,11 +137,10 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Resolve an `my_file` upload source — a reference to a PFS file by row id or
+   * Resolve a `my_file` upload source — a reference to a PFS file by row id or
    * by location (`filename` + optional `folder`) — to its bytes. Location
-   * resolution goes through the same listing the user sees, so it reaches
-   * orphans (filesystem files with no row) too; a duplicated filename is
-   * reported as ambiguous rather than picking one silently.
+   * resolution goes through the same listing the user sees; a duplicated
+   * filename is reported as ambiguous rather than picking one silently.
    */
   async resolveMyFileSource(params: {
     organizationId: string;
@@ -163,12 +171,12 @@ class SkillSandboxArtifactService {
       }
       try {
         return {
-          data: await getSandboxFileStorage().get(file),
+          data: await getFileBytesStorage().get(file),
           mimeType: file.mimeType,
           originalName: file.filename,
         };
       } catch (error) {
-        if (error instanceof SandboxFileMissingError) {
+        if (error instanceof FileBytesMissingError) {
           return { error: "missing_bytes" };
         }
         throw error;
@@ -191,29 +199,18 @@ class SkillSandboxArtifactService {
     if (matches.length === 0) return { error: "not_found" };
     if (matches.length > 1) return { error: "ambiguous" };
     const match = matches[0];
+    if (!match.id) return { error: "not_found" };
 
+    const file = await FileModel.findById(match.id);
+    if (!file) return { error: "not_found" };
     try {
-      if (match.id) {
-        const file = await FileModel.findById(match.id);
-        if (!file) return { error: "not_found" };
-        return {
-          data: await getSandboxFileStorage().get(file),
-          mimeType: file.mimeType,
-          originalName: match.filename,
-        };
-      }
-      // orphan: no row — read by location from the storage tree.
       return {
-        data: await getSandboxFileStorage().readUserFile({
-          userId: namespaceUserId,
-          folder,
-          filename: match.filename,
-        }),
-        mimeType: match.mimeType,
+        data: await getFileBytesStorage().get(file),
+        mimeType: file.mimeType,
         originalName: match.filename,
       };
     } catch (error) {
-      if (error instanceof SandboxFileMissingError) {
+      if (error instanceof FileBytesMissingError) {
         return { error: "missing_bytes" };
       }
       throw error;

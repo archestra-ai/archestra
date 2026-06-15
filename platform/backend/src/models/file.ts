@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
+import { getFileBytesStorage } from "@/skills-sandbox/file-storage";
 import type { PersistedFile, SandboxArtifactRow } from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
@@ -16,9 +16,9 @@ type PersistedFileMeta = {
 
 /**
  * Persistent user files (`files` table) — everything `download_file` and
- * `save_result` produce. Bytes go through the sandbox storage router exactly
- * like the old artifact rows did (`kind: "artifact"` keeps the router's
- * provider dispatch unchanged).
+ * `save_result` produce. Bytes go through the `FileBytesStorage` interface
+ * (Postgres-only today; the per-row `storage_provider` is the seam for a
+ * future backend).
  */
 class FileModel {
   static async create(params: {
@@ -26,32 +26,30 @@ class FileModel {
     /** Author — whoever produced the file. */
     userId: string;
     /**
-     * Storage namespace for filesystem-mode bytes: the FOLDER OWNER for
-     * project results (the folder is a real directory in their tree), else
-     * the author. Not a column — same role the old `createArtifact.userId`
-     * param played.
+     * Storage namespace owner: the FOLDER OWNER for project results, else the
+     * author. The Postgres backend ignores it (bytes live on the row); it is
+     * the placement seam a future external backend would read.
      */
     namespaceUserId: string;
     conversationId: string | null;
     /** Producing sandbox — provenance only; omit when none (save_result). */
     sandboxId?: string | null;
     folderId?: string | null;
-    /** Folder display name — used only to place filesystem-mode bytes. */
+    /** Folder display name — placement hint for a future external backend. */
     folderName?: string | null;
     filename: string;
     mimeType: string;
     sizeBytes: number;
     data: Buffer;
   }): Promise<PersistedFile> {
-    // id is generated app-side because the filesystem storage provider uses
-    // it as the collision fallback for the object key.
+    // id is generated app-side so a future external storage backend can use it
+    // as the collision fallback for an object key.
     const fileId = randomUUID();
-    const stored = await getSandboxFileStorage().put({
-      userId: params.namespaceUserId,
+    const stored = await getFileBytesStorage().put({
       fileId,
-      kind: "artifact",
       filename: params.filename,
       data: params.data,
+      namespace: { kind: "user", userId: params.namespaceUserId },
       folder: params.folderName ?? null,
     });
     let row: PersistedFile | undefined;
@@ -76,13 +74,13 @@ class FileModel {
     } catch (error) {
       // bytes may already sit in the user's storage folder (filesystem
       // provider); remove them so a failed insert leaves no orphan behind.
-      await getSandboxFileStorage()
+      await getFileBytesStorage()
         .delete(stored)
         .catch(() => {});
       throw error;
     }
     if (!row) {
-      await getSandboxFileStorage()
+      await getFileBytesStorage()
         .delete(stored)
         .catch(() => {});
       throw new Error("failed to insert file");

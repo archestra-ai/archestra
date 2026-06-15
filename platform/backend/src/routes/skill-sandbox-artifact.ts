@@ -2,8 +2,10 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { projectService } from "@/services/project";
-import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
-import { SandboxFileMissingError } from "@/skills-sandbox/file-storage-filesystem";
+import {
+  FileBytesMissingError,
+  getFileBytesStorage,
+} from "@/skills-sandbox/file-storage";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import {
@@ -75,10 +77,10 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the data column (storage_provider = 'filesystem').
       let data: Buffer;
       try {
-        data = await getSandboxFileStorage().get(artifact);
+        data = await getFileBytesStorage().get(artifact);
       } catch (error) {
-        if (error instanceof SandboxFileMissingError) {
-          // metadata exists but the backing file was removed from the folder
+        if (error instanceof FileBytesMissingError) {
+          // the row exists but its bytes are gone
           throw new ApiError(404, "Artifact data is no longer available");
         }
         throw error;

@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import logger from "@/logging";
-import {
-  getSandboxFileStorage,
-  storageFilename,
-} from "@/skills-sandbox/file-storage";
 import type {
   InsertSkillSandboxCommand,
   SandboxFileOrigin,
@@ -105,20 +100,9 @@ class SkillSandboxReplayEventModel {
   static async appendUpload(
     upload: UploadInput,
   ): Promise<SkillSandboxFile | null> {
-    // id is generated app-side (not by the column default) because the
-    // storage adapter needs it before the insert: Phase 2's filesystem
-    // provider uses it to derive a collision-free object key.
+    // id is generated app-side (not by the column default) so the replay-event
+    // row can reference it within the same transaction.
     const fileId = randomUUID();
-    const stored = await getSandboxFileStorage().put({
-      userId: upload.userId,
-      fileId,
-      kind: "upload",
-      filename: storageFilename({
-        originalName: upload.originalName,
-        path: upload.path,
-      }),
-      data: upload.data,
-    });
     const row = await db.transaction(async (tx) => {
       const [inserted] = await tx
         .insert(schema.skillSandboxFilesTable)
@@ -154,19 +138,6 @@ class SkillSandboxReplayEventModel {
       });
       return normalizeByteaField(inserted, "data");
     });
-    // the insert no-opped (attachment already staged). Uploads route to the
-    // db provider today, so this delete is a no-op — kept because it
-    // dispatches per blob and stays correct if upload routing ever changes.
-    if (!row) {
-      try {
-        await getSandboxFileStorage().delete(stored);
-      } catch (error) {
-        logger.warn(
-          { objectKey: stored.objectKey, error },
-          "failed to clean up orphaned sandbox upload bytes after staging conflict",
-        );
-      }
-    }
     return row;
   }
 

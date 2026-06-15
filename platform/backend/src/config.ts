@@ -700,32 +700,6 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
 const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
-/** @public — exercised directly in config.test.ts */
-export const parseSkillSandboxFileStorage = ({
-  provider,
-  path,
-}: {
-  provider: string | undefined;
-  path: string | undefined;
-}): { provider: "db" | "filesystem"; path: string | undefined } => {
-  const normalized = provider?.trim() || "db";
-  if (normalized !== "db" && normalized !== "filesystem") {
-    throw new Error(
-      `ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER must be "db" or "filesystem", got "${provider}"`,
-    );
-  }
-  if (normalized === "db") {
-    return { provider: "db", path: undefined };
-  }
-  const root = path?.trim();
-  if (!root) {
-    throw new Error(
-      "ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH is required when ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER=filesystem",
-    );
-  }
-  return { provider: "filesystem", path: root };
-};
-
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
@@ -1106,10 +1080,6 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       16 * 1024 * 1024,
     ),
-    fileStorage: parseSkillSandboxFileStorage({
-      provider: process.env.ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER,
-      path: process.env.ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH,
-    }),
   },
   /**
    * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by

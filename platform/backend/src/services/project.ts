@@ -5,7 +5,6 @@ import {
   ProjectShareModel,
   SandboxFolderExistsError,
 } from "@/models";
-import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { validateSandboxFolderName } from "@/skills-sandbox/folder-name";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import type {
@@ -40,10 +39,6 @@ class ProjectService {
 
     let folderId: string;
     try {
-      await getSandboxFileStorage().ensureFolderDir({
-        userId: params.userId,
-        name,
-      });
       const folder = await FolderModel.create({
         organizationId: params.organizationId,
         userId: params.userId,

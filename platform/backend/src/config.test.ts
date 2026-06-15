@@ -30,7 +30,6 @@ import config, {
   parseS3BlobStorageAuthMethod,
   parseS3BlobStorageBucket,
   parseSampleRate,
-  parseSkillSandboxFileStorage,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
 } from "./config";
@@ -1601,40 +1600,5 @@ describe("parseAuditLogRetentionDays", () => {
   test("returns default and warns on negative value", () => {
     expect(parseAuditLogRetentionDays("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
-  });
-});
-
-describe("parseSkillSandboxFileStorage", () => {
-  test("defaults to db when unset", () => {
-    expect(
-      parseSkillSandboxFileStorage({ provider: undefined, path: undefined }),
-    ).toEqual({ provider: "db", path: undefined });
-  });
-
-  test("accepts db explicitly and ignores a stray path", () => {
-    expect(
-      parseSkillSandboxFileStorage({ provider: "db", path: "/tmp/x" }),
-    ).toEqual({ provider: "db", path: undefined });
-  });
-
-  test("accepts filesystem with a path", () => {
-    expect(
-      parseSkillSandboxFileStorage({
-        provider: "filesystem",
-        path: " /var/sandbox-files ",
-      }),
-    ).toEqual({ provider: "filesystem", path: "/var/sandbox-files" });
-  });
-
-  test("throws when filesystem is selected without a path", () => {
-    expect(() =>
-      parseSkillSandboxFileStorage({ provider: "filesystem", path: undefined }),
-    ).toThrow(/ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH/);
-  });
-
-  test("throws on an unknown provider", () => {
-    expect(() =>
-      parseSkillSandboxFileStorage({ provider: "s3", path: undefined }),
-    ).toThrow(/ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER/);
   });
 });

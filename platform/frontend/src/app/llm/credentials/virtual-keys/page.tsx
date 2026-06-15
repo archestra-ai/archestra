@@ -43,7 +43,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
+import {
+  UserSearchableSelect,
+  type UserSelectOption,
+} from "@/components/user-searchable-select";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -51,6 +54,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -341,31 +345,40 @@ function OwnerSelectField({
   onChange: (userId: string) => void;
 }) {
   const { data: session } = useSession();
-  const { data: membersData } = useMembersPaginated({ limit: 100, offset: 0 });
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const { data: membersData, isFetching } = useMembersPaginated({
+    limit: 50,
+    offset: 0,
+    name: debouncedSearch || undefined,
+  });
+  // True while the typed query is still debouncing or its fetch is in flight,
+  // so the dropdown shows "Searching…" instead of a premature "no results".
+  const isSearching = search !== debouncedSearch || isFetching;
 
-  const users = useMemo(() => {
-    const fetched = membersData?.data ?? [];
+  // Accumulate every other member we've seen so a chosen owner stays
+  // selectable even when a later search filters them out. The signed-in user
+  // is excluded — picking yourself is the default (an empty selection).
+  const [knownUsers, setKnownUsers] = useState<
+    Record<string, UserSelectOption>
+  >({});
+  useEffect(() => {
     const selfId = session?.user?.id;
-    const hasSelf = !!selfId && fetched.some((m) => m.userId === selfId);
-    const self =
-      selfId && !hasSelf
-        ? [
-            {
-              userId: selfId,
-              name: session?.user?.name ?? null,
-              email: session?.user?.email ?? null,
-            },
-          ]
-        : [];
-    return [
-      ...self,
-      ...fetched.map((member) => ({
-        userId: member.userId,
-        name: member.name,
-        email: member.email,
-      })),
-    ];
+    setKnownUsers((prev) => {
+      const next = { ...prev };
+      for (const member of membersData?.data ?? []) {
+        if (member.userId === selfId) continue;
+        next[member.userId] = {
+          userId: member.userId,
+          name: member.name,
+          email: member.email,
+        };
+      }
+      return next;
+    });
   }, [membersData, session]);
+
+  const users = useMemo(() => Object.values(knownUsers), [knownUsers]);
 
   return (
     <div className="space-y-2">
@@ -374,8 +387,10 @@ function OwnerSelectField({
         value={value}
         onValueChange={onChange}
         users={users}
-        placeholder="Select a user"
-        hint="The key belongs to this user and its usage is attributed to them."
+        placeholder="Yourself"
+        onSearchQueryChange={setSearch}
+        emptyMessage={isSearching ? "Searching…" : "No matching users found."}
+        hint="Pick a teammate to create this key on their behalf. Leave empty to own it yourself."
       />
     </div>
   );
@@ -401,8 +416,6 @@ function CreateVirtualKeyDialog({
   isVirtualKeyAdmin: boolean;
 }) {
   const createMutation = useCreateVirtualApiKey();
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id ?? "";
 
   const [newKeyName, setNewKeyName] = useState("");
   const [ownerId, setOwnerId] = useState("");
@@ -436,10 +449,9 @@ function CreateVirtualKeyDialog({
     }
   }, [open, defaultExpirationSeconds, visibilityOptions]);
 
-  // Admins can mint a personal key on behalf of another org member; for
-  // everyone else the key always belongs to the creator.
+  // Admins can mint a personal key on behalf of another org member; left
+  // unset, the key belongs to the creator.
   const showOwnerField = isVirtualKeyAdmin && scope === "personal";
-  const effectiveOwnerId = ownerId || currentUserId;
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
@@ -453,7 +465,7 @@ function CreateVirtualKeyDialog({
           scope,
           teams: scope === "team" ? teamIds : [],
           providerApiKeys,
-          ownerId: showOwnerField ? effectiveOwnerId || undefined : undefined,
+          ownerId: showOwnerField && ownerId ? ownerId : undefined,
         },
       });
       setNewKeyName("");
@@ -472,7 +484,7 @@ function CreateVirtualKeyDialog({
     scope,
     teamIds,
     showOwnerField,
-    effectiveOwnerId,
+    ownerId,
   ]);
 
   return (
@@ -536,10 +548,7 @@ function CreateVirtualKeyDialog({
               />
 
               {showOwnerField && (
-                <OwnerSelectField
-                  value={effectiveOwnerId}
-                  onChange={setOwnerId}
-                />
+                <OwnerSelectField value={ownerId} onChange={setOwnerId} />
               )}
 
               <div className="space-y-2">

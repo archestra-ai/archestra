@@ -159,16 +159,18 @@ document.addEventListener("securitypolicyviolation", function(e) {\
  * Inject CSP meta tag and violation listener into HTML (Inspector pattern).
  * Used for srcdoc loading where HTTP headers aren't available.
  */
-function injectCSP(html, cspValue) {
+function injectCSP(html, cspValue, ownedApp) {
   var violationListener = buildViolationListenerScript();
   var injection;
   // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
   // envelope (app-sdk-injection.ts), so they work identically here and in a
   // foreign host. The proxy must NOT add a second CSP for them — a differing
   // policy would intersect and break the render — so it only adds the violation
-  // listener. External MCP-UI apps have no such envelope and get the full proxy
-  // CSP + SDK-URL injection.
-  if (html.indexOf("data-archestra-app-bootstrap") !== -1) {
+  // listener. This MUST key off the trusted host-set `ownedApp` flag, never the
+  // HTML: the HTML for external MCP-UI apps is attacker-controlled, so a content
+  // marker could be spoofed to suppress the platform CSP. External apps get the
+  // full proxy CSP + SDK-URL injection.
+  if (ownedApp === true) {
     injection = violationListener;
   } else {
     var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
@@ -296,7 +298,9 @@ window.addEventListener("message", async (event) => {
     }
 
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
-      const { html, sandbox, csp, permissions } = event.data.params;
+      // `ownedApp` is set by the trusted host (origin-validated above) only for
+      // Archestra-owned apps, whose envelope already carries the platform CSP.
+      const { html, sandbox, csp, permissions, ownedApp } = event.data.params;
       if (typeof sandbox === "string") {
         // Only allow known-safe sandbox tokens to prevent a compromised MCP
         // server from injecting e.g. allow-top-navigation to escape the sandbox.
@@ -315,7 +319,7 @@ window.addEventListener("message", async (event) => {
       if (typeof html === "string") {
         // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
-        const processedHtml = injectCSP(html, buildCSP(csp));
+        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
 
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc

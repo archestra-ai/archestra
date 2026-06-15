@@ -53,7 +53,7 @@ type McpListTool = ListToolsResult["tools"][number];
  * visibility check to reach this server), so it sits outside the per-tool RBAC
  * filter applied to assigned upstream tools.
  */
-const APP_LAUNCH_TOOL_NAME = "open";
+export const APP_LAUNCH_TOOL_NAME = "open";
 
 /**
  * Build the app-bound MCP server: a single endpoint carrying an app's whole

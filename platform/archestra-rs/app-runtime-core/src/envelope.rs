@@ -72,7 +72,10 @@ fn build_injection(escaped_context: &str, base_origin: &str, csp_content: &str) 
     let csp = if csp_content.is_empty() {
         String::new()
     } else {
-        format!(r#"<meta http-equiv="Content-Security-Policy" content="{csp_content}">"#)
+        format!(
+            r#"<meta http-equiv="Content-Security-Policy" content="{}">"#,
+            escape_attribute(csp_content),
+        )
     };
     let base_css = format!(
         r#"<link rel="stylesheet" href="{base_origin}{}" {}>"#,
@@ -99,6 +102,13 @@ fn splice(html: &str, at: usize, insert: &str) -> String {
     out.push_str(insert);
     out.push_str(&html[at..]);
     out
+}
+
+/// Escape a value for a double-quoted HTML attribute. The CSP content is
+/// caller-built from a config-derived origin; escaping `&`/`"` (order matters)
+/// keeps a stray quote from breaking out of the `content="…"` attribute.
+fn escape_attribute(value: &str) -> String {
+    value.replace('&', "&amp;").replace('"', "&quot;")
 }
 
 /// Escape a JSON string for embedding inside an inline `<script>`. `JSON`
@@ -299,5 +309,19 @@ mod tests {
     fn empty_csp_omits_the_meta() {
         let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON, "", "");
         assert!(!result.contains("Content-Security-Policy"));
+    }
+
+    #[test]
+    fn csp_content_cannot_break_out_of_the_attribute() {
+        let result = prepare_app_envelope(
+            COMPLETE_DOC,
+            CONTEXT_JSON,
+            "",
+            r#"default-src 'none'; "><script>alert(1)</script>"#,
+        );
+        // The stray quote is escaped, so the injected markup stays inside the
+        // attribute value (inert) rather than closing it.
+        assert!(!result.contains(r#""><script"#));
+        assert!(result.contains("&quot;><script"));
     }
 }

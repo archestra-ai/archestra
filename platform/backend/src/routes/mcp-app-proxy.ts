@@ -11,6 +11,7 @@ import { AppModel } from "@/models";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type App, UuidIdSchema } from "@/types";
 import {
+  APP_LAUNCH_TOOL_NAME,
   createAppServer,
   validateAppGatewayToken,
 } from "./mcp-app-gateway.utils";
@@ -244,6 +245,12 @@ async function rejectDisallowedToolCall(params: {
       -32602,
       "Invalid params: tools/call requires a string 'name' parameter",
     );
+  }
+  // The synthetic launch tool only hands back the app's own UI resource URI; it
+  // reaches no upstream tool or data store, so it bypasses the assignment gate
+  // (which would otherwise reject it as "not assigned to this app").
+  if (toolName === APP_LAUNCH_TOOL_NAME) {
+    return null;
   }
   const toolInput =
     callParams?.arguments && typeof callParams.arguments === "object"

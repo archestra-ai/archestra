@@ -485,6 +485,37 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     );
   });
 
+  test("the launch tool is callable and returns the app's UI resource", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "open", arguments: {} },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Not rejected by the assignment gate, and carries the UI resource.
+    expect(JSON.stringify(body)).not.toContain("not assigned to this app");
+    expect(body.result?._meta?.ui?.resourceUri).toBe(
+      getArchestraAppResourceUri(created.id),
+    );
+  });
+
   test("resources/read rejects a URI that is not this app's own", async ({
     makeApp,
     makeUser,

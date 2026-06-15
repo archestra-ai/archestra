@@ -1712,7 +1712,11 @@ describe("POST /api/chat handler composition", () => {
             toolCallId: "call-1",
             toolName: "whoami",
           },
-          { type: "tool-input-delta", toolCallId: "call-1", delta: "{" },
+          {
+            type: "tool-input-delta",
+            toolCallId: "call-1",
+            inputTextDelta: "{",
+          },
           { type: "finish" },
         ],
       }),
@@ -1801,6 +1805,51 @@ describe("POST /api/chat handler composition", () => {
             input: {},
           },
           { type: "tool-approval-request", toolCallId: "call-1" },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("who am i"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+    }>;
+    expect(mergedChunks.some((chunk) => chunk.type === "error")).toBe(false);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("does not flag a tool call whose input errored (tool-input-error)", async () => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "whoami",
+          },
+          {
+            type: "tool-input-delta",
+            toolCallId: "call-1",
+            inputTextDelta: "{",
+          },
+          {
+            type: "tool-input-error",
+            toolCallId: "call-1",
+            toolName: "whoami",
+            input: {},
+            errorText: "malformed tool call",
+          },
           { type: "finish" },
         ],
       }),

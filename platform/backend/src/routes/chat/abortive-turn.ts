@@ -1,6 +1,14 @@
 import type { UIMessageChunk } from "ai";
 
-export interface AbortiveTurnTrackerParams {
+// A tool call is "started" at `tool-input-start` and "resolved" once it emits
+// any chunk past input streaming — input complete (`tool-input-available`),
+// input failed (`tool-input-error`), awaiting approval (`tool-approval-request`),
+// or executed (`tool-output-*`). Only a call still stuck at `tool-input-start`/
+// `tool-input-delta` when the stream ends was genuinely abandoned (e.g. a
+// provider truncating mid tool-call). This taps the merged UI message stream
+// rather than streamText's `onChunk` so it observes the exact chunks the client
+// and persistence see.
+export function createAbortiveTurnTracker(params: {
   /**
    * Invoked from the transform's `flush()` when the turn ended with a tool call
    * the model started streaming but never completed. Returns the chunk to append
@@ -10,18 +18,7 @@ export interface AbortiveTurnTrackerParams {
    * on a stream the downstream consumer hasn't started draining yet.
    */
   onUnresolvedToolCall: () => UIMessageChunk | null;
-}
-
-// A tool call is "started" at `tool-input-start` and "resolved" once the model
-// finishes emitting its input (`tool-input-available`). Approval, MCP
-// elicitation, swap-agent stop tools, and normal completions all emit
-// `tool-input-available` before any execution pause, so only a genuinely
-// abandoned call (e.g. a provider that truncates mid tool-call) stays
-// unresolved. This taps the merged UI message stream rather than streamText's
-// `onChunk` so it observes the exact chunks the client and persistence see.
-export function createAbortiveTurnTracker(
-  params: AbortiveTurnTrackerParams,
-): TransformStream<UIMessageChunk, UIMessageChunk> {
+}): TransformStream<UIMessageChunk, UIMessageChunk> {
   const startedToolCallIds = new Set<string>();
   const resolvedToolCallIds = new Set<string>();
 
@@ -64,6 +61,11 @@ function recordToolCallLifecycle(
       startedToolCallIds.add(chunk.toolCallId);
       break;
     case "tool-input-available":
+    case "tool-input-error":
+    case "tool-approval-request":
+    case "tool-output-available":
+    case "tool-output-error":
+    case "tool-output-denied":
       resolvedToolCallIds.add(chunk.toolCallId);
       break;
     default:

@@ -93,6 +93,25 @@ describe("createAbortiveTurnTracker", () => {
     expect(onUnresolvedToolCall).not.toHaveBeenCalled();
   });
 
+  test("does not fire when the tool input itself errored (tool-input-error)", async () => {
+    const onUnresolvedToolCall = vi.fn(() => SENTINEL_ERROR);
+    await drainThroughTracker(
+      [
+        toolInputStart("call-1"),
+        toolInputDelta("call-1"),
+        {
+          type: "tool-input-error",
+          toolCallId: "call-1",
+          toolName: "search",
+          input: {},
+          errorText: "bad input",
+        },
+      ],
+      onUnresolvedToolCall,
+    );
+    expect(onUnresolvedToolCall).not.toHaveBeenCalled();
+  });
+
   test("does not fire for a plain text turn with no tool calls", async () => {
     const onUnresolvedToolCall = vi.fn(() => SENTINEL_ERROR);
     await drainThroughTracker(

@@ -97356,10 +97356,7 @@
                       "type": "string"
                     },
                     "object": {
-                      "type": "string",
-                      "enum": [
-                        "chat.completion"
-                      ]
+                      "type": "string"
                     },
                     "server_tier": {
                       "type": "string"
@@ -97399,9 +97396,7 @@
                   "required": [
                     "id",
                     "choices",
-                    "created",
-                    "model",
-                    "object"
+                    "model"
                   ],
                   "additionalProperties": {}
                 }
@@ -98798,10 +98793,7 @@
                       "type": "string"
                     },
                     "object": {
-                      "type": "string",
-                      "enum": [
-                        "chat.completion"
-                      ]
+                      "type": "string"
                     },
                     "server_tier": {
                       "type": "string"
@@ -98841,9 +98833,7 @@
                   "required": [
                     "id",
                     "choices",
-                    "created",
-                    "model",
-                    "object"
+                    "model"
                   ],
                   "additionalProperties": {}
                 }
@@ -116127,10 +116117,7 @@
                                     "type": "string"
                                   },
                                   "object": {
-                                    "type": "string",
-                                    "enum": [
-                                      "chat.completion"
-                                    ]
+                                    "type": "string"
                                   },
                                   "server_tier": {
                                     "type": "string"
@@ -116170,9 +116157,7 @@
                                 "required": [
                                   "id",
                                   "choices",
-                                  "created",
-                                  "model",
-                                  "object"
+                                  "model"
                                 ],
                                 "additionalProperties": {}
                               },
@@ -132883,10 +132868,7 @@
                               "type": "string"
                             },
                             "object": {
-                              "type": "string",
-                              "enum": [
-                                "chat.completion"
-                              ]
+                              "type": "string"
                             },
                             "server_tier": {
                               "type": "string"
@@ -132926,9 +132908,7 @@
                           "required": [
                             "id",
                             "choices",
-                            "created",
-                            "model",
-                            "object"
+                            "model"
                           ],
                           "additionalProperties": {}
                         },
@@ -229518,6 +229498,9 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "ownerId": {
+                    "type": "string"
                   }
                 },
                 "required": [

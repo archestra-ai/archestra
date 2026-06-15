@@ -27636,9 +27636,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
                 }> | null;
             };
         }>;
-        created: number;
+        created?: number;
         model: string;
-        object: 'chat.completion';
+        object?: string;
         server_tier?: string;
         system_fingerprint?: string | null;
         /**
@@ -28083,9 +28083,9 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
                 }> | null;
             };
         }>;
-        created: number;
+        created?: number;
         model: string;
-        object: 'chat.completion';
+        object?: string;
         server_tier?: string;
         system_fingerprint?: string | null;
         /**
@@ -31971,9 +31971,9 @@ export type GetInteractionsResponses = {
                         }> | null;
                     };
                 }>;
-                created: number;
+                created?: number;
                 model: string;
-                object: 'chat.completion';
+                object?: string;
                 server_tier?: string;
                 system_fingerprint?: string | null;
                 /**
@@ -35359,9 +35359,9 @@ export type GetInteractionResponses = {
                     }> | null;
                 };
             }>;
-            created: number;
+            created?: number;
             model: string;
-            object: 'chat.completion';
+            object?: string;
             server_tier?: string;
             system_fingerprint?: string | null;
             /**
@@ -60749,6 +60749,7 @@ export type CreateVirtualApiKeyData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        ownerId?: string;
     };
     path?: never;
     query?: never;

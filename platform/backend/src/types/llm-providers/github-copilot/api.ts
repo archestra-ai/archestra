@@ -8,6 +8,7 @@
  * @see https://docs.github.com/en/copilot
  */
 
+import { z } from "zod";
 import {
   ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
@@ -27,6 +28,15 @@ export {
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.passthrough();
 
-/** Response schema with passthrough for Copilot-specific fields. */
+/**
+ * Response schema with passthrough for Copilot-specific fields. Copilot's
+ * responses are OpenAI-shaped but non-standard: a non-streaming completion can
+ * omit the top-level `created` and `object` fields (and `object` isn't always
+ * the literal "chat.completion"). Relax both so response serialization doesn't
+ * 500 — clients still receive Copilot's actual fields via passthrough.
+ */
 export const ChatCompletionResponseSchema =
-  OpenAIChatCompletionResponseSchema.passthrough();
+  OpenAIChatCompletionResponseSchema.extend({
+    created: z.number().optional(),
+    object: z.string().optional(),
+  }).passthrough();

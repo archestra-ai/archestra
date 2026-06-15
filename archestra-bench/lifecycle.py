@@ -149,7 +149,10 @@ class Instance:
         email = self._env.get("ARCHESTRA_AUTH_ADMIN_EMAIL", _DEFAULT_ADMIN_EMAIL)
         password = self._env.get("ARCHESTRA_AUTH_ADMIN_PASSWORD", _DEFAULT_ADMIN_PASSWORD)
         self.client.sign_in(email, password)
-        self.api_key = self.client.mint_api_key(f"bench-{self.run_id}")
+        # a short, fixed label: better-auth's apiKey plugin caps the name at 32 chars
+        # (maximumNameLength default), and the run+env identity already lives in the db name and
+        # log path. each fresh db holds exactly one key, so the name needs no run_id.
+        self.api_key = self.client.mint_api_key("archestra-bench")
 
     # === teardown steps ===
 

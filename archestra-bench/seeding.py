@@ -47,6 +47,7 @@ def ensure_provider_and_models(
     provider: Provider,
     api_key: str,
     models: list[str],
+    base_url: str | None = None,  # override the provider's default endpoint (e.g. an Anthropic-compatible gateway)
     scope: Scope = "personal",  # provider keys are owned by the (admin) user, like the e2e setup
     timeout_s: float = 180.0,
     interval_s: float = 3.0,
@@ -56,7 +57,9 @@ def ensure_provider_and_models(
     Key creation triggers a fire-and-forget sync server-side; we poll, and force a sync once if a
     requested model hasn't appeared yet."""
     client.create_llm_key(
-        LlmKeyCreate(provider=provider, scope=scope, apiKey=api_key, name=f"bench-{provider}", isPrimary=True)
+        LlmKeyCreate(
+            provider=provider, scope=scope, apiKey=api_key, baseUrl=base_url, name=f"bench-{provider}", isPrimary=True
+        )
     )
     deadline = time.monotonic() + timeout_s
     forced = False

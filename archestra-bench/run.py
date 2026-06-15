@@ -78,13 +78,16 @@ def main(
     task: str | list[str] | tuple[str, ...] | None = None,
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
+    base_url: str | None = None,
     gate_only: bool = False,
     out: str | None = None,
     run_dir: str | None = None,
 ) -> int:
     """Run the benchmark. `env`, `task`, and `model` each take one name or a comma-separated list.
 
-    `env` defaults to every environment; `task` defaults to every task in the selected envs."""
+    `env` defaults to every environment; `task` defaults to every task in the selected envs.
+    `base_url` overrides the provider's default endpoint -- e.g. point `anthropic` at an
+    Anthropic-compatible gateway (Moonshot/Kimi) to benchmark a non-Anthropic model."""
     selected = _select_envs(load_envs(_ENVS_DIR), env, task)
     models = _normalize_models(model)
 
@@ -102,7 +105,9 @@ def main(
     run_id = _run_id()
     root_run_dir = Path(run_dir) if run_dir else _default_run_dir(run_id)
     root_run_dir.mkdir(parents=True, exist_ok=True)
-    _write_run_config(root_run_dir, run_id=run_id, selected=selected, provider=provider, models=models)
+    _write_run_config(
+        root_run_dir, run_id=run_id, selected=selected, provider=provider, base_url=base_url, models=models
+    )
 
     results: list[RunResult] = []
     with BenchmarkMcp(server_name=_BENCH_MCP_NAME) as bench_mcp:
@@ -116,6 +121,7 @@ def main(
                     run_id=run_id,
                     provider=provider,
                     api_key=api_key,
+                    base_url=base_url,
                     models=models,
                 )
             )
@@ -137,6 +143,7 @@ def _run_env(
     run_id: str,
     provider: str,
     api_key: str,
+    base_url: str | None,
     models: list[str],
 ) -> list[RunResult]:
     """Boot one fresh instance for an environment, seed its surface once, run its tasks x models."""
@@ -145,7 +152,7 @@ def _run_env(
     with Instance(_repo_root(), run_id=f"{run_id}-{env_cfg.id}", log_path=log_path) as instance:
         client = instance.client
         resolved = ensure_provider_and_models(
-            client, provider=_as_provider(provider), api_key=api_key, models=models
+            client, provider=_as_provider(provider), api_key=api_key, base_url=base_url, models=models
         )
         agent_id = _ensure_agent(client, env_cfg.agent_name, env_cfg.agent_system_prompt)
         client.enable_skill_defaults()
@@ -617,6 +624,7 @@ def _write_run_config(
     run_id: str,
     selected: list[tuple[EnvConfig, list[TaskConfig]]],
     provider: str,
+    base_url: str | None,
     models: list[str],
 ) -> None:
     config: dict[str, JsonValue] = {
@@ -626,6 +634,7 @@ def _write_run_config(
             {"id": env_cfg.id, "tasks": [t.id for t in tasks]} for env_cfg, tasks in selected
         ],
         "provider": provider,
+        "base_url": base_url,
         "models": models,
         "git_commit": _git_commit(),
     }
@@ -694,12 +703,17 @@ def cli(
     task: str | list[str] | tuple[str, ...] | None = None,
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
+    base_url: str | None = None,
     gate_only: bool = False,
     out: str | None = None,
     run_dir: str | None = None,
 ) -> None:
     """Fire entrypoint that preserves `main`'s integer exit code."""
-    coloredlogs.install(level=logging.INFO, fmt="%(message)s")
+    coloredlogs.install(
+        level=logging.INFO,
+        fmt="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
     # the in-process benchmark MCP server logs transport chatter (session manager, per-request) at
     # INFO via the `mcp` library; raise its floor so it doesn't drown the harness's own progress.
     logging.getLogger("mcp").setLevel(logging.WARNING)
@@ -707,7 +721,10 @@ def cli(
     # `kill`) do the same so the instance is always torn down instead of leaking a backend + database.
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     raise SystemExit(
-        main(env=env, task=task, model=model, provider=provider, gate_only=gate_only, out=out, run_dir=run_dir)
+        main(
+            env=env, task=task, model=model, provider=provider, base_url=base_url,
+            gate_only=gate_only, out=out, run_dir=run_dir,
+        )
     )
 
 

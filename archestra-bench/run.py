@@ -36,7 +36,7 @@ import signal
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import cast
@@ -691,15 +691,18 @@ def _drive_stage(
     )
     text = _expand_runtime(stage.text, runtime)
     stream_parse_error: str | None = None
+    coalescer = _StreamCoalescer(artifacts)
     try:
         for record in client.stream_chat_records(conversation_id, text=text, files=files):
-            artifacts.append_stream(record)
+            coalescer.feed(record)
             if record.kind == "event" and record.event is not None:
                 _apply_chat_event(run, record.event)
             elif record.kind == "parse_error" and stream_parse_error is None:
                 stream_parse_error = record.reason or record.raw or "malformed chat stream data"
     except ArchestraApiError as exc:
         return _api_error_text(exc)
+    finally:
+        coalescer.flush()
     return _combine_errors(run.stream_error, _chat_parse_error(stream_parse_error))
 
 
@@ -842,16 +845,6 @@ class _RunArtifacts:
             json.dump(record, handle, allow_nan=False, sort_keys=True)
             handle.write("\n")
 
-    def append_stream(self, record: ChatStreamRecord) -> None:
-        data: dict[str, JsonValue] = {"record_kind": record.kind}
-        if record.event is not None:
-            data["event"] = record.event
-        if record.raw is not None:
-            data["raw"] = record.raw
-        if record.reason is not None:
-            data["reason"] = record.reason
-        self.append("chat_stream", data)
-
     def append_error(self, kind: str, message: str) -> None:
         self.append(kind, {"error": message})
 
@@ -869,6 +862,119 @@ class _RunArtifacts:
         path = self.path / filename
         path.write_text(text, encoding="utf-8")
         return path
+
+
+def _text_block_id(event: dict[str, JsonValue]) -> str:
+    tid = event.get("id")
+    return tid if isinstance(tid, str) else ""
+
+
+@dataclass
+class _PartialToolCall:
+    """A tool call whose input is still streaming in (`tool-input-start`/`-delta`), kept so a stream
+    that drops before `tool-input-available` still records the attempted call rather than erasing it."""
+
+    name: str | None
+    text: str = ""
+
+
+@dataclass
+class _StreamCoalescer:
+    """Fold the token-granular AI-SDK chat stream into message-level trajectory records.
+
+    The raw stream emits one event per token (`text-delta`) and per tool-input fragment
+    (`tool-input-delta`), so writing each verbatim bloats `trajectory.jsonl` to thousands of
+    near-empty lines. This buffers text deltas and emits one coalesced record per logical event,
+    covering the same event types `_apply_chat_event` consumes so the trajectory records the
+    logical events grading is driven by. Per-token deltas, keepalive/framing markers, and opaque
+    `providerMetadata` are dropped; an unknown event type passes through verbatim so a new SDK
+    event is never lost. A tool call interrupted before its input completes is flushed as a
+    `tool_call_partial` so a dropped stream leaves a record of the attempt, not silence."""
+
+    artifacts: _RunArtifacts
+    _text: dict[str, str] = field(default_factory=dict)
+    _tool_input: dict[str, _PartialToolCall] = field(default_factory=dict)
+
+    def feed(self, record: ChatStreamRecord) -> None:
+        match record.kind:
+            case "parse_error":
+                self.artifacts.append("parse_error", {"raw": record.raw, "reason": record.reason})
+            case "ignored":
+                return
+            case "event" if record.event is not None:
+                self._feed_event(record.event)
+
+    def _feed_event(self, event: dict[str, JsonValue]) -> None:
+        match event.get("type"):
+            case "text-start":
+                self._text.setdefault(_text_block_id(event), "")
+            case "text-delta":
+                delta = event.get("delta")
+                if not isinstance(delta, str):
+                    delta = event.get("text")
+                if isinstance(delta, str):
+                    tid = _text_block_id(event)
+                    self._text[tid] = self._text.get(tid, "") + delta
+            case "text-end":
+                tid = _text_block_id(event)
+                text = self._text.pop(tid, "")
+                if text:
+                    self.artifacts.append("assistant_text", {"id": tid, "text": text})
+            case "tool-input-start":
+                call_id = event.get("toolCallId")
+                if isinstance(call_id, str):
+                    name = event.get("toolName")
+                    self._tool_input[call_id] = _PartialToolCall(name=name if isinstance(name, str) else None)
+            case "tool-input-delta":
+                call_id = event.get("toolCallId")
+                fragment = event.get("inputTextDelta")
+                if isinstance(call_id, str) and isinstance(fragment, str):
+                    self._tool_input.setdefault(call_id, _PartialToolCall(name=None)).text += fragment
+            case "tool-input-available" | "tool-call":
+                call_id = event.get("toolCallId")
+                if isinstance(call_id, str):
+                    self._tool_input.pop(call_id, None)  # input completed -> the partial buffer is superseded
+                name = event.get("toolName")
+                if isinstance(name, str):
+                    self.artifacts.append(
+                        "tool_call", {"tool_call_id": call_id, "tool_name": name, "input": event.get("input")}
+                    )
+                else:  # malformed call the grader would skip -- preserve verbatim rather than fabricate one
+                    self.artifacts.append("chat_stream", {"event": event})
+            case "tool-output-available":
+                self.artifacts.append(
+                    "tool_output", {"tool_call_id": event.get("toolCallId"), "output": event.get("output")}
+                )
+            case "finish" | "finish-step":
+                reason = event.get("finishReason")
+                if isinstance(reason, str):
+                    self.artifacts.append("finish", {"finish_reason": reason})
+            case "data-token-usage":
+                usage = event.get("data")
+                if isinstance(usage, dict) and isinstance(usage.get("totalTokens"), int):
+                    self.artifacts.append("token_usage", {"total_tokens": usage["totalTokens"]})
+            case "error":
+                self._flush_text()  # the text streamed before the error -- keep that order on disk
+                text = event.get("errorText") or event.get("error")
+                self.artifacts.append("error", {"error": text if isinstance(text, str) else json.dumps(event)})
+            case "start" | "start-step" | "data-heartbeat" | "data-context-window-estimate":
+                return
+            case _:
+                self.artifacts.append("chat_stream", {"event": event})
+
+    def _flush_text(self) -> None:
+        for tid, text in self._text.items():
+            if text:
+                self.artifacts.append("assistant_text", {"id": tid, "text": text})
+        self._text.clear()
+
+    def flush(self) -> None:
+        self._flush_text()
+        for call_id, partial in self._tool_input.items():
+            self.artifacts.append(
+                "tool_call_partial", {"tool_call_id": call_id, "tool_name": partial.name, "partial_input": partial.text}
+            )
+        self._tool_input.clear()
 
 
 # === result assembly ===

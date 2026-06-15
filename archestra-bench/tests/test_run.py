@@ -7,26 +7,33 @@ survive, and the runtime expander must substitute only `{{cell}}`/`{{agent_id}}`
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from archestra_client import ArchestraApiError
 from envs import EnvConfig
+from eval_client import ChatRunResult, ChatStreamRecord
 from results import Outcome, RunResult, build_report
 from run import (
     Lane,
     _base_urls,
     _build_run_plan,
     _cell_token,
+    _drive_stage,
     _expand_runtime,
     _lane_unit,
     _parse_lanes,
+    _RunArtifacts,
     _RunCtx,
+    _StreamCoalescer,
     _surface_violations,
     _tools_to_strip,
 )
-from tasks import Task, Verifier
+from tasks import Stage, Task, Verifier
 
 _BASE = frozenset(
     {
@@ -280,3 +287,208 @@ def test_lane_unit_preserves_partial_results_and_fills_only_missing(tmp_path: Pa
     results = _lane_unit(_env_cfg(), tasks, Lane("gemini", "g"), ctx, half)()
     assert results[0] is done  # the real t1 result is kept, not clobbered
     assert results[1].task_id == "t2" and results[1].outcome is Outcome.AGENT_ERROR
+
+
+# === trajectory coalescing ===
+
+
+def _ev(**event: object) -> ChatStreamRecord:
+    return ChatStreamRecord(kind="event", event=event)
+
+
+def _coalesce(records: list[ChatStreamRecord], cell: Path, *, flush: bool = True) -> list[dict[str, object]]:
+    coalescer = _StreamCoalescer(_RunArtifacts(cell))
+    for record in records:
+        coalescer.feed(record)
+    if flush:
+        coalescer.flush()
+    path = cell / "trajectory.jsonl"
+    if not path.exists():  # nothing written -> all records were dropped as noise
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_coalesce_folds_text_deltas_into_one_assistant_text(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(type="text-start", id="0"),
+            _ev(type="text-delta", id="0", delta="Hel"),
+            _ev(type="text-delta", id="0", delta="lo "),
+            _ev(type="text-delta", id="0", delta="world"),
+            _ev(type="text-end", id="0"),
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["assistant_text"]
+    assert out[0]["text"] == "Hello world" and out[0]["id"] == "0"
+
+
+def test_coalesce_tolerates_text_delta_without_start(tmp_path: Path) -> None:
+    out = _coalesce([_ev(type="text-delta", id="0", delta="hi"), _ev(type="text-end", id="0")], tmp_path / "cell")
+    assert [r["kind"] for r in out] == ["assistant_text"]
+    assert out[0]["text"] == "hi"
+
+
+def test_coalesce_tool_input_takes_full_input_and_strips_provider_metadata(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(type="tool-input-start", toolCallId="t1", toolName="archestra__run_command"),
+            _ev(type="tool-input-delta", toolCallId="t1", inputTextDelta='{"command":'),
+            _ev(type="tool-input-delta", toolCallId="t1", inputTextDelta='"ls"}'),
+            _ev(
+                type="tool-input-available",
+                toolCallId="t1",
+                toolName="archestra__run_command",
+                input={"command": "ls"},
+                providerMetadata={"google": {"thoughtSignature": "BIG"}},
+            ),
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["tool_call"]  # the deltas fold away; the full input survives
+    call = out[0]
+    assert call["tool_call_id"] == "t1" and call["tool_name"] == "archestra__run_command"
+    assert call["input"] == {"command": "ls"} and "providerMetadata" not in call
+
+
+def test_coalesce_normalizes_tool_call_event_like_the_grader(tmp_path: Path) -> None:
+    # _apply_chat_event treats `tool-call` as a tool invocation too; the trajectory must match.
+    out = _coalesce([_ev(type="tool-call", toolName="x", input={"a": 1})], tmp_path / "cell")
+    assert [r["kind"] for r in out] == ["tool_call"]
+    assert out[0]["tool_name"] == "x" and out[0]["input"] == {"a": 1} and out[0]["tool_call_id"] is None
+
+
+def test_coalesce_passes_malformed_tool_call_through_instead_of_fabricating(tmp_path: Path) -> None:
+    # a tool event with no string toolName is one the grader skips; record it verbatim, not as a tool_call.
+    out = _coalesce([_ev(type="tool-input-available", toolCallId="t1", input={"a": 1})], tmp_path / "cell")
+    assert [r["kind"] for r in out] == ["chat_stream"] and out[0]["event"]["toolCallId"] == "t1"
+
+
+def test_coalesce_flushes_interrupted_tool_input_as_partial(tmp_path: Path) -> None:
+    # stream drops after tool-input-start/-delta, before tool-input-available: keep the attempt, not silence.
+    out = _coalesce(
+        [
+            _ev(type="tool-input-start", toolCallId="t1", toolName="archestra__run_command"),
+            _ev(type="tool-input-delta", toolCallId="t1", inputTextDelta='{"command":'),
+            _ev(type="tool-input-delta", toolCallId="t1", inputTextDelta='"ls'),
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["tool_call_partial"]
+    assert out[0]["tool_call_id"] == "t1" and out[0]["tool_name"] == "archestra__run_command"
+    assert out[0]["partial_input"] == '{"command":"ls'
+
+
+def test_coalesce_completed_tool_input_leaves_no_partial(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(type="tool-input-start", toolCallId="t1", toolName="x"),
+            _ev(type="tool-input-delta", toolCallId="t1", inputTextDelta='{"a":1}'),
+            _ev(type="tool-input-available", toolCallId="t1", toolName="x", input={"a": 1}),
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["tool_call"]  # the partial buffer was superseded; nothing left to flush
+
+
+def test_coalesce_orders_text_before_a_following_error(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(type="text-start", id="0"),
+            _ev(type="text-delta", id="0", delta="hi"),
+            _ev(type="error", errorText="boom"),
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["assistant_text", "error"]  # chronology preserved
+    assert out[0]["text"] == "hi" and out[1]["error"] == "boom"
+
+
+def test_coalesce_tool_output_strips_provider_metadata(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(
+                type="tool-output-available",
+                toolCallId="t1",
+                output="ok",
+                providerMetadata={"google": {"thoughtSignature": "BIG"}},
+            )
+        ],
+        tmp_path / "cell",
+    )
+    assert [r["kind"] for r in out] == ["tool_output"]
+    assert out[0]["output"] == "ok" and out[0]["tool_call_id"] == "t1" and "providerMetadata" not in out[0]
+
+
+def test_coalesce_drops_keepalive_and_framing_noise(tmp_path: Path) -> None:
+    out = _coalesce(
+        [
+            _ev(type="start"),
+            _ev(type="start-step"),
+            _ev(type="data-heartbeat"),
+            _ev(type="data-context-window-estimate", data={"estimatedTokens": 5}),
+            _ev(type="finish-step"),  # bare per-step marker, no finishReason
+            ChatStreamRecord(kind="ignored", raw="data: [DONE]", reason="done"),
+        ],
+        tmp_path / "cell",
+    )
+    assert out == []
+
+
+def test_coalesce_finish_step_with_reason_becomes_finish(tmp_path: Path) -> None:
+    out = _coalesce(
+        [_ev(type="finish-step", finishReason="tool-calls"), _ev(type="finish", finishReason="stop")],
+        tmp_path / "cell",
+    )
+    assert [(r["kind"], r["finish_reason"]) for r in out] == [("finish", "tool-calls"), ("finish", "stop")]
+
+
+def test_coalesce_emits_token_usage(tmp_path: Path) -> None:
+    out = _coalesce([_ev(type="data-token-usage", data={"totalTokens": 1234})], tmp_path / "cell")
+    assert [r["kind"] for r in out] == ["token_usage"] and out[0]["total_tokens"] == 1234
+
+
+def test_coalesce_passes_unknown_event_through_verbatim(tmp_path: Path) -> None:
+    # an unrecognized type (e.g. a tool error carrying errorText) is preserved, never silently dropped.
+    event = {"type": "tool-output-error", "toolCallId": "t1", "errorText": "boom"}
+    out = _coalesce([_ev(**event)], tmp_path / "cell")
+    assert [r["kind"] for r in out] == ["chat_stream"] and out[0]["event"] == event
+
+
+def test_coalesce_flush_emits_dangling_text(tmp_path: Path) -> None:
+    out = _coalesce(
+        [_ev(type="text-start", id="0"), _ev(type="text-delta", id="0", delta="partial")], tmp_path / "cell"
+    )
+    assert [r["kind"] for r in out] == ["assistant_text"] and out[0]["text"] == "partial"
+
+
+def test_coalesce_preserves_parse_error(tmp_path: Path) -> None:
+    out = _coalesce(
+        [ChatStreamRecord(kind="parse_error", raw="data: {bad", reason="boom")], tmp_path / "cell"
+    )
+    assert [r["kind"] for r in out] == ["parse_error"]
+    assert out[0]["raw"] == "data: {bad" and out[0]["reason"] == "boom"
+
+
+class _DropStreamClient:
+    """Stand-in for the chat network boundary: yields some records, then the stream drops."""
+
+    def __init__(self, records: list[ChatStreamRecord]) -> None:
+        self._records = records
+
+    def stream_chat_records(
+        self, conversation_id: str, *, text: str, files: tuple[object, ...] = ()
+    ) -> Iterator[ChatStreamRecord]:
+        yield from self._records
+        raise ArchestraApiError("POST", "http://x/api/chat", 0, "chat stream interrupted")
+
+
+def test_drive_stage_flushes_dangling_text_on_stream_drop(tmp_path: Path) -> None:
+    artifacts = _RunArtifacts(tmp_path / "cell")
+    client = _DropStreamClient([_ev(type="text-start", id="0"), _ev(type="text-delta", id="0", delta="half")])
+    run = ChatRunResult(text="")
+    error = _drive_stage(client, "conv-1", Stage(text="hello"), _task("t"), run, artifacts, {})
+    assert error is not None  # the stream drop surfaces as an error string
+    out = [json.loads(line) for line in (tmp_path / "cell" / "trajectory.jsonl").read_text().splitlines()]
+    assert [r["kind"] for r in out] == ["assistant_text"]  # flushed in the finally despite the drop
+    assert out[0]["text"] == "half"

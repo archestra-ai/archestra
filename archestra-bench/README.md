@@ -25,7 +25,7 @@ start the harness-owned benchmark MCP (submit_result) in-process
                 the benchmark MCP; create the env's agent and lock its tool surface
        -> for each task x model:
             drive the task's ordered conversation stages (user asks X -> corrects to Y),
-            saving the streamed trajectory
+            saving the trajectory as coalesced message-level events
        -> read the submission (and, for file-producing tasks, download the produced
           artifact) and verify out of band
        -> drop the database + kill the backend
@@ -158,7 +158,10 @@ gitignored); `--out` writes the markdown report to a file instead of stdout.
 
 Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per shared env (or
 `<env>__<lane>.backend.log` per isolated lane), and an `<env>/<task>__<lane>/` subdirectory per cell
-(`<lane>` is a collision-proof `provider_model-<hash>` slug) with `trajectory.jsonl`, `run.json`,
+(`<lane>` is a collision-proof `provider_model-<hash>` slug) with `trajectory.jsonl` (the chat stream
+coalesced into message-level records — `assistant_text` / `tool_call` / `tool_output` / `finish` /
+`token_usage`, plus `error` / `parse_error` / `tool_call_partial` on failures or interrupted streams —
+not the raw per-token SSE chunks), `run.json`,
 `submission.json` (the accepted bytes), `artifact.bin` (a downloaded file artifact, when any),
 `state.json` (the `BENCH_STATE` snapshot, when any), and `verifier.stdout.txt` / `verifier.stderr.txt`.
 

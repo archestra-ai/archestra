@@ -147,7 +147,7 @@
     "quick-lru": "^7.3.0",
     "safe-regex2": "5.1.0",
     "tiktoken": "^1.0.22",
-    "ws": "^8.20.1",
+    "ws": "^8.21.0",
     "zod": "catalog:"
   },
   "devDependencies": {

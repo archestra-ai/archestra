@@ -1694,7 +1694,7 @@ describe("POST /api/chat handler composition", () => {
     expect(directWrites).not.toContain("data-tool-ui-start");
   });
 
-  test("appends a retryable EmptyResponse error when a tool call never completes", async () => {
+  test("appends a retryable IncompleteToolCall error when a tool call never completes", async () => {
     const { default: ConversationChatErrorModel } = await import(
       "@/models/conversation-chat-error"
     );
@@ -1735,14 +1735,14 @@ describe("POST /api/chat handler composition", () => {
     expect(errorChunk).toBeDefined();
     expect(mergedChunks.at(-1)).toBe(errorChunk); // trailing, after model content
     const payload = JSON.parse(errorChunk?.errorText ?? "{}");
-    expect(payload.code).toBe("empty_response");
+    expect(payload.code).toBe("incomplete_tool_call");
     expect(payload.isRetryable).toBe(true);
 
     await new Promise((resolve) => setImmediate(resolve));
     const persistedErrors =
       await ConversationChatErrorModel.findByConversation(conversationId);
     expect(persistedErrors).toHaveLength(1);
-    expect(persistedErrors[0]?.error.code).toBe("empty_response");
+    expect(persistedErrors[0]?.error.code).toBe("incomplete_tool_call");
   });
 
   test("does not flag a completed tool call", async () => {

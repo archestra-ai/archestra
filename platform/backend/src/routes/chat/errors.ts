@@ -1475,19 +1475,19 @@ function createErrorResponse(
 /**
  * Build the error surfaced when a turn ends with a tool call the model started
  * streaming but never completed — nothing executes and the turn produces no
- * reply. Reuses the retryable EmptyResponse card (its "ended its turn without a
- * reply" message fits) and records the distinguishing reason for diagnostics.
+ * reply. Uses the dedicated retryable IncompleteToolCall code so telemetry and
+ * the rendered card distinguish it from a cleanly empty turn (EmptyResponse).
  */
 export function buildAbortiveTurnError(
   provider: SupportedProvider,
 ): ChatErrorResponse {
   return createErrorResponse(
-    ChatErrorCode.EmptyResponse,
+    ChatErrorCode.IncompleteToolCall,
     provider,
     undefined,
-    ChatErrorMessages[ChatErrorCode.EmptyResponse],
+    ChatErrorMessages[ChatErrorCode.IncompleteToolCall],
     "AbortiveTurn",
-    { reason: "incomplete_tool_call" },
+    undefined,
   );
 }
 

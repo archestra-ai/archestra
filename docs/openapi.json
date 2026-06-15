@@ -74628,6 +74628,7 @@
                                     "server_error",
                                     "network_error",
                                     "empty_response",
+                                    "incomplete_tool_call",
                                     "provider_auth_required",
                                     "unknown"
                                   ]
@@ -75356,6 +75357,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -76061,6 +76063,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -76807,6 +76810,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -79020,6 +79024,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -80092,6 +80097,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -81753,6 +81759,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -82482,6 +82489,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -83203,6 +83211,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -83934,6 +83943,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -103784,6 +103794,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -104683,6 +104694,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -105290,6 +105302,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -105761,6 +105774,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -106243,6 +106257,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -108548,6 +108563,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -109030,6 +109046,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -109512,6 +109529,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -109994,6 +110012,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -110476,6 +110495,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -110958,6 +110978,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -111440,6 +111461,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -111922,6 +111944,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -112393,6 +112416,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -112864,6 +112888,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113346,6 +113371,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113828,6 +113854,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -116469,6 +116496,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -116951,6 +116979,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -117659,6 +117688,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -118558,6 +118588,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -120535,6 +120566,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -121434,6 +121466,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -122041,6 +122074,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -122512,6 +122546,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -122994,6 +123029,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -125299,6 +125335,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -125781,6 +125818,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -126263,6 +126301,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -126745,6 +126784,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -127227,6 +127267,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -127709,6 +127750,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -128191,6 +128233,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -128673,6 +128716,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -129144,6 +129188,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -129615,6 +129660,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -130097,6 +130143,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -130579,6 +130626,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -133220,6 +133268,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -133702,6 +133751,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -134410,6 +134460,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -135309,6 +135360,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -206825,6 +206877,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]

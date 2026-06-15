@@ -12,9 +12,9 @@ the capabilities the migration client doesn't need but the eval does:
   - create_conversation: open a chat conversation bound to an agent (gives a conversationId,
     which is what makes the per-conversation skill sandbox + skill activation + attachment
     staging engage -- the A2A path can't thread one).
-  - run_chat / stream_chat_records: POST /api/chat and consume the server-driven model+tool
-    loop's streamed UI-message events to completion, returning the final assistant text + metadata.
-  - discover/import_github_skills: seed a realistic skill library from a public GitHub repo.
+  - stream_chat_records: POST /api/chat and yield the server-driven model+tool loop's streamed
+    UI-message events to completion (the harness folds them into a ChatRunResult per stage).
+  - discover/import_github_skills: seed an environment's skills from a public GitHub repo, pinned.
 """
 
 from __future__ import annotations
@@ -95,9 +95,14 @@ class EvalClient(ArchestraClient):
 
     # --- skills & tools ---------------------------------------------------------------------
 
-    def discover_github_skills(self, repo_url: str, *, path: str | None = None) -> list[dict[str, JsonValue]]:
-        """list the skills a public GitHub repo exposes (each has a `skillPath`)."""
-        body: dict[str, JsonValue] = {"repoUrl": repo_url}
+    def discover_github_skills(
+        self, repo_url: str, *, path: str | None = None, ref: str | None = None
+    ) -> list[dict[str, JsonValue]]:
+        """list the skills a public GitHub repo exposes (each has a `skillPath`).
+
+        `ref` pins to a commit/branch/tag via GitHub's `/tree/<ref>` URL form (the backend resolves
+        it through getCommit), so the imported surface is reproducible."""
+        body: dict[str, JsonValue] = {"repoUrl": _pin_repo_url(repo_url, ref)}
         if path is not None:
             body["path"] = path
         result = require_dict(
@@ -108,10 +113,15 @@ class EvalClient(ArchestraClient):
         return [s for s in skills if isinstance(s, dict)] if isinstance(skills, list) else []
 
     def import_github_skills(
-        self, repo_url: str, skill_paths: list[str], *, scope: str = "org"
+        self, repo_url: str, skill_paths: list[str], *, scope: str = "org", ref: str | None = None
     ) -> dict[str, JsonValue]:
-        """import the named skills from a public GitHub repo into the skill library."""
-        body: dict[str, JsonValue] = {"repoUrl": repo_url, "skillPaths": skill_paths, "scope": scope}
+        """import the named skills from a public GitHub repo into the skill library, optionally
+        pinned to a commit/branch/tag `ref` (see `discover_github_skills`)."""
+        body: dict[str, JsonValue] = {
+            "repoUrl": _pin_repo_url(repo_url, ref),
+            "skillPaths": skill_paths,
+            "scope": scope,
+        }
         return require_dict(
             self._request("POST", "/api/skills/github/import", json_body=body),
             ctx="POST /api/skills/github/import",
@@ -150,20 +160,6 @@ class EvalClient(ArchestraClient):
             body["chatApiKeyId"] = chat_api_key_id
         return require_dict(self._request("POST", "/api/chat/conversations", json_body=body),
                             ctx="POST /api/chat/conversations")
-
-    def run_chat(self, conversation_id: str, *, text: str, files: tuple[FilePart, ...] = (),
-                 timeout_s: float = DEFAULT_CHAT_TIMEOUT_S) -> ChatRunResult:
-        """send one user message and drive the server-side model+tool loop to completion.
-
-        completion is the stream's EOF: the backend holds the response open for the whole run
-        and closes it when finished, so we drain every event rather than stopping on the first
-        text/step finish (intermediate tool steps also finish). an `error` event is recorded but
-        does not raise -- the caller decides what a non-clean finish means for the task."""
-        result = ChatRunResult(text="")
-        for record in self.stream_chat_records(conversation_id, text=text, files=files, timeout_s=timeout_s):
-            if record.kind == "event" and record.event is not None:
-                _apply_chat_event(result, record.event)
-        return result
 
     def stream_chat_records(self, conversation_id: str, *, text: str, files: tuple[FilePart, ...] = (),
                             timeout_s: float = DEFAULT_CHAT_TIMEOUT_S) -> Iterator[ChatStreamRecord]:
@@ -257,3 +253,10 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
     raw = exc.read()
     charset = exc.headers.get_content_charset() if exc.headers else None
     return raw.decode(charset or "utf-8", errors="replace")
+
+
+def _pin_repo_url(repo_url: str, ref: str | None) -> str:
+    """Pin a GitHub repo URL to a ref using the `/tree/<ref>` form the backend's parseRepoUrl reads."""
+    if ref is None:
+        return repo_url
+    return f"{repo_url.rstrip('/')}/tree/{ref}"

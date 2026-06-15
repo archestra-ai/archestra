@@ -57,6 +57,7 @@ class Instance:
     client: EvalClient = field(init=False)
     _proc: subprocess.Popen[bytes] | None = field(init=False, default=None)
     _db_name: str = field(init=False, default="")
+    _database_created: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self._platform = self.repo_root / "platform"
@@ -88,8 +89,12 @@ class Instance:
 
     def _create_database(self) -> None:
         logger.info("creating benchmark database %s", self._db_name)
-        with psycopg.connect(libpq_url(self._maint_db_url), autocommit=True) as conn:
-            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self._db_name)))
+        try:
+            with psycopg.connect(libpq_url(self._maint_db_url), autocommit=True) as conn:
+                conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self._db_name)))
+        except psycopg.OperationalError as exc:
+            raise RuntimeError(shared_postgres_unavailable_message(self._maint_db_url)) from exc
+        self._database_created = True
 
     def _migrate(self) -> None:
         logger.info("migrating %s", self._db_name)
@@ -164,7 +169,7 @@ class Instance:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
 
     def _drop_database(self) -> None:
-        if not self._db_name:
+        if not self._database_created:
             return
         logger.info("dropping benchmark database %s", self._db_name)
         try:
@@ -174,6 +179,7 @@ class Instance:
                     (self._db_name,),
                 )
                 conn.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(self._db_name)))
+            self._database_created = False
         except psycopg.Error:
             logger.exception("failed to drop benchmark database %s", self._db_name)
 
@@ -220,6 +226,23 @@ def libpq_url(db_url: str) -> str:
 def with_dbname(db_url: str, dbname: str) -> str:
     """Return `db_url` with its database name replaced, preserving query params (e.g. ?schema=public)."""
     return urllib.parse.urlparse(db_url)._replace(path=f"/{dbname}").geturl()
+
+
+def shared_postgres_unavailable_message(db_url: str) -> str:
+    """Human-safe diagnostic for the shared Postgres dependency, without leaking credentials."""
+    return (
+        f"cannot connect to shared Archestra Postgres at {redacted_db_location(db_url)}; "
+        "start the dev stack from platform/ with ARCHESTRA_CODE_RUNTIME_ENABLED=true and `tilt up`, "
+        "or restore the configured Postgres port-forward"
+    )
+
+
+def redacted_db_location(db_url: str) -> str:
+    parsed = urllib.parse.urlparse(db_url)
+    host = parsed.hostname or "<unknown-host>"
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    database = parsed.path.lstrip("/") or "<unknown-database>"
+    return f"{host}{port}/{database}"
 
 
 def build_backend_env(

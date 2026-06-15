@@ -40,7 +40,7 @@ class VerifyOutcome:
 def run_verifier(spec: VerifierSpec, upstream_dir: Path, report_bytes: bytes,
                  *, timeout_s: float = 900.0) -> VerifyOutcome:
     """verify an agent-produced report against the task's ground-truth verifier."""
-    with tempfile.TemporaryDirectory(prefix="skills-eval-verify-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="archestra-bench-verify-") as tmp:
         workdir = Path(tmp)
         python = _resolve_python(spec.deps, workdir)
         test_path, env = _stage(spec, upstream_dir, workdir, report_bytes)
@@ -54,7 +54,7 @@ def run_gate(spec: VerifierSpec, upstream_dir: Path, *, timeout_s: float = 900.0
     raises if the task declares no oracle."""
     if spec.oracle_file is None:
         raise ValueError("task has no oracle to run a fidelity gate against")
-    with tempfile.TemporaryDirectory(prefix="skills-eval-gate-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="archestra-bench-gate-") as tmp:
         workdir = Path(tmp)
         python = _resolve_python(spec.deps, workdir)
         report_bytes = _run_oracle(spec, upstream_dir, workdir, python=python, timeout_s=timeout_s)
@@ -62,7 +62,10 @@ def run_gate(spec: VerifierSpec, upstream_dir: Path, *, timeout_s: float = 900.0
         return _run_pytest(test_path, env=env, python=python, timeout_s=timeout_s)
 
 
-def render_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path) -> str:
+# === internal ===
+
+
+def _render_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path) -> str:
     """the oracle script with its hardcoded paths remapped onto the gate's working dir."""
     if spec.oracle_file is None:
         raise ValueError("task has no oracle")
@@ -74,14 +77,11 @@ def render_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path) -> str:
     return apply_replacements(text, replacements)
 
 
-# === internal ===
-
-
 def _resolve_python(deps: tuple[str, ...], workdir: Path) -> str:
-    """the interpreter to verify with: an ephemeral uv env for real tasks, else this one.
+    """the interpreter to verify with: an ephemeral uv env for tasks with deps, else this one.
 
-    a task with no deps (used by the offline tests) runs under the current interpreter so the
-    orchestration is exercised without uv or network."""
+    a task with no deps (e.g. the `basics` env) runs under the current interpreter, so a no-dep
+    verifier needs neither uv nor network."""
     if not deps:
         return sys.executable
     return _build_uv_env(deps, workdir / ".venv")
@@ -127,9 +127,8 @@ def _stage(spec: VerifierSpec, upstream_dir: Path, workdir: Path,
 def _run_pytest(test_path: Path, *, env: dict[str, str], python: str,
                 timeout_s: float) -> VerifyOutcome:
     """run pytest on a single file; exit 0 is a pass, any nonzero is a fail."""
-    # drop host vars that would let the surrounding environment change verifier behavior:
-    # import path, injected pytest options, and pytest/coverage state from an outer test run
-    # (the offline suite invokes this under pytest). keeps the verdict reproducible.
+    # drop host vars that would let the surrounding environment change verifier behavior: the
+    # import path and any injected pytest/coverage state. keeps the verdict reproducible.
     full_env = {
         k: v
         for k, v in os.environ.items()
@@ -158,7 +157,7 @@ def _run_oracle(spec: VerifierSpec, upstream_dir: Path, workdir: Path, *,
     """run the remapped oracle to produce report.json in the gate workdir; return its bytes."""
 
     shutil.copyfile(upstream_dir / spec.data_file, workdir / _DATA_NAME)
-    script = render_oracle(spec, upstream_dir, workdir)
+    script = _render_oracle(spec, upstream_dir, workdir)
     script_path = workdir / "oracle.sh"
     script_path.write_text(script, encoding="utf-8")
     proc = subprocess.run(

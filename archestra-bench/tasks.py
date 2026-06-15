@@ -1,21 +1,19 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """task model + adaptation: turn a benchmark task definition into upload-ready, send-ready pieces.
 
 A task is an ordered list of conversation **stages** (a "user asks X" turn, then optional "user
-corrects to Y" turns). The agent solves the task with whatever tools/skills it has and hands in its
-answer by calling the benchmark MCP's `submit_result` tool -- so a task also declares the JSON-schema
-that answer must match (`result_schema`).
+corrects to Y" turns). The agent solves the task with whatever tools/skills its environment provides
+and hands in its answer by calling the benchmark MCP's `submit_result` tool -- so a task also
+declares the JSON-schema that answer must match (`result_schema`).
 
-Fixtures a task can seed:
-  - skills: bundled SKILL.md (+files) imported before the run;
-  - mcps: extra MCP servers the agent may use (seeded the same way as the benchmark MCP).
+Skills and MCP fixtures are declared at the **environment** level (see envs.py), not per task. A
+task may still seed its own MCP fixtures via `mcps`.
 
 The verifier + oracle assets are NOT staged anywhere the agent can reach -- they run in the harness
-against the submitted bytes (anti-cheating). `adapt_task` is pure given an UpstreamFs reader, so it
-is fully unit-testable with no live instance.
+against the submitted bytes (anti-cheating). `adapt_task` is pure given an UpstreamFs reader.
 """
 
 from __future__ import annotations
@@ -62,14 +60,6 @@ class StageSpec:
 
 
 @dataclass(frozen=True)
-class SkillSource:
-    """a skill bundle to import for benchmark runs."""
-
-    name: str
-    dir: str  # dir relative to upstream/, containing SKILL.md (+ optional files)
-
-
-@dataclass(frozen=True)
 class McpFixture:
     """an extra MCP server the agent may use, seeded as a remote catalog item (by URL)."""
 
@@ -105,7 +95,6 @@ class TaskConfig:
     upstream_dir: Path  # absolute path to the task's upstream/ dir
     stages: tuple[StageSpec, ...]
     result_schema: dict[str, Any]  # JSON-schema the submitted result must match
-    skills: tuple[SkillSource, ...]
     verifier: VerifierSpec
     mcps: tuple[McpFixture, ...] = ()
     max_format_attempts: int = 3  # submit_result self-correction budget
@@ -129,17 +118,9 @@ class AdaptedStage:
 
 
 @dataclass(frozen=True)
-class AdaptedSkill:
-    name: str
-    skill_markdown: str
-    files: tuple[tuple[str, bytes], ...]  # (path-relative-to-skill-dir, bytes)
-
-
-@dataclass(frozen=True)
 class AdaptedTask:
     id: str
     stages: tuple[AdaptedStage, ...]
-    skills: tuple[AdaptedSkill, ...]
     mcps: tuple[McpFixture, ...]
     result_schema: dict[str, Any]
     verifier: VerifierSpec
@@ -151,8 +132,6 @@ class UpstreamFs(Protocol):
 
     def read(self, rel_path: str) -> bytes: ...
 
-    def list_files(self, rel_dir: str) -> list[str]: ...
-
 
 def apply_replacements(text: str, replacements: tuple[TextReplacement, ...]) -> str:
     """apply ordered literal substitutions; later replacements see earlier output."""
@@ -163,11 +142,9 @@ def apply_replacements(text: str, replacements: tuple[TextReplacement, ...]) -> 
 
 def adapt_task(config: TaskConfig, fs: UpstreamFs) -> AdaptedTask:
     stages = tuple(_adapt_stage(stage, fs) for stage in config.stages)
-    skills = tuple(_adapt_skill(s, fs) for s in config.skills)
     return AdaptedTask(
         id=config.id,
         stages=stages,
-        skills=skills,
         mcps=config.mcps,
         result_schema=config.result_schema,
         verifier=config.verifier,
@@ -184,10 +161,6 @@ class FsUpstream:
     def read(self, rel_path: str) -> bytes:
         return (self._root / rel_path).read_bytes()
 
-    def list_files(self, rel_dir: str) -> list[str]:
-        base = self._root / rel_dir
-        return sorted(str(p.relative_to(self._root)) for p in base.rglob("*") if p.is_file())
-
 
 def _adapt_stage(stage: StageSpec, fs: UpstreamFs) -> AdaptedStage:
     parts: list[str] = []
@@ -201,14 +174,3 @@ def _adapt_stage(stage: StageSpec, fs: UpstreamFs) -> AdaptedStage:
         AdaptedFile(dest=f.dest, content=fs.read(f.upstream), mime_type=f.mime_type) for f in stage.files
     )
     return AdaptedStage(message=message, files=files)
-
-
-def _adapt_skill(source: SkillSource, fs: UpstreamFs) -> AdaptedSkill:
-    skill_md_path = str(PurePosixPath(source.dir) / "SKILL.md")
-    skill_markdown = fs.read(skill_md_path).decode("utf-8")
-    files = tuple(
-        (str(PurePosixPath(rel).relative_to(source.dir)), fs.read(rel))
-        for rel in fs.list_files(source.dir)
-        if rel != skill_md_path
-    )
-    return AdaptedSkill(name=source.name, skill_markdown=skill_markdown, files=files)

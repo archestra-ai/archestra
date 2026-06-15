@@ -1,0 +1,120 @@
+{
+  "type": "object",
+  "required": [
+    "summary",
+    "vehicles",
+    "stations"
+  ],
+  "properties": {
+    "summary": {
+      "type": "object",
+      "required": [
+        "objective",
+        "travel_distance_miles",
+        "unmet_rebalancing_penalty",
+        "total_unmet_rebalancing_amount"
+      ],
+      "properties": {
+        "objective": {
+          "type": "number"
+        },
+        "travel_distance_miles": {
+          "type": "number"
+        },
+        "unmet_rebalancing_penalty": {
+          "type": "number"
+        },
+        "total_unmet_rebalancing_amount": {
+          "type": "number"
+        }
+      }
+    },
+    "vehicles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "vehicle_id",
+          "start_load",
+          "route",
+          "stops",
+          "end_load"
+        ],
+        "properties": {
+          "vehicle_id": {
+            "type": "number"
+          },
+          "start_load": {
+            "type": "number"
+          },
+          "route": {
+            "type": "array"
+          },
+          "end_load": {
+            "type": "number"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "station_id",
+                "bikes_picked_up",
+                "bikes_dropped_off",
+                "load_after_stop"
+              ],
+              "properties": {
+                "station_id": {
+                  "type": "number"
+                },
+                "bikes_picked_up": {
+                  "type": "number"
+                },
+                "bikes_dropped_off": {
+                  "type": "number"
+                },
+                "load_after_stop": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "stations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "station_id",
+          "net_rebalancing_target",
+          "total_bikes_picked_up",
+          "total_bikes_dropped_off",
+          "net_bike_change",
+          "unmet_rebalancing_amount"
+        ],
+        "properties": {
+          "station_id": {
+            "type": "number"
+          },
+          "net_rebalancing_target": {
+            "type": "number"
+          },
+          "total_bikes_picked_up": {
+            "type": "number"
+          },
+          "total_bikes_dropped_off": {
+            "type": "number"
+          },
+          "net_bike_change": {
+            "type": "number"
+          },
+          "unmet_rebalancing_amount": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

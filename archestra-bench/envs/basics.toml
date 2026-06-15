@@ -1,0 +1,71 @@
+id = "basics"
+name = "Basics"
+
+[agent]
+system_prompt = "You are an expert software engineer completing a benchmark task."
+
+# A trivial multi-turn task: the user asks for one thing, then corrects to another. No skills or
+# verifier deps -- exercises the multi-stage conversation + submit_result + out-of-band verify path.
+[[tasks]]
+id = "multistage-demo"
+upstream_dir = "tasks/multistage-demo/upstream"
+max_format_attempts = 3
+
+  [[tasks.stages]]
+  text = """Two integers: a = 6 and b = 7. Add them together and submit your answer by calling the `submit_result` tool with `result = {"sum": <number>}`. When you have your final answer, submit it by calling the `submit_result` tool with the report object as the `result` argument -- a single JSON object in exactly the format described above. Do not write a file; call `submit_result`. If the tool reports a format problem, fix it and call `submit_result` again."""
+
+  [[tasks.stages]]
+  text = """Correction: I actually need the PRODUCT of a and b (6 and 7), not the sum. Submit the corrected answer with `result = {"product": <number>}`."""
+
+  [tasks.result_schema]
+  type = "object"
+  required = ["product"]
+  additionalProperties = false
+
+    [tasks.result_schema.properties.product]
+    type = "number"
+
+  [tasks.verifier]
+  deps = []
+  test_file = "tests/test_outputs.py"
+  data_file = "environment/data.json"
+  report_env = "DEMO_REPORT"
+  data_env = "DEMO_DATA"
+
+# A simple single-stage sandbox task: read a staged JSON file, compute basic stats, submit.
+[[tasks]]
+id = "list-stats"
+upstream_dir = "tasks/list-stats/upstream"
+
+  [[tasks.stages]]
+  text = """A JSON file with a list of integers under the key `numbers` is available at `/home/sandbox/attachments/data.json`. Use the sandbox tools to read it and compute the sum, count, minimum, and maximum of the list. Submit your answer with `result = {"sum": <int>, "count": <int>, "min": <int>, "max": <int>}`.
+
+When you have your final answer, submit it by calling the `submit_result` tool with the report object as the `result` argument -- a single JSON object in exactly the format described above. Do not write a file; call `submit_result`. If the tool reports a format problem, fix it and call `submit_result` again."""
+
+    [[tasks.stages.files]]
+    upstream = "environment/data.json"
+    dest = "/home/sandbox/attachments/data.json"
+    mime_type = "application/json"
+
+  [tasks.result_schema]
+  type = "object"
+  required = ["sum", "count", "min", "max"]
+
+    [tasks.result_schema.properties.sum]
+    type = "number"
+
+    [tasks.result_schema.properties.count]
+    type = "number"
+
+    [tasks.result_schema.properties.min]
+    type = "number"
+
+    [tasks.result_schema.properties.max]
+    type = "number"
+
+  [tasks.verifier]
+  deps = []
+  test_file = "tests/test_outputs.py"
+  data_file = "environment/data.json"
+  report_env = "LIST_STATS_REPORT"
+  data_env = "LIST_STATS_DATA"

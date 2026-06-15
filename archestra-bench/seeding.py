@@ -1,13 +1,12 @@
 """Seed a fresh Archestra instance with everything a benchmark run needs the agent to have:
 
   - a real LLM provider key + synced models (so the agent can actually run);
-  - the task's bundled skills;
-  - a realistic distractor skill library imported from a public GitHub repo (so the agent's skill
-    surface resembles a real instance, not just the one task);
-  - the task's fixture MCP servers, registered exactly like the benchmark MCP.
+  - the environment's skills, imported from GitHub pinned to a commit/branch/tag;
+  - the environment's fixture MCP servers, registered exactly like the benchmark MCP.
 
-Seeding is loud: a key whose connection test fails, a model that never syncs, or an MCP whose tools
-never appear is a hard error, never a silently degraded run.
+Seeding is loud: a key whose connection test fails, a model that never syncs, a skill ref that
+resolves to nothing, or an MCP whose tools never appear is a hard error, never a silently degraded
+run.
 """
 
 from __future__ import annotations
@@ -20,12 +19,10 @@ from dataclasses import dataclass
 from archestra_client import (
     CatalogCreate,
     LlmKeyCreate,
-    SkillCreate,
-    SkillFile,
 )
 from contracts import JsonValue, Provider, Scope
 from eval_client import EvalClient
-from tasks import AdaptedSkill, McpFixture
+from tasks import McpFixture
 
 logger = logging.getLogger(__name__)
 
@@ -77,31 +74,23 @@ def ensure_provider_and_models(
         time.sleep(interval_s)
 
 
-def seed_task_skills(client: EvalClient, skills: tuple[AdaptedSkill, ...], *, scope: Scope = "org") -> None:
-    """Create the task's bundled skills. The instance is fresh, so no dedup is needed."""
-    for skill in skills:
-        logger.info("seeding task skill %s", skill.name)
-        client.create_skill(
-            SkillCreate(
-                content=skill.skill_markdown,
-                scope=scope,
-                files=[SkillFile(path=path, content=data.decode("utf-8")) for path, data in skill.files],
-            )
-        )
+def seed_skill_ref(
+    client: EvalClient, *, repo: str, path: str | None, ref: str, cap: int = 10, scope: Scope = "org"
+) -> list[str]:
+    """Import an environment's skills from a public GitHub repo, pinned to `ref` (commit/branch/tag).
 
-
-def seed_realistic_skills(client: EvalClient, *, repo_url: str, cap: int = 10) -> list[str]:
-    """Import up to `cap` skills from a public GitHub repo to make the agent's library realistic."""
-    discovered = client.discover_github_skills(repo_url)
-    paths = [path for s in discovered if isinstance(path := s.get("skillPath"), str)]
+    Discovers the skills under `path` at the pinned ref and imports up to `cap` of them. A ref that
+    resolves to no skills is a hard error -- a misconfigured environment, not a degraded run."""
+    discovered = client.discover_github_skills(repo, path=path, ref=ref)
+    paths = [p for s in discovered if isinstance(p := s.get("skillPath"), str)]
     if not paths:
-        logger.warning("no skills discovered in %s; skipping realistic seeding", repo_url)
-        return []
+        where = f"{repo}@{ref}" + (f" under {path!r}" if path else "")
+        raise SystemExit(f"no skills discovered in {where}; refusing to run a misconfigured environment")
     selected = paths[:cap]
     if len(paths) > cap:
-        logger.info("importing %d of %d skills from %s (capped)", cap, len(paths), repo_url)
-    client.import_github_skills(repo_url, selected, scope="org")
-    logger.info("imported %d realistic skills from %s", len(selected), repo_url)
+        logger.info("importing %d of %d skills from %s@%s (capped)", cap, len(paths), repo, ref)
+    client.import_github_skills(repo, selected, scope=scope, ref=ref)
+    logger.info("imported %d skills from %s@%s", len(selected), repo, ref)
     return selected
 
 

@@ -1,17 +1,18 @@
-"""Boot a fresh isolated Archestra, seed fixtures, run benchmark tasks, and verify out of band.
+"""Run env-configured benchmark environments against a fresh isolated Archestra, verify out of band.
 
-Per invocation the harness:
-  - starts the harness-owned benchmark MCP (`submit_result`) in-process;
+The harness starts the harness-owned benchmark MCP (`submit_result`) in-process, then for each
+selected environment (see envs.py):
   - boots a fresh backend on a new port over a fresh, migrated database, reusing the dev stack's
     shared Postgres + Dagger engine (see lifecycle.py);
-  - seeds an LLM provider key + models, the task skills, a realistic GitHub skill library, the task
-    fixture MCPs, and the benchmark MCP, then locks the eval agent's tool surface;
+  - seeds an LLM provider key + models, the env's web-pinned skills, its MCP fixtures, and the
+    benchmark MCP, then creates the env's agent and locks its tool surface;
   - drives each task's multi-stage conversation per model, capturing the trajectory;
   - reads the submitted result from the benchmark MCP and verifies its bytes out of band;
-  - writes per-cell artifacts + an aggregated report, and tears the instance down.
+  - tears the instance down.
+Results are written per cell and aggregated by environment and by task.
 
   export ANTHROPIC_API_KEY=<key>
-  uv run run.py --task bike-rebalance --model claude-sonnet-4-6
+  uv run run.py --env optimization --model claude-sonnet-4-6
 """
 
 from __future__ import annotations
@@ -28,8 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-# reuse the migration-kit zero-dependency client by importing it off sys.path (no extraction);
-# tests get this via tests/conftest.py, direct execution gets it here.
+# reuse the migration-kit zero-dependency client by importing it off sys.path (no extraction).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "migration-kit" / "scripts"))
 
 import coloredlogs
@@ -38,6 +38,7 @@ import fire
 from archestra_client import AgentCreate, ArchestraApiError
 from benchmark_mcp import BenchmarkMcp, SubmissionAccepted, SubmissionFormatFailed
 from contracts import JsonValue, Provider
+from envs import EnvConfig, load_envs
 from eval_client import ChatRunResult, ChatStreamRecord, EvalClient, FilePart, _apply_chat_event
 from lifecycle import Instance
 from results import GateResult, Outcome, RunResult, aggregate, build_report, render_markdown
@@ -47,20 +48,16 @@ from seeding import (
     ensure_provider_and_models,
     register_remote_mcp,
     seed_mcp_fixtures,
-    seed_realistic_skills,
-    seed_task_skills,
+    seed_skill_ref,
 )
-from task_configs import TASKS
-from tasks import AdaptedStage, AdaptedTask, FsUpstream, TaskConfig, adapt_task
+from tasks import AdaptedStage, AdaptedTask, FsUpstream, McpFixture, TaskConfig, adapt_task
 from verify import VerifyOutcome, run_gate, run_verifier
 
 logger = logging.getLogger(__name__)
 
-_EVAL_AGENT_NAME = "skills-eval-agent"
-_EVAL_AGENT_SYSTEM_PROMPT = "You are an expert software engineer completing a benchmark task."
+_ENVS_DIR = Path(__file__).resolve().parent / "envs"
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 _DEFAULT_PROVIDER = "anthropic"
-_REALISTIC_SKILLS_REPO = "github.com/arsenyinfo/skills"
 _BENCH_MCP_NAME = "benchmark"
 _SUBMIT_TOOL_SUFFIX = "__submit_result"
 
@@ -77,59 +74,51 @@ _MUTATING_SKILL_TOOL_SHORT_NAMES = ("create_skill", "update_skill")
 
 
 def main(
-    task: str = "bike-rebalance",
+    env: str | list[str] | tuple[str, ...] | None = None,
+    task: str | list[str] | tuple[str, ...] | None = None,
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
     gate_only: bool = False,
     out: str | None = None,
     run_dir: str | None = None,
 ) -> int:
-    """Run the benchmark. `task` and `model` may each be one name or a comma-separated list."""
-    configs = _resolve_tasks(task)
+    """Run the benchmark. `env`, `task`, and `model` each take one name or a comma-separated list.
+
+    `env` defaults to every environment; `task` defaults to every task in the selected envs."""
+    selected = _select_envs(load_envs(_ENVS_DIR), env, task)
     models = _normalize_models(model)
 
     if gate_only:
-        gate = [_run_fidelity_gate(config) for config in configs]
+        gate = [_run_fidelity_gate(env_cfg.id, config) for env_cfg, configs in selected for config in configs]
         _write_report(render_markdown([], gate), out)
-        return 0 if all(g.passed for g in gate) else 1
+        # only oracle-bearing tasks are gradeable; a selection with no gradeable gate (all N/A)
+        # has verified nothing, so it must not exit 0.
+        applicable = [g for g in gate if g.passed is not None]
+        if not applicable:
+            logger.warning("no selected task has an oracle; nothing to gate")
+        return 0 if applicable and all(g.passed for g in applicable) else 1
 
     api_key = _provider_key_from_env(provider)
     run_id = _run_id()
     root_run_dir = Path(run_dir) if run_dir else _default_run_dir(run_id)
     root_run_dir.mkdir(parents=True, exist_ok=True)
-    _write_run_config(root_run_dir, run_id=run_id, tasks=[c.id for c in configs], provider=provider, models=models)
+    _write_run_config(root_run_dir, run_id=run_id, selected=selected, provider=provider, models=models)
 
     results: list[RunResult] = []
     with BenchmarkMcp(server_name=_BENCH_MCP_NAME) as bench_mcp:
-        with Instance(_repo_root(), run_id=run_id, log_path=root_run_dir / "backend.log") as instance:
-            client = instance.client
-            resolved = ensure_provider_and_models(
-                client, provider=_as_provider(provider), api_key=api_key, models=models
+        for env_cfg, configs in selected:
+            results.extend(
+                _run_env(
+                    env_cfg=env_cfg,
+                    configs=configs,
+                    bench_mcp=bench_mcp,
+                    root_run_dir=root_run_dir,
+                    run_id=run_id,
+                    provider=provider,
+                    api_key=api_key,
+                    models=models,
+                )
             )
-            agent_id = _ensure_agent(client)
-            client.enable_skill_defaults()
-            submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url())
-            seed_realistic_skills(client, repo_url=_REALISTIC_SKILLS_REPO)
-
-            for config in configs:
-                adapted = adapt_task(config, FsUpstream(config.upstream_dir))
-                seed_task_skills(client, adapted.skills)
-                _seed_task_mcps(client, agent_id, adapted)
-                for model_name in models:
-                    logger.info("running %s / %s", adapted.id, model_name)
-                    results.append(
-                        _run_one(
-                            client=client,
-                            bench_mcp=bench_mcp,
-                            submit_tool=submit_tool,
-                            root_run_dir=root_run_dir,
-                            agent_id=agent_id,
-                            adapted=adapted,
-                            config=config,
-                            model_name=model_name,
-                            resolved=resolved[model_name],
-                        )
-                    )
 
     report = render_markdown(build_report(results))
     _write_report(report, out)
@@ -137,6 +126,53 @@ def main(
         json.dumps(aggregate(results).to_json(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return 0 if all(r.verifier_passed for r in results) else 1
+
+
+def _run_env(
+    *,
+    env_cfg: EnvConfig,
+    configs: list[TaskConfig],
+    bench_mcp: BenchmarkMcp,
+    root_run_dir: Path,
+    run_id: str,
+    provider: str,
+    api_key: str,
+    models: list[str],
+) -> list[RunResult]:
+    """Boot one fresh instance for an environment, seed its surface once, run its tasks x models."""
+    results: list[RunResult] = []
+    log_path = root_run_dir / f"{_slug(env_cfg.id)}.backend.log"
+    with Instance(_repo_root(), run_id=f"{run_id}-{env_cfg.id}", log_path=log_path) as instance:
+        client = instance.client
+        resolved = ensure_provider_and_models(
+            client, provider=_as_provider(provider), api_key=api_key, models=models
+        )
+        agent_id = _ensure_agent(client, env_cfg.agent_name, env_cfg.agent_system_prompt)
+        client.enable_skill_defaults()
+        submit_tool = _setup_agent_tools(client, agent_id, bench_mcp.base_url())
+        for sref in env_cfg.skills:
+            seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
+        adapteds = [adapt_task(config, FsUpstream(config.upstream_dir)) for config in configs]
+        _seed_env_mcps(client, agent_id, env_cfg, adapteds)
+
+        for config, adapted in zip(configs, adapteds):
+            for model_name in models:
+                logger.info("running %s / %s / %s", env_cfg.id, adapted.id, model_name)
+                results.append(
+                    _run_one(
+                        client=client,
+                        bench_mcp=bench_mcp,
+                        submit_tool=submit_tool,
+                        root_run_dir=root_run_dir,
+                        env_id=env_cfg.id,
+                        agent_id=agent_id,
+                        adapted=adapted,
+                        config=config,
+                        model_name=model_name,
+                        resolved=resolved[model_name],
+                    )
+                )
+    return results
 
 
 # === per-cell run ===
@@ -148,15 +184,17 @@ def _run_one(
     bench_mcp: BenchmarkMcp,
     submit_tool: str,
     root_run_dir: Path,
+    env_id: str,
     agent_id: str,
     adapted: AdaptedTask,
     config: TaskConfig,
     model_name: str,
     resolved: ResolvedModel,
 ) -> RunResult:
-    artifacts = _RunArtifacts(root_run_dir / _run_subdir(adapted.id, model_name))
+    artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, adapted.id, model_name))
     artifact_paths: dict[str, JsonValue] = {}
     metadata: dict[str, JsonValue] = {
+        "env_id": env_id,
         "task_id": adapted.id,
         "model": model_name,
         "model_id": resolved.model_id,
@@ -183,12 +221,12 @@ def _run_one(
     try:
         conversation = client.create_conversation(
             agent_id,
-            title=f"{adapted.id}/{model_name}",
+            title=f"{env_id}/{adapted.id}/{model_name}",
             model_id=resolved.model_id,
             chat_api_key_id=resolved.api_key_id,
         )
     except ArchestraApiError as exc:
-        return _agent_error(adapted, model_name, _api_error_text(exc), artifacts, metadata, run=None)
+        return _agent_error(env_id, adapted, model_name, _api_error_text(exc), artifacts, metadata, run=None)
 
     conversation_id = _require_str(conversation, "id")
     metadata["conversation_id"] = conversation_id
@@ -212,12 +250,13 @@ def _run_one(
     submission = bench_mcp.take_submission()
     if isinstance(submission, SubmissionFormatFailed):
         return _finish(
-            adapted, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata, format_attempts=submission.attempts
+            env_id, adapted, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
+            format_attempts=submission.attempts,
         )
     if submission is None:
         if stage_error is not None:
-            return _agent_error(adapted, model_name, stage_error, artifacts, metadata, run=run)
-        return _finish(adapted, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0)
+            return _agent_error(env_id, adapted, model_name, stage_error, artifacts, metadata, run=run)
+        return _finish(env_id, adapted, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0)
 
     assert isinstance(submission, SubmissionAccepted)
     metadata["format_attempts"] = submission.attempts
@@ -231,6 +270,7 @@ def _run_one(
     if not outcome.passed:
         logger.info("  verifier failed (exit %s)", outcome.exit_code)
     return _finish(
+        env_id,
         adapted,
         model_name,
         Outcome.PASSED if outcome.passed else Outcome.FAILED,
@@ -268,12 +308,12 @@ def _drive_stage(
 # === setup ===
 
 
-def _ensure_agent(client: EvalClient) -> str:
-    existing = [a for a in client.list_agents(name=_EVAL_AGENT_NAME) if a.get("name") == _EVAL_AGENT_NAME]
+def _ensure_agent(client: EvalClient, name: str, system_prompt: str) -> str:
+    existing = [a for a in client.list_agents(name=name) if a.get("name") == name]
     if existing:
         return _require_str(existing[0], "id")
     created = client.create_agent(
-        AgentCreate(name=_EVAL_AGENT_NAME, scope="org", agentType="agent", systemPrompt=_EVAL_AGENT_SYSTEM_PROMPT)
+        AgentCreate(name=name, scope="org", agentType="agent", systemPrompt=system_prompt)
     )
     return _require_str(created, "id")
 
@@ -300,10 +340,22 @@ def _strip_mutating_skill_tools(client: EvalClient, agent_id: str) -> None:
             client.unassign_tool(agent_id, _require_str(tool, "id"))
 
 
-def _seed_task_mcps(client: EvalClient, agent_id: str, adapted: AdaptedTask) -> None:
-    """Register a task's fixture MCPs, assigning their tools to the eval agent at install time."""
-    if adapted.mcps:
-        seed_mcp_fixtures(client, adapted.mcps, agent_ids=[agent_id])
+def _seed_env_mcps(
+    client: EvalClient, agent_id: str, env_cfg: EnvConfig, adapteds: list[AdaptedTask]
+) -> None:
+    """Register the env's fixture MCPs (env-level plus every task's), deduped by name, once -- so the
+    agent runs against the env's full surface and a fixture is never registered twice."""
+    fixtures: dict[str, McpFixture] = {}
+    for mcp in (*env_cfg.mcps, *(m for adapted in adapteds for m in adapted.mcps)):
+        existing = fixtures.get(mcp.name)
+        if existing is not None and existing.server_url != mcp.server_url:
+            raise SystemExit(
+                f"env {env_cfg.id!r}: MCP name {mcp.name!r} maps to two URLs "
+                f"({existing.server_url} and {mcp.server_url})"
+            )
+        fixtures.setdefault(mcp.name, mcp)
+    if fixtures:
+        seed_mcp_fixtures(client, tuple(fixtures.values()), agent_ids=[agent_id])
 
 
 def _resolve_required_tool_ids(client: EvalClient) -> dict[str, str]:
@@ -350,16 +402,16 @@ def _submit_tool(registered: RegisteredMcp) -> tuple[str, str]:
 # === fidelity gate ===
 
 
-def _run_fidelity_gate(config: TaskConfig) -> GateResult:
+def _run_fidelity_gate(env_id: str, config: TaskConfig) -> GateResult:
     if config.verifier.oracle_file is None:
-        return GateResult(task_id=config.id, passed=False, detail="task has no oracle to gate against")
+        return GateResult(env_id=env_id, task_id=config.id, passed=None, detail="no oracle; gate not applicable")
     outcome = run_gate(config.verifier, config.upstream_dir)
     detail = (
         "oracle reproduces a verifier-passing solution"
         if outcome.passed
         else f"oracle output failed the verifier (exit {outcome.exit_code})"
     )
-    return GateResult(task_id=config.id, passed=outcome.passed, detail=detail)
+    return GateResult(env_id=env_id, task_id=config.id, passed=outcome.passed, detail=detail)
 
 
 # === artifacts ===
@@ -416,6 +468,7 @@ class _RunArtifacts:
 
 
 def _agent_error(
+    env_id: str,
     adapted: AdaptedTask,
     model_name: str,
     error: str,
@@ -426,11 +479,13 @@ def _agent_error(
 ) -> RunResult:
     artifacts.append_error("agent_error", error)
     return _finish(
-        adapted, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata, format_attempts=0, agent_error=error
+        env_id, adapted, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
+        format_attempts=0, agent_error=error,
     )
 
 
 def _finish(
+    env_id: str,
     adapted: AdaptedTask,
     model_name: str,
     outcome: Outcome,
@@ -447,6 +502,7 @@ def _finish(
     metadata["format_attempts"] = format_attempts
     artifacts.write_run(metadata)
     return RunResult(
+        env_id=env_id,
         task_id=adapted.id,
         model=model_name,
         outcome=outcome,
@@ -470,13 +526,51 @@ def _save_verifier_artifacts(
 # === helpers ===
 
 
-def _resolve_tasks(task: str | list[str] | tuple[str, ...]) -> list[TaskConfig]:
-    values = [t.strip() for t in task.split(",")] if isinstance(task, str) else [t.strip() for t in task]
-    names = [n for n in values if n]
-    unknown = [n for n in names if n not in TASKS]
-    if unknown:
-        raise SystemExit(f"unknown task(s) {unknown}; choose from {sorted(TASKS)}")
-    return [TASKS[n] for n in names]
+def _select_envs(
+    envs: dict[str, EnvConfig],
+    env: str | list[str] | tuple[str, ...] | None,
+    task: str | list[str] | tuple[str, ...] | None,
+) -> list[tuple[EnvConfig, list[TaskConfig]]]:
+    """Resolve the `--env`/`--task` filters to (env, its selected tasks) pairs.
+
+    `env` defaults to all envs; `task` (a global filter) defaults to all tasks in the chosen envs.
+    Unknown names or a filter that selects nothing is a hard error -- never a silent empty run."""
+    env_names = _split_names(env)
+    if env_names is None:
+        chosen = [envs[name] for name in sorted(envs)]
+    else:
+        unknown = [name for name in env_names if name not in envs]
+        if unknown:
+            raise SystemExit(f"unknown env(s) {unknown}; choose from {sorted(envs)}")
+        chosen = [envs[name] for name in env_names]
+
+    task_names = _split_names(task)
+    selected: list[tuple[EnvConfig, list[TaskConfig]]] = []
+    matched: set[str] = set()
+    for env_cfg in chosen:
+        if task_names is None:
+            tasks = list(env_cfg.tasks)
+        else:
+            tasks = [t for t in env_cfg.tasks if t.id in task_names]
+            matched.update(t.id for t in tasks)
+        if tasks:
+            selected.append((env_cfg, tasks))
+
+    if task_names is not None:
+        unknown_tasks = [name for name in task_names if name not in matched]
+        if unknown_tasks:
+            raise SystemExit(f"task(s) {unknown_tasks} not found in the selected env(s)")
+    if not selected:
+        raise SystemExit("no tasks selected; check the --env/--task filters")
+    return selected
+
+
+def _split_names(value: str | list[str] | tuple[str, ...] | None) -> list[str] | None:
+    """Split a comma-separated string or list into names; None (the default) means 'all'."""
+    if value is None:
+        return None
+    values = [v.strip() for v in value.split(",")] if isinstance(value, str) else [v.strip() for v in value]
+    return [v for v in values if v] or None
 
 
 def _normalize_models(model: str | list[str] | tuple[str, ...] | None) -> list[str]:
@@ -498,6 +592,7 @@ def _provider_key_from_env(provider: str) -> str:
 
 
 def _as_provider(provider: str) -> Provider:
+    # deliberately narrower than contracts.Provider: only the API-key providers the benchmark seeds.
     allowed = ("anthropic", "openai", "gemini")
     if provider not in allowed:
         raise SystemExit(f"unsupported provider {provider!r}; expected one of {allowed}")
@@ -517,12 +612,19 @@ def _default_run_dir(run_id: str) -> Path:
 
 
 def _write_run_config(
-    run_dir: Path, *, run_id: str, tasks: list[str], provider: str, models: list[str]
+    run_dir: Path,
+    *,
+    run_id: str,
+    selected: list[tuple[EnvConfig, list[TaskConfig]]],
+    provider: str,
+    models: list[str],
 ) -> None:
     config: dict[str, JsonValue] = {
         "run_id": run_id,
         "started_at": _timestamp(),
-        "tasks": tasks,
+        "environments": [
+            {"id": env_cfg.id, "tasks": [t.id for t in tasks]} for env_cfg, tasks in selected
+        ],
         "provider": provider,
         "models": models,
         "git_commit": _git_commit(),
@@ -547,8 +649,8 @@ def _write_report(report: str, out: str | None) -> None:
         print(report)
 
 
-def _run_subdir(task_id: str, model_name: str) -> str:
-    return f"{_slug(task_id)}__{_slug(model_name)}"
+def _run_subdir(env_id: str, task_id: str, model_name: str) -> str:
+    return f"{_slug(env_id)}/{_slug(task_id)}__{_slug(model_name)}"
 
 
 def _slug(value: str) -> str:
@@ -588,7 +690,8 @@ def _require_str(obj: dict[str, JsonValue], key: str) -> str:
 
 
 def cli(
-    task: str = "bike-rebalance",
+    env: str | list[str] | tuple[str, ...] | None = None,
+    task: str | list[str] | tuple[str, ...] | None = None,
     model: str | list[str] | tuple[str, ...] | None = None,
     provider: str = _DEFAULT_PROVIDER,
     gate_only: bool = False,
@@ -597,10 +700,15 @@ def cli(
 ) -> None:
     """Fire entrypoint that preserves `main`'s integer exit code."""
     coloredlogs.install(level=logging.INFO, fmt="%(message)s")
+    # the in-process benchmark MCP server logs transport chatter (session manager, per-request) at
+    # INFO via the `mcp` library; raise its floor so it doesn't drown the harness's own progress.
+    logging.getLogger("mcp").setLevel(logging.WARNING)
     # SIGINT (Ctrl+C) already unwinds the with-blocks via KeyboardInterrupt; make SIGTERM (`timeout`,
     # `kill`) do the same so the instance is always torn down instead of leaking a backend + database.
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
-    raise SystemExit(main(task=task, model=model, provider=provider, gate_only=gate_only, out=out, run_dir=run_dir))
+    raise SystemExit(
+        main(env=env, task=task, model=model, provider=provider, gate_only=gate_only, out=out, run_dir=run_dir)
+    )
 
 
 def _raise_keyboard_interrupt(signum: int, frame: object) -> None:

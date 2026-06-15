@@ -29,4 +29,4 @@ __pycache__/
 docs/superpowers/plans
 docs/superpowers/specs
 
-skills-eval/experiments/
+archestra-bench/experiments/

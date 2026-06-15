@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -23,17 +24,21 @@ class Outcome(str, Enum):
 
 @dataclass(frozen=True)
 class GateResult:
-    """Fidelity gate: the task's oracle must reproduce a verifier-passing solution."""
+    """Fidelity gate: the task's oracle must reproduce a verifier-passing solution.
 
+    `passed is None` means the task declares no oracle, so the gate is not applicable (N/A)."""
+
+    env_id: str
     task_id: str
-    passed: bool
+    passed: bool | None
     detail: str
 
 
 @dataclass(frozen=True)
 class RunResult:
-    """One agent attempt at a task with a specific model."""
+    """One agent attempt at a task with a specific model, in a specific environment."""
 
+    env_id: str
     task_id: str
     model: str
     outcome: Outcome
@@ -51,19 +56,21 @@ class RunResult:
 
 
 def build_report(results: list[RunResult]) -> list[RunResult]:
-    """Sort results and reject duplicate (task, model) cells."""
-    seen: set[tuple[str, str]] = set()
+    """Sort results and reject duplicate (env, task, model) cells."""
+    seen: set[tuple[str, str, str]] = set()
     for result in results:
-        key = (result.task_id, result.model)
+        key = (result.env_id, result.task_id, result.model)
         if key in seen:
             raise ValueError(f"duplicate result for {key}")
         seen.add(key)
-    return sorted(results, key=lambda result: (result.task_id, result.model))
+    return sorted(results, key=lambda result: (result.env_id, result.task_id, result.model))
 
 
 @dataclass(frozen=True)
-class TaskAggregate:
-    task_id: str
+class GroupAggregate:
+    """Pass/outcome rollup for one group of cells (an environment or a task)."""
+
+    key: str
     total: int
     passed: int
     outcomes: dict[str, int]
@@ -78,7 +85,8 @@ class Aggregate:
     total: int
     passed: int
     outcomes: dict[str, int]
-    per_task: list[TaskAggregate]
+    per_env: list[GroupAggregate]
+    per_task: list[GroupAggregate]
 
     @property
     def pass_rate(self) -> float:
@@ -90,60 +98,66 @@ class Aggregate:
             "passed": self.passed,
             "pass_rate": self.pass_rate,
             "outcomes": self.outcomes,
-            "per_task": [
-                {
-                    "task_id": t.task_id,
-                    "total": t.total,
-                    "passed": t.passed,
-                    "pass_rate": t.pass_rate,
-                    "outcomes": t.outcomes,
-                }
-                for t in self.per_task
-            ],
+            "per_env": [_group_json("env_id", g) for g in self.per_env],
+            "per_task": [_group_json("task_id", g) for g in self.per_task],
         }
 
 
+def _group_json(key_name: str, group: GroupAggregate) -> dict[str, object]:
+    return {
+        key_name: group.key,
+        "total": group.total,
+        "passed": group.passed,
+        "pass_rate": group.pass_rate,
+        "outcomes": group.outcomes,
+    }
+
+
 def aggregate(results: list[RunResult]) -> Aggregate:
-    """Roll results up into per-task and overall outcome breakdowns."""
-    by_task: dict[str, list[RunResult]] = {}
-    for result in results:
-        by_task.setdefault(result.task_id, []).append(result)
-    per_task = [
-        TaskAggregate(
-            task_id=task_id,
-            total=len(rows),
-            passed=sum(r.verifier_passed for r in rows),
-            outcomes=_outcome_counts(rows),
-        )
-        for task_id, rows in sorted(by_task.items())
-    ]
+    """Roll results up into per-environment, per-task, and overall outcome breakdowns."""
     return Aggregate(
         total=len(results),
         passed=sum(r.verifier_passed for r in results),
         outcomes=_outcome_counts(results),
-        per_task=per_task,
+        per_env=_group_by(results, lambda r: r.env_id),
+        per_task=_group_by(results, lambda r: r.task_id),
     )
 
 
+def _group_by(results: list[RunResult], key: Callable[[RunResult], str]) -> list[GroupAggregate]:
+    grouped: dict[str, list[RunResult]] = {}
+    for result in results:
+        grouped.setdefault(key(result), []).append(result)
+    return [
+        GroupAggregate(
+            key=group_key,
+            total=len(rows),
+            passed=sum(r.verifier_passed for r in rows),
+            outcomes=_outcome_counts(rows),
+        )
+        for group_key, rows in sorted(grouped.items())
+    ]
+
+
 def render_markdown(rows: list[RunResult], gate: list[GateResult] | None = None) -> str:
-    """Render the fidelity gate, the task x model outcome table, and the aggregation."""
+    """Render the fidelity gate, the env x task x model outcome table, and the aggregation."""
     lines: list[str] = ["# Archestra benchmark results", ""]
 
     if gate:
         lines += ["## Fidelity gate", ""]
-        for item in gate:
-            lines.append(f"- {_verdict(item.passed)} `{item.task_id}` - {item.detail}")
+        for item in sorted(gate, key=lambda g: (g.env_id, g.task_id)):
+            lines.append(f"- {_verdict(item.passed)} `{item.env_id}` / `{item.task_id}` - {item.detail}")
         lines.append("")
 
     lines += [
         "## Pass matrix",
         "",
-        "| task | model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
+        "| env | task | model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row.task_id} | {row.model} | {row.outcome.value} | {_cell(row.finish_reason)} | "
+            f"| {row.env_id} | {row.task_id} | {row.model} | {row.outcome.value} | {_cell(row.finish_reason)} | "
             f"{row.tool_call_count} | {_cell(row.total_tokens)} | {row.stage_count} | "
             f"{row.format_attempts} | {_cell(row.agent_error)} | {_cell(row.artifact_dir)} |"
         )
@@ -153,13 +167,19 @@ def render_markdown(rows: list[RunResult], gate: list[GateResult] | None = None)
         lines += ["", "## Aggregate", ""]
         lines.append(f"- overall: {agg.passed}/{agg.total} passed ({agg.pass_rate:.0%})")
         lines.append(f"- outcomes: {_outcome_summary(agg.outcomes)}")
-        for task in agg.per_task:
-            lines.append(
-                f"  - `{task.task_id}`: {task.passed}/{task.total} passed "
-                f"({task.pass_rate:.0%}) - {_outcome_summary(task.outcomes)}"
-            )
+        lines += ["", "### By environment", ""]
+        lines += [_group_line(g) for g in agg.per_env]
+        lines += ["", "### By task", ""]
+        lines += [_group_line(g) for g in agg.per_task]
 
     return "\n".join(lines) + "\n"
+
+
+def _group_line(group: GroupAggregate) -> str:
+    return (
+        f"- `{group.key}`: {group.passed}/{group.total} passed "
+        f"({group.pass_rate:.0%}) - {_outcome_summary(group.outcomes)}"
+    )
 
 
 def _outcome_counts(rows: list[RunResult]) -> dict[str, int]:
@@ -171,12 +191,21 @@ def _outcome_summary(outcomes: dict[str, int]) -> str:
     return ", ".join(f"{name}={count}" for name, count in outcomes.items()) or "-"
 
 
-def _verdict(passed: bool) -> str:
+def _verdict(passed: bool | None) -> str:
+    if passed is None:
+        return "N/A"
     return "PASS" if passed else "FAIL"
+
+
+_MAX_CELL_WIDTH = 160  # keep the markdown table readable; full values live in run.json artifacts
 
 
 def _cell(value: object | None) -> str:
     if value is None:
         return "-"
-    text = str(value).replace("\n", " ").replace("|", "\\|")
+    # truncate the display text first, THEN escape pipes, so a cut never splits a `\|` escape.
+    text = str(value).replace("\n", " ")
+    if len(text) > _MAX_CELL_WIDTH:
+        text = text[: _MAX_CELL_WIDTH - 1] + "…"
+    text = text.replace("|", "\\|")
     return text or "-"

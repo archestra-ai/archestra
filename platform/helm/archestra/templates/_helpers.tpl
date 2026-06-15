@@ -307,8 +307,13 @@ grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# ConfigMaps for the per-environment Dagger engine config (engine.json).
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Deployments for MCP servers; StatefulSets for the per-environment Dagger engine.
 - apiGroups: ["apps"]
-  resources: ["deployments"]
+  resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]

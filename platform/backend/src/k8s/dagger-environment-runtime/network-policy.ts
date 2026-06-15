@@ -66,8 +66,12 @@ export type DaggerEgressPolicyObject =
  * capabilities. Pure — performs no cluster calls — so it is unit-testable.
  *
  * Returns `[]` when the environment policy is `unrestricted` or absent (nothing
- * to manage; the engine keeps open public egress, with the in-pod iptables floor
- * still blocking internal/metadata). Mirrors the provider precedence in
+ * to manage; the engine keeps fully open egress). There is NO metadata/RFC1918
+ * floor in the per-env path — unlike the chart's default engine, these pods carry
+ * no egress-firewall sidecar — so an `unrestricted` environment can reach
+ * link-local, RFC1918, and the cloud metadata endpoint. Confining egress is what
+ * a non-`unrestricted` policy is for; `unrestricted` is an explicit allow-all
+ * opt-in. Mirrors the provider precedence in
  * `K8sDeployment.applyK8sNetworkPolicy`: Cilium > GKE-FQDN > AWS > Kubernetes;
  * the GKE-FQDN path additionally emits a plain NetworkPolicy for the CIDR rules
  * (FQDN policies only carry domains).

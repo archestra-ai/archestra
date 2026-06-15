@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/k8s/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/k8s/shared")>()),
   isK8sConfigured: vi.fn(),
-  isK8sNotFoundError: vi.fn(),
+  getK8sNamespace: vi.fn(),
 }));
 
 // Mock the leaf module (not the @/models barrel) so the override propagates
@@ -15,13 +15,13 @@ vi.mock("@/models/organization", () => ({
   default: { getById: vi.fn() },
 }));
 
-import { isK8sConfigured, isK8sNotFoundError } from "@/k8s/shared";
+import { getK8sNamespace, isK8sConfigured } from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
 import type { Environment } from "@/types";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
 const mockIsK8sConfigured = vi.mocked(isK8sConfigured);
-const mockIsK8sNotFoundError = vi.mocked(isK8sNotFoundError);
+const mockGetK8sNamespace = vi.mocked(getK8sNamespace);
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -33,17 +33,11 @@ function makeEnv(overrides: Partial<Environment> = {}): Environment {
   } as unknown as Environment;
 }
 
-// Reach the private method without widening the module's public surface.
-function ensureNamespace(api: unknown, namespace: string): Promise<void> {
-  return (
-    daggerEnvironmentRuntimeManager as unknown as {
-      ensureNamespace(api: unknown, namespace: string): Promise<void>;
-    }
-  ).ensureNamespace(api, namespace);
-}
-
 describe("environmentTargetForEnvironment", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetK8sNamespace.mockReturnValue("archestra-release");
+  });
 
   it("returns undefined when Kubernetes is not configured", () => {
     mockIsK8sConfigured.mockReturnValue(false);
@@ -65,7 +59,7 @@ describe("environmentTargetForEnvironment", () => {
     });
   });
 
-  it("falls back to archestra-dagger-<id8> when the environment has no namespace", () => {
+  it("falls back to the release namespace when the environment has no namespace", () => {
     mockIsK8sConfigured.mockReturnValue(true);
     expect(
       daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
@@ -73,7 +67,7 @@ describe("environmentTargetForEnvironment", () => {
       ),
     ).toEqual({
       environmentId: "abcdef00-1111-2222-3333-444455556666",
-      namespace: "archestra-dagger-abcdef00",
+      namespace: "archestra-release",
     });
   });
 
@@ -83,66 +77,7 @@ describe("environmentTargetForEnvironment", () => {
       daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
         makeEnv({ namespace: "   " }),
       )?.namespace,
-    ).toBe("archestra-dagger-abcdef00");
-  });
-});
-
-describe("ensureNamespace (idempotent under concurrent create)", () => {
-  let coreApi: {
-    readNamespace: ReturnType<typeof vi.fn>;
-    createNamespace: ReturnType<typeof vi.fn>;
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    coreApi = { readNamespace: vi.fn(), createNamespace: vi.fn() };
-    // Model "not found" as an error carrying a marker we control here.
-    mockIsK8sNotFoundError.mockImplementation(
-      (e) => (e as { notFound?: boolean })?.notFound === true,
-    );
-  });
-
-  it("does nothing when the namespace already exists", async () => {
-    coreApi.readNamespace.mockResolvedValue({});
-    await ensureNamespace(coreApi, "ns-x");
-    expect(coreApi.createNamespace).not.toHaveBeenCalled();
-  });
-
-  it("creates the namespace when it is missing", async () => {
-    coreApi.readNamespace.mockRejectedValue({ notFound: true });
-    coreApi.createNamespace.mockResolvedValue({});
-    await ensureNamespace(coreApi, "ns-new");
-    expect(coreApi.createNamespace).toHaveBeenCalledWith({
-      body: { metadata: { name: "ns-new" } },
-    });
-  });
-
-  // A concurrent reconcile may create the namespace between our read and create;
-  // the 409 must be swallowed across every shape the k8s client surfaces it in.
-  it.each([
-    ["code", { code: 409 }],
-    ["statusCode", { statusCode: 409 }],
-    ["response.statusCode", { response: { statusCode: 409 } }],
-  ])("tolerates a 409 on create (%s shape) without throwing", async (_n, err) => {
-    coreApi.readNamespace.mockRejectedValue({ notFound: true });
-    coreApi.createNamespace.mockRejectedValue(err);
-    await expect(ensureNamespace(coreApi, "ns-x")).resolves.toBeUndefined();
-  });
-
-  it("rethrows a non-409 create error", async () => {
-    coreApi.readNamespace.mockRejectedValue({ notFound: true });
-    coreApi.createNamespace.mockRejectedValue({ code: 500 });
-    await expect(ensureNamespace(coreApi, "ns-x")).rejects.toMatchObject({
-      code: 500,
-    });
-  });
-
-  it("rethrows a non-not-found read error and never creates", async () => {
-    coreApi.readNamespace.mockRejectedValue({ code: 403 });
-    await expect(ensureNamespace(coreApi, "ns-x")).rejects.toMatchObject({
-      code: 403,
-    });
-    expect(coreApi.createNamespace).not.toHaveBeenCalled();
+    ).toBe("archestra-release");
   });
 });
 
@@ -186,6 +121,30 @@ describe("buildEngineStatefulSet", () => {
     const container = sts.spec?.template.spec?.containers[0];
     expect(container?.image).toBe("registry.dagger.io/engine:v0.21.0");
     expect(container?.securityContext?.privileged).toBe(true);
+  });
+
+  it("hardens the privileged engine: no SA token, memory cap, engine config mounted", () => {
+    const sts = build();
+    const podSpec = sts.spec?.template.spec;
+    // A privileged pod must not carry a usable API token next to sandbox code.
+    expect(podSpec?.automountServiceAccountToken).toBe(false);
+
+    const container = podSpec?.containers[0];
+    // Resources mirror the dagger-runtime chart engine.
+    expect(container?.resources?.requests?.cpu).toBe("2");
+    expect(container?.resources?.requests?.memory).toBe("8Gi");
+    expect(container?.resources?.limits?.memory).toBe("16Gi");
+
+    // engine.json is mounted from the per-env ConfigMap (disables insecure root
+    // capabilities + bounds the buildkit GC).
+    expect(
+      container?.volumeMounts?.find(
+        (m) => m.mountPath === "/etc/dagger/engine.json",
+      )?.subPath,
+    ).toBe("engine.json");
+    expect(
+      podSpec?.volumes?.find((v) => v.name === "config")?.configMap?.name,
+    ).toBe("dagger-engine-abcdef00-1111-2222-3333-444455556666-config");
   });
 });
 

@@ -5,6 +5,7 @@ import { getK8sCapabilities } from "@/k8s/capabilities";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import {
   createK8sClients,
+  getK8sNamespace,
   isK8sConfigured,
   isK8sNotFoundError,
   loadKubeConfig,
@@ -32,6 +33,20 @@ const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.0";
 const ENGINE_CONTAINER = "dagger-engine";
 // Per-env buildkit cache PVC size; matches the default engine's chart PVC.
 const ENGINE_CACHE_SIZE = "50Gi";
+// Engine resources mirror the dagger-runtime chart — we run few per-env engines,
+// so the chart's sizing applies directly. No CPU limit (build throughput), also
+// per the chart; the memory limit caps a runaway build so it can't OOM the node.
+const ENGINE_CPU_REQUEST = "2";
+const ENGINE_MEMORY_REQUEST = "8Gi";
+const ENGINE_MEMORY_LIMIT = "16Gi";
+// Mirrors the chart engine config: disables insecure root capabilities and
+// bounds the buildkit GC so the cache PVC can't fill unreclaimed. Read by the
+// engine from /etc/dagger/engine.json.
+const ENGINE_CONFIG_JSON = JSON.stringify({
+  logLevel: "info",
+  security: { insecureRootCapabilities: false },
+  gc: { maxUsedSpace: "40GB", reservedSpace: "5GB", minFreeSpace: "20%" },
+});
 
 /**
  * Provisions one Dagger engine pod per Environment and applies that
@@ -113,7 +128,9 @@ class DaggerEnvironmentRuntimeManager {
     const { kubeConfig } = loadKubeConfig();
     const clients = createK8sClients(kubeConfig, namespace);
 
-    await this.ensureNamespace(clients.coreApi, namespace);
+    // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
+    // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
+    await this.applyEngineConfig(clients.coreApi, environment, namespace);
     await this.applyEngineStatefulSet(clients.appsApi, environment, namespace);
 
     const effectivePolicy =
@@ -149,11 +166,12 @@ class DaggerEnvironmentRuntimeManager {
     return config.skillsSandbox.enabled && isK8sConfigured();
   }
 
+  // Mirrors the MCP runtime's resolution (the environment's namespace, else the
+  // release namespace), so a per-env engine only ever lands where the chart
+  // already grants RBAC: a declared `environmentNamespaces` namespace or the
+  // release namespace. No namespace is created at runtime.
   private engineNamespace(environment: Environment): string {
-    return (
-      environment.namespace?.trim() ||
-      `archestra-dagger-${environment.id.slice(0, 8)}`
-    );
+    return environment.namespace?.trim() || getK8sNamespace();
   }
 
   // Threads the org default so an environment that inherits a restricted
@@ -170,26 +188,6 @@ class DaggerEnvironmentRuntimeManager {
       environmentNetworkPolicy: environment.networkPolicy,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
-  }
-
-  private async ensureNamespace(
-    coreApi: k8s.CoreV1Api,
-    namespace: string,
-  ): Promise<void> {
-    try {
-      await coreApi.readNamespace({ name: namespace });
-    } catch (error) {
-      if (!isK8sNotFoundError(error)) throw error;
-      try {
-        await coreApi.createNamespace({
-          body: { metadata: { name: namespace } },
-        });
-      } catch (createError) {
-        // A concurrent reconcile (e.g. startup reconcileAll racing a create's
-        // fire-and-forget) may have created it between our read and create.
-        if (!isConflict(createError)) throw createError;
-      }
-    }
   }
 
   private async applyEngineStatefulSet(
@@ -212,6 +210,28 @@ class DaggerEnvironmentRuntimeManager {
     }
   }
 
+  private async applyEngineConfig(
+    coreApi: k8s.CoreV1Api,
+    environment: Environment,
+    namespace: string,
+  ): Promise<void> {
+    const name = engineConfigMapName(environment.id);
+    const body: k8s.V1ConfigMap = {
+      metadata: {
+        name,
+        namespace,
+        labels: daggerEnginePodLabels(environment.id),
+      },
+      data: { "engine.json": ENGINE_CONFIG_JSON },
+    };
+    try {
+      await coreApi.createNamespacedConfigMap({ namespace, body });
+    } catch (error) {
+      if (!isConflict(error)) throw error;
+      await coreApi.replaceNamespacedConfigMap({ name, namespace, body });
+    }
+  }
+
   private buildEngineStatefulSet(
     environment: Environment,
     namespace: string,
@@ -230,22 +250,41 @@ class DaggerEnvironmentRuntimeManager {
           metadata: { labels },
           spec: {
             terminationGracePeriodSeconds: 30,
+            // The engine is reached via exec/attach (`kube-pod://`), never the k8s
+            // API, so it gets no ServiceAccount token mounted next to the
+            // privileged sandbox workload it runs.
+            automountServiceAccountToken: false,
             containers: [
               {
                 name: ENGINE_CONTAINER,
                 image: ENGINE_IMAGE,
                 securityContext: { privileged: true },
                 resources: {
-                  requests: { cpu: "500m", memory: "1Gi" },
+                  requests: {
+                    cpu: ENGINE_CPU_REQUEST,
+                    memory: ENGINE_MEMORY_REQUEST,
+                  },
+                  limits: { memory: ENGINE_MEMORY_LIMIT },
                 },
                 volumeMounts: [
                   { name: "varlib", mountPath: "/var/lib/dagger" },
                   { name: "run", mountPath: "/run/dagger" },
+                  {
+                    name: "config",
+                    mountPath: "/etc/dagger/engine.json",
+                    subPath: "engine.json",
+                  },
                 ],
               },
             ],
-            // /run/dagger is the runtime socket dir — ephemeral by design.
-            volumes: [{ name: "run", emptyDir: { medium: "Memory" } }],
+            volumes: [
+              // /run/dagger is the runtime socket dir — ephemeral by design.
+              { name: "run", emptyDir: { medium: "Memory" } },
+              {
+                name: "config",
+                configMap: { name: engineConfigMapName(environment.id) },
+              },
+            ],
           },
         },
         // Persistent buildkit cache (warm base + layers): the single replica gets
@@ -372,6 +411,10 @@ class DaggerEnvironmentRuntimeManager {
       });
     }
   }
+}
+
+function engineConfigMapName(environmentId: string): string {
+  return `${daggerEngineDeploymentName(environmentId)}-config`;
 }
 
 const CRD_COORDS: Record<

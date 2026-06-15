@@ -56,7 +56,15 @@ export function SidebarUserMenu() {
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" side="top" className="min-w-56">
+      <DropdownMenuContent
+        align="center"
+        side="top"
+        className="min-w-56"
+        // Closing via an outside click otherwise returns focus to the trigger,
+        // which re-shows its focus ring and reads as a stray border. Keep focus
+        // off the trigger on pointer-driven close (keyboard Tab still rings it).
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="truncate text-sm font-medium">{displayName}</div>
           {user.name && (

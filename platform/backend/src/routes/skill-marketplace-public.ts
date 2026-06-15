@@ -185,12 +185,12 @@ async function buildServeContext(token: string): Promise<ServeContext | null> {
   const validated = await SkillShareLinkModel.validate({ rawToken: token });
   if (!validated) return null;
 
-  const skills = await loadSkillsForLink(validated.skills.map((s) => s.id));
+  const [skills, organization] = await Promise.all([
+    loadSkillsForLink(validated.skills.map((s) => s.id)),
+    OrganizationModel.getById(validated.link.organizationId),
+  ]);
   if (skills.length === 0) return null;
 
-  const organization = await OrganizationModel.getById(
-    validated.link.organizationId,
-  );
   const ownerName = organization?.name ?? "Archestra";
 
   const materializer = marketplaceMaterializer.get();

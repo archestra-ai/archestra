@@ -1,14 +1,21 @@
 import {
+  getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_READ_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -945,7 +952,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
   });
 
-  test("also keeps sandbox runtime tools top-level in tools/list when the sandbox feature is enabled", async ({
+  test("also keeps sandbox runtime and app tools top-level in tools/list when their features are enabled", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -954,7 +961,9 @@ describe("MCP Gateway (stateless mode)", () => {
   }) => {
     const config = (await import("@/config")).default;
     const originalSandboxEnabled = config.skillsSandbox.enabled;
+    const originalAppsEnabled = config.apps.enabled;
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    (config.apps as { enabled: boolean }).enabled = true;
 
     try {
       const org = await makeOrganization();
@@ -1013,11 +1022,18 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_RUN_TOOL_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
+          getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
         ].sort(),
       );
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
+      (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
     }
   });
 

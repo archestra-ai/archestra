@@ -99,6 +99,10 @@ import {
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
 import {
+  clearAllAppDiagnostics,
+  drainAppDiagnostics,
+} from "@/lib/chat/app-diagnostics-store";
+import {
   fetchConversationEnabledTools,
   useCompactConversation,
   useConversation,
@@ -143,6 +147,7 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -577,6 +582,13 @@ export function ChatPageContent({
     [router],
   );
 
+  // App render diagnostics are conversation-scoped: drop any leftovers when
+  // switching conversations so they never attach to an unrelated send.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberately re-runs on conversation switch
+  useEffect(() => {
+    clearAllAppDiagnostics();
+  }, [conversationId]);
+
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
@@ -934,13 +946,16 @@ export function ChatPageContent({
   // selector is deterministic and survives transient section unmounts (the
   // previous mount-effect registry could empty when a single canvas's section
   // briefly unmounted).
+  const { getToolShortName: getArchestraToolShortName } =
+    useArchestraMcpIdentity();
   const mcpCanvases = useMemo(
     () =>
       deriveCanvasesFromMessages(
         messages,
         chatSession?.earlyToolUiStarts ?? {},
+        getArchestraToolShortName,
       ),
-    [messages, chatSession?.earlyToolUiStarts],
+    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
   );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
@@ -1275,12 +1290,16 @@ export function ChatPageContent({
       });
     }
 
+    const initialAppDiagnostics = drainAppDiagnostics();
     sendMessage({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToSend ? { skill: skillToSend } : {}),
+        ...(initialAppDiagnostics.length > 0
+          ? { appDiagnostics: initialAppDiagnostics }
+          : {}),
       },
     });
   }, [
@@ -1430,12 +1449,16 @@ export function ChatPageContent({
       }
     }
 
+    // Attach-once: captured app render diagnostics ride this message's
+    // metadata and the store is drained — a regenerate never re-attaches.
+    const appDiagnostics = drainAppDiagnostics();
     sendMessage?.({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(options?.skill ? { skill: options.skill } : {}),
+        ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
   };

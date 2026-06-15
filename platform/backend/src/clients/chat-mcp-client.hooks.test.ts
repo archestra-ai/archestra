@@ -9,7 +9,7 @@
 import { vi } from "vitest";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { afterEach, describe, expect, test } from "@/test";
-import { __test as chatClient } from "./chat-mcp-client";
+import { __test as chatClient } from "./chat-tool-builder";
 
 const {
   firePreToolUseHook,

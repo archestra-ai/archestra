@@ -7,7 +7,13 @@ import {
   type UIMessage,
 } from "ai";
 import logger from "@/logging";
-import { A2AMessageModel, AgentModel, TeamModel, UserModel } from "@/models";
+import {
+  A2AMessageModel,
+  AgentModel,
+  AgentTeamModel,
+  TeamModel,
+  UserModel,
+} from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
 import type { A2AContext } from "@/types";
@@ -219,6 +225,13 @@ export class A2AManager {
         agentId,
         agentType: agent.agentType ?? undefined,
         sessionId,
+        teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+        userTeams: a2aUser
+          ? await TeamModel.getTeamLabelInfoForUser({
+              userId: a2aUser.id,
+              organizationId: agent.organizationId,
+            })
+          : [],
         routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
         user: a2aUser
           ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }

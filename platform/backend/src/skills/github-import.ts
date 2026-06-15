@@ -68,6 +68,8 @@ interface DiscoveredSkill {
 
 /** A fully fetched skill ready to be persisted. */
 interface ImportedSkill {
+  /** Directory path of the skill, relative to the repo root. */
+  skillPath: string;
   parsed: ParsedSkill;
   files: {
     path: string;
@@ -75,6 +77,12 @@ interface ImportedSkill {
     encoding: SkillFileEncoding;
     kind: SkillFileKind;
   }[];
+  /**
+   * Resource paths (relative to the skill dir) that were not imported:
+   * oversized files, files beyond the per-skill cap, and files whose fetch
+   * failed. Surfaced to the caller so drops are never silent.
+   */
+  skippedFiles: string[];
   /** Provenance string, e.g. `owner/repo@main:skills/pdf`. */
   sourceRef: string;
   /** Commit SHA the snapshot was taken at. */
@@ -219,19 +227,32 @@ export async function importSkills(params: {
       snapshot.manifests.set(manifestPath, parsed);
     }
 
+    const toRelative = (absolutePath: string) =>
+      skillPath ? absolutePath.slice(skillPath.length + 1) : absolutePath;
+    const skippedFiles: string[] = [];
+
     // Pre-filter using the tree's `size` field so we don't issue HTTP requests
     // for files we'd immediately drop on the response side.
-    const resourcePaths = snapshot.tree
-      .filter(
-        (item) =>
-          item.type === "blob" &&
-          !!item.path &&
-          isUnderSkillDir(item.path, skillPath) &&
-          basename(item.path) !== SKILL_MANIFEST_FILENAME &&
-          (typeof item.size !== "number" || item.size <= MAX_SKILL_FILE_BYTES),
-      )
-      .map((item) => item.path as string)
-      .slice(0, MAX_FILES_PER_SKILL);
+    const candidatePaths: string[] = [];
+    for (const item of snapshot.tree) {
+      if (
+        item.type !== "blob" ||
+        !item.path ||
+        !isUnderSkillDir(item.path, skillPath) ||
+        basename(item.path) === SKILL_MANIFEST_FILENAME
+      ) {
+        continue;
+      }
+      if (typeof item.size === "number" && item.size > MAX_SKILL_FILE_BYTES) {
+        skippedFiles.push(toRelative(item.path));
+        continue;
+      }
+      candidatePaths.push(item.path);
+    }
+    const resourcePaths = candidatePaths.slice(0, MAX_FILES_PER_SKILL);
+    skippedFiles.push(
+      ...candidatePaths.slice(MAX_FILES_PER_SKILL).map(toRelative),
+    );
 
     const files: ImportedSkill["files"] = [];
     for (const absolutePath of resourcePaths) {
@@ -241,10 +262,11 @@ export async function importSkills(params: {
         absolutePath,
         params.githubToken,
       );
-      if (fetched === null) continue;
-      const relativePath = skillPath
-        ? absolutePath.slice(skillPath.length + 1)
-        : absolutePath;
+      const relativePath = toRelative(absolutePath);
+      if (fetched === null) {
+        skippedFiles.push(relativePath);
+        continue;
+      }
       files.push({
         path: relativePath,
         content: fetched.content,
@@ -254,8 +276,10 @@ export async function importSkills(params: {
     }
 
     imported.push({
+      skillPath,
       parsed,
       files,
+      skippedFiles,
       sourceRef: `${location.owner}/${location.repo}@${ref}:${skillPath}`,
       sourceCommit: snapshot.commitSha,
     });
@@ -293,8 +317,8 @@ function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
   }
 
   const withoutProtocol = trimmed
-    .replace(/^https?:\/\//, "")
-    .replace(/^github\.com\//, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^github\.com\//i, "")
     .replace(/\.git$/, "");
   const segments = withoutProtocol.split("/").filter(Boolean);
 
@@ -305,6 +329,14 @@ function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
   }
 
   const [owner, repo, ...rest] = segments;
+  // GitHub owner names cannot contain dots, so a dotted first segment is a
+  // foreign host (gitlab.com/…, www.github.com/…) that would otherwise be
+  // misread as an owner and fail later with a confusing GitHub 404.
+  if (owner.includes(".")) {
+    throw new SkillImportError(
+      "Only github.com repositories are supported, e.g. owner/repo or https://github.com/owner/repo",
+    );
+  }
   let ref: string | null = null;
   let urlSubpath = "";
 
@@ -443,12 +475,25 @@ async function fetchRawFile(
     );
     return null;
   }
-  // Null byte → binary. Preserve raw bytes by base64-encoding so we can
-  // redistribute the asset verbatim later.
+  // Binary detection: a null byte (valid UTF-8, but unstorable in Postgres
+  // `text`) or any invalid UTF-8 sequence means the bytes must be preserved
+  // verbatim via base64 so the asset can be redistributed unchanged.
   if (buffer.includes(0)) {
     return { content: buffer.toString("base64"), encoding: "base64" };
   }
-  return { content: buffer.toString("utf-8"), encoding: "utf8" };
+  try {
+    return {
+      // ignoreBOM keeps a leading BOM in the text so the stored bytes stay
+      // faithful to the source file
+      content: new TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: true,
+      }).decode(buffer),
+      encoding: "utf8",
+    };
+  } catch {
+    return { content: buffer.toString("base64"), encoding: "base64" };
+  }
 }
 
 function normalizeSubpath(path: string): string {

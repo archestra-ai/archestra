@@ -1,13 +1,18 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
   extractFileAttachments,
+  extractOwnedAppRender,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
+
+const getToolShortName = (toolName: string) =>
+  getArchestraToolShortName(toolName, { includeDefaultPrefix: true });
 
 describe("extractFileAttachments", () => {
   it("should return undefined for undefined parts", () => {
@@ -253,7 +258,7 @@ describe("deriveCanvasesFromMessages", () => {
       },
     ] as never;
 
-    expect(deriveCanvasesFromMessages(messages, {})).toEqual([
+    expect(deriveCanvasesFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
         label: "show_board",
@@ -281,9 +286,16 @@ describe("deriveCanvasesFromMessages", () => {
     ] as never;
 
     expect(
-      deriveCanvasesFromMessages(messages, {
-        call_1: { uiResourceUri: "ui://pm/board", toolName: "pm__show_board" },
-      }),
+      deriveCanvasesFromMessages(
+        messages,
+        {
+          call_1: {
+            uiResourceUri: "ui://pm/board",
+            toolName: "pm__show_board",
+          },
+        },
+        getToolShortName,
+      ),
     ).toEqual([
       {
         toolCallId: "call_1",
@@ -322,12 +334,137 @@ describe("deriveCanvasesFromMessages", () => {
       },
     ] as never;
 
-    const canvases = deriveCanvasesFromMessages(messages, {});
+    const canvases = deriveCanvasesFromMessages(messages, {}, getToolShortName);
     expect(canvases).toHaveLength(1);
     expect(canvases[0]).toMatchObject({
       toolCallId: "call_1",
       label: "show_board",
     });
+  });
+
+  it("returns a canvas labeled with the app name for an owned-app create_app result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__create_app",
+            toolCallId: "call_app",
+            state: "output-available",
+            output: {
+              content: "Created app",
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+                name: "To Do App",
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveCanvasesFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_app",
+        label: "To Do App",
+        serverName: "archestra",
+        createdAt: 0,
+      },
+    ]);
+  });
+
+  it("ignores a foreign server's create_app result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-other__create_app",
+            toolCallId: "call_foreign",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveCanvasesFromMessages(messages, {}, getToolShortName)).toEqual(
+      [],
+    );
+  });
+});
+
+describe("extractOwnedAppRender", () => {
+  const output = {
+    structuredContent: {
+      id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      name: "To Do App",
+      latestVersion: 3,
+    },
+  };
+
+  it.each([
+    "create_app",
+    "update_app",
+    "edit_app",
+    "render_app",
+  ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
+    expect(
+      extractOwnedAppRender({
+        toolName: `archestra__${shortName}`,
+        output,
+        getToolShortName,
+      }),
+    ).toEqual({
+      appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      appName: "To Do App",
+      latestVersion: 3,
+    });
+  });
+
+  it.each([
+    "create_app",
+    "edit_app",
+  ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
+    expect(
+      extractOwnedAppRender({
+        toolName: shortName,
+        output,
+        getToolShortName,
+      }),
+    ).toEqual({
+      appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      appName: "To Do App",
+      latestVersion: 3,
+    });
+  });
+
+  it.each([
+    ["foreign server prefix", "other__create_app", output],
+    ["non-rendering app tool", "archestra__list_apps", output],
+    ["non-rendering delete tool", "archestra__delete_app", output],
+    ["non-rendering read tool", "archestra__read_app", output],
+    [
+      "non-UUID id",
+      "archestra__create_app",
+      { structuredContent: { id: "not-a-uuid" } },
+    ],
+    ["missing structuredContent", "archestra__create_app", { content: "ok" }],
+    ["plain string output", "archestra__create_app", "Created app"],
+  ])("returns null for %s", (_label, toolName, toolOutput) => {
+    expect(
+      extractOwnedAppRender({
+        toolName,
+        output: toolOutput,
+        getToolShortName,
+      }),
+    ).toBeNull();
   });
 });
 

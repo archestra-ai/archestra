@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useOrganization,
   useUpdateAgentSettings,
@@ -72,6 +73,7 @@ function SkillsList() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const appName = useAppName();
 
   const pageIndex = Number(searchParams.get("page") || "1") - 1;
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
@@ -141,7 +143,7 @@ function SkillsList() {
                 <span className="truncate font-medium">{skill.name}</span>
                 {skill.sourceType === "built_in" && (
                   <Badge variant="secondary" className="shrink-0">
-                    Archestra
+                    {appName}
                   </Badge>
                 )}
                 {repo && (
@@ -410,6 +412,11 @@ function SkillSlashCommandToggle() {
 /** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
 function parseRepoFromSourceRef(sourceRef: string | null): string | null {
   if (!sourceRef) return null;
+  // Built-in skills carry an internal `builtin:<id>` ref (e.g.
+  // `builtin:archestra-platform-operations`); it is an identity token, not a
+  // source repo, and would leak the unbranded "archestra" id into the UI. The
+  // app-name badge already marks these as built-in, so show nothing here.
+  if (sourceRef.startsWith("builtin:")) return null;
   const atIdx = sourceRef.indexOf("@");
   return atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
 }
@@ -512,6 +519,7 @@ function ResetSkillDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const resetSkill = useResetSkill();
+  const appName = useAppName();
 
   const handleReset = useCallback(async () => {
     const result = await resetSkill.mutateAsync(skill.id);
@@ -525,7 +533,7 @@ function ResetSkillDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Reset Skill"
-      description={`Reset "${skill.name}" to the version Archestra ships? Any local edits to its instructions and resource files will be overwritten.`}
+      description={`Reset "${skill.name}" to the version ${appName} ships? Any local edits to its instructions and resource files will be overwritten.`}
       isPending={resetSkill.isPending}
       onConfirm={handleReset}
       confirmLabel="Reset to default"

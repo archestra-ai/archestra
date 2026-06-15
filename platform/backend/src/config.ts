@@ -15,6 +15,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
@@ -722,14 +723,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
-// off. the former `run_python` code-runtime env vars now gate the sandbox.
+// off.
 const skillsSandboxRequested =
   process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
-  envValue:
-    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST ||
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST,
+  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
 // a missing/invalid runner host disables the feature instead of crashing boot.
 const skillsSandboxEnabled =
@@ -769,7 +768,7 @@ const config = {
     endpoint: "/v1/mcp",
   },
   skillMarketplace: {
-    endpoint: "/skills/m",
+    endpoint: SKILL_MARKETPLACE_PREFIX,
     /**
      * Cache directory for materialized share-link git repos. The cache is a
      * derived view of the `skill_share_link_revision` history — wiping it is
@@ -1123,7 +1122,6 @@ const config = {
     runnerHost: daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
-      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
       undefined,
     maxConcurrent: parsePositiveInt(
@@ -1152,6 +1150,14 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
+  },
+  /**
+   * user-authored MCP Apps — first-class apps created inside Archestra (from
+   * chat or the /apps page), backed by a per-app data store and assignable
+   * tools. Ships dark: off by default until the feature is ready to surface.
+   */
+  apps: {
+    enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -18,6 +19,7 @@ import {
   testMcpServerCommand,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config, {
   getProviderConfiguredBaseUrl,
   getProviderEnvApiKey,
@@ -42,9 +44,11 @@ import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import {
   BUILT_IN_SKILLS,
+  builtInSkillShippedWrite,
   builtInSkillSourceRef,
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
+import type { Organization } from "@/types";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -134,6 +138,16 @@ export async function syncBuiltInAgents(): Promise<void> {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       } as const,
     },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
+      description:
+        "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
+      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      } as const,
+    },
   ];
 
   for (const organization of organizations) {
@@ -210,100 +224,109 @@ export async function syncBuiltInSkills(): Promise<void> {
   const organizations = await getOrganizationsForBuiltInAgentSync();
 
   for (const organization of organizations) {
-    for (const builtInSkill of BUILT_IN_SKILLS) {
-      const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
-      const shippedVersion = builtInSkillVersion(builtInSkill);
-      const files = builtInSkill.files.map((file) => ({
-        path: file.path,
-        content: file.content,
-        kind: file.kind,
-      }));
+    const orgRecord = await OrganizationModel.getById(organization.id);
+    if (!orgRecord) continue;
+    await syncBuiltInSkillsForOrganization(orgRecord);
+  }
+}
 
-      const existing = await SkillModel.findBuiltIn({
-        organizationId: organization.id,
-        sourceRef,
-      });
+/**
+ * Reconcile the built-in skills into a single organization, branded under its
+ * white-label app name. Called per-org by {@link syncBuiltInSkills} on startup
+ * and directly when an admin changes the app name (so list_skills/load_skill
+ * reflect the new brand immediately, mirroring the built-in MCP tool re-seed).
+ *
+ * @public — invoked from the organization route on app-name change.
+ */
+export async function syncBuiltInSkillsForOrganization(
+  organization: Pick<Organization, "id" | "appName" | "iconLogo">,
+): Promise<void> {
+  // Brand the shipped built-in skills under this org's white-label identity (a
+  // no-op unless full white-labeling is active), mirroring how built-in MCP
+  // tools are seeded under the org's branded tool name. builtInSkillShippedWrite
+  // reads the synced singleton, so this must run before it.
+  archestraMcpBranding.syncFromOrganization(organization);
 
-      if (!existing) {
-        const created = await SkillModel.createWithFiles({
-          skill: {
-            organizationId: organization.id,
-            scope: "org",
-            name: builtInSkill.name,
-            description: builtInSkill.description,
-            content: builtInSkill.content,
-            sourceType: "built_in",
-            sourceRef,
-            sourceCommit: shippedVersion,
-          },
-          files,
-        });
-        // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
-        // index, so a null means a pre-existing non-built-in skill already
-        // holds this name. Surface it instead of reporting a phantom seed — that
-        // org has no built-in copy and thus no reset path until the clash clears.
-        if (!created) {
-          logger.warn(
-            {
-              builtInSkillId: builtInSkill.builtInSkillId,
-              organizationId: organization.id,
-              name: builtInSkill.name,
-            },
-            "Skipped seeding built-in skill: a skill with this name already exists",
-          );
-          continue;
-        }
-        logger.info(
-          {
-            builtInSkillId: builtInSkill.builtInSkillId,
-            organizationId: organization.id,
-          },
-          "Seeded built-in skill",
-        );
-        continue;
-      }
+  for (const builtInSkill of BUILT_IN_SKILLS) {
+    const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
+    const shipped = builtInSkillShippedWrite(builtInSkill);
 
-      if (existing.sourceCommit === shippedVersion) {
-        continue;
-      }
+    const existing = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef,
+    });
 
-      const liveFiles = await SkillFileModel.findBySkillId(existing.id);
-      const liveVersion = builtInSkillVersion({
-        content: existing.content,
-        files: liveFiles,
-      });
-
-      // Only auto-upgrade copies that still match the revision we last wrote; a
-      // diverged copy was edited by the user and is reset explicitly instead.
-      if (liveVersion !== existing.sourceCommit) {
-        logger.info(
-          {
-            builtInSkillId: builtInSkill.builtInSkillId,
-            organizationId: organization.id,
-          },
-          "Built-in skill was edited, preserving user changes",
-        );
-        continue;
-      }
-
-      await SkillModel.updateWithFiles({
-        id: existing.id,
+    if (!existing) {
+      const created = await SkillModel.createWithFiles({
         skill: {
-          name: builtInSkill.name,
-          description: builtInSkill.description,
-          content: builtInSkill.content,
-          sourceCommit: shippedVersion,
+          organizationId: organization.id,
+          scope: "org",
+          sourceType: "built_in",
+          sourceRef,
+          ...shipped.skill,
         },
-        files,
+        files: shipped.files,
       });
+      // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
+      // index, so a null means a pre-existing non-built-in skill already
+      // holds this name. Surface it instead of reporting a phantom seed — that
+      // org has no built-in copy and thus no reset path until the clash clears.
+      if (!created) {
+        logger.warn(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+            name: builtInSkill.name,
+          },
+          "Skipped seeding built-in skill: a skill with this name already exists",
+        );
+        continue;
+      }
       logger.info(
         {
           builtInSkillId: builtInSkill.builtInSkillId,
           organizationId: organization.id,
         },
-        "Upgraded built-in skill to current revision",
+        "Seeded built-in skill",
       );
+      continue;
     }
+
+    if (existing.sourceCommit === shipped.skill.sourceCommit) {
+      continue;
+    }
+
+    const liveFiles = await SkillFileModel.findBySkillId(existing.id);
+    const liveVersion = builtInSkillVersion({
+      content: existing.content,
+      files: liveFiles,
+    });
+
+    // Only auto-upgrade copies that still match the revision we last wrote; a
+    // diverged copy was edited by the user and is reset explicitly instead.
+    if (liveVersion !== existing.sourceCommit) {
+      logger.info(
+        {
+          builtInSkillId: builtInSkill.builtInSkillId,
+          organizationId: organization.id,
+        },
+        "Built-in skill was edited, preserving user changes",
+      );
+      continue;
+    }
+
+    await SkillModel.updateWithFiles({
+      id: existing.id,
+      skill: shipped.skill,
+      files: shipped.files,
+    });
+    logger.info(
+      {
+        builtInSkillId: builtInSkill.builtInSkillId,
+        organizationId: organization.id,
+      },
+      "Upgraded built-in skill to current revision",
+    );
   }
 }
 
@@ -317,6 +340,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 

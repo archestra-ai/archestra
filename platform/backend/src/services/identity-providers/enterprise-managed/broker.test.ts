@@ -3,6 +3,7 @@ import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { agentOwner } from "@/types";
 import { resolveEnterpriseTransportCredential } from "./broker";
 
 describe("resolveEnterpriseTransportCredential", () => {
@@ -56,7 +57,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -128,7 +129,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "external-token",
         teamId: null,
@@ -179,7 +180,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "external-token",
         teamId: null,
@@ -275,7 +276,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       });
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "external-id-jag",
         teamId: null,
@@ -384,7 +385,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       });
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "external-id-jag",
         teamId: null,
@@ -510,7 +511,7 @@ describe("resolveEnterpriseTransportCredential", () => {
       });
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -591,7 +592,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -673,7 +674,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -760,7 +761,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -850,7 +851,7 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     const result = await resolveEnterpriseTransportCredential({
-      agentId: agent.id,
+      owner: agentOwner(agent.id),
       tokenAuth: {
         tokenId: "session-token",
         teamId: null,
@@ -938,7 +939,7 @@ describe("resolveEnterpriseTransportCredential", () => {
 
     await expect(
       resolveEnterpriseTransportCredential({
-        agentId: agent.id,
+        owner: agentOwner(agent.id),
         tokenAuth: {
           tokenId: "session-token",
           teamId: null,

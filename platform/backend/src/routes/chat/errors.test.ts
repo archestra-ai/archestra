@@ -1483,6 +1483,55 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should map OpenRouter upstream idle timeouts to retryable network errors", () => {
+    // Faithful to the real shape: the mid-stream SSE idle timeout reaches the
+    // mapper as a bare Error (no statusCode/responseBody), whose non-enumerable
+    // message serializes to `{}` in the raw-error field.
+    const error = new Error("Upstream idle timeout exceeded");
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.NetworkError]);
+    // The real upstream message is preserved for debugging, unlike the bare
+    // termination case which is rewritten to a generic close message.
+    expect(result.originalError?.message).toBe(
+      "Upstream idle timeout exceeded",
+    );
+  });
+
+  it("should map an idle timeout delivered as an HTTP 408 with a body too", () => {
+    // The other delivery shape: when the timeout fires before the stream opens,
+    // OpenRouter returns HTTP 408 with a body. 408 falls through to Unknown, so
+    // the same message-text reclassification must apply.
+    const error = {
+      statusCode: 408,
+      responseBody: JSON.stringify({
+        error: { code: 408, message: "Upstream idle timeout exceeded" },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+  });
+
+  it("should not reclassify a recognized error that mentions idle timeout", () => {
+    const error = {
+      statusCode: 401,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.AUTHENTICATION,
+          message: "Auth failed while waiting on upstream idle timeout",
+        },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.Authentication);
+    expect(result.isRetryable).toBe(false);
+  });
+
   it("should handle string errors", () => {
     const result = mapProviderError("Simple string error", "openai");
 

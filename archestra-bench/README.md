@@ -90,7 +90,7 @@ fresh backend per lane. Add a new environment by dropping another `envs/*.toml` 
 
 `basic` ships all skills from `anthropics/skills` + `openai/skills`, three public no-auth remote MCPs
 (DeepWiki, Microsoft Learn, Context7) as a realistic surface, `share_backend = true` (its tasks are
-read-only against backend state), and three tasks —
+read-only against backend state), and six tasks —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
@@ -98,6 +98,13 @@ read-only against backend state), and three tasks —
   checks both values against recorded ground truth within tolerance.
 - `median-salary` — compute the median of the salary column of a CSV inlined into the prompt (via a
   `{{file:…}}` placeholder); the verifier recomputes from the same fixture.
+- `nitpicker-version` — report the latest `nitpicker` crate version as of a date; the verifier checks
+  against recorded ground truth.
+- `github-stars` — fetch the current star count of `archestra-ai/archestra` from the GitHub API; the
+  verifier fetches the live `stargazers_count` and accepts the answer within a small tolerance (the
+  count grows without bound, so there is no fixed offline fixture).
+- `lena-png-size` — report the size in KiB (floored) of scikit-image's pinned `lena.png`; the verifier
+  checks against recorded ground truth.
 
 `archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
 tool and skill catalog is the subject under test; `tools = ["create_skill"]`) with two tasks —

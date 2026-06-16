@@ -1,0 +1,14 @@
+[[stages]]
+text = """Using the GitHub REST API from the sandbox, find the current number of stargazers (stars) of the public repository `archestra-ai/archestra`. Fetch `https://api.github.com/repos/archestra-ai/archestra` (send a `User-Agent` header so GitHub does not reject the request) and read the integer `stargazers_count` field. Submit your answer with result = {"stars": <integer>}."""
+
+[result_schema]
+type = "object"
+required = ["stars"]
+additionalProperties = false
+
+  [result_schema.properties.stars]
+  type = "integer"
+  minimum = 1
+
+[verifier]
+deps = []

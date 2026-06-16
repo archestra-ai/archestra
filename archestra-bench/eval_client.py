@@ -20,8 +20,12 @@ the capabilities the migration client doesn't need but the eval does:
 from __future__ import annotations
 
 import base64
+import functools
 import http.client
 import json
+import os
+import shutil
+import subprocess
 import urllib.error
 import urllib.request
 import uuid
@@ -113,6 +117,7 @@ class EvalClient(ArchestraClient):
         body: dict[str, JsonValue] = {"repoUrl": _pin_repo_url(repo_url, ref)}
         if path is not None:
             body["path"] = path
+        _with_github_token(body)
         result = require_dict(
             self._request("POST", "/api/skills/github/discover", json_body=body),
             ctx="POST /api/skills/github/discover",
@@ -136,6 +141,7 @@ class EvalClient(ArchestraClient):
             "skillPaths": skill_paths,
             "scope": scope,
         }
+        _with_github_token(body)
         prev_timeout = self.timeout
         self.timeout = max(prev_timeout, timeout_s)
         try:
@@ -325,3 +331,28 @@ def _pin_repo_url(repo_url: str, ref: str | None) -> str:
     if ref is None:
         return repo_url
     return f"{repo_url.rstrip('/')}/tree/{ref}"
+
+
+def _with_github_token(body: dict[str, JsonValue]) -> None:
+    """Attach a transient GitHub PAT so ref resolution + file fetches use the authenticated rate limit
+    (5000/h) instead of the unauthenticated 60/h that trips on big repos. Falls back to the local `gh`
+    CLI's active token, so a logged-in `gh` needs no env var."""
+    token = _github_token()
+    if token:
+        body["githubToken"] = token
+
+
+@functools.cache
+def _github_token() -> str | None:
+    env = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if env:
+        return env
+    if not shutil.which("gh"):
+        return None
+    try:
+        out = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            ["gh", "auth", "token"], capture_output=True, text=True, timeout=10, check=True
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    return out.stdout.strip() or None

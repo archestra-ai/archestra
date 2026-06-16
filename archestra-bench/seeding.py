@@ -47,24 +47,29 @@ def ensure_provider_and_models(
     api_key: str,
     models: list[str],
     base_url: str | None = None,  # override the provider's default endpoint (e.g. an Anthropic-compatible gateway)
+    key_name: str | None = None,  # name the provider key (unique per lane so same-provider lanes coexist)
+    is_primary: bool = True,  # only one primary key per provider is allowed; later same-provider keys pass False
     scope: Scope = "personal",  # provider keys are owned by the (admin) user, like the e2e setup
     timeout_s: float = 180.0,
     interval_s: float = 3.0,
 ) -> dict[str, ResolvedModel]:
-    """Create the provider key and resolve each requested model to its UUID + linked key id.
+    """Create the provider key and resolve each requested model to its UUID + this key's id.
 
     Key creation triggers a fire-and-forget sync server-side; we poll, and force a sync once if a
-    requested model hasn't appeared yet."""
-    client.create_llm_key(
+    requested model hasn't appeared yet. Resolution is scoped to the key we just created, so two keys
+    of the same provider (distinct gateways) resolve their models to the right key, never each other's."""
+    created = client.create_llm_key(
         LlmKeyCreate(
-            provider=provider, scope=scope, apiKey=api_key, baseUrl=base_url, name=f"bench-{provider}", isPrimary=True
+            provider=provider, scope=scope, apiKey=api_key, baseUrl=base_url,
+            name=key_name or f"bench-{provider}", isPrimary=is_primary,
         )
     )
+    key_id = _require_str(created, "id")
     deadline = time.monotonic() + timeout_s
     forced = False
     while True:
         rows = client.list_models()
-        resolved = _resolve(rows, models)
+        resolved = _resolve(rows, models, key_id)
         missing = [name for name in models if name not in resolved]
         if not missing:
             return resolved
@@ -138,25 +143,23 @@ def seed_mcp_fixtures(
 # === internal ===
 
 
-def _resolve(rows: list[dict[str, JsonValue]], wanted: list[str]) -> dict[str, ResolvedModel]:
+def _resolve(rows: list[dict[str, JsonValue]], wanted: list[str], key_id: str) -> dict[str, ResolvedModel]:
+    """Resolve each wanted model to its UUID, but only via rows linked to `key_id` -- so a model that
+    several same-provider keys (distinct gateways) expose resolves to this lane's key, not another's."""
     found: dict[str, ResolvedModel] = {}
     for row in rows:
         name = row.get("modelId")
-        if not isinstance(name, str) or name not in wanted:
+        if not isinstance(name, str) or name not in wanted or not _links_key(row, key_id):
             continue
-        key_id = _first_key_id(row)
-        if key_id is None:
-            raise SystemExit(f"model {name!r} has no linked provider api key; cannot run it")
         found[name] = ResolvedModel(model_id=_require_str(row, "id"), api_key_id=key_id)
     return found
 
 
-def _first_key_id(model: Mapping[str, JsonValue]) -> str | None:
+def _links_key(model: Mapping[str, JsonValue], key_id: str) -> bool:
     keys = model.get("apiKeys")
-    if isinstance(keys, list) and keys and isinstance(keys[0], dict):
-        raw = keys[0].get("id")
-        return raw if isinstance(raw, str) else None
-    return None
+    if not isinstance(keys, list):
+        return False
+    return any(isinstance(k, dict) and k.get("id") == key_id for k in keys)
 
 
 def _require_str(obj: Mapping[str, JsonValue], key: str) -> str:

@@ -143,30 +143,28 @@ Each (env, task, provider, model) cell resolves to exactly one outcome:
 ```bash
 export ANTHROPIC_API_KEY=<key>
 
-uv run run.py                                          # every env x every task x default model
-uv run run.py --env basic --task median-salary --model claude-sonnet-4-6
-# benchmark a non-Anthropic model via an Anthropic-compatible gateway:
-ANTHROPIC_API_KEY=$KIMI_API_KEY uv run run.py --env basic \
-  --provider anthropic --base-url https://api.kimi.com/coding --model kimi-for-coding
-# multi-provider sweep, 3 lanes concurrently (Kimi via the anthropic-compatible gateway):
-ANTHROPIC_API_KEY=$KIMI_API_KEY GEMINI_API_KEY=... OPENROUTER_API_KEY=... uv run run.py --env basic \
-  --lanes "anthropic:kimi-for-coding,gemini:gemini-3-flash-preview,openrouter:vendor/model:free" \
-  --base-url "anthropic=https://api.kimi.com/coding" --max-workers 3
+uv run run.py                                          # every env x every task x every lane in lanes.toml
+uv run run.py --env basic --task median-salary --lanes sonnet
+# lanes run concurrently by default (each carries its own gateway + key in lanes.toml):
+GEMINI_API_KEY=... OPENROUTER_API_KEY=... KIMI_API_KEY=... ZAI_API_KEY=... \
+  uv run run.py --env basic --lanes gemini-flash,or-free,kimi,glm     # 4 lanes -> 4 workers
 ```
 
 `--env` and `--task` each accept one name or a comma-separated list (default: all). A **lane** is a
-`(provider, model)` pair; the sweep is `env x lane`. Lanes come from `--lanes`
-(`provider:model,...` — the model tail may contain `:`, e.g. an OpenRouter `:free` suffix) or the
-back-compat `--provider` + `--model` form (mutually exclusive with `--lanes`). `--base-url` overrides a
-provider's endpoint: a bare URL for a single-provider sweep, or `provider=url[,...]` to point one
-provider at a gateway while others use defaults (each provider's key is read from `<PROVIDER>_API_KEY`).
-`--max-workers` runs that many lanes concurrently (default 1 = serial); tasks within a lane stay serial.
-`--run-dir` overrides the artifact directory (default `archestra-bench/experiments/run_<id>/`,
-gitignored); `--out` writes the markdown report to a file instead of stdout.
+named `(provider, model)` endpoint defined in `lanes.toml`; the sweep is `env x lane`. Each `[[lane]]`
+carries a unique `name` (the selection handle), `provider` (`anthropic`/`openai`/`gemini`/`openrouter`),
+`model`, an optional `base_url` (e.g. an Anthropic-compatible gateway), and an optional `api_key_env`
+(default `<PROVIDER>_API_KEY`) — so two lanes can share a provider through different gateways/keys. The
+`--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
+one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
+(default: one worker per selected lane, capped at 4); tasks within a lane stay serial. `--run-dir`
+overrides the artifact directory
+(default `archestra-bench/experiments/run_<id>/`, gitignored); `--out` writes the markdown report to a
+file instead of stdout.
 
 Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per shared env (or
 `<env>__<lane>.backend.log` per isolated lane), and an `<env>/<task>__<lane>/` subdirectory per cell
-(`<lane>` is a collision-proof `provider_model-<hash>` slug) with `trajectory.jsonl` (the chat stream
+(`<lane>` is the lane's name from lanes.toml) with `trajectory.jsonl` (the chat stream
 coalesced into message-level records — `assistant_text` / `tool_call` / `tool_output` / `finish` /
 `token_usage`, plus `error` / `parse_error` / `tool_call_partial` on failures or interrupted streams —
 not the raw per-token SSE chunks), `run.json`,

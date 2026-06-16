@@ -6,8 +6,8 @@ selected environment (see envs.py):
     shared Postgres + Dagger engine (see lifecycle.py);
   - seeds an LLM provider key + models, the env's web-pinned skills, its remote MCP servers, and the
     benchmark MCP, then creates the env's agent and locks its tool surface;
-  - drives each task's multi-stage conversation per lane (a (provider, model) pair), capturing the
-    trajectory;
+  - drives each task's multi-stage conversation per lane (a named (provider, model) endpoint from
+    lanes.toml), capturing the trajectory;
   - reads the submission (and, for file-producing tasks, downloads the produced artifact) and
     verifies out of band;
   - tears the instance down.
@@ -17,11 +17,13 @@ The sweep is `env x lane`. Lanes run concurrently up to `--max-workers` (default
 lane runs its env's tasks serially against its own benchmark MCP + agent. A clean env can share one
 backend across its lanes (`share_backend` in its toml); a mutating env keeps a backend per lane.
 
+Lanes are defined in lanes.toml (a named provider/model/base_url/key per `[[lane]]`); `--lanes`
+selects a subset by name (default: all), so you can keep many lanes and run one.
+
   export ANTHROPIC_API_KEY=<key>
-  uv run run.py --env basic --model claude-sonnet-4-6
-  # multi-provider sweep, 3 lanes at once (Kimi via the anthropic-compatible gateway):
-  uv run run.py --lanes "anthropic:kimi-for-coding,gemini:gemini-3-flash-preview,openrouter:x/y:free" \
-      --base-url "anthropic=https://api.kimi.com/coding" --max-workers 3
+  uv run run.py --env basic --lanes sonnet
+  # run several lanes concurrently (each lane carries its own gateway + key in lanes.toml):
+  uv run run.py --env basic --lanes kimi,gemini-flash,or-free --max-workers 3
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+import tomlconf
 from archestra_client import AgentCreate, ArchestraApiError
 from benchmark_mcp import BenchmarkMcp, SubmissionAccepted, SubmissionFormatFailed
 from contracts import JsonValue, Provider
@@ -72,8 +75,7 @@ from verify import VerifyOutcome, run_verifier
 logger = logging.getLogger(__name__)
 
 _ENVS_DIR = Path(__file__).resolve().parent / "envs"
-_DEFAULT_MODEL = "claude-sonnet-4-6"
-_DEFAULT_PROVIDER = "anthropic"
+_LANES_TOML = Path(__file__).resolve().parent / "lanes.toml"
 _BENCH_MCP_NAME = "benchmark"
 _SUBMIT_TOOL_SUFFIX = "__submit_result"
 _STATE_NAME = "state.json"
@@ -89,24 +91,29 @@ _REQUIRED_TOOL_SHORT_NAMES = (
     "load_skill",
 )
 _MUTATING_SKILL_TOOL_SHORT_NAMES = ("create_skill", "update_skill")
-_DEFAULT_MAX_WORKERS = 1  # serial by default; parallelism is explicit opt-in via --max-workers
+_MAX_WORKERS_CAP = 4  # auto default fans out one worker per lane up to this cap
 
 
 @dataclass(frozen=True)
 class Lane:
-    """one (provider, model) pair the sweep runs; combined with each env to form the parallel units."""
+    """one named (provider, model) endpoint the sweep runs; combined with each env to form the
+    parallel units. `name` is a unique slug from lanes.toml and doubles as the lane's stable
+    identity, so two lanes that share a provider+model (e.g. distinct Anthropic-compatible gateways)
+    never collide on an agent, MCP catalog, log, or artifact dir."""
 
+    name: str
     provider: str
     model: str
+    base_url: str | None = None
+    api_key_env: str | None = None
 
     @property
     def slug(self) -> str:
-        """A unique, name-safe slug for this lane's agent / MCP catalog / log / artifact dir. The
-        readable `provider_model` slug is lossy (`a/b` and `a_b` collapse), so a short hash of the raw
-        `provider:model` is appended -- otherwise two distinct lanes could share an agent (and thus a
-        benchmark MCP), misattributing submissions."""
-        digest = hashlib.sha256(f"{self.provider}:{self.model}".encode()).hexdigest()[:8]
-        return f"{_slug(f'{self.provider}_{self.model}')}-{digest}"
+        return _slug(self.name)
+
+    @property
+    def key_env(self) -> str:
+        return self.api_key_env or f"{self.provider.upper()}_API_KEY"
 
 
 @dataclass(frozen=True)
@@ -122,56 +129,36 @@ class EnvPlan:
         return self.env.share_backend
 
 
-def _parse_lanes(
-    lanes: str | list[str] | tuple[str, ...] | None,
-    provider: str,
-    model: str | list[str] | tuple[str, ...] | None,
-) -> list[Lane]:
-    """Resolve the lane set. `--lanes` (comma list of `provider:model`) is mutually exclusive with the
-    back-compat `--provider`/`--model` form; passing `--lanes` together with an explicit `--model` is a
-    loud error rather than a silent override."""
-    specs = _split_names(lanes)
-    if specs is None:
-        return [Lane(provider=_as_provider(provider), model=m) for m in _normalize_models(model)]
-    if model is not None:
-        raise SystemExit("--lanes is mutually exclusive with --model/--provider; pass one or the other")
-    parsed: list[Lane] = []
-    for spec in specs:
-        head, sep, tail = spec.partition(":")  # split on the FIRST colon -- model may contain ':' (e.g. ':free')
-        if not sep or not head or not tail:
-            raise SystemExit(f"lane {spec!r} must be 'provider:model' (e.g. anthropic:claude-sonnet-4-6)")
-        parsed.append(Lane(provider=_as_provider(head), model=tail))
-    if len(parsed) != len({(lane.provider, lane.model) for lane in parsed}):
-        raise SystemExit(f"duplicate lanes are not allowed: {specs}")
-    return parsed
-
-
-def _base_urls(base_url: str | None, providers: set[str]) -> dict[str, str | None]:
-    """Resolve the per-provider base-url override. A bare URL applies to the sole provider (ambiguous
-    with more than one); a `provider=url` comma-map assigns per provider, leaving the rest on their
-    default endpoint. Lets e.g. a Kimi gateway (`anthropic=...`) run beside native `gemini` lanes."""
-    if base_url is None:
-        return {}
-    if "=" not in base_url:
-        if len(providers) != 1:
-            raise SystemExit(
-                f"--base-url with no 'provider=' prefix is ambiguous across providers {sorted(providers)}; "
-                "use 'provider=url[,provider=url]'"
-            )
-        return {next(iter(providers)): base_url}
-    resolved: dict[str, str | None] = {}
-    for pair in base_url.split(","):
-        name, sep, url = pair.partition("=")
-        name, url = name.strip(), url.strip()
-        if not sep or not name or not url:
-            raise SystemExit(f"--base-url entry {pair!r} must be 'provider=url'")
-        provider = _as_provider(name)
-        if provider not in providers:
-            raise SystemExit(
-                f"--base-url targets provider {provider!r} which has no lane; lanes use {sorted(providers)}"
-            )
-        resolved[provider] = url
-    return resolved
+def _load_lanes(path: Path, select: str | list[str] | tuple[str, ...] | None) -> list[Lane]:
+    """Load the lane catalog from `lanes.toml` and return the selected subset (`--lanes name,...`,
+    default: all). Each `[[lane]]` is a named (provider, model) endpoint; names are unique slugs and
+    the selection handles, so the same provider+model can appear twice under different gateways."""
+    rows = tomlconf.rows(tomlconf.parse_toml(path), "lane", path.name)
+    if not rows:
+        raise SystemExit(f"{path.name}: no [[lane]] defined")
+    catalog: dict[str, Lane] = {}
+    for row in rows:
+        ctx = f"{path.name}: lane"
+        name = tomlconf.req_str(row, "name", ctx)
+        if not tomlconf.is_slug(name):
+            raise SystemExit(f"{ctx}: name {name!r} must be a slug ([a-z0-9][a-z0-9-]*)")
+        if name in catalog:
+            raise SystemExit(f"{path.name}: duplicate lane name {name!r}")
+        ctx = f"{path.name}: lane {name!r}"
+        catalog[name] = Lane(
+            name=name,
+            provider=_as_provider(tomlconf.req_str(row, "provider", ctx)),
+            model=tomlconf.req_str(row, "model", ctx),
+            base_url=tomlconf.opt_str(row, "base_url", ctx),
+            api_key_env=tomlconf.opt_str(row, "api_key_env", ctx),
+        )
+    names = _split_names(select)
+    if names is None:
+        return list(catalog.values())
+    unknown = [name for name in names if name not in catalog]
+    if unknown:
+        raise SystemExit(f"unknown lane(s) {unknown}; choose from {sorted(catalog)}")
+    return [catalog[name] for name in names]
 
 
 def _build_run_plan(selected: list[tuple[EnvConfig, list[Task]]], lanes: list[Lane]) -> list[EnvPlan]:
@@ -179,48 +166,39 @@ def _build_run_plan(selected: list[tuple[EnvConfig, list[Task]]], lanes: list[La
     return [EnvPlan(env=env, tasks=tuple(tasks), lanes=tuple(lanes)) for env, tasks in selected]
 
 
-def _lane_models(lanes: tuple[Lane, ...], provider: str) -> list[str]:
-    return [lane.model for lane in lanes if lane.provider == provider]
-
-
 def main(
     env: str | list[str] | tuple[str, ...] | None = None,
     task: str | list[str] | tuple[str, ...] | None = None,
-    model: str | list[str] | tuple[str, ...] | None = None,
-    provider: str = _DEFAULT_PROVIDER,
-    base_url: str | None = None,
+    lanes: str | list[str] | tuple[str, ...] | None = None,
+    lanes_file: str | None = None,
     out: str | None = None,
     run_dir: str | None = None,
-    lanes: str | list[str] | tuple[str, ...] | None = None,
-    max_workers: int = _DEFAULT_MAX_WORKERS,
+    max_workers: int | None = None,
 ) -> int:
-    """Run the benchmark sweep: each selected env x lane, where a lane is a (provider, model) pair.
+    """Run the benchmark sweep: each selected env x lane, where a lane is a named (provider, model)
+    endpoint defined in lanes.toml.
 
-    `env`/`task` filter the matrix (one name or comma list each). Lanes come from `--lanes`
-    (`provider:model,...`) or the back-compat `--provider` + `--model` form (mutually exclusive).
-    `--base-url` overrides a provider's endpoint -- a bare URL for a single-provider sweep, or
-    `provider=url[,...]` to point one provider (e.g. an Anthropic-compatible Kimi gateway) at a gateway
-    while others use defaults. `--max-workers` runs that many lanes concurrently (default 1 = serial);
-    each lane runs its env's tasks serially against its own benchmark MCP + agent."""
-    if max_workers < 1:
-        raise SystemExit(f"--max-workers must be >= 1, got {max_workers}")
+    `env`/`task` filter the matrix (one name or comma list each). `--lanes` selects lane names from
+    the catalog (default: every lane in the file), so you can define many and run one. `--lanes-file`
+    overrides the catalog path (default: archestra-bench/lanes.toml). `--max-workers` runs that many
+    lanes concurrently; the default fans out one worker per lane (capped) so a normal multi-lane run
+    is parallel out of the box. Each lane runs its env's tasks serially against its own benchmark MCP
+    + agent."""
     selected = _select_envs(load_envs(_ENVS_DIR), env, task)
-    lane_list = _parse_lanes(lanes, provider, model)
-    providers = {lane.provider for lane in lane_list}
-    base_url_map = _base_urls(base_url, providers)
-    api_keys = {p: _provider_key_from_env(p) for p in providers}
+    lane_list = _load_lanes(Path(lanes_file) if lanes_file else _LANES_TOML, lanes)
+    workers = _resolve_workers(max_workers, len(lane_list))
+    api_keys = {lane.name: _lane_api_key(lane) for lane in lane_list}
 
     run_id = _run_id()
     root_run_dir = Path(run_dir) if run_dir else _default_run_dir(run_id)
     root_run_dir.mkdir(parents=True, exist_ok=True)
     plan = _build_run_plan(selected, lane_list)
     _write_run_config(
-        root_run_dir, run_id=run_id, selected=selected, lanes=lane_list,
-        base_urls=base_url_map, max_workers=max_workers,
+        root_run_dir, run_id=run_id, selected=selected, lanes=lane_list, max_workers=workers,
     )
 
-    ctx = _RunCtx(root_run_dir=root_run_dir, run_id=run_id, api_keys=api_keys, base_urls=base_url_map)
-    results = _execute_plan(plan, ctx, max_workers=max_workers)
+    ctx = _RunCtx(root_run_dir=root_run_dir, run_id=run_id, api_keys=api_keys)
+    results = _execute_plan(plan, ctx, max_workers=workers)
 
     report = render_markdown(build_report(results))
     _write_report(report, out)
@@ -228,6 +206,16 @@ def main(
         json.dumps(aggregate(results).to_json(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return 0 if all(r.verifier_passed for r in results) else 1
+
+
+def _resolve_workers(requested: int | None, lane_count: int) -> int:
+    """Resolve `--max-workers`: an explicit value is validated and honored; the default (None) fans
+    out one worker per lane, capped at `_MAX_WORKERS_CAP`."""
+    if requested is None:
+        return min(lane_count, _MAX_WORKERS_CAP) or 1
+    if requested < 1:
+        raise SystemExit(f"--max-workers must be >= 1, got {requested}")
+    return requested
 
 
 # === lane execution ===
@@ -289,8 +277,7 @@ class _RunCtx:
 
     root_run_dir: Path
     run_id: str
-    api_keys: dict[str, str]
-    base_urls: dict[str, str | None]
+    api_keys: dict[str, str]  # keyed by lane name
 
 
 def _execute_plan(plan: list[EnvPlan], ctx: _RunCtx, *, max_workers: int) -> list[RunResult]:
@@ -333,7 +320,7 @@ def _shared_env_units(
     log_path = ctx.root_run_dir / f"{_slug(env.id)}.backend.log"
     instance = stack.enter_context(Instance(_repo_root(), run_id=f"{ctx.run_id}-{env.id}", log_path=log_path))
     client = instance.client
-    resolved = _resolve_env_providers(client, env_plan.lanes, ctx)
+    resolved = _resolve_lanes(client, env_plan.lanes, ctx)
     client.enable_skill_defaults()
     for sref in env.skills:
         seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
@@ -349,7 +336,7 @@ def _shared_env_units(
             env, env_plan.tasks, lane, ctx, reporter,
             _shared_lane_body(
                 client, env, env_plan.tasks, lane, mcp, submit_tool, agent_id,
-                ctx.root_run_dir, resolved[lane.provider][lane.model], reporter,
+                ctx.root_run_dir, resolved[lane.name], reporter,
             ),
         )
         for lane, agent_id, submit_tool, mcp in setups
@@ -402,30 +389,38 @@ def _isolated_lane_body(
             BenchmarkMcp(server_name=f"{_BENCH_MCP_NAME}-{lane.slug}") as mcp,
         ):
             client = instance.client
-            resolved = _resolve_env_providers(client, (lane,), ctx)
+            resolved = _resolve_lanes(client, (lane,), ctx)
             client.enable_skill_defaults()
             for sref in env.skills:
                 seed_skill_ref(client, repo=sref.repo, path=sref.path, ref=sref.ref, cap=sref.cap)
             agent_id, submit_tool = _setup_lane_agent(client, env, lane, mcp)
             if env.mcps:
                 seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id])
-            model = resolved[lane.provider][lane.model]
-            _run_lane(client, env, tasks, lane, mcp, submit_tool, agent_id, ctx.root_run_dir, model, reporter, out)
+            _run_lane(
+                client, env, tasks, lane, mcp, submit_tool, agent_id,
+                ctx.root_run_dir, resolved[lane.name], reporter, out,
+            )
 
     return body
 
 
-def _resolve_env_providers(
+def _resolve_lanes(
     client: EvalClient, lanes: tuple[Lane, ...], ctx: _RunCtx
-) -> dict[str, dict[str, ResolvedModel]]:
-    """Register each distinct provider's key + models on `client`, keyed provider -> model -> resolved."""
-    return {
-        provider: ensure_provider_and_models(
-            client, provider=_as_provider(provider), api_key=ctx.api_keys[provider],
-            base_url=ctx.base_urls.get(provider), models=_lane_models(lanes, provider),
-        )
-        for provider in {lane.provider for lane in lanes}
-    }
+) -> dict[str, ResolvedModel]:
+    """Register each lane's provider key (own base_url + key) and resolve its model, keyed by lane name.
+    A per-lane key name lets two lanes on the same provider (distinct gateways) coexist on one backend;
+    only the first key per provider is marked primary (the backend allows just one primary per provider)."""
+    resolved: dict[str, ResolvedModel] = {}
+    seen_providers: set[str] = set()
+    for lane in lanes:
+        is_primary = lane.provider not in seen_providers
+        seen_providers.add(lane.provider)
+        resolved[lane.name] = ensure_provider_and_models(
+            client, provider=_as_provider(lane.provider), api_key=ctx.api_keys[lane.name],
+            base_url=lane.base_url, models=[lane.model], key_name=f"bench-{lane.name}",
+            is_primary=is_primary,
+        )[lane.model]
+    return resolved
 
 
 def _lane_unit(
@@ -447,7 +442,7 @@ def _lane_unit(
         except (Exception, SystemExit) as exc:  # noqa: BLE001 -- per-lane isolation; KeyboardInterrupt still propagates
             # SystemExit too: seeding/model-sync raise it (e.g. a model that never syncs), and one bad
             # lane must not abort the whole sweep -- it becomes an infra: result like any boot failure.
-            logger.exception("lane %s / %s:%s aborted (infra)", env.id, lane.provider, lane.model)
+            logger.exception("lane %s / %s aborted (infra)", env.id, lane.name)
             done = {result.task_id for result in out}
             for task in tasks:
                 if task.id in done:
@@ -502,7 +497,7 @@ def _infra_failed(env: EnvConfig, task: Task, lane: Lane, root_run_dir: Path, ex
     subdir.mkdir(parents=True, exist_ok=True)
     stamp = _timestamp()
     metadata: dict[str, JsonValue] = {
-        "env_id": env.id, "task_id": task.id, "provider": lane.provider, "model": lane.model,
+        "env_id": env.id, "task_id": task.id, "lane": lane.name, "provider": lane.provider, "model": lane.model,
         "outcome": Outcome.AGENT_ERROR.value, "agent_error": error, "finished_at": stamp,
     }
     (subdir / "run.json").write_text(
@@ -512,7 +507,7 @@ def _infra_failed(env: EnvConfig, task: Task, lane: Lane, root_run_dir: Path, ex
         json.dump({"sequence": 1, "timestamp": stamp, "kind": "infra_error", "error": error}, handle, sort_keys=True)
         handle.write("\n")
     return RunResult(
-        env_id=env.id, task_id=task.id, provider=lane.provider, model=lane.model,
+        env_id=env.id, task_id=task.id, lane=lane.name, provider=lane.provider, model=lane.model,
         outcome=Outcome.AGENT_ERROR, finish_reason=None, tool_call_count=0, turn_count=0, total_tokens=None,
         agent_error=error, stage_count=len(task.stages), format_attempts=0, artifact_dir=str(subdir),
     )
@@ -533,15 +528,15 @@ def _run_one(
     task: Task,
     resolved: ResolvedModel,
 ) -> RunResult:
-    provider, model_name = lane.provider, lane.model
-    cell_key = f"{env_id}/{task.id}/{provider}/{model_name}"
+    cell_key = f"{env_id}/{task.id}/{lane.slug}"
     artifacts = _RunArtifacts(root_run_dir / _run_subdir(env_id, task.id, lane))
     artifact_paths: dict[str, JsonValue] = {}
     metadata: dict[str, JsonValue] = {
         "env_id": env_id,
         "task_id": task.id,
-        "provider": provider,
-        "model": model_name,
+        "lane": lane.name,
+        "provider": lane.provider,
+        "model": lane.model,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
         "submit_tool": submit_tool,
@@ -571,7 +566,7 @@ def _run_one(
             artifacts, metadata, artifact_paths, cell_key,
         )
     except Exception as exc:  # noqa: BLE001 -- per-cell boundary; KeyboardInterrupt still propagates
-        return _agent_error(env_id, provider, task, model_name, f"infra: {exc}", artifacts, metadata, run=None)
+        return _agent_error(env_id, lane, task, f"infra: {exc}", artifacts, metadata, run=None)
 
 
 def _grade_cell(
@@ -590,7 +585,6 @@ def _grade_cell(
 ) -> RunResult:
     """Drive one cell's conversation and grade it. May raise; `_run_one` is the boundary that turns an
     unexpected error into a clean per-cell agent_error."""
-    provider, model_name = lane.provider, lane.model
     bench_mcp.begin_task(task_key=cell_key, schema=task.result_schema, max_attempts=task.max_format_attempts)
 
     try:
@@ -601,14 +595,14 @@ def _grade_cell(
             chat_api_key_id=resolved.api_key_id,
         )
     except ArchestraApiError as exc:
-        return _agent_error(env_id, provider, task, model_name, _api_error_text(exc), artifacts, metadata, run=None)
+        return _agent_error(env_id, lane, task, _api_error_text(exc), artifacts, metadata, run=None)
 
     conversation_id = _require_str(conversation, "id")
     metadata["conversation_id"] = conversation_id
     artifacts.append("conversation_created", {"conversation_id": conversation_id})
     artifacts.write_run(metadata)
 
-    runtime = {"cell": _cell_token(cell_key, model_name), "agent_id": agent_id}
+    runtime = {"cell": _cell_token(cell_key, lane.model), "agent_id": agent_id}
     run = ChatRunResult(text="")
     stage_error: str | None = None
     for index, stage in enumerate(task.stages):
@@ -627,14 +621,14 @@ def _grade_cell(
     submission = bench_mcp.take_submission(cell_key)
     if isinstance(submission, SubmissionFormatFailed):
         return _finish(
-            env_id, provider, task, model_name, Outcome.FORMAT_FAILED, run, artifacts, metadata,
+            env_id, lane, task, Outcome.FORMAT_FAILED, run, artifacts, metadata,
             format_attempts=submission.attempts,
         )
     if submission is None:
         if stage_error is not None:
-            return _agent_error(env_id, provider, task, model_name, stage_error, artifacts, metadata, run=run)
+            return _agent_error(env_id, lane, task, stage_error, artifacts, metadata, run=run)
         return _finish(
-            env_id, provider, task, model_name, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0
+            env_id, lane, task, Outcome.NO_SUBMISSION, run, artifacts, metadata, format_attempts=0
         )
 
     assert isinstance(submission, SubmissionAccepted)
@@ -650,7 +644,7 @@ def _grade_cell(
             )
         except ArchestraApiError as exc:
             return _agent_error(
-                env_id, provider, task, model_name, f"artifact retrieval failed: {_api_error_text(exc)}",
+                env_id, lane, task, f"artifact retrieval failed: {_api_error_text(exc)}",
                 artifacts, metadata, run=run,
             )
 
@@ -660,7 +654,7 @@ def _grade_cell(
             state_bytes = _capture_state(client, task, runtime, run.tool_invocations, artifacts, artifact_paths)
         except ArchestraApiError as exc:
             return _agent_error(
-                env_id, provider, task, model_name, f"state capture failed: {_api_error_text(exc)}",
+                env_id, lane, task, f"state capture failed: {_api_error_text(exc)}",
                 artifacts, metadata, run=run,
             )
 
@@ -670,9 +664,8 @@ def _grade_cell(
     metadata["verifier_timed_out"] = outcome.timed_out
     return _finish(
         env_id,
-        provider,
+        lane,
         task,
-        model_name,
         Outcome.PASSED if outcome.passed else Outcome.FAILED,
         run,
         artifacts,
@@ -1056,9 +1049,8 @@ class _StreamCoalescer:
 
 def _agent_error(
     env_id: str,
-    provider: str,
+    lane: Lane,
     task: Task,
-    model_name: str,
     error: str,
     artifacts: _RunArtifacts,
     metadata: dict[str, JsonValue],
@@ -1067,16 +1059,15 @@ def _agent_error(
 ) -> RunResult:
     artifacts.append_error("agent_error", error)
     return _finish(
-        env_id, provider, task, model_name, Outcome.AGENT_ERROR, run, artifacts, metadata,
+        env_id, lane, task, Outcome.AGENT_ERROR, run, artifacts, metadata,
         format_attempts=0, agent_error=error,
     )
 
 
 def _finish(
     env_id: str,
-    provider: str,
+    lane: Lane,
     task: Task,
-    model_name: str,
     outcome: Outcome,
     run: ChatRunResult | None,
     artifacts: _RunArtifacts,
@@ -1093,8 +1084,9 @@ def _finish(
     return RunResult(
         env_id=env_id,
         task_id=task.id,
-        provider=provider,
-        model=model_name,
+        lane=lane.name,
+        provider=lane.provider,
+        model=lane.model,
         outcome=outcome,
         finish_reason=run.finish_reason if run else None,
         tool_call_count=len(run.tool_calls) if run else 0,
@@ -1164,21 +1156,10 @@ def _split_names(value: str | list[str] | tuple[str, ...] | None) -> list[str] |
     return [v for v in values if v] or None
 
 
-def _normalize_models(model: str | list[str] | tuple[str, ...] | None) -> list[str]:
-    if model is None:
-        return [_DEFAULT_MODEL]
-    values = [p.strip() for p in model.split(",")] if isinstance(model, str) else [p.strip() for p in model]
-    models = [v for v in values if v]
-    if len(models) != len(set(models)):
-        raise SystemExit(f"duplicate models are not allowed: {models}")
-    return models or [_DEFAULT_MODEL]
-
-
-def _provider_key_from_env(provider: str) -> str:
-    var = f"{provider.upper()}_API_KEY"
-    key = os.environ.get(var)
+def _lane_api_key(lane: Lane) -> str:
+    key = os.environ.get(lane.key_env)
     if not key:
-        raise SystemExit(f"set {var} to seed the {provider} provider key")
+        raise SystemExit(f"set {lane.key_env} to seed lane {lane.name!r} ({lane.provider})")
     return key
 
 
@@ -1208,7 +1189,6 @@ def _write_run_config(
     run_id: str,
     selected: list[tuple[EnvConfig, list[Task]]],
     lanes: list[Lane],
-    base_urls: dict[str, str | None],
     max_workers: int,
 ) -> None:
     config: dict[str, JsonValue] = {
@@ -1218,8 +1198,10 @@ def _write_run_config(
             {"id": env_cfg.id, "tasks": [t.id for t in tasks], "share_backend": env_cfg.share_backend}
             for env_cfg, tasks in selected
         ],
-        "lanes": [{"provider": lane.provider, "model": lane.model} for lane in lanes],
-        "base_urls": dict(sorted(base_urls.items())),
+        "lanes": [
+            {"name": lane.name, "provider": lane.provider, "model": lane.model, "base_url": lane.base_url}
+            for lane in lanes
+        ],
         "max_workers": max_workers,
         "git_commit": _git_commit(),
     }
@@ -1304,13 +1286,11 @@ def _require_str(obj: dict[str, JsonValue], key: str) -> str:
 def cli(
     env: str | list[str] | tuple[str, ...] | None = None,
     task: str | list[str] | tuple[str, ...] | None = None,
-    model: str | list[str] | tuple[str, ...] | None = None,
-    provider: str = _DEFAULT_PROVIDER,
-    base_url: str | None = None,
+    lanes: str | list[str] | tuple[str, ...] | None = None,
+    lanes_file: str | None = None,
     out: str | None = None,
     run_dir: str | None = None,
-    lanes: str | list[str] | tuple[str, ...] | None = None,
-    max_workers: int = _DEFAULT_MAX_WORKERS,
+    max_workers: int | None = None,
 ) -> None:
     """Fire entrypoint that preserves `main`'s integer exit code."""
     coloredlogs.install(
@@ -1326,8 +1306,8 @@ def cli(
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     raise SystemExit(
         main(
-            env=env, task=task, model=model, provider=provider, base_url=base_url,
-            out=out, run_dir=run_dir, lanes=lanes, max_workers=max_workers,
+            env=env, task=task, lanes=lanes, lanes_file=lanes_file,
+            out=out, run_dir=run_dir, max_workers=max_workers,
         )
     )
 

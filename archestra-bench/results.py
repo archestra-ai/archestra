@@ -28,6 +28,7 @@ class RunResult:
 
     env_id: str
     task_id: str
+    lane: str
     provider: str
     model: str
     outcome: Outcome
@@ -46,14 +47,14 @@ class RunResult:
 
 
 def build_report(results: list[RunResult]) -> list[RunResult]:
-    """Sort results and reject duplicate (env, task, provider, model) cells."""
-    seen: set[tuple[str, str, str, str]] = set()
+    """Sort results and reject duplicate (env, task, lane) cells."""
+    seen: set[tuple[str, str, str]] = set()
     for result in results:
-        key = (result.env_id, result.task_id, result.provider, result.model)
+        key = (result.env_id, result.task_id, result.lane)
         if key in seen:
             raise ValueError(f"duplicate result for {key}")
         seen.add(key)
-    return sorted(results, key=lambda result: (result.env_id, result.task_id, result.provider, result.model))
+    return sorted(results, key=lambda result: (result.env_id, result.task_id, result.lane))
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ class Aggregate:
     total_tokens: int
     per_env: list[GroupAggregate]
     per_task: list[GroupAggregate]
+    per_provider: list[GroupAggregate]
 
     @property
     def pass_rate(self) -> float:
@@ -94,6 +96,7 @@ class Aggregate:
             "total_tokens": self.total_tokens,
             "per_env": [_group_json("env_id", g) for g in self.per_env],
             "per_task": [_group_json("task_id", g) for g in self.per_task],
+            "per_provider": [_group_json("provider", g) for g in self.per_provider],
         }
 
 
@@ -117,6 +120,7 @@ def aggregate(results: list[RunResult]) -> Aggregate:
         total_tokens=sum(r.total_tokens or 0 for r in results),
         per_env=_group_by(results, lambda r: r.env_id),
         per_task=_group_by(results, lambda r: r.task_id),
+        per_provider=_group_by(results, lambda r: r.provider),
     )
 
 
@@ -139,15 +143,18 @@ def render_markdown(rows: list[RunResult]) -> str:
     """Render the env x task x model outcome table and the aggregation."""
     lines: list[str] = ["# Archestra benchmark results", ""]
 
+    header = ["env", "task", "lane", "provider/model", "outcome", "finish",
+              "tools", "tokens", "stages", "fmt", "agent error", "artifacts"]
+    align = ["---", "---", "---", "---", "---", "---", "---:", "---:", "---:", "---:", "---", "---"]
     lines += [
         "## Pass matrix",
         "",
-        "| env | task | provider/model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(align) + " |",
     ]
     for row in rows:
         lines.append(
-            f"| {row.env_id} | {row.task_id} | {row.provider}/{row.model} | {row.outcome.value} | "
+            f"| {row.env_id} | {row.task_id} | {row.lane} | {row.provider}/{row.model} | {row.outcome.value} | "
             f"{_cell(row.finish_reason)} | {row.tool_call_count} | {_cell(row.total_tokens)} | {row.stage_count} | "
             f"{row.format_attempts} | {_cell(row.agent_error)} | {_cell(row.artifact_dir)} |"
         )
@@ -162,6 +169,8 @@ def render_markdown(rows: list[RunResult]) -> str:
         lines += [_group_line(g) for g in agg.per_env]
         lines += ["", "### By task", ""]
         lines += [_group_line(g) for g in agg.per_task]
+        lines += ["", "### By provider", ""]
+        lines += [_group_line(g) for g in agg.per_provider]
 
     return "\n".join(lines) + "\n"
 

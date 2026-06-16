@@ -1,4 +1,4 @@
-import { FileModel, ProjectModel } from "@/models";
+import { ConversationModel, FileModel, ProjectModel } from "@/models";
 import { expect, test } from "@/test";
 
 test("listForUser returns the user's own files and excludes project files", async ({
@@ -46,4 +46,49 @@ test("listForUser returns the user's own files and excludes project files", asyn
     projectId: project.id,
   });
   expect(projFiles.map((r) => r.filename)).toEqual(["proj.txt"]);
+});
+
+test("listByConversation returns only the caller's files in that conversation", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const me = await makeUser();
+  const other = await makeUser({ email: "other-author@test.com" });
+  const agent = await makeAgent({ organizationId: org.id });
+  const conv = await ConversationModel.create({
+    userId: me.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+
+  const mine = await FileModel.create({
+    organizationId: org.id,
+    userId: me.id,
+    projectId: null,
+    conversationId: conv.id,
+    filename: "mine.txt",
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    data: Buffer.from("hi"),
+  });
+  await FileModel.create({
+    organizationId: org.id,
+    userId: other.id,
+    projectId: null,
+    conversationId: conv.id,
+    filename: "theirs.txt",
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    data: Buffer.from("hi"),
+  });
+
+  const listed = await FileModel.listByConversation({
+    organizationId: org.id,
+    userId: me.id,
+    conversationId: conv.id,
+  });
+  expect(listed.map((r) => r.filename)).toEqual(["mine.txt"]);
+  expect(listed[0].id).toBe(mine.id);
 });

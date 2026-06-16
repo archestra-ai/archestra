@@ -13,7 +13,7 @@ type PersistedFileMeta = {
   createdAt: Date;
 };
 
-const ARTIFACT_COLUMNS = {
+const artifactColumns = {
   id: schema.filesTable.id,
   filename: schema.filesTable.filename,
   mimeType: schema.filesTable.mimeType,
@@ -99,7 +99,7 @@ class FileModel {
     userId: string;
   }): Promise<SandboxArtifactRow[]> {
     return db
-      .select(ARTIFACT_COLUMNS)
+      .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(
@@ -117,7 +117,7 @@ class FileModel {
     projectId: string;
   }): Promise<SandboxArtifactRow[]> {
     return db
-      .select(ARTIFACT_COLUMNS)
+      .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(
@@ -135,7 +135,7 @@ class FileModel {
     conversationId: string;
   }): Promise<SandboxArtifactRow[]> {
     return db
-      .select(ARTIFACT_COLUMNS)
+      .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(

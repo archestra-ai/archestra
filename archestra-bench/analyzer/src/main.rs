@@ -7,6 +7,7 @@
 //! Tier 2, the benchmark fixtures (task prompts, schemas, verifiers, env/skill config, runner).
 
 mod analyze;
+mod lanes;
 mod runmeta;
 mod trajectory;
 
@@ -20,7 +21,7 @@ use futures::stream::{self, StreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nitpicker_agent::prelude::AgentProgress;
 
-use analyze::ProviderKind;
+use lanes::Lanes;
 use runmeta::{RolloutId, RunMeta, load_run_meta, metrics_block};
 use trajectory::{format_to_markdown, load_trajectory};
 
@@ -48,23 +49,16 @@ struct Args {
     #[arg(long, default_value = ".")]
     explore_root: PathBuf,
 
+    /// Lane name (from `--lanes-file`) driving the per-trajectory map phase.
     #[arg(long)]
-    map_model: String,
-    #[arg(long, value_enum)]
-    map_provider: ProviderKind,
+    map: String,
+    /// Lane name (from `--lanes-file`) driving the repo-grounded reduce phase.
     #[arg(long)]
-    map_base_url: Option<String>,
+    reduce: String,
+    /// Lane registry `--map`/`--reduce` resolve against. Defaults to `lanes.toml` beside the
+    /// benchmark crate, resolved from the build manifest dir so it is found regardless of cwd.
     #[arg(long)]
-    map_api_key_env: Option<String>,
-
-    #[arg(long)]
-    reduce_model: String,
-    #[arg(long, value_enum)]
-    reduce_provider: ProviderKind,
-    #[arg(long)]
-    reduce_base_url: Option<String>,
-    #[arg(long)]
-    reduce_api_key_env: Option<String>,
+    lanes_file: Option<PathBuf>,
 
     /// Output report path (default: `<run-dir>/trajectory_analysis_<ts>.md`).
     #[arg(long)]
@@ -100,6 +94,16 @@ fn run_dir_rel(run_dir: &Path, explore_root: &Path) -> Option<String> {
     let rel = abs.strip_prefix(explore_root).ok()?;
     let rel = rel.to_string_lossy().into_owned();
     if rel.is_empty() { None } else { Some(rel) }
+}
+
+/// Default lanes registry: `archestra-bench/lanes.toml`, resolved from the crate manifest dir so it
+/// is found regardless of the caller's working directory — mirroring the Python runner, which
+/// resolves the same file relative to its own source rather than cwd.
+fn default_lanes_file() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("crate manifest dir always has a parent")
+        .join("lanes.toml")
 }
 
 fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
@@ -181,6 +185,11 @@ async fn main() -> Result<()> {
     let run_dir_rel = run_dir_rel(&args.run_dir, &explore_root);
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
 
+    let lanes_file = args.lanes_file.clone().unwrap_or_else(default_lanes_file);
+    let lanes = Lanes::load(&lanes_file)?;
+    let map_lane = lanes.get(&args.map)?;
+    let reduce_lane = lanes.get(&args.reduce)?;
+
     let mp = MultiProgress::new();
 
     let rollouts = discover_rollouts(&args.run_dir)?;
@@ -198,11 +207,7 @@ async fn main() -> Result<()> {
             .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
     }
 
-    let map_client = nitpicker_agent::client_from_env(analyze::to_provider(
-        args.map_provider,
-        args.map_base_url,
-        args.map_api_key_env,
-    )?)?;
+    let map_client = nitpicker_agent::client_from_env(map_lane.provider()?)?;
 
     let bar = mp.add(ProgressBar::new(total as u64));
     bar.set_style(
@@ -213,7 +218,7 @@ async fn main() -> Result<()> {
     let mapped: Vec<(RolloutId, Result<(RunMeta, String)>)> = stream::iter(rollouts)
         .map(|rollout| {
             let client = map_client.clone();
-            let model = args.map_model.clone();
+            let model = map_lane.model.clone();
             let bar = bar.clone();
             async move {
                 let summary = rollout.meta.summarize_outcome();
@@ -295,11 +300,7 @@ async fn main() -> Result<()> {
         );
     }
 
-    let reduce_client = nitpicker_agent::client_from_env(analyze::to_provider(
-        args.reduce_provider,
-        args.reduce_base_url,
-        args.reduce_api_key_env,
-    )?)?;
+    let reduce_client = nitpicker_agent::client_from_env(reduce_lane.provider()?)?;
 
     // Persist the paid-for map output before reduce runs: a reduce/provider failure must not throw
     // away every per-rollout summary. The reducer reads its own copy from a temp dir under explore_root.
@@ -338,7 +339,7 @@ async fn main() -> Result<()> {
     // line behind on the path operators most need to read.
     let result = analyze::reduce(
         reduce_client,
-        &args.reduce_model,
+        &reduce_lane.model,
         &analyses_doc,
         &explore_root,
         run_dir_rel.as_deref(),
@@ -416,6 +417,16 @@ mod tests {
         let mut ids: Vec<String> = rollouts.iter().map(|c| c.id.to_string()).collect();
         ids.sort();
         assert_eq!(ids, vec!["api/list__stats__kimi", "basic/pi__glm"]);
+    }
+
+    #[test]
+    fn default_lanes_file_sits_beside_the_bench_crate() {
+        let p = default_lanes_file();
+        assert!(p.ends_with("lanes.toml"));
+        assert_eq!(
+            p.parent().and_then(|d| d.file_name()).unwrap(),
+            "archestra-bench"
+        );
     }
 
     #[test]

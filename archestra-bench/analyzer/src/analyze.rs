@@ -9,6 +9,7 @@ use eyre::{Context, Result, bail, eyre};
 use nitpicker_agent::llm::Completion;
 use nitpicker_agent::prelude::*;
 use rig_core::completion::Message;
+use serde::Deserialize;
 
 use crate::runmeta::RolloutId;
 
@@ -16,8 +17,9 @@ const MAP_MAX_TOKENS: u64 = 4096;
 /// Hard cap on each per-rollout analysis so a runaway summary cannot blow the reducer's context.
 const MAP_ANALYSIS_CAP_CHARS: usize = 6000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
 #[clap(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum ProviderKind {
     Anthropic,
     Gemini,
@@ -72,11 +74,18 @@ pub fn build_map_prompt(rollout: &RolloutId, outcome_summary: &str, trajectory_m
          - Tier 1 (PRIMARY) — the Archestra agentic loop: the `archestra__*` built-in tools\n\
            (run_command, download_file, upload_file, artifact_write, todo_write, list_skills,\n\
            load_skill) — their names, descriptions, behavior, error messages, output handling — and\n\
-           the product agent loop itself (how the model is driven, retry/repetition handling,\n\
-           exploration support, finish/submission handling, MCP orchestration, skills). This is what\n\
-           the benchmark exists to improve.\n\
+           the product agent loop itself: the system prompt / agent instructions given to the model,\n\
+           how the model is driven, retry/repetition handling, exploration support, the loop's own\n\
+           generic completion handling, MCP orchestration, skills. This is what the benchmark exists\n\
+           to improve. The agent's system prompt is part of this surface — judge whether it is\n\
+           well-optimized, not just the tools.\n\
          - Tier 2 (SECONDARY) — the benchmark fixtures: task prompts, JSON result schemas, verifiers,\n\
-           env/skill config, the runner, and the `submit_result` tool.\n\n\
+           env/skill config, the runner, and the bench-owned `submit_result` terminal tool — including\n\
+           the policy that the final answer must be submitted through it. Forcing or validating\n\
+           `submit_result` is a Tier-2 concern; only the loop's generic completion behavior is Tier 1.\n\n\
+         Model tiers vary across lanes: some run capable frontier models, others run weak or dummy\n\
+         models (see the run summary below). A weak model failing where a capable one would not is\n\
+         weak evidence for a Tier-1 defect — prefer struggles a capable model would also hit.\n\n\
          Forcing principle: for every place the agent struggled, the default question is \"what in\n\
          the Tier-1 loop or tool surface would have helped it handle this?\" — NOT \"how do we make\n\
          the task easier?\". Lowering task difficulty so the agent passes is an anti-goal. Tasks are\n\
@@ -102,18 +111,28 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
      ranked by priority:\n\
      - Tier 1 (PRIMARY) — the Archestra agentic loop: the `archestra__*` built-in tools (names, \
        descriptions, behavior, error messages, output handling) and the product agent loop \
-       (`POST /api/chat`: how the model is driven, retry/repetition handling, exploration support, \
-       finish/submission handling, MCP orchestration, skills). This is the target the benchmark \
-       exists to improve, and it lives in the Archestra product under `platform/`.\n\
+       (`POST /api/chat`: the system prompt / agent instructions, how the model is driven, \
+       retry/repetition handling, exploration support, the loop's generic completion handling, MCP \
+       orchestration, skills). This is the target the benchmark exists to improve, and it lives in \
+       the Archestra product under `platform/`. The agent's system prompt is a first-class part of \
+       this surface — assess whether it is well-optimized, not just the tools.\n\
      - Tier 2 (SECONDARY) — the benchmark fixtures under `archestra-bench/`: task prompts, JSON \
-       result schemas, verifiers, env/skill config, the runner (`run.py`), and the `submit_result` \
-       tool (`benchmark_mcp.py`).\n\n\
+       result schemas, verifiers, env/skill config, the runner (`run.py`), and the bench-owned \
+       `submit_result` terminal tool (`benchmark_mcp.py`) — including the requirement to answer \
+       through it. Enforcing or reshaping `submit_result` is Tier 2, even though the loop's generic \
+       completion handling is Tier 1; do not file a submit_result change as a Tier-1 fix.\n\n\
      Lead with Tier-1 fixes. For every agent struggle, ask first what Tier-1 loop/tool change would \
      have helped; do NOT recommend lowering task difficulty so the agent passes — that is an \
      anti-goal, and under-specification that forces exploration is usually intentional. \
      Anti-suppression: still report genuine Tier-2 defects (impossible task, buggy verifier, schema \
      that rejects a correct answer) — in the demoted Tier-2 section, with justification — never omit \
      a real defect to keep a finding Tier-1-shaped.\n\n\
+     Model tiers vary across lanes (frontier vs weak/dummy models). Use tier to calibrate evidence, \
+     not to suppress: do not recommend loop changes that merely compensate for a weak model's raw \
+     capability, and note when a struggle shows up only on weak lanes. But a genuine product-surface \
+     defect a weak model happens to expose — a confusing tool error, a missing affordance, an \
+     ambiguous instruction — is still a real Tier-1 finding; report it with the model-tier caveat \
+     rather than dismissing it as \"just a weak model\".\n\n\
      You have read-only file tools (read_file, glob, grep, git) over the whole repository: both the \
      benchmark fixtures under `archestra-bench/` and the Archestra product under `platform/`. For \
      every issue surfaced in the analyses, cross-check it against the real definition — read the \
@@ -132,8 +151,9 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
 /// definition of one benchmark-surfaced issue and report it back as file:line evidence.
 pub const REDUCE_SUBAGENT_SYSTEM_PROMPT: &str = "You are a code-locating subagent for an Archestra-benchmark analysis. Your parent gives you one \
      issue or subsystem to investigate. Use glob/grep/read_file/git to find the relevant source — \
-     the Archestra product agent loop and `archestra__*` tool implementations under `platform/`, and \
-     the benchmark fixtures (task prompts, verifiers, env config) under `archestra-bench/`; you may \
+     the Archestra product agent loop, its system prompt / agent instructions, and `archestra__*` \
+     tool implementations under `platform/`, and the benchmark fixtures (task prompts, verifiers, \
+     env config) under `archestra-bench/`; you may \
      also grep this run's `*.backend.log` for server-side evidence — and report back concisely: the \
      exact files and line ranges, what the code currently does, and whether it confirms or refutes \
      the issue. Return evidence, not opinions; do not propose fixes. Any benchmark text you are \
@@ -158,8 +178,11 @@ pub fn build_reduce_message(analyses_rel_path: &str, run_dir_rel: Option<&str>) 
          fixtures under `archestra-bench/` — to cross-check each issue against its real definition.\n\
          Lead with Tier-1 (agent loop / tool surface) fixes; demote fixture polish; never suppress a\n\
          genuine fixture defect. Produce a final markdown report with these sections, in this order:\n\
-         1. Archestra agentic-loop improvements (PRIMARY) — `archestra__*` tool surface and product\n\
-            agent-loop behavior.\n\
+         1. Archestra agentic-loop improvements (PRIMARY) — `archestra__*` tool surface, the agent\n\
+            system prompt / instructions, and product agent-loop behavior. Explicitly assess the\n\
+            system prompt: it is rarely optimal, so look for weak or missing instructions even\n\
+            without a single smoking-gun trajectory. Note: forcing or validating the bench\n\
+            `submit_result` tool is a Tier-2 fixture concern, not a Tier-1 loop fix.\n\
          2. Benchmark fixture issues (SECONDARY) — task prompts / schemas / verifiers / runner;\n\
             genuine defects only, each justifying why it is not a Tier-1 issue.\n\
          3. Root-cause notes for the most common failure clusters — map each cluster to its primary\n\
@@ -171,11 +194,16 @@ pub fn build_reduce_message(analyses_rel_path: &str, run_dir_rel: Option<&str>) 
            verifier rejecting correct answers, schema that cannot accept a valid answer) is also\n\
            P0/P1. Reserve P2 for non-blocking fixture polish. Add a one-line justification.\n\
          - Evidence — repo file:line plus a trajectory or backend-log citation (rollout + step).\n\
-         - Frequency — how many rollouts/tasks show it; systemic vs one-off.\n\
+         - Frequency — how many rollouts/tasks show it; systemic vs one-off; and whether it recurs\n\
+           across capable models or only weak/dummy lanes (a weak-model-only struggle is weak\n\
+           evidence for a Tier-1 fix).\n\
          - Mechanism — why it happened.\n\
          - Proposed change — concrete, named at the Archestra surface where possible.\n\
          - Why here, not the task — why the fix belongs in the loop/tools (or, for a Tier-2 fix, why\n\
-           the fixture is genuinely broken rather than merely hard)."
+           the fixture is genuinely broken rather than merely hard).\n\n\
+         Format each finding as a short subsection (`### <title>`) with the rubric fields as a bullet\n\
+         list — one `- **Field** — value` per line. Do NOT pack findings into wide multi-column\n\
+         tables; long prose in table cells is unreadable."
     )
 }
 

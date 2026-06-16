@@ -166,6 +166,35 @@ describe("knowledge file routes", () => {
     expect(download.headers["content-disposition"]).toContain("attachment");
   });
 
+  test("renders a markdown file inline as text instead of forcing a download", async () => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        files: [
+          {
+            name: "runbook.md",
+            content: Buffer.from("# Title\nBody"),
+            mimeType: "text/markdown",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+
+    const preview = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-files/${fileId}/content`,
+    });
+
+    expect(preview.statusCode).toBe(200);
+    expect(preview.body).toBe("# Title\nBody");
+    // Coerced to text/plain so the browser renders it under nosniff.
+    expect(preview.headers["content-type"]).toContain("text/plain");
+    expect(preview.headers["content-disposition"]).toContain("inline");
+  });
+
   test("does not expose personal files to other users in the same organization", async ({
     makeUser,
     makeMember,

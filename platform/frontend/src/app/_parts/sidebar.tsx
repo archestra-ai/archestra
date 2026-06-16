@@ -587,19 +587,19 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  // My Files (sandbox artifacts) are gated behind the sandbox feature flag.
-  const sandboxEnabled = useFeature("sandbox") === true;
+  // Projects and My Files are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
+  const projectsEnabled = useFeature("projectsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
 
-  // Projects and My Files exist only when the sandbox runtime is on.
+  // Projects and My Files exist only when the projects feature is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter(
-        (item) => item.title === "New Chat" || sandboxEnabled,
+        (item) => item.title === "New Chat" || projectsEnabled,
       ),
-    [sandboxEnabled],
+    [projectsEnabled],
   );
 
   // Filter nav groups based on connect permissions and feature flags

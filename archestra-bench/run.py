@@ -35,6 +35,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ import coloredlogs
 import fire
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from archestra_client import AgentCreate, ArchestraApiError
 from benchmark_mcp import BenchmarkMcp, SubmissionAccepted, SubmissionFormatFailed
@@ -231,6 +233,52 @@ def main(
 # === lane execution ===
 
 
+class ProgressReporter:
+    """Thread-safe live progress over `(task, lane)` cells across concurrently running lanes.
+
+    One `tqdm` bar replaces the per-task INFO logs: concurrent worker threads call
+    `cell_started`/`cell_finished` under a lock, and the bar's postfix shows the in-flight cells and
+    the last completed outcome. Wrap the run loop in `logging_redirect_tqdm()` so setup/teardown logs
+    (some emitted from worker threads mid-run) print above the bar instead of corrupting it."""
+
+    def __init__(self, total: int) -> None:
+        self._lock = threading.Lock()
+        self._bar = tqdm(total=total, desc="tasks", unit="task")
+        self._running: dict[str, str] = {}
+        self._last = "-"
+
+    def cell_started(self, cell_id: str, label: str) -> None:
+        with self._lock:
+            self._running[cell_id] = label
+            self._refresh()
+
+    def cell_finished(self, cell_id: str, label: str, outcome: Outcome) -> None:
+        with self._lock:
+            self._running.pop(cell_id, None)
+            mark = "✓" if outcome is Outcome.PASSED else "✗"
+            suffix = "" if outcome in (Outcome.PASSED, Outcome.FAILED) else f"({outcome.value})"
+            self._last = f"{mark} {label}{suffix}"
+            self._bar.update(1)
+            self._refresh()
+
+    def _refresh(self) -> None:
+        cur = ", ".join(sorted(self._running.values())) or "-"
+        self._bar.set_postfix_str(f"cur={cur} last={self._last}", refresh=True)
+
+    def close(self) -> None:
+        self._bar.close()
+
+    def __enter__(self) -> ProgressReporter:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
+def _cell_id(task: Task, lane: Lane) -> str:
+    return f"{lane.slug}/{task.id}"
+
+
 @dataclass(frozen=True)
 class _RunCtx:
     """Run-wide config threaded into every lane unit."""
@@ -251,24 +299,27 @@ def _execute_plan(plan: list[EnvPlan], ctx: _RunCtx, *, max_workers: int) -> lis
     the Parallel call) unwinds the stack rather than stranding a backend. Isolated-env lanes own their
     backend inside the worker thread."""
     units: list[Callable[[], list[RunResult]]] = []
-    with contextlib.ExitStack() as stack:
+    total_cells = sum(len(env_plan.tasks) for env_plan in plan for _ in env_plan.lanes)
+    with contextlib.ExitStack() as stack, logging_redirect_tqdm(), ProgressReporter(total_cells) as reporter:
         for env_plan in plan:
             builder = _shared_env_units if env_plan.share_backend else _isolated_env_units
-            units.extend(builder(env_plan, ctx, stack))
-        total = len(units)
-        n_jobs = min(max_workers, total) or 1
-        logger.info("running %d lane unit(s) across %d env(s) with up to %d worker(s)", total, len(plan), n_jobs)
+            units.extend(builder(env_plan, ctx, stack, reporter))
+        n_jobs = min(max_workers, len(units)) or 1
+        logger.info(
+            "running %d lane unit(s) / %d task(s) across %d env(s) with up to %d worker(s)",
+            len(units), total_cells, len(plan), n_jobs,
+        )
         generator = Parallel(n_jobs=n_jobs, backend="threading", return_as="generator")(
             delayed(unit)() for unit in units
         )
         results: list[RunResult] = []
-        for lane_results in tqdm(generator, total=total, desc="lanes", unit="lane"):
+        for lane_results in generator:
             results.extend(lane_results)
         return results
 
 
 def _shared_env_units(
-    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack
+    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack, reporter: ProgressReporter
 ) -> list[Callable[[], list[RunResult]]]:
     """Boot + seed one backend for the env (serial, up front), create a per-lane agent + benchmark MCP,
     and return one thunk per lane that drives that lane's tasks against the shared backend."""
@@ -289,10 +340,10 @@ def _shared_env_units(
         seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id for _, agent_id, _, _ in setups])
     return [
         _lane_unit(
-            env, env_plan.tasks, lane, ctx,
+            env, env_plan.tasks, lane, ctx, reporter,
             _shared_lane_body(
                 client, env, env_plan.tasks, lane, mcp, submit_tool, agent_id,
-                ctx.root_run_dir, resolved[lane.provider][lane.model],
+                ctx.root_run_dir, resolved[lane.provider][lane.model], reporter,
             ),
         )
         for lane, agent_id, submit_tool, mcp in setups
@@ -309,30 +360,34 @@ def _shared_lane_body(
     agent_id: str,
     root_run_dir: Path,
     resolved: ResolvedModel,
+    reporter: ProgressReporter,
 ) -> Callable[[list[RunResult]], None]:
     def body(out: list[RunResult]) -> None:
         # own client per lane so concurrent lanes never share one client's mutable state on the
         # shared backend (the agent + MCP were already set up on the shared client, serially).
         with client.sibling() as lane_client:
-            _run_lane(lane_client, env, tasks, lane, mcp, submit_tool, agent_id, root_run_dir, resolved, out)
+            _run_lane(lane_client, env, tasks, lane, mcp, submit_tool, agent_id, root_run_dir, resolved, reporter, out)
 
     return body
 
 
 def _isolated_env_units(
-    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack
+    env_plan: EnvPlan, ctx: _RunCtx, stack: contextlib.ExitStack, reporter: ProgressReporter
 ) -> list[Callable[[], list[RunResult]]]:
     """One thunk per lane; each boots + seeds + tears down its own backend inside the worker thread, so
     lanes never share mutable backend state (required for mutating envs)."""
     env = env_plan.env
     return [
-        _lane_unit(env, env_plan.tasks, lane, ctx, _isolated_lane_body(env, env_plan.tasks, lane, ctx))
+        _lane_unit(
+            env, env_plan.tasks, lane, ctx, reporter,
+            _isolated_lane_body(env, env_plan.tasks, lane, ctx, reporter),
+        )
         for lane in env_plan.lanes
     ]
 
 
 def _isolated_lane_body(
-    env: EnvConfig, tasks: tuple[Task, ...], lane: Lane, ctx: _RunCtx
+    env: EnvConfig, tasks: tuple[Task, ...], lane: Lane, ctx: _RunCtx, reporter: ProgressReporter
 ) -> Callable[[list[RunResult]], None]:
     def body(out: list[RunResult]) -> None:
         log_path = ctx.root_run_dir / f"{_slug(env.id)}__{lane.slug}.backend.log"
@@ -349,7 +404,7 @@ def _isolated_lane_body(
             if env.mcps:
                 seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id])
             model = resolved[lane.provider][lane.model]
-            _run_lane(client, env, tasks, lane, mcp, submit_tool, agent_id, ctx.root_run_dir, model, out)
+            _run_lane(client, env, tasks, lane, mcp, submit_tool, agent_id, ctx.root_run_dir, model, reporter, out)
 
     return body
 
@@ -368,7 +423,12 @@ def _resolve_env_providers(
 
 
 def _lane_unit(
-    env: EnvConfig, tasks: tuple[Task, ...], lane: Lane, ctx: _RunCtx, body: Callable[[list[RunResult]], None]
+    env: EnvConfig,
+    tasks: tuple[Task, ...],
+    lane: Lane,
+    ctx: _RunCtx,
+    reporter: ProgressReporter,
+    body: Callable[[list[RunResult]], None],
 ) -> Callable[[], list[RunResult]]:
     """Wrap a lane body so an infra failure (boot/seed/setup) is logged and turned into an `infra:`
     AGENT_ERROR result per not-yet-run task -- isolating the failure so sibling lanes keep going and
@@ -383,7 +443,13 @@ def _lane_unit(
             # lane must not abort the whole sweep -- it becomes an infra: result like any boot failure.
             logger.exception("lane %s / %s:%s aborted (infra)", env.id, lane.provider, lane.model)
             done = {result.task_id for result in out}
-            out.extend(_infra_failed(env, task, lane, ctx.root_run_dir, exc) for task in tasks if task.id not in done)
+            for task in tasks:
+                if task.id in done:
+                    continue
+                # tasks that ran already advanced the bar in _run_lane; advance it for the rest so a
+                # boot/seed failure still drives the bar to 100% instead of stranding the lane's cells.
+                out.append(_infra_failed(env, task, lane, ctx.root_run_dir, exc))
+                reporter.cell_finished(_cell_id(task, lane), task.id, Outcome.AGENT_ERROR)
         return out
 
     return run
@@ -399,25 +465,27 @@ def _run_lane(
     agent_id: str,
     root_run_dir: Path,
     resolved: ResolvedModel,
+    reporter: ProgressReporter,
     out: list[RunResult],
 ) -> None:
     """Run the lane's tasks serially against its own MCP + agent, appending each result to `out` (so a
     mid-lane failure keeps the results already produced)."""
     for task in tasks:
-        logger.info("running %s / %s / %s:%s", env.id, task.id, lane.provider, lane.model)
-        out.append(
-            _run_one(
-                client=client,
-                bench_mcp=mcp,
-                submit_tool=submit_tool,
-                root_run_dir=root_run_dir,
-                env_id=env.id,
-                lane=lane,
-                agent_id=agent_id,
-                task=task,
-                resolved=resolved,
-            )
+        cell = _cell_id(task, lane)
+        reporter.cell_started(cell, task.id)
+        result = _run_one(
+            client=client,
+            bench_mcp=mcp,
+            submit_tool=submit_tool,
+            root_run_dir=root_run_dir,
+            env_id=env.id,
+            lane=lane,
+            agent_id=agent_id,
+            task=task,
+            resolved=resolved,
         )
+        out.append(result)
+        reporter.cell_finished(cell, task.id, result.outcome)
 
 
 def _infra_failed(env: EnvConfig, task: Task, lane: Lane, root_run_dir: Path, exc: BaseException) -> RunResult:
@@ -592,8 +660,6 @@ def _grade_cell(
     _save_verifier_artifacts(artifacts, artifact_paths, outcome)
     metadata["verifier_exit_code"] = outcome.exit_code
     metadata["verifier_timed_out"] = outcome.timed_out
-    if not outcome.passed:
-        logger.info("  verifier failed (exit %s)", outcome.exit_code)
     return _finish(
         env_id,
         provider,

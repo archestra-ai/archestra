@@ -20,6 +20,7 @@ from eval_client import ChatRunResult, ChatStreamRecord
 from results import Outcome, RunResult, build_report
 from run import (
     Lane,
+    ProgressReporter,
     _base_urls,
     _build_run_plan,
     _cell_token,
@@ -250,7 +251,7 @@ def test_lane_unit_turns_an_exception_into_infra_results_for_all_tasks(tmp_path:
     def boom(_out: list[RunResult]) -> None:
         raise RuntimeError("backend exited early")
 
-    results = _lane_unit(_env_cfg(), tasks, lane, ctx, boom)()  # must NOT raise -- isolation
+    results = _lane_unit(_env_cfg(), tasks, lane, ctx, ProgressReporter(len(tasks)), boom)()  # must NOT raise
     assert [r.task_id for r in results] == ["t1", "t2"]
     assert all(r.outcome is Outcome.AGENT_ERROR and (r.agent_error or "").startswith("infra:") for r in results)
     # a per-cell record is persisted for every task, so no cell silently vanishes from the run dir
@@ -267,7 +268,7 @@ def test_lane_unit_isolates_systemexit_too(tmp_path: Path) -> None:
     def never_syncs(_out: list[RunResult]) -> None:
         raise SystemExit("models never synced")
 
-    results = _lane_unit(_env_cfg(), (_task("t1"),), Lane("gemini", "g"), ctx, never_syncs)()
+    results = _lane_unit(_env_cfg(), (_task("t1"),), Lane("gemini", "g"), ctx, ProgressReporter(1), never_syncs)()
     assert [r.outcome for r in results] == [Outcome.AGENT_ERROR]
 
 
@@ -284,7 +285,7 @@ def test_lane_unit_preserves_partial_results_and_fills_only_missing(tmp_path: Pa
         out.append(done)  # t1 already graded
         raise RuntimeError("crashed before t2")
 
-    results = _lane_unit(_env_cfg(), tasks, Lane("gemini", "g"), ctx, half)()
+    results = _lane_unit(_env_cfg(), tasks, Lane("gemini", "g"), ctx, ProgressReporter(len(tasks)), half)()
     assert results[0] is done  # the real t1 result is kept, not clobbered
     assert results[1].task_id == "t2" and results[1].outcome is Outcome.AGENT_ERROR
 

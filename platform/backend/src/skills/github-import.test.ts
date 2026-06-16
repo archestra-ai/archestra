@@ -25,6 +25,40 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * Stub GitHub, then delay specific raw-file responses so they resolve out of
+ * tree order. Earlier files given longer delays surface any assembly that
+ * tracks completion order instead of input order.
+ */
+function stubGithubWithRawDelays(
+  repos: Parameters<typeof stubGithub>[0],
+  delayByRawPath: Record<string, number>,
+): void {
+  const inner = stubGithub(repos) as unknown as (
+    input: string | URL | Request,
+  ) => Promise<Response>;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const urlStr =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const url = new URL(urlStr);
+      if (url.hostname === "raw.githubusercontent.com") {
+        const rawPath = decodeURIComponent(
+          url.pathname.split(`/${COMMIT_SHA}/`)[1] ?? "",
+        );
+        const delay = delayByRawPath[rawPath];
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      return inner(input);
+    }),
+  );
+}
+
 describe("discoverSkills", () => {
   it("finds every directory holding a SKILL.md, with parsed metadata and file counts", async () => {
     stubGithub([
@@ -85,6 +119,31 @@ describe("discoverSkills", () => {
     });
 
     expect(result.skills.map((skill) => skill.name)).toEqual(["inside-skill"]);
+  });
+
+  it("keeps skills in tree order when manifest fetches resolve out of order", async () => {
+    stubGithubWithRawDelays(
+      [
+        {
+          owner: "disc-order",
+          repo: "skills",
+          files: {
+            "skills/a/SKILL.md": manifest("a-skill"),
+            "skills/b/SKILL.md": manifest("b-skill"),
+            "skills/c/SKILL.md": manifest("c-skill"),
+          },
+        },
+      ],
+      { "skills/a/SKILL.md": 40, "skills/b/SKILL.md": 20 },
+    );
+
+    const result = await discoverSkills({ repoUrl: "disc-order/skills" });
+
+    expect(result.skills.map((skill) => skill.name)).toEqual([
+      "a-skill",
+      "b-skill",
+      "c-skill",
+    ]);
   });
 
   it("accepts a /tree/<ref>/<subpath> URL and resolves that ref", async () => {
@@ -381,6 +440,39 @@ describe("importSkills", () => {
     expect(imported.skippedFiles[0]).toBe(
       `references/file-${String(MAX_FILES_PER_SKILL).padStart(4, "0")}.md`,
     );
+  });
+
+  it("keeps resource files in tree order when fetches resolve out of order", async () => {
+    stubGithubWithRawDelays(
+      [
+        {
+          owner: "imp-order",
+          repo: "skills",
+          files: {
+            "s/SKILL.md": manifest("ordered-skill"),
+            "s/a.txt": "a",
+            "s/b.txt": "b",
+            "s/c.txt": "c",
+            "s/d.txt": "d",
+            "s/e.txt": "e",
+          },
+        },
+      ],
+      { "s/a.txt": 50, "s/b.txt": 40, "s/c.txt": 30, "s/d.txt": 20 },
+    );
+
+    const [imported] = await importSkills({
+      repoUrl: "imp-order/skills",
+      skillPaths: ["s"],
+    });
+
+    expect(imported.files.map((file) => file.path)).toEqual([
+      "a.txt",
+      "b.txt",
+      "c.txt",
+      "d.txt",
+      "e.txt",
+    ]);
   });
 });
 

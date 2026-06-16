@@ -94,8 +94,9 @@ read-only against backend state), and six tasks —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
-- `crypto-price` — fetch BTC/SOL price at a timestamp from Yahoo Finance in the sandbox; the verifier
-  checks both values against recorded ground truth within tolerance.
+- `crypto-price` — fetch the BTC and SOL price at a timestamp from Yahoo Finance in the sandbox and
+  report their ratio (BTC/SOL); the verifier derives the expected ratio from recorded ground truth
+  and checks it within tolerance.
 - `median-salary` — compute the median of the salary column of a CSV inlined into the prompt (via a
   `{{file:…}}` placeholder); the verifier recomputes from the same fixture.
 - `nitpicker-version` — report the latest `nitpicker` crate version as of a date; the verifier checks

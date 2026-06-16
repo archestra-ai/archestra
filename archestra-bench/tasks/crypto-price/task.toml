@@ -1,16 +1,12 @@
 [[stages]]
-text = """Using Yahoo Finance data fetched from the sandbox, find the price of Bitcoin (ticker BTC-USD) and Solana (ticker SOL-USD) at 2026-06-01 16:00 UTC. Install whatever you need (e.g. yfinance) following the run_command tool's guidance, fetch the historical intraday data, and read off the Close value for the 1h candle whose timestamp is exactly 2026-06-01 16:00:00+00:00. Submit your answer with result = {"btc_usd": <number>, "sol_usd": <number>} (prices in USD)."""
+text = """From Yahoo Finance, take the USD price of Bitcoin (ticker BTC-USD) and Solana (ticker SOL-USD) at exactly 2026-06-01 16:00:00 UTC -- the Close of that 1-hour candle for each. Report how many SOL one BTC was worth at that moment: the BTC price divided by the SOL price. Submit your answer with result = {"btc_sol_ratio": <number>}."""
 
 [result_schema]
 type = "object"
-required = ["btc_usd", "sol_usd"]
+required = ["btc_sol_ratio"]
 additionalProperties = false
 
-  [result_schema.properties.btc_usd]
-  type = "number"
-  exclusiveMinimum = 0
-
-  [result_schema.properties.sol_usd]
+  [result_schema.properties.btc_sol_ratio]
   type = "number"
   exclusiveMinimum = 0
 

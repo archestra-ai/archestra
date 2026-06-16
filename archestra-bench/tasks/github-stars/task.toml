@@ -1,5 +1,5 @@
 [[stages]]
-text = """Using the GitHub REST API from the sandbox, find the current number of stargazers (stars) of the public repository `archestra-ai/archestra`. Fetch `https://api.github.com/repos/archestra-ai/archestra` (send a `User-Agent` header so GitHub does not reject the request) and read the integer `stargazers_count` field. Submit your answer with result = {"stars": <integer>}."""
+text = """Determine the exact current number of stargazers (stars) of Archestra's main open-source repository on GitHub. Submit your answer with result = {"stars": <integer>}."""
 
 [result_schema]
 type = "object"

@@ -497,6 +497,41 @@ fn warm_base_user_setup(py_requirements: &str) -> String {
     )
 }
 
+/// The root-level setup exec, run before `with_user` drops to the sandbox user.
+/// A pre-baked image only verifies its provenance marker (no network); a plain
+/// base runs the apt toolbelt + sandbox dirs + pip shim.
+fn warm_base_root_setup(prebuilt: bool) -> String {
+    match prebuilt {
+        // Skipping the apt/uv setup is only safe if the image really is the baked
+        // base. Verify its provenance marker so a mis-set runtime image fails here
+        // with a clear message rather than producing a container that breaks
+        // downstream — and with no network fallback under restricted egress.
+        true => format!(
+            "test -f {SANDBOX_BASE_MARKER} || (echo 'error: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true but {SANDBOX_BASE_MARKER} is absent; the runtime image is not the baked sandbox base' >&2; exit 1)"
+        ),
+        // apt packages + sandbox dirs + ownership + pip shim. the shim redirects
+        // any `pip` invocation to uv so the model is never tempted to install into
+        // ~/.local (which the venv python won't see). `uv pip` is unaffected
+        // because it's a subcommand of `uv`, not a separate binary.
+        false => {
+            let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
+            format!(
+                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
+            )
+        }
+    }
+}
+
+/// The user-level setup exec, run after `with_user`. A pre-baked image already
+/// has the uv project + venv, so there is nothing to do; a plain base scaffolds
+/// the project and seeds the default packages.
+fn warm_base_user_setup_exec(prebuilt: bool) -> Option<String> {
+    match prebuilt {
+        true => None,
+        false => Some(warm_base_user_setup(&DEFAULT_PYTHON_REQUIREMENTS.join(" "))),
+    }
+}
+
 #[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
@@ -512,35 +547,15 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     tracing::Span::current().record("image", image.as_str());
     tracing::info!(%image, prebuilt, "building warm base image");
 
-    let mut container = client.container().from(&image);
-
-    if prebuilt {
-        // Skipping the apt/uv setup is only safe if the image really is the baked
-        // base. Verify its provenance marker so a mis-set runtime image fails here
-        // with a clear message rather than producing a container that breaks
-        // downstream — and with no network fallback under restricted egress.
-        container = container.with_exec(vec![
+    let mut container = client
+        .container()
+        .from(&image)
+        // exactly one root-level exec: provenance check (prebuilt) or apt/uv setup.
+        .with_exec(vec![
             "sh".to_string(),
             "-c".to_string(),
-            format!(
-                "test -f {SANDBOX_BASE_MARKER} || (echo 'error: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true but {SANDBOX_BASE_MARKER} is absent; the runtime image is not the baked sandbox base' >&2; exit 1)"
-            ),
-        ]);
-    }
-
-    if !prebuilt {
-        let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
-        // root setup: apt packages + sandbox dirs + ownership + pip shim. the
-        // shim redirects any `pip` invocation to uv so the model is never tempted
-        // to install into ~/.local (which the venv python won't see). `uv pip` is
-        // unaffected because it's a subcommand of `uv`, not a separate binary.
-        let root_setup = format!(
-            "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
-        );
-        container = container.with_exec(vec!["sh".to_string(), "-c".to_string(), root_setup]);
-    }
-
-    container = container
+            warm_base_root_setup(prebuilt),
+        ])
         // written as root (0755) so every materialised container inherits a
         // world-readable, executable supervisor without a per-call layer.
         .with_new_file_opts(
@@ -558,11 +573,8 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .with_env_variable("VIRTUAL_ENV", DEFAULT_VENV_DIR)
         .with_env_variable("PATH", format!("{DEFAULT_VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"));
 
-    if !prebuilt {
-        let py_requirements = DEFAULT_PYTHON_REQUIREMENTS.join(" ");
-        // user setup: scaffold the uv project, create the venv, seed default
-        // packages with `uv add` (same path the model uses), owned by sandbox user.
-        let user_setup = warm_base_user_setup(&py_requirements);
+    // user setup runs as the sandbox user; a prebuilt base already has the venv.
+    if let Some(user_setup) = warm_base_user_setup_exec(prebuilt) {
         container = container.with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup]);
     }
 
@@ -1082,6 +1094,51 @@ mod tests {
         // deps seeded via the same `uv add` path the model uses.
         assert!(cmd.contains("uv add numpy pandas"));
         assert!(!cmd.contains("uv pip install"));
+    }
+
+    #[test]
+    fn warm_base_root_setup_prebuilt_verifies_marker_only() {
+        let cmd = warm_base_root_setup(true);
+        // prebuilt only checks the provenance marker and fails loudly if absent.
+        assert!(cmd.contains(&format!("test -f {SANDBOX_BASE_MARKER}")));
+        assert!(cmd.contains("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true"));
+        assert!(cmd.contains("exit 1"));
+        // no network/apt steps — those are what a restricted egress starves.
+        assert!(!cmd.contains("apt-get"));
+        assert!(!cmd.contains("mkdir"));
+    }
+
+    #[test]
+    fn warm_base_root_setup_plain_installs_apt_toolbelt() {
+        let cmd = warm_base_root_setup(false);
+        assert!(cmd.contains("apt-get update"));
+        assert!(cmd.contains("apt-get install -y --no-install-recommends"));
+        // every default apt package is present.
+        for pkg in DEFAULT_APT_PACKAGES {
+            assert!(cmd.contains(pkg), "missing apt package: {pkg}");
+        }
+        assert!(cmd.contains(&format!(
+            "mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
+        )));
+        assert!(cmd.contains(PIP_SHIM_SETUP));
+        // a plain base never checks the baked-image marker.
+        assert!(!cmd.contains(SANDBOX_BASE_MARKER));
+    }
+
+    #[test]
+    fn warm_base_user_setup_exec_is_skipped_when_prebuilt() {
+        // a baked base already has the uv project + venv, so no user-level exec.
+        assert!(warm_base_user_setup_exec(true).is_none());
+    }
+
+    #[test]
+    fn warm_base_user_setup_exec_scaffolds_when_plain() {
+        let cmd = warm_base_user_setup_exec(false).expect("plain base needs user setup");
+        assert!(cmd.contains("uv venv --python python3 /home/sandbox/.venv"));
+        // default python deps are seeded via the same `uv add` path the model uses.
+        for req in DEFAULT_PYTHON_REQUIREMENTS {
+            assert!(cmd.contains(req), "missing python requirement: {req}");
+        }
     }
 
     #[test]

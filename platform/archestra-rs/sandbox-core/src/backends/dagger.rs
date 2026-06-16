@@ -532,6 +532,14 @@ fn warm_base_user_setup_exec(prebuilt: bool) -> Option<String> {
     }
 }
 
+/// The base is treated as pre-baked only on an exact `"true"`; anything else
+/// (unset, empty, `"1"`, `"True"`) falls back to building from a stock image,
+/// because skipping the toolchain build on a non-baked image yields a broken
+/// container with no network fallback under restricted egress.
+fn base_prebuilt_from_env(value: Option<String>) -> bool {
+    value.as_deref() == Some("true")
+}
+
 #[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
@@ -541,9 +549,7 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     // are the steps that hit ghcr.io/debian/pypi at runtime and get starved by a
     // restrictive egress policy. Only the supervisor + env/user are layered on
     // (no network), so a cold restricted engine works without warming first.
-    let prebuilt = env::var("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT")
-        .map(|v| v == "true")
-        .unwrap_or(false);
+    let prebuilt = base_prebuilt_from_env(env::var("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT").ok());
     tracing::Span::current().record("image", image.as_str());
     tracing::info!(%image, prebuilt, "building warm base image");
 
@@ -1139,6 +1145,22 @@ mod tests {
         for req in DEFAULT_PYTHON_REQUIREMENTS {
             assert!(cmd.contains(req), "missing python requirement: {req}");
         }
+    }
+
+    #[test]
+    fn base_prebuilt_from_env_is_true_only_for_exact_true() {
+        assert!(base_prebuilt_from_env(Some("true".to_string())));
+        // anything but an exact "true" must not skip the toolchain build.
+        assert!(!base_prebuilt_from_env(Some("True".to_string())));
+        assert!(!base_prebuilt_from_env(Some("TRUE".to_string())));
+        assert!(!base_prebuilt_from_env(Some("1".to_string())));
+        assert!(!base_prebuilt_from_env(Some("true ".to_string())));
+        assert!(!base_prebuilt_from_env(Some(String::new())));
+    }
+
+    #[test]
+    fn base_prebuilt_from_env_defaults_to_false_when_unset() {
+        assert!(!base_prebuilt_from_env(None));
     }
 
     #[test]

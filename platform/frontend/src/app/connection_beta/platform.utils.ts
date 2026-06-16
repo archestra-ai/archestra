@@ -5,17 +5,25 @@ export type ConnectPlatform = NonNullable<
   CreateConnectionSetupBody["platform"]
 >;
 
-export const CONNECT_PLATFORMS: readonly ConnectPlatform[] = [
-  "macos",
-  "linux",
-  "windows",
-];
+/**
+ * The selectable options. macOS and Linux render the identical `curl | bash`
+ * script, so they collapse into one choice (sent to the API as "macos");
+ * Windows gets the PowerShell renderer.
+ */
+export const CONNECT_PLATFORM_OPTIONS = ["macos", "windows"] as const;
+export type ConnectPlatformOption = (typeof CONNECT_PLATFORM_OPTIONS)[number];
 
-export const platformLabels: Record<ConnectPlatform, string> = {
-  macos: "macOS",
-  linux: "Linux",
+export const platformLabels: Record<ConnectPlatformOption, string> = {
+  macos: "macOS / Linux",
   windows: "Windows",
 };
+
+/** Collapse a detected OS onto a selectable option (linux folds into macOS). */
+export function toPlatformOption(
+  platform: ConnectPlatform,
+): ConnectPlatformOption {
+  return platform === "windows" ? "windows" : "macos";
+}
 
 /**
  * Best-effort OS detection from the browser so the wizard pre-selects the

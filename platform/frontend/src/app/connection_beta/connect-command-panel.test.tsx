@@ -149,9 +149,9 @@ describe("ConnectCommandPanel", () => {
   it("shows the auto-detected platform in the review step", async () => {
     renderPanel();
     await screen.findByText(COMMAND);
-    // jsdom reports no Windows UA, so detection falls back to macOS.
+    // jsdom reports no Windows UA, so detection falls back to the bash option.
     expect(screen.getByText(/Run on/)).toBeInTheDocument();
-    expect(screen.getByText("macOS")).toBeInTheDocument();
+    expect(screen.getByText("macOS / Linux")).toBeInTheDocument();
     expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectPlatform } from "./platform.utils";
+import { detectPlatform, toPlatformOption } from "./platform.utils";
 
 function stubUserAgent(userAgent: string, platform = "") {
   vi.stubGlobal("navigator", { userAgent, platform });
@@ -37,5 +37,16 @@ describe("detectPlatform", () => {
   it("falls back to macOS when nothing matches", () => {
     stubUserAgent("something-unknown");
     expect(detectPlatform()).toBe("macos");
+  });
+});
+
+describe("toPlatformOption", () => {
+  it("folds linux into the macOS/Linux bash option", () => {
+    expect(toPlatformOption("linux")).toBe("macos");
+    expect(toPlatformOption("macos")).toBe("macos");
+  });
+
+  it("keeps windows distinct", () => {
+    expect(toPlatformOption("windows")).toBe("windows");
   });
 });

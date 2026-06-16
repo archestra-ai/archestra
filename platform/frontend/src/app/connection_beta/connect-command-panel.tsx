@@ -34,11 +34,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
+import { OsLogos } from "./os-logos";
 import {
-  CONNECT_PLATFORMS,
-  type ConnectPlatform,
+  CONNECT_PLATFORM_OPTIONS,
+  type ConnectPlatformOption,
   detectPlatform,
   platformLabels,
+  toPlatformOption,
 } from "./platform.utils";
 import { SearchableSelect } from "./searchable-select";
 import {
@@ -137,9 +139,9 @@ export function ConnectCommandPanel({
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
-  const [platform, setPlatform] = useState<ConnectPlatform>("macos");
+  const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
   useEffect(() => {
-    setPlatform(detectPlatform());
+    setPlatform(toPlatformOption(detectPlatform()));
   }, []);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
@@ -233,7 +235,7 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const inputs = JSON.parse(key) as {
         clientId: ScriptClientId;
-        platform: ConnectPlatform;
+        platform: ConnectPlatformOption;
         baseUrl: string;
         gatewayId: string | null;
         proxyId: string | null;
@@ -318,15 +320,18 @@ export function ConnectCommandPanel({
     <EditorField label="Platform">
       <Select
         value={platform}
-        onValueChange={(v) => setPlatform(v as ConnectPlatform)}
+        onValueChange={(v) => setPlatform(v as ConnectPlatformOption)}
       >
         <SelectTrigger className="w-full" data-testid="connect-platform-select">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {CONNECT_PLATFORMS.map((p) => (
+          {CONNECT_PLATFORM_OPTIONS.map((p) => (
             <SelectItem key={p} value={p}>
-              {platformLabels[p]}
+              <span className="flex items-center gap-2">
+                <OsLogos platform={p} />
+                {platformLabels[p]}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -514,7 +519,8 @@ export function ConnectCommandPanel({
             changeTestId="connect-change-platform"
           >
             Run on{" "}
-            <span className="font-medium text-foreground">
+            <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
+              <OsLogos platform={platform} />
               {platformLabels[platform]}
             </span>
           </SummaryRow>

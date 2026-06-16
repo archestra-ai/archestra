@@ -892,6 +892,45 @@ describe("SlackProvider.sendReply", () => {
     // Subsequent posts thread under the first message's ts.
     expect(secondArgs.thread_ts).toBe("2000.000001");
   });
+
+  test("correctly counts table blocks when followed by paragraph text", async () => {
+    const provider = createProvider();
+    const postMessage = vi
+      .fn()
+      .mockResolvedValue({ ts: "3000.000001" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    // A table followed by a paragraph. The old estimator would count:
+    // - 1 for H1
+    // - 0 for table (bug: not flushed when followed by paragraph)
+    // - 1 for paragraph
+    // Total: 2, which is under 45, so no split would happen.
+    // But Slack actually renders: H1 + table + paragraph = 3 blocks.
+    // With 27 tables + paragraphs, that's 27*3 = 81 blocks > 50, causing invalid_blocks.
+    const text = `# Title\n\n${Array.from({ length: 27 }, (_, i) =>
+      `| A${i} | B${i} |\n|---|---|\n| 1 | 2 |\n\nParagraph ${i} describing the data above.`
+    ).join("\n\n")}`;
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "9999999999.000000",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "tables with paragraphs",
+        rawText: "tables with paragraphs",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text,
+    });
+
+    // Must split into multiple messages because 27 tables + 27 paragraphs + 1 H1 = 55 blocks
+    expect(postMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 // =============================================================================

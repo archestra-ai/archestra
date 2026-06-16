@@ -1849,6 +1849,12 @@ function estimateRenderedBlocks(text: string): number {
       continue;
     }
 
+    // Non-empty line that's not a table row, heading, or code block start.
+    // This is paragraph content — flush any pending table first.
+    if (trimmed !== "" && !trimmed.startsWith("|") && !inCodeBlock) {
+      if (inTable) flushTable();
+    }
+
     if (trimmed.startsWith("|")) {
       if (!inTable) {
         flushParagraph();

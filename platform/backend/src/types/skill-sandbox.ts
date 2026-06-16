@@ -71,11 +71,6 @@ export const InsertSkillSandboxFileSchema = createInsertSchema(
   createdAt: true,
 });
 
-export const SelectSkillSandboxFolderSchema = createSelectSchema(
-  schema.foldersTable,
-);
-export type SkillSandboxFolder = z.infer<typeof SelectSkillSandboxFolderSchema>;
-
 export const SelectSkillSandboxReplayEventSchema = createSelectSchema(
   schema.skillSandboxReplayEventsTable,
   { kind: SkillSandboxReplayEventKindSchema },
@@ -123,9 +118,8 @@ export type SandboxArtifactRow = {
   createdAt: Date;
   storageProvider: SkillSandboxFileStorageProvider;
   objectKey: string | null;
-  folderId: string | null;
-  /** Resolved folder name (left-joined); null for root files. */
-  folderName: string | null;
+  /** Owning project; null = the author's own file. */
+  projectId: string | null;
 };
 
 /**

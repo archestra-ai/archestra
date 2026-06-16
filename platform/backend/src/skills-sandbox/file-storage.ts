@@ -1,4 +1,4 @@
-import type { StorageNamespace, StoredBlobRow } from "@/types";
+import type { StoredBlobRow } from "@/types";
 
 /** Where a new file's bytes were persisted. */
 interface StoredBlob {
@@ -19,9 +19,6 @@ interface FileBytesStorage {
     fileId: string;
     filename: string;
     data: Buffer;
-    namespace: StorageNamespace;
-    /** Display folder the file lands in; placement hint for future backends. */
-    folder?: string | null;
   }): Promise<StoredBlob>;
   get(row: StoredBlobRow): Promise<Buffer>;
   delete(blob: { provider: string; objectKey: string | null }): Promise<void>;

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type ContextWindowBreakdown,
   E2eTestId,
   getSupportedFileTypesDescription,
   type ModelInputModality,
@@ -16,6 +17,7 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
+import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
@@ -62,6 +64,14 @@ export interface ChatPromptInputToolsProps {
   cachedTokens?: number;
   /** Maximum context length of the selected model (for context indicator) */
   maxContextLength?: number | null;
+  /** Per-category breakdown of the assembled request (for context usage panel) */
+  contextWindow?: ContextWindowBreakdown | null;
+  /** Most recent compaction result, surfaced as a marker in the context panel */
+  lastCompaction?: {
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+    trigger?: "auto" | "manual";
+  } | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
@@ -104,6 +114,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   tokensUsed = 0,
   cachedTokens,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   selectorAgentId,
@@ -279,12 +291,27 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                       Context
                     </p>
-                    <ContextIndicator
+                    <ContextWindowDialog
+                      breakdown={contextWindow ?? null}
                       tokensUsed={tokensUsed}
                       cachedTokens={cachedTokens}
                       maxTokens={maxContextLength}
-                      size="sm"
-                    />
+                      lastCompaction={lastCompaction}
+                    >
+                      <button
+                        type="button"
+                        aria-label="Context usage"
+                        data-testid={E2eTestId.ChatContextUsageTrigger}
+                        className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ContextIndicator
+                          tokensUsed={tokensUsed}
+                          maxTokens={maxContextLength}
+                          size="sm"
+                          hideTooltip
+                        />
+                      </button>
+                    </ContextWindowDialog>
                   </div>
                 )}
               </div>
@@ -430,12 +457,27 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {tokensUsed > 0 && maxContextLength && (
-            <ContextIndicator
+            <ContextWindowDialog
+              breakdown={contextWindow ?? null}
               tokensUsed={tokensUsed}
               cachedTokens={cachedTokens}
               maxTokens={maxContextLength}
-              size="sm"
-            />
+              lastCompaction={lastCompaction}
+            >
+              <button
+                type="button"
+                aria-label="Context usage"
+                data-testid={E2eTestId.ChatContextUsageTrigger}
+                className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ContextIndicator
+                  tokensUsed={tokensUsed}
+                  maxTokens={maxContextLength}
+                  size="sm"
+                  hideTooltip
+                />
+              </button>
+            </ContextWindowDialog>
           )}
         </>
       )}

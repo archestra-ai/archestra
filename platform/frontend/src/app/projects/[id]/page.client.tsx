@@ -471,8 +471,8 @@ function SharePopover({ projectId }: { projectId: string }) {
         )}
         <p className="text-xs text-muted-foreground">
           People you share with can read every chat, start their own, and work
-          with the result folder through chats. Writing in a chat stays with its
-          author.
+          with the project's files through chats. Writing in a chat stays with
+          its author.
         </p>
       </PopoverContent>
     </Popover>

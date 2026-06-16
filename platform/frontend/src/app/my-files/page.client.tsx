@@ -219,7 +219,7 @@ function FileRow({
         <span
           role="img"
           className="text-muted-foreground/50"
-          title="Added outside the app — open it from the storage folder"
+          title="Added outside the app"
           aria-label={`${file.filename} was added outside the app; download unavailable`}
         >
           <Download className="h-4 w-4" />

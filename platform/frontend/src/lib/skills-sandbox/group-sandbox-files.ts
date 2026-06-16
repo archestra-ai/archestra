@@ -20,30 +20,39 @@ export function groupSandboxFiles(
   if (!data) return [];
 
   const own: SandboxFileRow[] = [];
+  // keyed by projectId, NOT name: the merged list can contain two distinct
+  // accessible projects (own + shared) that happen to share a name.
   const byProject = new Map<
     string,
-    { id: string | null; files: SandboxFileRow[] }
+    { name: string; files: SandboxFileRow[] }
   >();
   for (const file of data.files) {
     if (file.projectId == null || file.projectName == null) {
       own.push(file);
     } else {
-      const entry = byProject.get(file.projectName) ?? {
-        id: file.projectId,
+      const entry = byProject.get(file.projectId) ?? {
+        name: file.projectName,
         files: [],
       };
       entry.files.push(file);
-      byProject.set(file.projectName, entry);
+      byProject.set(file.projectId, entry);
     }
   }
 
   const groups: SandboxFileGroup[] = [];
-  if (own.length > 0)
+  if (own.length > 0) {
     groups.push({ project: null, projectId: null, files: own });
-  for (const name of [...byProject.keys()].sort((a, b) => a.localeCompare(b))) {
-    const entry = byProject.get(name);
-    if (!entry) continue;
-    groups.push({ project: name, projectId: entry.id, files: entry.files });
   }
+  const projectGroups = [...byProject.entries()]
+    .sort(
+      ([idA, a], [idB, b]) =>
+        a.name.localeCompare(b.name) || idA.localeCompare(idB),
+    )
+    .map(([projectId, entry]) => ({
+      project: entry.name,
+      projectId,
+      files: entry.files,
+    }));
+  groups.push(...projectGroups);
   return groups;
 }

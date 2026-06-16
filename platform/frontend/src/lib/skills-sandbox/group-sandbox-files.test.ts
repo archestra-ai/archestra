@@ -73,4 +73,36 @@ describe("groupSandboxFiles", () => {
     expect(groups.map((g) => g.project)).toEqual([null]);
     expect(groups[0].files.map((f) => f.filename)).toEqual(["x.txt"]);
   });
+
+  test("two distinct projects with the same name stay separate groups", () => {
+    const groups = groupSandboxFiles({
+      files: [
+        {
+          ...file({
+            filename: "a.txt",
+            projectId: "p-aaa",
+            projectName: "reports",
+          }),
+          id: "f1",
+        },
+        {
+          ...file({
+            filename: "b.txt",
+            projectId: "p-bbb",
+            projectName: "reports",
+          }),
+          id: "f2",
+        },
+      ],
+    });
+    const reports = groups.filter((g) => g.project === "reports");
+    expect(reports).toHaveLength(2);
+    expect(new Set(reports.map((g) => g.projectId))).toEqual(
+      new Set(["p-aaa", "p-bbb"]),
+    );
+    expect(reports.flatMap((g) => g.files.map((f) => f.id)).sort()).toEqual([
+      "f1",
+      "f2",
+    ]);
+  });
 });

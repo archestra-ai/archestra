@@ -166,7 +166,9 @@ export function useDeleteProject() {
     },
     onSuccess: (ok) => {
       if (!ok) return;
-      toast.success("Project deleted — its chats and folder were kept");
+      toast.success(
+        "Project deleted — its chats were kept as ordinary conversations.",
+      );
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });

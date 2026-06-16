@@ -160,6 +160,25 @@ jobs:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+  build-and-push-sandbox-base-docker-image:
+    name: Build and push Sandbox Base Docker image
+    # The sandbox base ships with every platform release: the engine pulls it as
+    # the pre-baked code-runtime base, so it is published whenever the platform is.
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
+    uses: ./.github/workflows/build-sandbox-base-docker-image.yml
+    needs:
+      - release-please
+    permissions:
+      contents: read # Required to invoke the reusable image build workflow.
+      id-token: write # Required for Workload Identity Federation.
+    with:
+      push_to_gcr: true
+      version: ${{ needs.release-please.outputs.platform_version }}
+      checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
   build-and-push-platform-docker-image-to-dockerhub:
     name: Build and push platform Docker image to Docker Hub
     # The platform Docker image references the MCP server base image tag via
@@ -210,12 +229,13 @@ jobs:
   publish-github-release:
     name: Publish GitHub Release
     # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
-    # (MCP server image, platform Docker image, Helm chart) are published.
-    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
+    # (MCP server image, sandbox base image, platform Docker image, Helm chart) are published.
+    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
+      - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:

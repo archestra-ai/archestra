@@ -219,6 +219,11 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Backstop: every check here finishes in well under 10m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
+    # and hold the step's log pipe open, leaving a *finished* job hanging until
+    # GitHub's 6h default. Fail fast instead.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:

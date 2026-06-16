@@ -102,9 +102,9 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteSkillSandboxArtifact,
         description:
-          "Delete a persistent file (artifact). Removes the record and, in " +
-          "filesystem storage mode, the file on disk. Allowed for the chat " +
-          "that produced it or the owner of the folder it sits in.",
+          "Delete a persistent file. Allowed for the file's author, the owner " +
+          "of the personal folder it sits in, or anyone with access to the " +
+          "project owning its folder.",
         tags: ["Skills"],
         params: z.object({ artifactId: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

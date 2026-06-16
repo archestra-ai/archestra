@@ -1,7 +1,7 @@
 import type { StorageNamespace, StoredBlobRow } from "@/types";
 
 /** Where a new file's bytes were persisted. */
-export interface StoredBlob {
+interface StoredBlob {
   /** Future backends extend this union (e.g. "s3"). */
   provider: "db";
   objectKey: string | null;
@@ -14,7 +14,7 @@ export interface StoredBlob {
  * `get`/`delete`) is the seam a future backend implements — adding one is
  * purely additive, old rows keep reading from where their bytes are.
  */
-export interface FileBytesStorage {
+interface FileBytesStorage {
   put(params: {
     fileId: string;
     filename: string;

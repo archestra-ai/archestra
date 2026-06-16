@@ -3,8 +3,8 @@ import db, { schema } from "@/database";
 import type { SkillSandboxFolder } from "@/types";
 
 /**
- * A user's PFS folders (`skill_sandbox_folders`). Names are unique per user
- * and double as the on-disk directory name in filesystem storage mode.
+ * PFS folders (`folders`). A folder is owned by a user (personal) or a project
+ * (its result folder); personal-folder names are unique per user.
  */
 class FolderModel {
   static async create(params: {
@@ -128,7 +128,14 @@ class FolderModel {
 
 export default FolderModel;
 
-/** The user already has a folder with this name. */
+/**
+ * The user already has a folder with this name. Raised by the personal-folder
+ * write path (`FolderModel.create`), which the schema and read/access logic
+ * support; currently exercised through tests pending a folder-create API.
+ *
+ * @public — personal-folder capability retained for the model's read/write
+ * surface; consumed by tests until a user-facing folder API lands.
+ */
 export class SandboxFolderExistsError extends Error {
   constructor(name: string) {
     super(`a folder named "${name}" already exists`);

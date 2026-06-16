@@ -112,9 +112,8 @@ export type InsertSkillSandboxFile = z.infer<
 >;
 
 /**
- * One row of a user's artifact listing as the model returns it. `filename` is
- * already derived (`original_name ?? basename(path)`); `storageProvider` /
- * `objectKey` let the filesystem provider match a row to an on-disk file.
+ * One row of a user's file listing as the model returns it. `storageProvider` /
+ * `objectKey` are the byte-location seam (always `db` / null today).
  */
 export type SandboxArtifactRow = {
   id: string;
@@ -130,9 +129,8 @@ export type SandboxArtifactRow = {
 };
 
 /**
- * One PFS folder as the My Files surfaces render it. `id` is null for a
- * directory that exists on disk without a `skill_sandbox_folders` row (made by
- * hand in the storage folder).
+ * One PFS folder as the My Files surfaces render it. `id` stays nullable in the
+ * wire schema for compatibility, but is always set now (Postgres-only storage).
  */
 export const SandboxFolderListItemSchema = z.object({
   id: z.string().uuid().nullable(),
@@ -142,10 +140,9 @@ export const SandboxFolderListItemSchema = z.object({
 export type SandboxFolderListItem = z.infer<typeof SandboxFolderListItemSchema>;
 
 /**
- * One file as the My Files surfaces render it. `id` is the artifact row id used
- * for download via `/api/skill-sandbox/artifacts/:id`; it is null (and
- * `downloadable` false) for filesystem files that were added by hand and have
- * no row.
+ * One file as the My Files surfaces render it. `id` is the file row id used for
+ * download via `/api/skill-sandbox/artifacts/:id`; it stays nullable in the
+ * wire schema for compatibility but is always set now (Postgres-only storage).
  */
 export const SandboxFileListItemSchema = z.object({
   id: z.string().uuid().nullable(),

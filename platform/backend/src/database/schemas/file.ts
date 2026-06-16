@@ -28,17 +28,16 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
  * sandbox — replay events can only reference `kind = 'upload'` rows, so these
  * files were never part of the sandbox recipe.
  *
- * Ownership mirrors the old sandbox-derived semantics exactly:
- *   - `user_id` — the AUTHOR: whoever ran download_file / save_result (was
- *     the producing sandbox's user).
- *   - `folder_id` — where the file lives; a project's result folder links the
- *     file to that project. The folder OWNER's visibility comes from owning
- *     the folder (`skill_sandbox_folders.user_id`), not from a column here —
- *     project folders collect results from every member's chats.
+ * Ownership:
+ *   - `user_id` — the AUTHOR: whoever ran download_file / save_result.
+ *   - `folder_id` — where the file lives. A personal folder is visible to its
+ *     owner; a project's result folder (`folders.project_id`) is visible to
+ *     anyone with access to that project. Both derive from the folder, not a
+ *     column here.
  *
- * Bytes live in `data` (when `storage_provider = 'db'`) or on the filesystem
- * under `object_key` (when `storage_provider = 'filesystem'`), exactly like
- * `skill_sandbox_files` — same router (`skills-sandbox/file-storage.ts`).
+ * Bytes are Postgres-only today (`storage_provider = 'db'`, `data` bytea); the
+ * `storage_provider`/`object_key` columns are the seam a future external
+ * backend would use (`skills-sandbox/file-storage.ts`).
  */
 const filesTable = pgTable(
   "files",

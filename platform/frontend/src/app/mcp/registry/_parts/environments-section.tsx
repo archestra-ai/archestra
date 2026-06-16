@@ -679,16 +679,24 @@ function NetworkPolicyFields({
   provider: string | null;
   disabled: boolean;
 }) {
+  // No enforcer on the cluster: every rule below would be accepted but never
+  // enforced, so the whole egress section is disabled rather than offering
+  // controls that silently do nothing.
+  const enforcementUnavailable = provider === "none";
   return (
     <div className="space-y-4">
-      {provider === "none" ? (
+      {enforcementUnavailable ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
           <AlertTitle>Network policy enforcement unavailable</AlertTitle>
           <AlertDescription className="block leading-6">
-            Kubernetes access is not configured, or network policy capabilities
-            could not be inspected. Enable a Kubernetes network policy provider
-            before relying on these policies.
+            No Kubernetes NetworkPolicy enforcer (Calico, Cilium, or a supported
+            FQDN provider) was detected, or Kubernetes access isn't configured.
+            Egress rules set here would be accepted but not enforced — install a
+            network policy provider before relying on them.{" "}
+            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+              View docs
+            </ExternalDocsLink>
           </AlertDescription>
         </Alert>
       ) : !supportsFqdn ? (
@@ -717,7 +725,7 @@ function NetworkPolicyFields({
         <Select
           value={egressMode}
           onValueChange={(value) => setEgressMode(value as EgressMode)}
-          disabled={disabled}
+          disabled={disabled || enforcementUnavailable}
         >
           <SelectTrigger className="w-full">
             <SelectValue />
@@ -774,7 +782,9 @@ function NetworkPolicyFields({
           onChange={(e) => setAllowedCidrsText(e.target.value)}
           placeholder={"203.0.113.0/24\n2001:db8::/32"}
           className="min-h-20 font-mono text-sm"
-          disabled={disabled || egressMode !== "restricted"}
+          disabled={
+            disabled || enforcementUnavailable || egressMode !== "restricted"
+          }
         />
       </div>
 

@@ -1,4 +1,3 @@
-import { FolderModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -27,7 +26,7 @@ describe("POST /api/projects", () => {
     await app.close();
   });
 
-  test("creates the project together with its folder", async () => {
+  test("creates the project", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
@@ -42,13 +41,9 @@ describe("POST /api/projects", () => {
     expect(body).toMatchObject({
       name: "research",
       isOwner: true,
-      folderName: "research",
       conversationCount: 0,
       visibility: null,
     });
-
-    const folder = await FolderModel.findByProjectId(body.id);
-    expect(folder?.name).toBe("research");
   });
 
   test("rejects invalid names with 400 and duplicates with 409", async () => {
@@ -71,21 +66,5 @@ describe("POST /api/projects", () => {
       payload: { name: "dup" },
     });
     expect(second.statusCode).toBe(409);
-  });
-
-  test("a project name is independent of a personal folder of the same name", async () => {
-    // project folders are owned by the project, not the user, so they no
-    // longer share a namespace with personal folders.
-    await FolderModel.create({
-      organizationId,
-      userId: user.id,
-      name: "taken",
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/projects",
-      payload: { name: "taken" },
-    });
-    expect(response.statusCode).toBe(200);
   });
 });

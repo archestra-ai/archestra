@@ -1,7 +1,6 @@
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
-import FolderModel from "@/models/folder";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
@@ -32,11 +31,9 @@ test("conversationFilesService.list groups generated + attachments with basename
   const artifact = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespace: { kind: "user", userId: user.id },
+    projectId: null,
     conversationId: conv.id,
     sandboxId: sandbox.id,
-    folderId: null,
-    folderName: null,
     filename: "chart.png",
     mimeType: "image/png",
     sizeBytes: 3,
@@ -143,11 +140,9 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   const ownOutput = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespace: { kind: "user", userId: user.id },
+    projectId: null,
     conversationId: conv.id,
     sandboxId: convSandbox.id,
-    folderId: null,
-    folderName: null,
     filename: "here.txt",
     mimeType: "text/plain",
     sizeBytes: 1,
@@ -175,11 +170,9 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   const elsewhere = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespace: { kind: "user", userId: user.id },
+    projectId: null,
     conversationId: null,
     sandboxId: otherSandbox.id,
-    folderId: null,
-    folderName: null,
     filename: "elsewhere.txt",
     mimeType: "text/plain",
     sizeBytes: 1,
@@ -214,7 +207,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   expect(viewerResult.myFiles).toEqual([]);
 });
 
-test("project chat: myFiles is the project's result folder in the owner's namespace, for any reader", async ({
+test("project chat: myFiles is the project's files, for any reader", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -231,7 +224,7 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     description: null,
   });
   // shared org-wide: the member legitimately has project access, which is what
-  // lets them have a chat here and read the result folder.
+  // lets them have a chat here and read the project's files.
   await projectService.setShare({
     id: project.id,
     organizationId: org.id,
@@ -239,8 +232,6 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     visibility: "organization",
     teamIds: [],
   });
-  const folder = await FolderModel.findByProjectId(project.id);
-  if (!folder) throw new Error("project folder missing");
   const conv = await ConversationModel.create({
     userId: member.id,
     organizationId: org.id,
@@ -254,28 +245,24 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const inFolder = await FileModel.create({
+  const projectFile = await FileModel.create({
     organizationId: org.id,
     userId: owner.id,
-    namespace: { kind: "user", userId: owner.id },
+    projectId: project.id,
     conversationId: null,
     sandboxId: ownerSandbox.id,
-    folderId: folder.id,
-    folderName: "filespanel",
     filename: "result.txt",
     mimeType: "text/plain",
     sizeBytes: 2,
     data: Buffer.from("in"),
   });
-  // the owner's personal root file must stay invisible in a project chat
+  // the owner's personal file must stay invisible in a project chat
   await FileModel.create({
     organizationId: org.id,
     userId: owner.id,
-    namespace: { kind: "user", userId: owner.id },
+    projectId: null,
     conversationId: null,
     sandboxId: ownerSandbox.id,
-    folderId: null,
-    folderName: null,
     filename: "personal.txt",
     mimeType: "text/plain",
     sizeBytes: 3,
@@ -290,11 +277,11 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
   });
   expect(result.myFiles).toEqual([
     {
-      id: inFolder.id,
+      id: projectFile.id,
       name: "result.txt",
       mimeType: "text/plain",
-      contentUrl: `/api/skill-sandbox/artifacts/${inFolder.id}`,
-      createdAt: inFolder.createdAt.toISOString(),
+      contentUrl: `/api/skill-sandbox/artifacts/${projectFile.id}`,
+      createdAt: projectFile.createdAt.toISOString(),
     },
   ]);
   expect(result.projectName).toBe("filespanel");
@@ -316,8 +303,6 @@ test("project chat: a requester without project access sees no project files", a
     name: "locked",
     description: null,
   });
-  const folder = await FolderModel.findByProjectId(project.id);
-  if (!folder) throw new Error("project folder missing");
   const sandbox = await SkillSandboxModel.create({
     organizationId: org.id,
     userId: owner.id,
@@ -327,11 +312,9 @@ test("project chat: a requester without project access sees no project files", a
   await FileModel.create({
     organizationId: org.id,
     userId: owner.id,
-    namespace: { kind: "project", projectId: project.id },
+    projectId: project.id,
     conversationId: null,
     sandboxId: sandbox.id,
-    folderId: folder.id,
-    folderName: "locked",
     filename: "secret.txt",
     mimeType: "text/plain",
     sizeBytes: 2,

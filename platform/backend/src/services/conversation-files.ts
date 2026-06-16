@@ -72,11 +72,11 @@ class ConversationFilesService {
 
   /**
    * The PFS files the agent can reach from this chat — mirrors the
-   * search_files tool's scope. Project chat: the project's result folder
-   * (project membership is the authorization — the route verified conversation
-   * access). Personal chat: the owner's whole PFS, but only when the owner
-   * themself is asking, so a shared chat doesn't expose unrelated personal
-   * files to its viewers.
+   * search_files tool's scope. Project chat: the project's files (project
+   * membership is the authorization — the route verified conversation access).
+   * Personal chat: the owner's whole PFS, but only when the owner themself is
+   * asking, so a shared chat doesn't expose unrelated personal files to its
+   * viewers.
    */
   private async listAccessibleFiles(params: {
     conversationId: string;
@@ -94,8 +94,8 @@ class ConversationFilesService {
         organizationId: params.organizationId,
       });
     } catch (error) {
-      // Fail-closed scope (e.g. the requester lost project access, or the
-      // project folder is gone): no PFS file is reachable, so list none.
+      // Fail-closed scope (e.g. the requester lost project access): no PFS
+      // file is reachable, so list none.
       if (error instanceof SkillSandboxError) {
         return { files: [], projectName: null };
       }
@@ -103,9 +103,9 @@ class ConversationFilesService {
     }
 
     if (scope) {
-      const rows = await FileModel.listByFolders({
+      const rows = await FileModel.listByProject({
         organizationId: params.organizationId,
-        folderIds: [scope.folderId],
+        projectId: scope.projectId,
       });
       return {
         files: rows.map((row) => ({
@@ -115,7 +115,8 @@ class ConversationFilesService {
           sizeBytes: row.sizeBytes,
           createdAt: row.createdAt,
           downloadable: true,
-          folder: row.folderName,
+          projectId: row.projectId,
+          projectName: scope.projectName,
         })),
         projectName: scope.projectName,
       };
@@ -124,7 +125,7 @@ class ConversationFilesService {
     if (params.requestingUserId !== params.conversationOwnerUserId) {
       return { files: [], projectName: null };
     }
-    const { files } = await skillSandboxArtifactService.listAllForUser({
+    const files = await skillSandboxArtifactService.listAllForUser({
       organizationId: params.organizationId,
       userId: params.conversationOwnerUserId,
     });

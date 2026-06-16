@@ -123,17 +123,6 @@ export type SandboxArtifactRow = {
 };
 
 /**
- * One PFS folder as the My Files surfaces render it. `id` stays nullable in the
- * wire schema for compatibility, but is always set now (Postgres-only storage).
- */
-export const SandboxFolderListItemSchema = z.object({
-  id: z.string().uuid().nullable(),
-  name: z.string(),
-  createdAt: z.date(),
-});
-export type SandboxFolderListItem = z.infer<typeof SandboxFolderListItemSchema>;
-
-/**
  * One file as the My Files surfaces render it. `id` is the file row id used for
  * download via `/api/skill-sandbox/artifacts/:id`; it stays nullable in the
  * wire schema for compatibility but is always set now (Postgres-only storage).

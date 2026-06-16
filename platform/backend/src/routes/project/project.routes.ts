@@ -45,7 +45,6 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: project.name,
         description: project.description,
         isOwner: true,
-        folderName: project.name,
         conversationCount: 0,
         visibility: null,
         createdAt: project.createdAt,
@@ -149,9 +148,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteProject,
         description:
-          "Delete a project (owner only). Its chats and result folder " +
-          "survive — chats become ordinary conversations, the folder stays " +
-          "browsable in My Files.",
+          "Delete a project (owner only). Its chats survive as ordinary " +
+          "conversations; its files are deleted with it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

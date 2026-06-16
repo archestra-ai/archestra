@@ -31,7 +31,6 @@ export const ProjectListItemSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   isOwner: z.boolean(),
-  folderName: z.string(),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),

@@ -12,7 +12,6 @@ import {
   ApiError,
   constructResponseSchema,
   SandboxFileListItemSchema,
-  SandboxFolderListItemSchema,
 } from "@/types";
 
 /**
@@ -149,15 +148,12 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetSkillSandboxFiles,
         description:
-          "List the calling user's persistent files (My Files): folders and " +
-          "artifact files across all conversations, plus the result folders " +
-          "of projects shared with them.",
+          "List the calling user's persistent files (My Files): their own " +
+          "artifact files across all conversations, plus the files of " +
+          "projects shared with them.",
         tags: ["Skills"],
         response: constructResponseSchema(
-          z.object({
-            folders: z.array(SandboxFolderListItemSchema),
-            files: z.array(SandboxFileListItemSchema),
-          }),
+          z.object({ files: z.array(SandboxFileListItemSchema) }),
         ),
       },
     },
@@ -167,12 +163,12 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userId: user.id,
         }),
-        projectService.listSharedFolders({ organizationId, userId: user.id }),
+        projectService.listSharedProjectFiles({
+          organizationId,
+          userId: user.id,
+        }),
       ]);
-      return {
-        folders: [...own.folders, ...shared.folders],
-        files: [...own.files, ...shared.files],
-      };
+      return { files: [...own, ...shared] };
     },
   );
 };

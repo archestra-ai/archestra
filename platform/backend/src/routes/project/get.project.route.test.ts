@@ -125,7 +125,7 @@ describe("GET /api/projects/:id/files", () => {
     await app.close();
   });
 
-  test("members of a shared project see the result-folder files; outsiders 404", async ({
+  test("members of a shared project see the project's files; outsiders 404", async ({
     makeUser,
     makeMember,
   }) => {
@@ -143,11 +143,7 @@ describe("GET /api/projects/:id/files", () => {
       teamIds: [],
     });
 
-    const { FileModel, FolderModel, SkillSandboxModel } = await import(
-      "@/models"
-    );
-    const folder = await FolderModel.findByProjectId(project.id);
-    if (!folder) throw new Error("project folder missing");
+    const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId: owner.id,
@@ -157,24 +153,21 @@ describe("GET /api/projects/:id/files", () => {
     await FileModel.create({
       organizationId,
       userId: owner.id,
-      namespace: { kind: "user", userId: owner.id },
+      projectId: project.id,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: folder.id,
-      folderName: "filed",
-      filename: "in-folder.txt",
+      filename: "in-project.txt",
       mimeType: "text/plain",
       sizeBytes: 2,
       data: Buffer.from("in"),
     });
+    // the owner's personal file must not appear in the project listing
     await FileModel.create({
       organizationId,
       userId: owner.id,
-      namespace: { kind: "user", userId: owner.id },
+      projectId: null,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: null,
-      folderName: null,
       filename: "elsewhere.txt",
       mimeType: "text/plain",
       sizeBytes: 3,
@@ -190,8 +183,15 @@ describe("GET /api/projects/:id/files", () => {
       url: `/api/projects/${project.id}/files`,
     });
     expect(response.statusCode).toBe(200);
-    const files = response.json<Array<{ filename: string }>>();
-    expect(files.map((f) => f.filename)).toEqual(["in-folder.txt"]);
+    const files =
+      response.json<
+        Array<{ filename: string; projectId: string; projectName: string }>
+      >();
+    expect(files.map((f) => f.filename)).toEqual(["in-project.txt"]);
+    expect(files[0]).toMatchObject({
+      projectId: project.id,
+      projectName: "filed",
+    });
 
     await ProjectShareModel.remove(project.id);
     const denied = await app.inject({

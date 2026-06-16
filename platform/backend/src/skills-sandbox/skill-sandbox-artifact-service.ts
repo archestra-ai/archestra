@@ -1,87 +1,61 @@
-import {
-  FileModel,
-  FolderModel,
-  ProjectModel,
-  ProjectShareModel,
-} from "@/models";
-import type {
-  PersistedFile,
-  SandboxFileListItem,
-  SandboxFolderListItem,
-} from "@/types";
+import { FileModel, ProjectModel, ProjectShareModel } from "@/models";
+import type { PersistedFile, SandboxFileListItem } from "@/types";
 import { FileBytesMissingError, getFileBytesStorage } from "./file-storage";
 
-/** Bytes + metadata of a PFS file resolved for sandbox upload. */
-type ResolvedMyFile = {
-  data: Buffer;
-  mimeType: string;
-  originalName: string;
+type ResolvedMyFile = { data: Buffer; mimeType: string; originalName: string };
+
+type MyFileResolutionError = {
+  error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
 };
 
-/** Why an my_file reference failed to resolve. */
-type MyFileResolutionError = {
-  error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project_folder";
-};
+function toListItem(row: {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+  projectId: string | null;
+}): SandboxFileListItem {
+  return {
+    id: row.id,
+    filename: row.filename,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt,
+    downloadable: true,
+    projectId: row.projectId,
+    projectName: null,
+  };
+}
 
 /**
- * The user's persistent file system (PFS / My Files): listing, folders, and
- * byte access for the upload path. Rows live in the `files` table; a listing
- * is simply the rows (Postgres-only byte storage).
+ * The user's persistent file system (PFS / My Files): listing and byte access
+ * for the upload path. Rows live in the `files` table; access is the file's
+ * author for personal files, or project membership for project files.
  */
 class SkillSandboxArtifactService {
-  /** Surface A: files produced in one conversation (all downloadable). */
+  /** Files produced in one conversation (all downloadable). */
   async listForConversation(params: {
     organizationId: string;
     userId: string;
     conversationId: string;
   }): Promise<SandboxFileListItem[]> {
-    const rows = await FileModel.listByConversation(params);
-    return rows.map((row) => ({
-      id: row.id,
-      filename: row.filename,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
-      createdAt: row.createdAt,
-      downloadable: true,
-      folder: row.folderName,
-    }));
+    return (await FileModel.listByConversation(params)).map(toListItem);
   }
 
-  /** Surface B: the user's whole PFS — the rows are the listing. */
+  /** The user's own personal files (no project files). */
   async listAllForUser(params: {
     organizationId: string;
     userId: string;
-  }): Promise<{
-    folders: SandboxFolderListItem[];
-    files: SandboxFileListItem[];
-  }> {
-    const [rows, folderRows] = await Promise.all([
-      FileModel.listForUser(params),
-      FolderModel.listByUser(params),
-    ]);
-    return {
-      folders: folderRows.map((f) => ({
-        id: f.id,
-        name: f.name,
-        createdAt: f.createdAt,
-      })),
-      files: rows.map((row) => ({
-        id: row.id,
-        filename: row.filename,
-        mimeType: row.mimeType,
-        sizeBytes: row.sizeBytes,
-        createdAt: row.createdAt,
-        downloadable: true,
-        folder: row.folderName,
-      })),
-    };
+  }): Promise<SandboxFileListItem[]> {
+    return (await FileModel.listForUser(params)).map(toListItem);
   }
 
   /**
-   * Fetch a file the caller may access — the SAME rule for reading and
-   * deleting: the file's author, the personal-folder owner, or (project
-   * folders) anyone with access to the owning project. Null for "not found"
-   * AND "not yours" alike, so 404s can't probe ids.
+   * Fetch a file the caller may access — same rule for read and delete: the
+   * author for a personal file, or anyone with access to the owning project for
+   * a project file. Null for "not found" AND "not yours" alike, so 404s can't
+   * probe ids.
    */
   async getArtifactForUser(params: {
     artifactId: string;
@@ -90,35 +64,20 @@ class SkillSandboxArtifactService {
   }): Promise<PersistedFile | null> {
     const file = await FileModel.findById(params.artifactId);
     if (!file || file.organizationId !== params.organizationId) return null;
-    if (file.userId === params.userId) return file;
-    if (!file.folderId) return null;
-    const folder = (await FolderModel.findByIds([file.folderId])).get(
-      file.folderId,
-    );
-    if (!folder || folder.organizationId !== params.organizationId) {
-      return null;
+    if (file.projectId) {
+      const project = await ProjectModel.findById(file.projectId);
+      if (!project) return null;
+      const canAccess = await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      });
+      return canAccess ? file : null;
     }
-    if (folder.userId) {
-      // personal folder: the owner has full rights.
-      return folder.userId === params.userId ? file : null;
-    }
-    // project folder: project access = full rights over its files.
-    if (!folder.projectId) return null;
-    const project = await ProjectModel.findById(folder.projectId);
-    if (!project) return null;
-    const canAccess = await ProjectShareModel.userCanAccessProject({
-      project,
-      userId: params.userId,
-      organizationId: params.organizationId,
-    });
-    return canAccess ? file : null;
+    return file.userId === params.userId ? file : null;
   }
 
-  /**
-   * Delete a file: the row first (the DB is authoritative), then any external
-   * bytes, best-effort (a no-op under Postgres storage — the bytes die with
-   * the row). Same access rule as reading.
-   */
+  /** Delete a file (row first), then any external bytes (no-op under Postgres). */
   async deleteArtifactForUser(params: {
     artifactId: string;
     organizationId: string;
@@ -128,30 +87,22 @@ class SkillSandboxArtifactService {
     if (!file) return false;
     await FileModel.deleteById(file.id);
     await getFileBytesStorage()
-      .delete({
-        provider: file.storageProvider,
-        objectKey: file.objectKey,
-      })
+      .delete({ provider: file.storageProvider, objectKey: file.objectKey })
       .catch(() => {});
     return true;
   }
 
   /**
-   * Resolve a `my_file` upload source — a reference to a PFS file by row id or
-   * by location (`filename` + optional `folder`) — to its bytes. Location
-   * resolution goes through the same listing the user sees; a duplicated
-   * filename is reported as ambiguous rather than picking one silently.
+   * Resolve a `my_file` upload source (by row id, or by `filename` within the
+   * chat's flat scope) to its bytes. A duplicated filename is reported as
+   * ambiguous rather than picking one silently.
    */
   async resolveMyFileSource(params: {
     organizationId: string;
     userId: string;
     id?: string;
     filename?: string;
-    folder?: string;
-    scope?: {
-      folderId: string;
-      folderName: string;
-    } | null;
+    scope?: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
     const scope = params.scope ?? null;
 
@@ -161,66 +112,42 @@ class SkillSandboxArtifactService {
         return { error: "not_found" };
       }
       if (scope) {
-        // in a project chat the folder is the boundary, not file ownership.
-        if (file.folderId !== scope.folderId) {
-          return { error: "outside_project_folder" };
+        if (file.projectId !== scope.projectId) {
+          return { error: "outside_project" };
         }
-      } else if (file.userId !== params.userId) {
+      } else if (file.userId !== params.userId || file.projectId != null) {
         return { error: "not_found" };
       }
-      try {
-        return {
-          data: await getFileBytesStorage().get(file),
-          mimeType: file.mimeType,
-          originalName: file.filename,
-        };
-      } catch (error) {
-        if (error instanceof FileBytesMissingError) {
-          return { error: "missing_bytes" };
-        }
-        throw error;
-      }
+      return this.readBytes(file);
     }
 
-    const folder = scope ? scope.folderName : (params.folder ?? null);
-    if (scope && params.folder && params.folder !== scope.folderName) {
-      return { error: "outside_project_folder" };
-    }
     const filename = params.filename ?? "";
-    // project chat: the candidate set is the project folder's files; personal
-    // chat: the user's own My Files.
     const candidates = scope
-      ? (
-          await FileModel.listByFolders({
-            organizationId: params.organizationId,
-            folderIds: [scope.folderId],
-          })
-        ).map((r) => ({
-          id: r.id,
-          filename: r.filename,
-          folder: r.folderName,
-        }))
-      : (
-          await this.listAllForUser({
-            organizationId: params.organizationId,
-            userId: params.userId,
-          })
-        ).files;
-    const matches = candidates.filter(
-      (f) => f.filename === filename && f.folder === folder,
-    );
+      ? await FileModel.listByProject({
+          organizationId: params.organizationId,
+          projectId: scope.projectId,
+        })
+      : await FileModel.listForUser({
+          organizationId: params.organizationId,
+          userId: params.userId,
+        });
+    const matches = candidates.filter((f) => f.filename === filename);
     if (matches.length === 0) return { error: "not_found" };
     if (matches.length > 1) return { error: "ambiguous" };
-    const match = matches[0];
-    if (!match.id) return { error: "not_found" };
 
-    const file = await FileModel.findById(match.id);
+    const file = await FileModel.findById(matches[0].id);
     if (!file) return { error: "not_found" };
+    return this.readBytes(file);
+  }
+
+  private async readBytes(
+    file: PersistedFile,
+  ): Promise<ResolvedMyFile | MyFileResolutionError> {
     try {
       return {
         data: await getFileBytesStorage().get(file),
         mimeType: file.mimeType,
-        originalName: match.filename,
+        originalName: file.filename,
       };
     } catch (error) {
       if (error instanceof FileBytesMissingError) {

@@ -145,8 +145,9 @@ export const SandboxFileListItemSchema = z.object({
   sizeBytes: z.number().int().nonnegative(),
   createdAt: z.date(),
   downloadable: z.boolean(),
-  /** PFS folder the file sits in; null for root files. */
-  folder: z.string().nullable(),
+  /** Owning project (null = the caller's own file) + its display name. */
+  projectId: z.string().uuid().nullable(),
+  projectName: z.string().nullable(),
 });
 
 export type SandboxFileListItem = z.infer<typeof SandboxFileListItemSchema>;

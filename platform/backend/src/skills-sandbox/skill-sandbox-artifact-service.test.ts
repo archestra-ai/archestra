@@ -1,22 +1,21 @@
-import { FileModel, SkillSandboxModel } from "@/models";
+import { FileModel, ProjectModel } from "@/models";
+import ConversationModel from "@/models/conversation";
+import { projectService } from "@/services/project";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { describe, expect, test } from "@/test";
 
 async function seed(params: {
   organizationId: string;
   userId: string;
-  sandboxId: string;
   filename: string;
+  projectId?: string | null;
   conversationId?: string | null;
 }) {
   return FileModel.create({
     organizationId: params.organizationId,
     userId: params.userId,
-    namespace: { kind: "user", userId: params.userId },
+    projectId: params.projectId ?? null,
     conversationId: params.conversationId ?? null,
-    sandboxId: params.sandboxId,
-    folderId: null,
-    folderName: null,
     filename: params.filename,
     mimeType: "text/plain",
     sizeBytes: 3,
@@ -24,30 +23,23 @@ async function seed(params: {
   });
 }
 
-describe("skillSandboxArtifactService", () => {
-  test("listForConversation returns only that conversation's artifacts, all downloadable", async ({
+describe("skillSandboxArtifactService listing", () => {
+  test("listForConversation returns that conversation's files, downloadable", async ({
     makeUser,
     makeOrganization,
     makeAgent,
-    makeConversation,
   }) => {
-    const user = await makeUser();
     const org = await makeOrganization();
+    const user = await makeUser();
     const agent = await makeAgent({ organizationId: org.id });
-    const conv = await makeConversation(agent.id, {
+    const conv = await ConversationModel.create({
       userId: user.id,
       organizationId: org.id,
-    });
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: conv.id,
-      defaultCwd: "/sandbox",
+      agentId: agent.id,
     });
     await seed({
       organizationId: org.id,
       userId: user.id,
-      sandboxId: sandbox.id,
       filename: "a.txt",
       conversationId: conv.id,
     });
@@ -57,106 +49,174 @@ describe("skillSandboxArtifactService", () => {
       userId: user.id,
       conversationId: conv.id,
     });
-
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ filename: "a.txt", downloadable: true });
     expect(items[0].id).toBeTruthy();
   });
 
-  test("listAllForUser returns the user's files as downloadable items", async ({
+  test("listAllForUser returns the user's own files, excluding project files", async ({
     makeUser,
     makeOrganization,
   }) => {
-    const user = await makeUser();
     const org = await makeOrganization();
-    const sandbox = await SkillSandboxModel.create({
+    const user = await makeUser();
+    const project = await ProjectModel.create({
       organizationId: org.id,
       userId: user.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
+      name: "p",
+      description: null,
     });
+    await seed({ organizationId: org.id, userId: user.id, filename: "own.txt" });
     await seed({
       organizationId: org.id,
       userId: user.id,
-      sandboxId: sandbox.id,
-      filename: "out.txt",
+      filename: "proj.txt",
+      projectId: project.id,
     });
 
-    const { folders, files } = await skillSandboxArtifactService.listAllForUser(
-      {
-        organizationId: org.id,
-        userId: user.id,
-      },
-    );
-
-    expect(folders).toEqual([]);
-    expect(files).toHaveLength(1);
-    expect(files[0]).toMatchObject({
-      filename: "out.txt",
-      downloadable: true,
-      folder: null,
+    const files = await skillSandboxArtifactService.listAllForUser({
+      organizationId: org.id,
+      userId: user.id,
     });
+    expect(files.map((f) => f.filename)).toEqual(["own.txt"]);
+    expect(files[0].projectId).toBeNull();
   });
 });
 
-describe("skillSandboxArtifactService.resolveMyFileSource", () => {
-  test("resolves by id, scoped to the owning user (db mode)", async ({
+describe("getArtifactForUser access", () => {
+  test("author sees own personal file; a stranger does not", async ({
     makeUser,
     makeOrganization,
   }) => {
-    const user = await makeUser();
     const org = await makeOrganization();
-    const sandbox = await SkillSandboxModel.create({
+    const user = await makeUser();
+    const file = await seed({
       organizationId: org.id,
       userId: user.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
+      filename: "secret.txt",
     });
-    const artifact = await seed({
+
+    const seen = await skillSandboxArtifactService.getArtifactForUser({
+      artifactId: file.id,
       organizationId: org.id,
       userId: user.id,
-      sandboxId: sandbox.id,
+    });
+    expect(seen?.id).toBe(file.id);
+
+    const stranger = await makeUser({ email: "stranger@test.com" });
+    expect(
+      await skillSandboxArtifactService.getArtifactForUser({
+        artifactId: file.id,
+        organizationId: org.id,
+        userId: stranger.id,
+      }),
+    ).toBeNull();
+  });
+
+  test("project file: a member is allowed, a cross-org user is denied", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "shared",
+      description: null,
+    });
+    await projectService.setShare({
+      id: project.id,
+      organizationId: org.id,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const file = await seed({
+      organizationId: org.id,
+      userId: owner.id,
+      filename: "r.txt",
+      projectId: project.id,
+    });
+
+    const member = await makeUser({ email: "proj-member@test.com" });
+    const seen = await skillSandboxArtifactService.getArtifactForUser({
+      artifactId: file.id,
+      organizationId: org.id,
+      userId: member.id,
+    });
+    expect(seen?.id).toBe(file.id);
+
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser({ email: "cross-org@test.com" });
+    expect(
+      await skillSandboxArtifactService.getArtifactForUser({
+        artifactId: file.id,
+        organizationId: otherOrg.id,
+        userId: outsider.id,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveMyFileSource", () => {
+  test("resolves a personal file by id; rejects a stranger and a project file", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const file = await seed({
+      organizationId: org.id,
+      userId: user.id,
       filename: "data.txt",
     });
 
-    const resolved = await skillSandboxArtifactService.resolveMyFileSource({
+    const ok = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
       userId: user.id,
-      id: artifact.id,
+      id: file.id,
     });
-    expect(resolved).toMatchObject({
-      mimeType: "text/plain",
-      originalName: "data.txt",
-    });
-    expect("data" in resolved && resolved.data.toString()).toBe("abc");
+    expect("data" in ok && ok.data.toString()).toBe("abc");
+    expect("originalName" in ok && ok.originalName).toBe("data.txt");
 
-    const stranger = await makeUser({ email: "xfile-stranger@test.com" });
-    const denied = await skillSandboxArtifactService.resolveMyFileSource({
+    const stranger = await makeUser({ email: "rs-stranger@test.com" });
+    expect(
+      await skillSandboxArtifactService.resolveMyFileSource({
+        organizationId: org.id,
+        userId: stranger.id,
+        id: file.id,
+      }),
+    ).toEqual({ error: "not_found" });
+
+    const project = await ProjectModel.create({
       organizationId: org.id,
-      userId: stranger.id,
-      id: artifact.id,
+      userId: user.id,
+      name: "pp",
+      description: null,
     });
-    expect(denied).toEqual({ error: "not_found" });
+    const projFile = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "p.txt",
+      projectId: project.id,
+    });
+    expect(
+      await skillSandboxArtifactService.resolveMyFileSource({
+        organizationId: org.id,
+        userId: user.id,
+        id: projFile.id,
+      }),
+    ).toEqual({ error: "not_found" });
   });
 
-  test("resolves by filename, reporting duplicates as ambiguous (db mode)", async ({
+  test("resolves by filename and reports duplicates as ambiguous", async ({
     makeUser,
     makeOrganization,
   }) => {
-    const user = await makeUser();
     const org = await makeOrganization();
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
-    });
-    await seed({
-      organizationId: org.id,
-      userId: user.id,
-      sandboxId: sandbox.id,
-      filename: "report.txt",
-    });
+    const user = await makeUser();
+    await seed({ organizationId: org.id, userId: user.id, filename: "report.txt" });
 
     const byName = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
@@ -165,24 +225,63 @@ describe("skillSandboxArtifactService.resolveMyFileSource", () => {
     });
     expect("data" in byName && byName.data.toString()).toBe("abc");
 
-    await seed({
-      organizationId: org.id,
-      userId: user.id,
-      sandboxId: sandbox.id,
-      filename: "report.txt",
-    });
-    const dup = await skillSandboxArtifactService.resolveMyFileSource({
-      organizationId: org.id,
-      userId: user.id,
-      filename: "report.txt",
-    });
-    expect(dup).toEqual({ error: "ambiguous" });
+    await seed({ organizationId: org.id, userId: user.id, filename: "report.txt" });
+    expect(
+      await skillSandboxArtifactService.resolveMyFileSource({
+        organizationId: org.id,
+        userId: user.id,
+        filename: "report.txt",
+      }),
+    ).toEqual({ error: "ambiguous" });
 
-    const missing = await skillSandboxArtifactService.resolveMyFileSource({
+    expect(
+      await skillSandboxArtifactService.resolveMyFileSource({
+        organizationId: org.id,
+        userId: user.id,
+        filename: "nope.txt",
+      }),
+    ).toEqual({ error: "not_found" });
+  });
+
+  test("project scope: a file outside the project is rejected by id", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const project = await ProjectModel.create({
       organizationId: org.id,
-      userId: user.id,
-      filename: "nope.txt",
+      userId: owner.id,
+      name: "scope-proj",
+      description: null,
     });
-    expect(missing).toEqual({ error: "not_found" });
+    const inProj = await seed({
+      organizationId: org.id,
+      userId: owner.id,
+      filename: "in.txt",
+      projectId: project.id,
+    });
+    const personal = await seed({
+      organizationId: org.id,
+      userId: owner.id,
+      filename: "out.txt",
+    });
+
+    const ok = await skillSandboxArtifactService.resolveMyFileSource({
+      organizationId: org.id,
+      userId: owner.id,
+      id: inProj.id,
+      scope: { projectId: project.id },
+    });
+    expect("data" in ok && ok.data.toString()).toBe("abc");
+
+    expect(
+      await skillSandboxArtifactService.resolveMyFileSource({
+        organizationId: org.id,
+        userId: owner.id,
+        id: personal.id,
+        scope: { projectId: project.id },
+      }),
+    ).toEqual({ error: "outside_project" });
   });
 });

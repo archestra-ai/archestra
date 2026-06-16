@@ -26,6 +26,7 @@ from typing import Any
 
 import uvicorn
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 from jsonschema.protocols import Validator
 from mcp.server.fastmcp import FastMCP
 
@@ -199,8 +200,41 @@ def _schema_errors(validator: Validator, result: dict[str, Any]) -> tuple[str, .
     errors = []
     for error in validator.iter_errors(result):
         location = "/".join(str(part) for part in error.absolute_path) or "(root)"
-        errors.append(f"- at `{location}`: {error.message}")
+        errors.append(f"- at `{location}`: {_explain(error)}")
     return tuple(sorted(errors))
+
+
+def _explain(error: ValidationError) -> str:
+    """jsonschema's default type message quotes the value (`'84712' is not of type 'number'`), which
+    weaker models misread as "the value is already correct". For type mismatches, name the *received*
+    JSON type and show the literal, so a model that sent a stringified number sees exactly what to fix."""
+    if error.validator != "type":
+        return error.message
+    expected = error.validator_value
+    expected_str = expected if isinstance(expected, str) else " or ".join(expected)
+    received = _json_type_name(error.instance)
+    return (
+        f"expected a JSON {expected_str}, but received a {received}: {json.dumps(error.instance)}. "
+        f"Send a bare JSON {expected_str}, not a {received}."
+    )
+
+
+def _json_type_name(value: object) -> str:
+    match value:
+        case bool():
+            return "boolean"
+        case int() | float():
+            return "number"
+        case str():
+            return "string"
+        case list():
+            return "array"
+        case dict():
+            return "object"
+        case None:
+            return "null"
+        case _:
+            return type(value).__name__
 
 
 def _canonical_bytes(result: dict[str, Any]) -> bytes:

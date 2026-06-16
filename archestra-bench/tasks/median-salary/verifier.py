@@ -10,8 +10,6 @@ import os
 import statistics
 from pathlib import Path
 
-_EPSILON = 0.5  # median of integer salaries is an int or a .5; allow float rounding
-
 
 def _result() -> dict:
     path = os.environ.get("BENCH_RESULT")
@@ -33,6 +31,8 @@ def _fixture_salaries() -> list[float]:
 
 
 def test_median_matches() -> None:
+    # The fixture is an odd number of integer salaries (see expected/generate.py), so the median is
+    # exactly one of them -- an integer. The schema requires an integer submission; compare exactly.
     expected = statistics.median(_fixture_salaries())
     submitted = _result()["median_salary"]
-    assert abs(submitted - expected) <= _EPSILON, f"submitted median {submitted} != expected {expected}"
+    assert submitted == expected, f"submitted median {submitted} != expected {expected}"

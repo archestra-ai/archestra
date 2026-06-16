@@ -417,10 +417,34 @@ const NavPrimary = ({
   const permittedHeaderItems = items.filter(
     (item) => permissionMap[item.url] ?? true,
   );
+  // In Studio mode the header items don't include New Chat, and when collapsed
+  // the Chats/Studio toggle is hidden — so surface a collapsed-only New Chat in
+  // the icon rail. Skipped when New Chat is already a header item (Chats mode),
+  // to avoid a duplicate.
+  const hasNewChat = permittedHeaderItems.some((item) => item.url === "/chat");
 
   return (
     <SidebarGroup>
       <SidebarMenu>
+        {!hasNewChat && (
+          <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+            <SidebarMenuButton
+              asChild
+              tooltip="New Chat"
+              isActive={pathname === "/chat"}
+            >
+              <SidebarPrefetchLink
+                href="/chat"
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false);
+                }}
+              >
+                <MessageCircle />
+                <span>New Chat</span>
+              </SidebarPrefetchLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         {permittedHeaderItems.map(renderItem)}
         <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
           <SidebarMenuButton

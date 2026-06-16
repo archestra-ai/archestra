@@ -583,7 +583,8 @@ const registry = defineArchestraTools([
           organizationId: guard.userCtx.organizationId,
         });
       } catch (error) {
-        if (error instanceof SkillSandboxError) return errorResult(error.message);
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
         throw error;
       }
 

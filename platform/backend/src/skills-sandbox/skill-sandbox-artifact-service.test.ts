@@ -66,7 +66,11 @@ describe("skillSandboxArtifactService listing", () => {
       name: "p",
       description: null,
     });
-    await seed({ organizationId: org.id, userId: user.id, filename: "own.txt" });
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "own.txt",
+    });
     await seed({
       organizationId: org.id,
       userId: user.id,
@@ -253,7 +257,11 @@ describe("resolveMyFileSource", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    await seed({ organizationId: org.id, userId: user.id, filename: "report.txt" });
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "report.txt",
+    });
 
     const byName = await skillSandboxArtifactService.resolveMyFileSource({
       organizationId: org.id,
@@ -262,7 +270,11 @@ describe("resolveMyFileSource", () => {
     });
     expect("data" in byName && byName.data.toString()).toBe("abc");
 
-    await seed({ organizationId: org.id, userId: user.id, filename: "report.txt" });
+    await seed({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "report.txt",
+    });
     expect(
       await skillSandboxArtifactService.resolveMyFileSource({
         organizationId: org.id,

@@ -5705,7 +5705,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Delete a persistent file. Allowed for the file's author, the owner of the personal folder it sits in, or anyone with access to the project owning its folder.
+ * Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.
  *
  * Authentication:
  *

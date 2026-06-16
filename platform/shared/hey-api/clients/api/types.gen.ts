@@ -25511,6 +25511,7 @@ export type GetConfigResponses = {
             agentSkillsEnabled: boolean;
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
+            projectsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;

@@ -90492,6 +90492,9 @@
                         "appsEnabled": {
                           "type": "boolean"
                         },
+                        "projectsEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -90585,6 +90588,7 @@
                         "agentSkillsEnabled",
                         "agentEnvironmentsEnabled",
                         "appsEnabled",
+                        "projectsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -220371,7 +220375,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a persistent file. Allowed for the file's author, the owner of the personal folder it sits in, or anyone with access to the project owning its folder.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Delete a persistent file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {

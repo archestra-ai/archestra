@@ -187,7 +187,7 @@ export class WebCrawlerConnector extends BaseConnector {
     const excludePathPatterns = compileExcludePathPatterns(
       params.config.excludePathPatterns,
     );
-    const startHostname = new URL(startUrl).hostname;
+    const startOrigin = new URL(startUrl).origin;
     let previousRequestCompletedAt = 0;
 
     return new CheerioCrawler(
@@ -215,11 +215,14 @@ export class WebCrawlerConnector extends BaseConnector {
             };
 
             // got follows redirects internally, bypassing the per-request SSRF
-            // and scope checks above. Reject cross-host and out-of-scope
+            // and scope checks above. Reject cross-origin and out-of-scope
             // redirects without dialing the target (so an unreachable external
-            // host can't hang the crawl, and a redirect can't pull in a path the
-            // crawl was scoped to exclude), and re-run the SSRF check on the
-            // remaining same-host, in-scope redirects.
+            // host can't hang the crawl, and a redirect can't pull in a path or
+            // origin the crawl was scoped to exclude), and re-run the SSRF check
+            // on the remaining same-origin, in-scope redirects. Origin — not
+            // just hostname — matches the same-origin invariant enforced on
+            // discovered links, so a redirect to another port or scheme is
+            // refused too.
             gotOptions.hooks = {
               ...gotOptions.hooks,
               beforeRedirect: [
@@ -227,9 +230,9 @@ export class WebCrawlerConnector extends BaseConnector {
                 async (redirectOptions) => {
                   if (!redirectOptions.url) return;
                   const target = new URL(redirectOptions.url);
-                  if (target.hostname !== startHostname) {
+                  if (target.origin !== startOrigin) {
                     throw new Error(
-                      `Refusing to follow cross-host redirect to ${target.href}`,
+                      `Refusing to follow cross-origin redirect to ${target.href}`,
                     );
                   }
                   if (

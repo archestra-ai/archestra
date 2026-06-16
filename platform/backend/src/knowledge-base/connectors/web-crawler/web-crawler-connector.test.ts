@@ -201,7 +201,53 @@ describe("WebCrawlerConnector", () => {
     expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([
       expect.objectContaining({
         itemId: `${site.url}/docs/`,
-        reason: expect.stringContaining("cross-host redirect"),
+        reason: expect.stringContaining("cross-origin redirect"),
+      }),
+    ]);
+  });
+
+  test("does not follow a redirect to a different port on the same host", async () => {
+    const site = await createTestSite({
+      "/docs/": (_req, res) => {
+        res.writeHead(302, { location: "http://127.0.0.1:9/docs/" });
+        res.end();
+      },
+    });
+
+    const batches = await collectBatches({
+      startUrl: `${site.url}/docs/`,
+      maxPages: 1,
+    });
+
+    expect(batches.flatMap((batch) => batch.documents)).toEqual([]);
+    expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([
+      expect.objectContaining({
+        itemId: `${site.url}/docs/`,
+        reason: expect.stringContaining("cross-origin redirect"),
+      }),
+    ]);
+  });
+
+  test("does not follow a redirect that changes the scheme", async () => {
+    const site = await createTestSite({
+      "/docs/": (req, res) => {
+        res.writeHead(302, {
+          location: `https://${req.headers.host}/docs/`,
+        });
+        res.end();
+      },
+    });
+
+    const batches = await collectBatches({
+      startUrl: `${site.url}/docs/`,
+      maxPages: 1,
+    });
+
+    expect(batches.flatMap((batch) => batch.documents)).toEqual([]);
+    expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([
+      expect.objectContaining({
+        itemId: `${site.url}/docs/`,
+        reason: expect.stringContaining("cross-origin redirect"),
       }),
     ]);
   });

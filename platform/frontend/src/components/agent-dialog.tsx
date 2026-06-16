@@ -49,6 +49,7 @@ import {
 import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
+  type McpEnvConflict,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -58,7 +59,7 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
@@ -615,6 +616,10 @@ export function AgentDialog({
   const accessibleEnvironments = environments.filter(
     (env) => !env.restricted || canDeployRestricted,
   );
+  // Scope the agent's MCP list to its environment only when the feature is on
+  // for an internal agent (same gate as the environment selector).
+  const environmentScopingEnabled =
+    agentType === "agent" && !!agentEnvironmentsEnabled;
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -675,6 +680,7 @@ export function AgentDialog({
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
+  const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -1337,12 +1343,10 @@ export function AgentDialog({
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Default runtime" />
+                        <SelectValue placeholder="Default" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">
-                          Default runtime (no environment)
-                        </SelectItem>
+                        <SelectItem value="none">Default</SelectItem>
                         {accessibleEnvironments.map((env) => (
                           <SelectItem key={env.id} value={env.id}>
                             {env.name}
@@ -1543,6 +1547,13 @@ export function AgentDialog({
                       assignmentScope={scope}
                       assignmentTeamIds={assignedTeamIds}
                       onSelectedCountChange={setSelectedToolsCount}
+                      environmentScopingEnabled={environmentScopingEnabled}
+                      agentEnvironmentId={environmentId ?? null}
+                      agentEnvironmentName={
+                        environments.find((env) => env.id === environmentId)
+                          ?.name ?? null
+                      }
+                      onConflictsChange={setMcpEnvConflicts}
                       openComboboxOnMount={openToolsCombobox}
                     />
                   </div>
@@ -2090,6 +2101,36 @@ export function AgentDialog({
               )}
             </div>
           </fieldset>
+          {!readOnly && mcpEnvConflicts.length > 0 && (
+            <Alert variant="warning" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>
+                {mcpEnvConflicts.length} MCP server
+                {mcpEnvConflicts.length === 1 ? "" : "s"} not in this
+                environment
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or
+                  change the environment before saving:{" "}
+                  <span className="font-medium text-foreground">
+                    {mcpEnvConflicts.map((c) => c.name).join(", ")}
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() =>
+                    agentToolsEditorRef.current?.removeIncompatibleTools()
+                  }
+                >
+                  Remove incompatible
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               {readOnly ? "Close" : "Cancel"}
@@ -2103,6 +2144,7 @@ export function AgentDialog({
                   createAgent.isPending ||
                   updateAgent.isPending ||
                   requiresTeamSelection ||
+                  mcpEnvConflicts.length > 0 ||
                   (!isAdmin && scope === "team" && hasNoAvailableTeams)
                 }
               >

@@ -34,7 +34,7 @@ import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
 } from "@/skills-sandbox/types";
-import { asSandboxId, type SandboxFileListItem, type SandboxId } from "@/types";
+import { asSandboxId, type SandboxId } from "@/types";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -236,17 +236,7 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .min(1)
         .optional()
-        .describe(
-          "Exact filename of a persistent file. Use together with `folder`; " +
-            "the only way to reference files that have no id.",
-        ),
-      folder: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          "Persistent-storage folder the file sits in. Omit for the top level.",
-        ),
+        .describe("Exact filename of a persistent file (when you have no id)."),
     })
     .refine((v) => (v.id != null) !== (v.filename != null), {
       message: "provide exactly one of `id` or `filename`",
@@ -296,44 +286,25 @@ const SearchFilesSchema = z
       .min(1)
       .optional()
       .describe(
-        "Case-insensitive substring matched against filenames. Omit to list " +
-          "everything.",
-      ),
-    folder: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        "Restrict matches to one persistent-storage folder (exact name). " +
-          "Omit to search the top level and every folder.",
+        "Case-insensitive substring matched against filenames. Omit to list everything.",
       ),
   })
   .describe(
     "Search the user's persistent file storage (My Files): files exported " +
-      "from sandboxes across ALL conversations, plus files added by hand.",
+      "from sandboxes across ALL conversations. In a project chat, searches " +
+      "the project's files instead.",
   );
 
 const SearchFilesOutputSchema = z.object({
   files: z.array(
     z.object({
-      id: z
-        .string()
-        .nullable()
-        .describe(
-          "Persistent file id — pass to upload_file's my_file source. Null " +
-            "for files added outside Archestra; reference those by filename " +
-            "+ folder instead.",
-        ),
+      id: z.string().nullable(),
       filename: z.string(),
-      folder: z.string().nullable(),
       mimeType: z.string(),
       sizeBytes: z.number(),
       createdAt: z.string(),
     }),
   ),
-  folders: z
-    .array(z.string())
-    .describe("All folder names in the user's persistent storage."),
 });
 
 const SaveResultSchema = z
@@ -369,10 +340,10 @@ const SaveResultSchema = z
 const SaveResultOutputSchema = z.object({
   fileId: z.string(),
   filename: z.string(),
-  folder: z
+  projectName: z
     .string()
     .nullable()
-    .describe("Persistent-storage folder the file was saved into."),
+    .describe("Owning project when saved in a project chat; null otherwise."),
   mimeType: z.string(),
   sizeBytes: z.number(),
   /** See DownloadFileOutputSchema.downloadUrl. */
@@ -478,8 +449,7 @@ const registry = defineArchestraTools([
           caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
-          folder: scope ? { id: scope.folderId, name: scope.folderName } : null,
-          namespace: scope?.namespace,
+          projectId: scope?.projectId ?? null,
           environment: await resolveEnvironmentTarget(context),
         });
 
@@ -615,72 +585,41 @@ const registry = defineArchestraTools([
           organizationId: guard.userCtx.organizationId,
         });
       } catch (error) {
-        if (error instanceof SkillSandboxError) {
-          return errorResult(error.message);
-        }
+        if (error instanceof SkillSandboxError) return errorResult(error.message);
         throw error;
       }
-      if (scope && args.folder && args.folder !== scope.folderName) {
-        return errorResult(
-          `This chat belongs to project "${scope.projectName}", whose file access is limited to its result folder "${scope.folderName}". Omit \`folder\` or pass exactly that name.`,
-        );
-      }
 
-      // in a project chat the listing is the project folder's files (project
-      // membership is the authorization); in a personal chat it is the user's
-      // own My Files.
-      let files: SandboxFileListItem[];
-      let folderNames: string[];
-      if (scope) {
-        const rows = await FileModel.listByFolders({
-          organizationId: guard.userCtx.organizationId,
-          folderIds: [scope.folderId],
-        });
-        files = rows.map((r) => ({
-          id: r.id,
-          filename: r.filename,
-          mimeType: r.mimeType,
-          sizeBytes: r.sizeBytes,
-          createdAt: r.createdAt,
-          downloadable: true,
-          folder: r.folderName,
-        }));
-        folderNames = [scope.folderName];
-      } else {
-        const all = await skillSandboxArtifactService.listAllForUser({
-          organizationId: guard.userCtx.organizationId,
-          userId: guard.userCtx.userId,
-        });
-        files = all.files;
-        folderNames = all.folders.map((f) => f.name);
-      }
+      const rows = scope
+        ? await FileModel.listByProject({
+            organizationId: guard.userCtx.organizationId,
+            projectId: scope.projectId,
+          })
+        : await FileModel.listForUser({
+            organizationId: guard.userCtx.organizationId,
+            userId: guard.userCtx.userId,
+          });
 
       const query = args.query?.toLowerCase() ?? null;
-      const matches = files.filter((f) => {
-        if (query && !f.filename.toLowerCase().includes(query)) return false;
-        if (!scope && args.folder && f.folder !== args.folder) return false;
-        return true;
-      });
+      const matches = rows.filter(
+        (f) => !query || f.filename.toLowerCase().includes(query),
+      );
 
       const result = {
         files: matches.map((f) => ({
           id: f.id,
           filename: f.filename,
-          folder: f.folder,
           mimeType: f.mimeType,
           sizeBytes: f.sizeBytes,
           createdAt: f.createdAt.toISOString(),
         })),
-        folders: folderNames,
       };
-
       const summary =
         matches.length === 0
           ? "No persistent files matched."
           : matches
               .map(
                 (f) =>
-                  `${f.folder ? `${f.folder}/` : ""}${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes)${f.id ? ` id=${f.id}` : " [no id — reference by filename]"}`,
+                  `${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes)${f.id ? ` id=${f.id}` : ""}`,
               )
               .join("\n");
       return structuredSuccessResult(result, summary);
@@ -754,13 +693,8 @@ const registry = defineArchestraTools([
         const row = await FileModel.create({
           organizationId: guard.userCtx.organizationId,
           userId: guard.userCtx.userId,
-          namespace: scope?.namespace ?? {
-            kind: "user",
-            userId: guard.userCtx.userId,
-          },
+          projectId: scope?.projectId ?? null,
           conversationId: context.conversationId ?? null,
-          folderId: scope?.folderId ?? null,
-          folderName: scope?.folderName ?? null,
           filename,
           mimeType,
           sizeBytes: data.byteLength,
@@ -781,13 +715,13 @@ const registry = defineArchestraTools([
           {
             fileId: row.id,
             filename,
-            folder: scope?.folderName ?? null,
+            projectName: scope?.projectName ?? null,
             mimeType: row.mimeType,
             sizeBytes: row.sizeBytes,
             downloadUrl,
           },
           [
-            `Saved ${scope ? `${scope.folderName}/` : ""}${filename} (${row.sizeBytes} bytes) to persistent storage.`,
+            `Saved ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes) to persistent storage.`,
             `Download URL (use this for links): ${downloadUrl}`,
           ].join("\n"),
         );
@@ -1140,19 +1074,16 @@ async function loadUploadSource(params: {
         userId: userCtx.userId,
         id: source.id,
         filename: source.filename,
-        folder: source.folder,
-        scope,
+        scope: scope ? { projectId: scope.projectId } : null,
       });
       if ("error" in resolved) {
-        const ref =
-          source.id ??
-          `${source.folder ? `${source.folder}/` : ""}${source.filename}`;
+        const ref = source.id ?? source.filename ?? "";
         logger.warn(
           {
             organizationId: userCtx.organizationId,
             userId: userCtx.userId,
             conversationId,
-            xFileRef: ref,
+            ref,
             reason: resolved.error,
           },
           "[Sandbox] rejected my_file upload",
@@ -1160,18 +1091,16 @@ async function loadUploadSource(params: {
         switch (resolved.error) {
           case "ambiguous":
             return {
-              error:
-                `Multiple persistent files are named "${source.filename}"${source.folder ? ` in folder "${source.folder}"` : ""}. ` +
-                "Run search_files and use the `id` of the one you mean.",
+              error: `Multiple persistent files are named "${source.filename}". Run search_files and use the \`id\` of the one you mean.`,
             };
-          case "outside_project_folder":
+          case "outside_project":
             return {
               error:
-                "This chat belongs to a project; only files in the project's result folder can be used here. Run search_files to see them.",
+                "This chat belongs to a project; only the project's files can be used here. Run search_files to see them.",
             };
           case "missing_bytes":
             return {
-              error: `The persistent file ${ref} exists but its bytes are no longer in storage (it may have been deleted from the storage folder).`,
+              error: `The persistent file ${ref} exists but its bytes are no longer in storage.`,
             };
           default:
             return {

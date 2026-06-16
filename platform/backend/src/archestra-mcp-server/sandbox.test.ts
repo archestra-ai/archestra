@@ -11,7 +11,7 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   FileModel,
-  FolderModel,
+  ProjectModel,
   SkillModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
@@ -833,7 +833,7 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 });
 
-describe("PFS tools (search_files, my_file source, download_file folder)", () => {
+describe("PFS tools (search_files, my_file source, download_file project)", () => {
   let agent: Agent;
   let organizationId: string;
   let userId: string;
@@ -893,11 +893,9 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
     return FileModel.create({
       organizationId,
       userId,
-      namespace: { kind: "user", userId: userId },
+      projectId: null,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: null,
-      folderName: null,
       filename,
       mimeType: "text/plain",
       sizeBytes: content.length,
@@ -909,11 +907,6 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
     test("lists and filters the user's persistent files", async () => {
       await seedPfsArtifact("q2-report.txt");
       await seedPfsArtifact("notes.txt");
-      await FolderModel.create({
-        organizationId,
-        userId,
-        name: "reports",
-      });
 
       const all = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
@@ -923,13 +916,11 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
       expect(all.isError).toBe(false);
       const allOut = structuredOf<{
         files: Array<{ filename: string; id: string | null }>;
-        folders: string[];
       }>(all);
       expect(allOut.files.map((f) => f.filename).sort()).toEqual([
         "notes.txt",
         "q2-report.txt",
       ]);
-      expect(allOut.folders).toEqual(["reports"]);
       expect(allOut.files.every((f) => f.id)).toBe(true);
 
       const filtered = await executeArchestraTool(
@@ -958,11 +949,9 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
       await FileModel.create({
         organizationId,
         userId: stranger.id,
-        namespace: { kind: "user", userId: stranger.id },
+        projectId: null,
         conversationId: null,
         sandboxId: strangerSandbox.id,
-        folderId: null,
-        folderName: null,
         filename: "theirs.txt",
         mimeType: "text/plain",
         sizeBytes: 1,
@@ -1037,7 +1026,7 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
   });
 
   describe("download_file project scoping", () => {
-    test("non-project chats export with no folder", async () => {
+    test("non-project chats export with no project", async () => {
       const ctx = await makeConversationCtx();
       const spy = vi
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
@@ -1056,13 +1045,11 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
         ctx,
       );
       expect(result.isError).toBe(false);
-      expect(spy.mock.calls[0][0].folder).toBeNull();
-      expect(spy.mock.calls[0][0].namespace).toBeUndefined();
+      expect(spy.mock.calls[0][0].projectId).toBeNull();
     });
 
-    test("project chats force the project folder and the project namespace", async () => {
-      const { projectService } = await import("@/services/project");
-      const project = await projectService.create({
+    test("project chats force the project id", async () => {
+      const project = await ProjectModel.create({
         organizationId,
         userId,
         name: "tool-proj",
@@ -1094,12 +1081,7 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
         ctx,
       );
       expect(result.isError).toBe(false);
-      const call = spy.mock.calls[0][0];
-      expect(call.folder?.name).toBe("tool-proj");
-      expect(call.namespace).toEqual({
-        kind: "project",
-        projectId: project.id,
-      });
+      expect(spy.mock.calls[0][0].projectId).toBe(project.id);
     });
   });
 });
@@ -1145,16 +1127,12 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   });
 
   async function makeProjectChatCtx(name: string) {
-    const { projectService } = await import("@/services/project");
-    const { FolderModel } = await import("@/models");
-    const project = await projectService.create({
+    const project = await ProjectModel.create({
       organizationId,
       userId,
       name,
       description: null,
     });
-    const folder = await FolderModel.findByProjectId(project.id);
-    if (!folder) throw new Error("project folder missing");
     const conversation = await ConversationModel.create({
       userId,
       organizationId,
@@ -1164,7 +1142,6 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     });
     return {
       project,
-      folder,
       ctx: { ...context, conversationId: conversation.id },
     };
   }
@@ -1191,32 +1168,32 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(result.isError).toBe(false);
     const out = structuredOf<{
       fileId: string;
-      folder: string | null;
+      projectName: string | null;
       downloadUrl: string;
     }>(result);
-    expect(out.folder).toBeNull();
+    expect(out.projectName).toBeNull();
     expect(out.downloadUrl).toBe(`/api/skill-sandbox/artifacts/${out.fileId}`);
 
     const { FileModel } = await import("@/models");
     const row = await FileModel.findById(out.fileId);
     expect(row).not.toBeNull();
-    expect(row?.folderId).toBeNull();
+    expect(row?.projectId).toBeNull();
   });
 
-  test("save_result lands in the project folder in a project chat", async () => {
-    const { folder, ctx } = await makeProjectChatCtx("save-here");
+  test("save_result lands in the project in a project chat", async () => {
+    const { project, ctx } = await makeProjectChatCtx("save-here");
     const result = await executeArchestraTool(
       SAVE_RESULT_FULL_NAME,
       { filename: "result.md", content: "done" },
       ctx,
     );
     expect(result.isError).toBe(false);
-    const out = structuredOf<{ fileId: string; folder: string }>(result);
-    expect(out.folder).toBe("save-here");
+    const out = structuredOf<{ fileId: string; projectName: string }>(result);
+    expect(out.projectName).toBe("save-here");
 
     const { FileModel } = await import("@/models");
     const row = await FileModel.findById(out.fileId);
-    expect(row?.folderId).toBe(folder.id);
+    expect(row?.projectId).toBe(project.id);
   });
 
   test("save_result validates filename, content presence, and size", async () => {
@@ -1243,8 +1220,8 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(both.isError).toBe(true);
   });
 
-  test("search_files in a project chat sees only the project folder", async () => {
-    const { folder, ctx } = await makeProjectChatCtx("searchable");
+  test("search_files in a project chat sees only the project's files", async () => {
+    const { project, ctx } = await makeProjectChatCtx("searchable");
     const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
@@ -1255,11 +1232,9 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     await FileModel.create({
       organizationId,
       userId,
-      namespace: { kind: "user", userId: userId },
+      projectId: project.id,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: folder.id,
-      folderName: "searchable",
       filename: "inside.txt",
       mimeType: "text/plain",
       sizeBytes: 2,
@@ -1268,11 +1243,9 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     await FileModel.create({
       organizationId,
       userId,
-      namespace: { kind: "user", userId: userId },
+      projectId: null,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: null,
-      folderName: null,
       filename: "outside.txt",
       mimeType: "text/plain",
       sizeBytes: 3,
@@ -1286,22 +1259,12 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     );
     const out = structuredOf<{
       files: Array<{ filename: string }>;
-      folders: string[];
     }>(result);
     expect(out.files.map((f) => f.filename)).toEqual(["inside.txt"]);
-    expect(out.folders).toEqual(["searchable"]);
-
-    const wrongFolder = await executeArchestraTool(
-      TOOL_SEARCH_FILES_FULL_NAME,
-      { folder: "elsewhere" },
-      ctx,
-    );
-    expect(wrongFolder.isError).toBe(true);
-    expect(textOf(wrongFolder)).toContain("searchable");
   });
 
-  test("my_file uploads in a project chat are confined to the project folder", async () => {
-    const { folder, ctx } = await makeProjectChatCtx("confined");
+  test("my_file uploads in a project chat are confined to the project", async () => {
+    const { project, ctx } = await makeProjectChatCtx("confined");
     const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
@@ -1312,11 +1275,9 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     const inside = await FileModel.create({
       organizationId,
       userId,
-      namespace: { kind: "user", userId: userId },
+      projectId: project.id,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: folder.id,
-      folderName: "confined",
       filename: "in.txt",
       mimeType: "text/plain",
       sizeBytes: 2,
@@ -1325,11 +1286,9 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     const outside = await FileModel.create({
       organizationId,
       userId,
-      namespace: { kind: "user", userId: userId },
+      projectId: null,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: null,
-      folderName: null,
       filename: "out.txt",
       mimeType: "text/plain",
       sizeBytes: 3,

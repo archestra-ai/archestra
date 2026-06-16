@@ -23,9 +23,10 @@ catalog:
 overrides:
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
-  protobufjs: '>=8.0.2'
+  protobufjs: '>=8.6.0'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.2
+  vite: 7.3.5
+  shell-quote: '>=1.8.4'
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
   dompurify: 3.4.0

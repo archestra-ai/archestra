@@ -66,9 +66,7 @@ export function handleApiError(error: ApiSdkError) {
   const sentryError = toApiError(error);
 
   if (typeof window !== "undefined") {
-    // Long-but-finite so an admin can read/copy the full error; the close
-    // button dismisses it early. Not Infinity — this helper has no dedupe, so
-    // persistent error toasts would silently accumulate.
+    // Errors stay long enough to read and copy; the close button dismisses early.
     toast.error(sentryError.message, { duration: 12000 });
   }
 

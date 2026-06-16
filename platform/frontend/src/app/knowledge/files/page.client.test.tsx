@@ -172,8 +172,8 @@ describe("KnowledgeFilesPage", () => {
       vi.clearAllMocks();
     });
 
-    const makeFile = (name: string, content = "x") =>
-      new File([content], name, { type: "text/markdown" });
+    const makeFile = (name: string, content = "x", lastModified = 1000) =>
+      new File([content], name, { type: "text/markdown", lastModified });
 
     const stageFiles = (input: HTMLInputElement, files: File[]) => {
       Object.defineProperty(input, "files", {
@@ -204,14 +204,24 @@ describe("KnowledgeFilesPage", () => {
       expect(screen.getByText("2 / 20")).toBeInTheDocument();
     });
 
-    it("ignores duplicate files", async () => {
+    it("ignores re-picking the identical file", async () => {
       const { input } = await openUploadDialog();
 
-      stageFiles(input, [makeFile("dup.md", "same")]);
-      stageFiles(input, [makeFile("dup.md", "same")]);
+      stageFiles(input, [makeFile("dup.md", "same", 1000)]);
+      stageFiles(input, [makeFile("dup.md", "same", 1000)]);
 
       expect(screen.getAllByText("dup.md")).toHaveLength(1);
       expect(screen.getByText("1 / 20")).toBeInTheDocument();
+    });
+
+    it("keeps same-named files that differ in content", async () => {
+      const { input } = await openUploadDialog();
+
+      stageFiles(input, [makeFile("notes.md", "first", 1000)]);
+      stageFiles(input, [makeFile("notes.md", "second-longer", 2000)]);
+
+      expect(screen.getAllByText("notes.md")).toHaveLength(2);
+      expect(screen.getByText("2 / 20")).toBeInTheDocument();
     });
 
     it("removes a staged file", async () => {

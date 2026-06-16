@@ -504,7 +504,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(modelTrigger?.className).not.toContain("animate-pulse");
     });
 
-    it("does not pulse anything when embedding is fully configured", () => {
+    it("does not highlight anything when embedding is fully configured", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",

@@ -21,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
@@ -300,25 +300,37 @@ function UploadKnowledgeFilesDialog({
   const uploadDisabled =
     files.length === 0 || teamSelectionInvalid || isUploading;
 
+  const exceededLimitRef = useRef(false);
+
   const addFiles = (incoming: File[]) => {
     if (incoming.length === 0) return;
-    const seen = new Set(files.map((file) => `${file.name}:${file.size}`));
-    const merged = [...files];
-    for (const file of incoming) {
-      const key = `${file.name}:${file.size}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(file);
-    }
-    if (merged.length > MAX_KNOWLEDGE_FILES_PER_UPLOAD) {
-      toast.warning(
-        `Up to ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} files can be uploaded at once. Only the first ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} were kept.`,
-      );
-      setFiles(merged.slice(0, MAX_KNOWLEDGE_FILES_PER_UPLOAD));
-      return;
-    }
-    setFiles(merged);
+    const fileKey = (file: File) =>
+      `${file.name}:${file.size}:${file.lastModified}`;
+    setFiles((prev) => {
+      const seen = new Set(prev.map(fileKey));
+      const merged = [...prev];
+      for (const file of incoming) {
+        const key = fileKey(file);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(file);
+      }
+      if (merged.length > MAX_KNOWLEDGE_FILES_PER_UPLOAD) {
+        exceededLimitRef.current = true;
+        return merged.slice(0, MAX_KNOWLEDGE_FILES_PER_UPLOAD);
+      }
+      return merged;
+    });
   };
+
+  // Warn after commit rather than inside the updater so the toast fires once.
+  useEffect(() => {
+    if (!exceededLimitRef.current) return;
+    exceededLimitRef.current = false;
+    toast.warning(
+      `Up to ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} files can be uploaded at once. Only the first ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} were kept.`,
+    );
+  });
 
   const removeFile = (target: File) => {
     setFiles((prev) => prev.filter((file) => file !== target));
@@ -348,6 +360,11 @@ function UploadKnowledgeFilesDialog({
     }
     if (hadDirectory) {
       toast.warning("Folders aren't supported — drop individual files.");
+    }
+    if (droppedFiles.length === 0 && !hadDirectory) {
+      // Browser without the entry API: stage whatever it exposed directly.
+      addFiles(Array.from(event.dataTransfer.files));
+      return;
     }
     addFiles(droppedFiles);
   };

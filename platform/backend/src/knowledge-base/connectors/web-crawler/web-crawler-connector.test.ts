@@ -225,6 +225,29 @@ describe("WebCrawlerConnector", () => {
     expect(documents[0]?.sourceUrl).toBe(`${site.url}/docs/dest/`);
   });
 
+  test("does not follow a same-host redirect that leaves the crawl scope", async () => {
+    const site = await createTestSite({
+      "/docs/": (_req, res) => {
+        res.writeHead(302, { location: "/admin/secrets/" });
+        res.end();
+      },
+      "/admin/secrets/": html("<main><h1>Secrets</h1></main>"),
+    });
+
+    const batches = await collectBatches({
+      startUrl: `${site.url}/docs/`,
+      includePathPrefixes: ["/docs/"],
+    });
+
+    expect(batches.flatMap((batch) => batch.documents)).toEqual([]);
+    expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([
+      expect.objectContaining({
+        itemId: `${site.url}/docs/`,
+        reason: expect.stringContaining("out-of-scope redirect"),
+      }),
+    ]);
+  });
+
   test("falls back to the fetched URL when canonical points to another origin", async () => {
     const site = await createTestSite({
       "/docs/": html(`

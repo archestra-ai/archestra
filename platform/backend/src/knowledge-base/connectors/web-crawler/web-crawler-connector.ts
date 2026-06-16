@@ -215,9 +215,11 @@ export class WebCrawlerConnector extends BaseConnector {
             };
 
             // got follows redirects internally, bypassing the per-request SSRF
-            // check above. Reject cross-host redirects without dialing the
-            // target (so an unreachable external host can't hang the crawl) and
-            // re-run the SSRF check on same-host redirects.
+            // and scope checks above. Reject cross-host and out-of-scope
+            // redirects without dialing the target (so an unreachable external
+            // host can't hang the crawl, and a redirect can't pull in a path the
+            // crawl was scoped to exclude), and re-run the SSRF check on the
+            // remaining same-host, in-scope redirects.
             gotOptions.hooks = {
               ...gotOptions.hooks,
               beforeRedirect: [
@@ -228,6 +230,18 @@ export class WebCrawlerConnector extends BaseConnector {
                   if (target.hostname !== startHostname) {
                     throw new Error(
                       `Refusing to follow cross-host redirect to ${target.href}`,
+                    );
+                  }
+                  if (
+                    !isPathInScope({
+                      pathname: target.pathname,
+                      search: target.search,
+                      allowedPathPrefixes,
+                      excludePathPatterns,
+                    })
+                  ) {
+                    throw new Error(
+                      `Refusing to follow out-of-scope redirect to ${target.href}`,
                     );
                   }
                   await assertPublicCrawlUrl({
@@ -506,16 +520,31 @@ function isAllowedUrl(params: {
 
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   if (url.origin !== startUrl.origin) return false;
+
+  return isPathInScope({
+    pathname: url.pathname,
+    search: url.search,
+    allowedPathPrefixes: params.allowedPathPrefixes,
+    excludePathPatterns: params.excludePathPatterns,
+  });
+}
+
+function isPathInScope(params: {
+  pathname: string;
+  search: string;
+  allowedPathPrefixes: string[];
+  excludePathPatterns: RegExp[];
+}): boolean {
   if (
     !params.allowedPathPrefixes.some((prefix) =>
-      pathMatchesPrefix(url.pathname, prefix),
+      pathMatchesPrefix(params.pathname, prefix),
     )
   ) {
     return false;
   }
 
   return !params.excludePathPatterns.some((pattern) =>
-    pattern.test(`${url.pathname}${url.search}`),
+    pattern.test(`${params.pathname}${params.search}`),
   );
 }
 

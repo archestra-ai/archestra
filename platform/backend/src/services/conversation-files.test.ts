@@ -230,6 +230,15 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     name: "filespanel",
     description: null,
   });
+  // shared org-wide: the member legitimately has project access, which is what
+  // lets them have a chat here and read the result folder.
+  await projectService.setShare({
+    id: project.id,
+    organizationId: org.id,
+    userId: owner.id,
+    visibility: "organization",
+    teamIds: [],
+  });
   const folder = await FolderModel.findByProjectId(project.id);
   if (!folder) throw new Error("project folder missing");
   const conv = await ConversationModel.create({
@@ -289,4 +298,60 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     },
   ]);
   expect(result.projectName).toBe("filespanel");
+});
+
+test("project chat: a requester without project access sees no project files", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser({});
+  const outsider = await makeUser({ email: "files-outsider@test.com" });
+  const agent = await makeAgent({ organizationId: org.id });
+
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: owner.id,
+    name: "locked",
+    description: null,
+  });
+  const folder = await FolderModel.findByProjectId(project.id);
+  if (!folder) throw new Error("project folder missing");
+  const sandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: owner.id,
+    conversationId: null,
+    defaultCwd: "/home/sandbox",
+  });
+  await FileModel.create({
+    organizationId: org.id,
+    userId: owner.id,
+    namespace: { kind: "project", projectId: project.id },
+    conversationId: null,
+    sandboxId: sandbox.id,
+    folderId: folder.id,
+    folderName: "locked",
+    filename: "secret.txt",
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    data: Buffer.from("hi"),
+  });
+  // the outsider owns a chat in the project but the project is unshared (e.g.
+  // access was revoked) — the result folder must stay out of reach.
+  const conv = await ConversationModel.create({
+    userId: outsider.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+
+  const result = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+    conversationOwnerUserId: outsider.id,
+    requestingUserId: outsider.id,
+  });
+  expect(result.myFiles).toEqual([]);
+  expect(result.projectName).toBeNull();
 });

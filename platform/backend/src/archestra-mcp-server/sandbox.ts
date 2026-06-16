@@ -463,7 +463,11 @@ const registry = defineArchestraTools([
 
       let scope: ProjectFileScope | null;
       try {
-        scope = await resolveProjectFileScope(context.conversationId);
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "download_file");
       }
@@ -539,7 +543,11 @@ const registry = defineArchestraTools([
 
       let uploadScope: ProjectFileScope | null;
       try {
-        uploadScope = await resolveProjectFileScope(context.conversationId);
+        uploadScope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "upload_file");
       }
@@ -601,7 +609,11 @@ const registry = defineArchestraTools([
 
       let scope: ProjectFileScope | null;
       try {
-        scope = await resolveProjectFileScope(context.conversationId);
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
       } catch (error) {
         if (error instanceof SkillSandboxError) {
           return errorResult(error.message);
@@ -722,7 +734,11 @@ const registry = defineArchestraTools([
 
       let scope: ProjectFileScope | null;
       try {
-        scope = await resolveProjectFileScope(context.conversationId);
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
       } catch (error) {
         if (error instanceof SkillSandboxError) {
           return errorResult(error.message);

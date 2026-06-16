@@ -86,10 +86,16 @@ class ConversationFilesService {
   }): Promise<{ files: SandboxFileListItem[]; projectName: string | null }> {
     let scope: Awaited<ReturnType<typeof resolveProjectFileScope>>;
     try {
-      scope = await resolveProjectFileScope(params.conversationId);
+      scope = await resolveProjectFileScope({
+        conversationId: params.conversationId,
+        // The requester's own access decides what the panel lists, mirroring
+        // the search_files scope a project member gets in this chat.
+        userId: params.requestingUserId,
+        organizationId: params.organizationId,
+      });
     } catch (error) {
-      // Fail-closed scope (e.g. the project folder is gone): the agent can't
-      // touch any PFS file, so the panel lists none.
+      // Fail-closed scope (e.g. the requester lost project access, or the
+      // project folder is gone): no PFS file is reachable, so list none.
       if (error instanceof SkillSandboxError) {
         return { files: [], projectName: null };
       }

@@ -1294,7 +1294,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
-  [RouteId.GetProjectFiles]: { project: ["read"] },
+  // The file list is part of the PFS surface, so it requires the same
+  // `sandbox:execute` as the byte endpoint that serves these files
+  // (GetSkillSandboxArtifact) — otherwise a role could list files marked
+  // `downloadable` and then 403 on every fetch. Project membership is still
+  // enforced in the handler (projectService.listFiles -> requireReadable).
+  [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
@@ -1370,8 +1375,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
 
-  // X-Files
-  "/x-files": { sandbox: ["execute"] },
+  // My Files
+  "/my-files": { sandbox: ["execute"] },
+
+  // Projects
+  "/projects": { project: ["read"] },
+  "/projects/[id]": { project: ["read"] },
 
   // Agents
   "/agents": { agent: ["read"] },

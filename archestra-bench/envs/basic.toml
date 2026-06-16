@@ -1,0 +1,37 @@
+id = "basic"
+name = "Basic"
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size"]
+
+# These tasks are read-only against backend state (they run sandbox code + download artifacts, never
+# mutating the skill/tool catalog), and the skill surface is large + web-pinned -- so seed one backend
+# once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
+share_backend = true
+
+[agent]
+system_prompt = """You are an expert software engineer working inside a sandboxed environment. You can run shell commands, install packages, read staged files, and use any installed skills. When a task is complete, hand in your answer by calling the submit_result tool."""
+
+# All skills from the two public skill libraries, pinned. A broad, realistic skill surface; the agent
+# picks whatever helps (e.g. the document skills for the xlsx task). `cap` unset = import all.
+[[skills]]
+repo = "github.com/anthropics/skills"
+path = "skills"
+ref = "57546260929473d4e0d1c1bb75297be2fdfa1949"
+
+[[skills]]
+repo = "github.com/openai/skills"
+path = "skills"
+ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
+
+# Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
+# requires them). Each must list tools without auth or env setup hard-fails naming it.
+[[mcps]]
+name = "deepwiki"
+server_url = "https://mcp.deepwiki.com/mcp"
+
+[[mcps]]
+name = "microsoft-learn"
+server_url = "https://learn.microsoft.com/api/mcp"
+
+[[mcps]]
+name = "context7"
+server_url = "https://mcp.context7.com/mcp"

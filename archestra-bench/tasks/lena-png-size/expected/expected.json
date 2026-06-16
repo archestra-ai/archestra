@@ -1,0 +1,5 @@
+{
+  "_source": "scikit-image skimage/data/lena.png @ v0.10.0 (sha256 135632b71bd0c009c73d3b4132dbab43fd0923ad1e85102ff6f51452a1d3aec0, 474659 bytes); size_kb = floor(474659 / 1024)",
+  "byte_size": 474659,
+  "size_kb": 463
+}

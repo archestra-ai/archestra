@@ -14,7 +14,7 @@ import type { SelectUserToken } from "@/types";
 const FORCE_DB = true;
 
 /** Raised by `create` when a concurrent request already created the (org, user) token. */
-export class UserTokenConflictError extends Error {
+class UserTokenConflictError extends Error {
   constructor(userId: string, organizationId: string) {
     super(
       `user token already exists for user ${userId} in organization ${organizationId}`,

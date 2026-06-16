@@ -5,7 +5,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import UserTokenModel, { UserTokenConflictError } from "./user-token";
+import UserTokenModel from "./user-token";
 
 describe("UserTokenModel", () => {
   describe("create", () => {
@@ -58,7 +58,7 @@ describe("UserTokenModel", () => {
 
       await UserTokenModel.create(user.id, org.id);
       await expect(UserTokenModel.create(user.id, org.id)).rejects.toThrow(
-        UserTokenConflictError,
+        /user token already exists/,
       );
 
       // the conflicting create must not leak the secret it minted before the insert lost.

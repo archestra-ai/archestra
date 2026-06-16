@@ -169,6 +169,102 @@ describe("0290 migration: backfill kind='artifact' rows into files", () => {
     expect(file.filename).toBe("chart.png");
   });
 
+  test("derives filename from the path basename when original_name is empty", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const sandbox = await makeSandbox({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+    });
+
+    const artifact = await makeArtifactFile({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/out/report.csv",
+      originalName: "",
+      mimeType: "text/csv",
+      data: Buffer.from("report contents"),
+    });
+
+    await runBackfill();
+
+    const [file] = await db
+      .select()
+      .from(schema.filesTable)
+      .where(eq(schema.filesTable.id, artifact.id));
+    expect(file).toBeDefined();
+    // NULLIF(original_name, '') falls through to the path basename, not ''.
+    expect(file.filename).toBe("report.csv");
+  });
+
+  test("is idempotent: re-running does not duplicate or resurrect rows", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const sandbox = await makeSandbox({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+    });
+
+    const data = Buffer.from("report contents");
+    const artifact = await makeArtifactFile({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/output/report.csv",
+      originalName: "report.csv",
+      mimeType: "text/csv",
+      data,
+    });
+
+    // Run the backfill twice; the second pass exercises ON CONFLICT DO NOTHING.
+    await runBackfill();
+    await runBackfill();
+
+    // Exactly one files row for the id — no duplicate from the second pass.
+    const files = await db
+      .select()
+      .from(schema.filesTable)
+      .where(eq(schema.filesTable.id, artifact.id));
+    expect(files).toHaveLength(1);
+    const file = files[0];
+    // Fields remain intact (the conflicting re-insert was skipped, not applied).
+    expect(file.id).toBe(artifact.id);
+    expect(file.filename).toBe("report.csv");
+    expect(file.mimeType).toBe("text/csv");
+    expect(file.sizeBytes).toBe(data.byteLength);
+    expect(Buffer.from(file.data as Buffer).toString()).toBe("report contents");
+    expect(file.organizationId).toBe(org.id);
+    expect(file.userId).toBe(user.id);
+    expect(file.conversationId).toBe(conversation.id);
+    expect(file.sandboxId).toBe(sandbox.id);
+
+    // The source artifact stays deleted; the re-run does not resurrect it.
+    const remaining = await db
+      .select()
+      .from(schema.skillSandboxFilesTable)
+      .where(eq(schema.skillSandboxFilesTable.id, artifact.id));
+    expect(remaining).toHaveLength(0);
+  });
+
   test("leaves kind='upload' rows untouched", async ({
     makeUser,
     makeOrganization,

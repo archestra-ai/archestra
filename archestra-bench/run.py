@@ -331,6 +331,10 @@ def _shared_env_units(
         setups.append((lane, agent_id, submit_tool, mcp))
     if env.mcps:  # one pass assigning the env's remote MCP tools to every lane agent (no dup catalog items)
         seed_mcp_fixtures(client, env.mcps, agent_ids=[agent_id for _, agent_id, _, _ in setups])
+    try:  # best-effort, serial, before fan-out: pre-create the shared token so lanes don't race it
+        client.warm_user_token()
+    except ArchestraApiError:
+        logger.exception("warm_user_token failed; lanes may race the gateway-token insert (non-fatal)")
     return [
         _lane_unit(
             env, env_plan.tasks, lane, ctx, reporter,
@@ -605,7 +609,10 @@ def _grade_cell(
     runtime = {"cell": _cell_token(cell_key, lane.model), "agent_id": agent_id}
     run = ChatRunResult(text="")
     stage_error: str | None = None
+    final_stage = len(task.stages) - 1
     for index, stage in enumerate(task.stages):
+        if index == final_stage:  # arm submission only for the last stage; earlier ones must not lock
+            bench_mcp.allow_submission(cell_key)
         stage_error = _drive_stage(client, conversation_id, stage, task, run, artifacts, runtime)
         if stage_error is not None:
             break
@@ -620,6 +627,7 @@ def _grade_cell(
     # error is still gradeable. agent_error is only for a run that errored without ever submitting.
     submission = bench_mcp.take_submission(cell_key)
     if isinstance(submission, SubmissionFormatFailed):
+        metadata["format_errors"] = list(submission.errors)
         return _finish(
             env_id, lane, task, Outcome.FORMAT_FAILED, run, artifacts, metadata,
             format_attempts=submission.attempts,
@@ -633,6 +641,7 @@ def _grade_cell(
 
     assert isinstance(submission, SubmissionAccepted)
     metadata["format_attempts"] = submission.attempts
+    metadata["result"] = json.loads(submission.payload_bytes)  # the graded answer, inline for triage
     report_path = artifacts.write_bytes("submission.json", submission.payload_bytes)
     artifact_paths["submission"] = str(report_path)
 
@@ -662,6 +671,8 @@ def _grade_cell(
     _save_verifier_artifacts(artifacts, artifact_paths, outcome)
     metadata["verifier_exit_code"] = outcome.exit_code
     metadata["verifier_timed_out"] = outcome.timed_out
+    if not outcome.passed:
+        metadata["verifier_summary"] = _verifier_summary(outcome)
     return _finish(
         env_id,
         lane,
@@ -759,6 +770,7 @@ def _drive_stage(
     text = _expand_runtime(stage.text, runtime)
     stream_parse_error: str | None = None
     coalescer = _StreamCoalescer(artifacts)
+    run.stage_tokens = None  # this stage's usage accumulates fresh; folded into the run total below
     try:
         for record in client.stream_chat_records(conversation_id, text=text, files=files):
             coalescer.feed(record)
@@ -770,6 +782,8 @@ def _drive_stage(
         return _api_error_text(exc)
     finally:
         coalescer.flush()
+        if run.stage_tokens is not None:
+            run.total_tokens = (run.total_tokens or 0) + run.stage_tokens
     return _combine_errors(run.stream_error, _chat_parse_error(stream_parse_error))
 
 
@@ -1104,6 +1118,22 @@ def _save_verifier_artifacts(
 ) -> None:
     artifact_paths["verifier_stdout"] = str(artifacts.write_text("verifier.stdout.txt", outcome.stdout))
     artifact_paths["verifier_stderr"] = str(artifacts.write_text("verifier.stderr.txt", outcome.stderr))
+
+
+_VERIFIER_SUMMARY_CAP = 500  # enough for the assertion lines; full output lives in verifier.stdout.txt
+
+
+def _verifier_summary(outcome: VerifyOutcome) -> str:
+    """The why-it-failed line(s) for run.json: pytest's `E ` assertion explanation, else the FAILED
+    summary, else the tail of stdout/stderr -- so a failure is legible without opening the artifacts."""
+    lines = [ln.strip() for ln in outcome.stdout.splitlines() if ln.strip()]
+    highlights = [ln for ln in lines if ln.startswith("E ") or ln.startswith("FAILED")]
+    if not highlights:
+        highlights = lines[-3:] or [ln.strip() for ln in outcome.stderr.splitlines() if ln.strip()][-3:]
+    if outcome.timed_out:
+        highlights = ["verifier timed out", *highlights]
+    text = " | ".join(highlights)
+    return text[:_VERIFIER_SUMMARY_CAP] if len(text) > _VERIFIER_SUMMARY_CAP else text
 
 
 # === helpers ===

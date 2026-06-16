@@ -58,6 +58,7 @@ class _TaskContext:
     task_key: str
     validator: Validator
     max_attempts: int
+    accepting: bool = False  # armed only for the final stage; earlier stages must not lock a result
     attempts: int = 0
     accepted: bytes | None = None
     failed: bool = False
@@ -130,6 +131,16 @@ class BenchmarkMcp:
                 task_key=task_key, validator=Draft202012Validator(schema), max_attempts=max_attempts
             )
 
+    def allow_submission(self, task_key: str) -> None:
+        """Arm the active task to accept a submission -- called before driving its final stage.
+
+        Until armed, `submit_result` is a sequencing error (the agent is mid-task) rather than a real
+        answer, so it is refused without consuming the format-correction budget. Single-stage tasks are
+        armed before their only stage, so this is a no-op for them."""
+        with self._lock:
+            if self._ctx is not None and self._ctx.task_key == task_key:
+                self._ctx.accepting = True
+
     def take_submission(self, task_key: str) -> Submission:
         """Read the outcome for `task_key` and close the context (`_ctx = None`).
 
@@ -156,6 +167,11 @@ class BenchmarkMcp:
             ctx = self._ctx
             if ctx is None:
                 return "No benchmark task is active; this submission was ignored."
+            if not ctx.accepting:
+                return (
+                    "This task has more steps to complete. Keep following the instructions and call "
+                    "submit_result only when the final step asks you to hand in your answer."
+                )
             if ctx.accepted is not None:
                 return "A result was already accepted for this task; ignoring this submission."
             if ctx.failed:

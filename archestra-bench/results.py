@@ -80,7 +80,7 @@ class Aggregate:
     total_tokens: int
     per_env: list[GroupAggregate]
     per_task: list[GroupAggregate]
-    per_provider: list[GroupAggregate]
+    per_lane: list[GroupAggregate]
 
     @property
     def pass_rate(self) -> float:
@@ -96,7 +96,7 @@ class Aggregate:
             "total_tokens": self.total_tokens,
             "per_env": [_group_json("env_id", g) for g in self.per_env],
             "per_task": [_group_json("task_id", g) for g in self.per_task],
-            "per_provider": [_group_json("provider", g) for g in self.per_provider],
+            "per_lane": [_group_json("lane", g) for g in self.per_lane],
         }
 
 
@@ -120,7 +120,7 @@ def aggregate(results: list[RunResult]) -> Aggregate:
         total_tokens=sum(r.total_tokens or 0 for r in results),
         per_env=_group_by(results, lambda r: r.env_id),
         per_task=_group_by(results, lambda r: r.task_id),
-        per_provider=_group_by(results, lambda r: r.provider),
+        per_lane=_group_by(results, lambda r: r.lane),
     )
 
 
@@ -169,8 +169,8 @@ def render_markdown(rows: list[RunResult]) -> str:
         lines += [_group_line(g) for g in agg.per_env]
         lines += ["", "### By task", ""]
         lines += [_group_line(g) for g in agg.per_task]
-        lines += ["", "### By provider", ""]
-        lines += [_group_line(g) for g in agg.per_provider]
+        lines += ["", "### By lane", ""]
+        lines += [_group_line(g) for g in agg.per_lane]
 
     return "\n".join(lines) + "\n"
 

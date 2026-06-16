@@ -17,7 +17,7 @@ import pytest
 from archestra_client import ArchestraApiError
 from envs import EnvConfig
 from eval_client import ChatRunResult, ChatStreamRecord
-from results import Outcome, RunResult, build_report
+from results import Outcome, RunResult, aggregate, build_report
 from run import (
     Lane,
     ProgressReporter,
@@ -248,6 +248,19 @@ def test_build_report_keys_on_lane_so_same_model_two_gateways_coexist() -> None:
 def test_build_report_rejects_true_duplicate_cell() -> None:
     with pytest.raises(ValueError, match="duplicate result"):
         build_report([_result("kimi", "anthropic", "m"), _result("kimi", "anthropic", "m")])
+
+
+def test_aggregate_groups_by_lane_not_provider() -> None:
+    # two lanes share a provider -> they must roll up as distinct lane rows, not one provider row.
+    rows = [
+        _result("kimi", "anthropic", "m"),
+        _result("glm", "anthropic", "m"),
+        _result("minimax", "openrouter", "n"),
+    ]
+    agg = aggregate(rows)
+    assert [g.key for g in agg.per_lane] == ["glm", "kimi", "minimax"]
+    assert all(g.total == 1 for g in agg.per_lane)
+    assert "per_lane" in agg.to_json() and "per_provider" not in agg.to_json()
 
 
 # === lane slug ===
@@ -522,3 +535,41 @@ def test_drive_stage_flushes_dangling_text_on_stream_drop(tmp_path: Path) -> Non
     out = [json.loads(line) for line in (tmp_path / "cell" / "trajectory.jsonl").read_text().splitlines()]
     assert [r["kind"] for r in out] == ["assistant_text"]  # flushed in the finally despite the drop
     assert out[0]["text"] == "half"
+
+
+class _StaticStreamClient:
+    """Network boundary that replays one canned stream per stage call (no real chat)."""
+
+    def __init__(self, stages: list[list[ChatStreamRecord]]) -> None:
+        self._stages = iter(stages)
+
+    def stream_chat_records(
+        self, conversation_id: str, *, text: str, files: tuple[object, ...] = ()
+    ) -> Iterator[ChatStreamRecord]:
+        yield from next(self._stages)
+
+
+def _usage(total: int) -> ChatStreamRecord:
+    return _ev(type="data-token-usage", data={"totalTokens": total})
+
+
+def test_drive_stage_sums_per_stage_totals(tmp_path: Path) -> None:
+    # real stream shape: per-step usages (small) then a final terminal aggregate (the stage total).
+    # take-last picks the aggregate; the run total sums per-stage aggregates -- never every event.
+    artifacts = _RunArtifacts(tmp_path / "cell")
+    client = _StaticStreamClient([
+        [_usage(50), _usage(70), _usage(180)],  # stage 1: 50,70 per-step; 180 terminal aggregate
+        [_usage(60), _usage(150)],              # stage 2: 60 per-step; 150 terminal aggregate
+    ])
+    run = ChatRunResult(text="")
+    for _ in range(2):
+        assert _drive_stage(client, "c", Stage(text="go"), _task("t"), run, artifacts, {}) is None
+    assert run.total_tokens == 180 + 150  # not 50+70+180+60+150
+
+
+def test_drive_stage_leaves_total_none_when_provider_emits_no_usage(tmp_path: Path) -> None:
+    artifacts = _RunArtifacts(tmp_path / "cell")
+    client = _StaticStreamClient([[_ev(type="text-start", id="0")]])
+    run = ChatRunResult(text="")
+    assert _drive_stage(client, "c", Stage(text="go"), _task("t"), run, artifacts, {}) is None
+    assert run.total_tokens is None  # honest: provider reported nothing, not 0

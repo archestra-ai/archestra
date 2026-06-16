@@ -69,7 +69,8 @@ class ChatRunResult:
     tool_invocations: list[dict[str, JsonValue]] = field(default_factory=list)  # {name, input} per call
     turn_count: int = 0  # model steps (one LLM call each), counted from stream step boundaries
     finish_reason: str | None = None
-    total_tokens: int | None = None
+    total_tokens: int | None = None  # summed across stages; folded from stage_tokens at each stage end
+    stage_tokens: int | None = None  # latest usage in the current stage's stream (the onFinish total)
     stream_error: str | None = None  # an error event surfaced mid-stream (run did not finish clean)
 
 
@@ -206,6 +207,14 @@ class EvalClient(ArchestraClient):
         }
         yield from self._stream_chat_records(body, timeout_s)
 
+    def warm_user_token(self) -> None:
+        """Materialize the per-(user,org) MCP gateway token before concurrent chats race to create it.
+
+        `GET /api/user-tokens/me` calls the backend's `ensureUserToken` (creating it if absent) with no
+        LLM call. On a shared backend the first `/api/chat` of every lane otherwise races this check-
+        then-insert; doing it once, serially, up front means all later chats hit the existing token."""
+        self._request("GET", "/api/user-tokens/me")
+
     # --- conversation files ----------------------------------------------------------------
 
     def list_conversation_files(self, conversation_id: str) -> dict[str, JsonValue]:
@@ -312,9 +321,14 @@ def _apply_chat_event(result: ChatRunResult, event: dict[str, JsonValue]) -> Non
             if isinstance(reason, str):
                 result.finish_reason = reason
         case "data-token-usage":
+            # The backend emits one of these per step (onStepFinish) then a final terminal event
+            # carrying the AI-SDK aggregate usage. The last value is thus the stage total -- relay it;
+            # summing every event would double-count the per-step ones. (A flaky gateway may under-
+            # report its aggregate; relaying the provider's own number is the honest choice.)
+            # _drive_stage folds this per-stage total into the run total.
             usage = event.get("data")
             if isinstance(usage, dict) and isinstance(usage.get("totalTokens"), int):
-                result.total_tokens = usage["totalTokens"]
+                result.stage_tokens = usage["totalTokens"]
         case "error":
             text = event.get("errorText") or event.get("error")
             result.stream_error = text if isinstance(text, str) else json.dumps(event)

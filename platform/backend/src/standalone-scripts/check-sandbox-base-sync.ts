@@ -4,8 +4,11 @@
  * (the Dockerfile, used when ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true) and at
  * runtime (build_warm_base) — so if the apt set / python deps / venv path / base
  * image / provenance marker diverge, prebuilt mode fails silently in production
- * while non-prebuilt still works. The provenance marker only proves image
- * identity, not content; this proves content parity.
+ * while non-prebuilt still works. The provenance marker only proves which image
+ * is running; this guards that the two build paths agree on the apt set, python
+ * dep *names*, venv path, base image, and marker. Resolved versions aren't
+ * compared — the baked image pins requirements.lock while the runtime fallback
+ * floats `uv add`.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";

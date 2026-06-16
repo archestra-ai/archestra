@@ -3,9 +3,11 @@
 # Mirrors what `sandbox-core/src/backends/dagger.rs` `build_warm_base()` builds at
 # run time, so a restricted engine never has to apt/uv over the network. The apt
 # set, python deps, venv path, and provenance marker are kept in sync with the
-# DEFAULT_* constants there by `check:sandbox-base` in CI. Reproducible: the base
-# is digest-pinned and deps come from a committed, hashed `requirements.lock`
-# (regenerate with `make update-lockfile` after editing pyproject.toml).
+# DEFAULT_* constants there by `check:sandbox-base` in CI. The base image is
+# digest-pinned and the python deps come from a committed, hashed
+# `requirements.lock` (regenerate with `make update-lockfile` after editing
+# pyproject.toml); the apt toolbelt is not version-pinned, so it floats with the
+# Debian mirror.
 FROM ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim@sha256:d935373e69f9507199c29006b5eaec59893cbd606f6fb7a185da0c2c83f716e9
 
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the

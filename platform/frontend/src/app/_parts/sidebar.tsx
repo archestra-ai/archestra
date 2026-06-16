@@ -20,7 +20,6 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
-  PencilRuler,
   Route,
   Slack,
   Star,
@@ -38,7 +37,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -80,12 +78,8 @@ interface NavGroup {
   items: NavItem[];
 }
 
-type SidebarMode = "chats" | "studio";
-
-const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
-
-// Items of the Chats tab (flat list above Recents)
-const chatsNavItems: NavItem[] = [
+// Primary nav items shown in the header (flat list, like sidebar-10 NavMain)
+const headerNavItems: NavItem[] = [
   {
     title: "New Chat",
     url: "/chat",
@@ -93,96 +87,6 @@ const chatsNavItems: NavItem[] = [
     customIsActive: (pathname: string) => pathname === "/chat",
   },
 ];
-
-/** Which tab a route belongs to; null = no opinion (keep the current tab). */
-function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat"];
-  if (
-    chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
-  ) {
-    return "chats";
-  }
-  const studioPrefixes = [
-    "/agents",
-    "/scheduled-tasks",
-    "/mcp",
-    "/llm",
-    "/knowledge",
-    "/audit",
-    "/connection",
-  ];
-  if (
-    studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
-  ) {
-    return "studio";
-  }
-  return null;
-}
-
-/**
- * Chats/Studio tab state: explicit picks persist, and navigation that
- * clearly belongs to one tab (deep links included) switches to it.
- */
-function useSidebarMode(pathname: string) {
-  const [mode, setMode] = React.useState<SidebarMode>(
-    () => routeSidebarMode(pathname) ?? "chats",
-  );
-
-  React.useEffect(() => {
-    const stored = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
-    if (
-      (stored === "chats" || stored === "studio") &&
-      routeSidebarMode(window.location.pathname) === null
-    ) {
-      setMode(stored);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    const routeMode = routeSidebarMode(pathname);
-    if (routeMode) setMode(routeMode);
-  }, [pathname]);
-
-  const pick = React.useCallback((next: SidebarMode) => {
-    setMode(next);
-    window.localStorage.setItem(SIDEBAR_MODE_STORAGE_KEY, next);
-  }, []);
-
-  return [mode, pick] as const;
-}
-
-/** Segmented Chats/Studio control (hidden when the sidebar is collapsed). */
-function SidebarModeToggle({
-  mode,
-  onPick,
-}: {
-  mode: SidebarMode;
-  onPick: (mode: SidebarMode) => void;
-}) {
-  const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
-    <button
-      type="button"
-      key={value}
-      onClick={() => onPick(value)}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
-        mode === value
-          ? "bg-background font-medium text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
-
-  return (
-    <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
-      {segment("chats", "Chats", MessageCircle)}
-      {segment("studio", "Studio", PencilRuler)}
-    </div>
-  );
-}
 
 // Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
 const contentNavGroups: NavGroup[] = [
@@ -340,12 +244,14 @@ const NavPrimary = ({
   pathname,
   searchParams,
   permissionMap,
+  chatSection,
 }: {
   items: NavItem[];
   groups: NavGroup[];
   pathname: string;
   searchParams: URLSearchParams;
   permissionMap: Record<string, boolean>;
+  chatSection?: React.ReactNode;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -370,6 +276,7 @@ const NavPrimary = ({
           <span>{item.title}</span>
         </SidebarPrefetchLink>
       </SidebarMenuButton>
+      {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
           {item.subItems
@@ -573,7 +480,6 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
 
@@ -619,36 +525,14 @@ export function AppSidebar() {
       <SidebarContent>
         {isAuthenticated && permissionMap && (
           <>
-            <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
-            {sidebarMode === "chats" ? (
-              <>
-                <NavPrimary
-                  items={chatsNavItems}
-                  groups={[]}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                  permissionMap={permissionMap}
-                />
-                <SidebarGroup className="pt-0">
-                  <SidebarGroupLabel>Recents</SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      <SidebarMenuItem>
-                        <ChatSidebarSection slots={15} flat />
-                      </SidebarMenuItem>
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </>
-            ) : (
-              <NavPrimary
-                items={[]}
-                groups={filteredNavGroups}
-                pathname={pathname}
-                searchParams={searchParams}
-                permissionMap={permissionMap}
-              />
-            )}
+            <NavPrimary
+              items={headerNavItems}
+              groups={filteredNavGroups}
+              pathname={pathname}
+              searchParams={searchParams}
+              permissionMap={permissionMap}
+              chatSection={<ChatSidebarSection />}
+            />
             <NavSecondary
               items={[]}
               pathname={pathname}

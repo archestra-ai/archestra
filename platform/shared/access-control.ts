@@ -163,7 +163,11 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // LLM
   llmProxy: ["read", "create", "update", "delete"],
   llmProviderApiKey: ["read"],
-  llmVirtualKey: ["read"],
+  // Members can create LLM proxies and need to mint personal virtual keys to
+  // route through them (e.g. the /connection auto-provisioning flow). Granting
+  // "create" only enables personal-scope keys; org-scoped keys still require
+  // llmVirtualKey:admin (enforced in the virtual-api-key create route).
+  llmVirtualKey: ["read", "create"],
   llmOauthClient: ["read"],
   llmModel: ["read"],
   llmLimit: [],
@@ -452,6 +456,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // skill admin) are conditional on what the setup includes and enforced in
   // the route handler. The script GET is public (token-authenticated).
   [RouteId.CreateConnectionSetup]: {},
+  // Provisions a personal virtual key for the manual /connection flow. The
+  // llmVirtualKey:create check is enforced in the handler (mirrors the
+  // virtual-key branch of CreateConnectionSetup).
+  [RouteId.CreateConnectionVirtualKey]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)

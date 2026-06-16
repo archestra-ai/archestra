@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-16
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -89,7 +89,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
-| LLM Virtual Keys | `read` |
+| LLM Virtual Keys | `read`, `create` |
 | LLM OAuth Clients | `read` |
 | LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete` |

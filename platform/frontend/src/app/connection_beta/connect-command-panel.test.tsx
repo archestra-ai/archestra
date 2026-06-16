@@ -110,6 +110,7 @@ describe("ConnectCommandPanel", () => {
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenCalledWith({
         clientId: "claude-code",
+        platform: "macos", // jsdom has no Windows UA → bash default
         baseUrl: "http://localhost:9000/v1",
         mcpGatewayId: "g1",
         llmProxyId: "p1",
@@ -143,6 +144,15 @@ describe("ConnectCommandPanel", () => {
       screen.getByText(/Reach the gateway and proxy at/),
     ).toBeInTheDocument();
     expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
+  });
+
+  it("shows the auto-detected platform in the review step", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+    // jsdom reports no Windows UA, so detection falls back to macOS.
+    expect(screen.getByText(/Run on/)).toBeInTheDocument();
+    expect(screen.getByText("macOS")).toBeInTheDocument();
+    expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
   });
 
   it("regenerates without skills after opting out in Options", async () => {

@@ -34,6 +34,12 @@ import {
 import { cn } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
+import {
+  CONNECT_PLATFORMS,
+  type ConnectPlatform,
+  detectPlatform,
+  platformLabels,
+} from "./platform.utils";
 import { SearchableSelect } from "./searchable-select";
 import {
   fetchAllSkillIds,
@@ -43,7 +49,7 @@ import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
-type EditableRow = "endpoint" | "gateway" | "proxy" | "skills";
+type EditableRow = "endpoint" | "gateway" | "proxy" | "skills" | "platform";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
@@ -128,6 +134,13 @@ export function ConnectCommandPanel({
   const includeSkills = skillsEligible && !skillsOptOut;
 
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
+  // Target OS for the generated command. Auto-detected from the browser after
+  // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
+  // user can override it in the review step.
+  const [platform, setPlatform] = useState<ConnectPlatform>("macos");
+  useEffect(() => {
+    setPlatform(detectPlatform());
+  }, []);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -205,6 +218,7 @@ export function ConnectCommandPanel({
   // newer one.
   const inputsKey = JSON.stringify({
     clientId: client.id,
+    platform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? proxy.id : null,
@@ -219,6 +233,7 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const inputs = JSON.parse(key) as {
         clientId: ScriptClientId;
+        platform: ConnectPlatform;
         baseUrl: string;
         gatewayId: string | null;
         proxyId: string | null;
@@ -239,6 +254,7 @@ export function ConnectCommandPanel({
 
       const created = await createSetup({
         clientId: inputs.clientId,
+        platform: inputs.platform,
         baseUrl: inputs.baseUrl,
         mcpGatewayId: inputs.gatewayId ?? undefined,
         llmProxyId: inputs.proxyId ?? undefined,
@@ -295,6 +311,26 @@ export function ConnectCommandPanel({
         value={baseUrl}
         onChange={onBaseUrlChange}
       />
+    </EditorField>
+  );
+
+  const platformEditor = (
+    <EditorField label="Platform">
+      <Select
+        value={platform}
+        onValueChange={(v) => setPlatform(v as ConnectPlatform)}
+      >
+        <SelectTrigger className="w-full" data-testid="connect-platform-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {CONNECT_PLATFORMS.map((p) => (
+            <SelectItem key={p} value={p}>
+              {platformLabels[p]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </EditorField>
   );
 
@@ -470,6 +506,18 @@ export function ConnectCommandPanel({
               <span className="font-medium text-foreground">{baseUrl}</span>
             </SummaryRow>
           )}
+          <SummaryRow
+            editable
+            isEditing={editing === "platform"}
+            onToggle={() => toggleEdit("platform")}
+            editor={platformEditor}
+            changeTestId="connect-change-platform"
+          >
+            Run on{" "}
+            <span className="font-medium text-foreground">
+              {platformLabels[platform]}
+            </span>
+          </SummaryRow>
         </ul>
       </WizardStep>
 
@@ -525,9 +573,13 @@ export function ConnectCommandPanel({
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <span className="max-w-2xl">
-              One-time command, expires in 15 minutes · macOS &amp; Linux only
-              (not Windows) · it edits your client config in place and
-              isn&apos;t undone automatically — revert manually if you need to.
+              One-time command, expires in 15 minutes · for{" "}
+              {platformLabels[platform]} ·{" "}
+              {platform === "windows"
+                ? "runs in PowerShell"
+                : "runs in a shell"}{" "}
+              and edits your client config in place — it isn&apos;t undone
+              automatically, so revert manually if you need to.
             </span>
             <button
               type="button"

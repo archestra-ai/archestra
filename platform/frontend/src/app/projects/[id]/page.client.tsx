@@ -134,7 +134,7 @@ function ProjectDetail() {
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and the result folder are kept — chats become ordinary conversations, the folder stays in My Files."
+            description="Chats and files are kept — chats become ordinary conversations, the files stay in My Files."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });
@@ -155,7 +155,7 @@ function ProjectDetail() {
       <div className="hidden md:flex h-full min-h-0">
         <ProjectFilesSidebar
           projectId={project.id}
-          folderName={project.folderName}
+          projectName={project.name}
         />
       </div>
     </div>
@@ -243,16 +243,16 @@ function ChatsList({
 }
 
 /**
- * The project's result folder as a full-height right sidebar — the exact
- * chat-page Files panel: same resizable shell, same tab header, same stacked
+ * The project's files as a full-height right sidebar — the exact chat-page
+ * Files panel: same resizable shell, same tab header, same stacked
  * list-over-preview body.
  */
 function ProjectFilesSidebar({
   projectId,
-  folderName,
+  projectName,
 }: {
   projectId: string;
-  folderName: string;
+  projectName: string;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -290,7 +290,7 @@ function ProjectFilesSidebar({
             </TabsList>
           </div>
           <span className="shrink-0 truncate pr-1 text-xs text-muted-foreground">
-            {folderName}
+            {projectName}
           </span>
         </div>
 

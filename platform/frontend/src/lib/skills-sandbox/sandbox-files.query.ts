@@ -27,7 +27,7 @@ export function useConversationArtifacts(conversationId: string | undefined) {
   });
 }
 
-/** Surface B: the user's whole PFS; polled so folder hand-edits appear. */
+/** Surface B: the user's whole PFS; polled so out-of-band changes appear. */
 export function useUserSandboxFiles() {
   return useQuery({
     queryKey: ["sandbox-files", "all"],

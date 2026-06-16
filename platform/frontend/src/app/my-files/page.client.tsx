@@ -77,8 +77,8 @@ function MyFilesList() {
       ) : (
         <div className="space-y-4">
           {groups.map((group) =>
-            group.folder === null ? (
-              <div key="(root)" className="overflow-hidden rounded-md border">
+            group.project === null ? (
+              <div key="(own)" className="overflow-hidden rounded-md border">
                 {group.files.map((file, i) => (
                   <FileRow
                     key={file.id ?? file.filename}
@@ -92,7 +92,7 @@ function MyFilesList() {
               </div>
             ) : (
               <ProjectGroup
-                key={group.folder}
+                key={group.project}
                 group={group}
                 onDelete={setPendingDelete}
                 onPreview={setPreviewing}
@@ -133,7 +133,7 @@ function ProjectGroup({
           className="h-4 w-4 shrink-0 text-muted-foreground"
           aria-hidden
         />
-        <span className="truncate">{group.folder}</span>
+        <span className="truncate">{group.project}</span>
         <span className="ml-1 text-xs font-normal text-muted-foreground">
           {group.files.length}
         </span>
@@ -147,7 +147,7 @@ function ProjectGroup({
           ) : (
             group.files.map((file, i) => (
               <FileRow
-                key={file.id ?? `${group.folder}/${file.filename}`}
+                key={file.id ?? `${group.project}/${file.filename}`}
                 file={file}
                 withBorder={i > 0}
                 onDelete={onDelete}

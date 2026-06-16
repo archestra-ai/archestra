@@ -4,51 +4,46 @@ type FilesResponse = archestraApiTypes.GetSkillSandboxFilesResponses["200"];
 export type SandboxFileRow = FilesResponse["files"][number];
 
 export type SandboxFileGroup = {
-  /** Folder name; null = top-level files (rendered first, without a header). */
-  folder: string | null;
-  /** Row id of the folder; null for the root group and hand-made directories. */
-  folderId: string | null;
+  /** Project name; null = the user's own files (rendered first, no header). */
+  project: string | null;
+  projectId: string | null;
   files: SandboxFileRow[];
 };
 
 /**
- * Order the PFS listing for rendering: top-level files first, then one group
- * per folder sorted by name. Empty folders keep their group (so a freshly
- * created folder is visible); files keep the API's newest-first order.
+ * Order the PFS listing for rendering: the user's own files first, then one
+ * group per project sorted by name. Files keep the API's newest-first order.
  */
 export function groupSandboxFiles(
   data: FilesResponse | null | undefined,
 ): SandboxFileGroup[] {
   if (!data) return [];
 
-  const byFolder = new Map<string, SandboxFileRow[]>();
-  const rootFiles: SandboxFileRow[] = [];
+  const own: SandboxFileRow[] = [];
+  const byProject = new Map<
+    string,
+    { id: string | null; files: SandboxFileRow[] }
+  >();
   for (const file of data.files) {
-    if (file.folder == null) {
-      rootFiles.push(file);
+    if (file.projectId == null || file.projectName == null) {
+      own.push(file);
     } else {
-      const list = byFolder.get(file.folder) ?? [];
-      list.push(file);
-      byFolder.set(file.folder, list);
+      const entry = byProject.get(file.projectName) ?? {
+        id: file.projectId,
+        files: [],
+      };
+      entry.files.push(file);
+      byProject.set(file.projectName, entry);
     }
   }
 
-  const folderNames = new Set<string>([
-    ...data.folders.map((f) => f.name),
-    ...byFolder.keys(),
-  ]);
-  const folderIdByName = new Map(data.folders.map((f) => [f.name, f.id]));
-
   const groups: SandboxFileGroup[] = [];
-  if (rootFiles.length > 0) {
-    groups.push({ folder: null, folderId: null, files: rootFiles });
-  }
-  for (const name of [...folderNames].sort((a, b) => a.localeCompare(b))) {
-    groups.push({
-      folder: name,
-      folderId: folderIdByName.get(name) ?? null,
-      files: byFolder.get(name) ?? [],
-    });
+  if (own.length > 0)
+    groups.push({ project: null, projectId: null, files: own });
+  for (const name of [...byProject.keys()].sort((a, b) => a.localeCompare(b))) {
+    const entry = byProject.get(name);
+    if (!entry) continue;
+    groups.push({ project: name, projectId: entry.id, files: entry.files });
   }
   return groups;
 }

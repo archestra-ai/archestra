@@ -62,7 +62,7 @@ export function useProjectConversations(id: string | undefined) {
   });
 }
 
-/** Files in the project's result folder; polled like the My Files page. */
+/** Files belonging to the project; polled like the My Files page. */
 export function useProjectFiles(id: string | undefined) {
   return useQuery({
     queryKey: ["projects", id, "files"],
@@ -98,7 +98,7 @@ export function useCreateProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      // its folder appears on the My Files page too
+      // its files appear on the My Files page too
       queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
     },
   });

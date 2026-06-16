@@ -37,7 +37,7 @@ function ProjectsList() {
   return (
     <PageLayout
       title="Projects"
-      description="Collections of chats with a shared result folder. Share a project to let teammates follow along and start their own chats."
+      description="Collections of chats with shared files. Share a project to let teammates follow along and start their own chats."
       actionButton={
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -80,8 +80,7 @@ function ProjectsList() {
               )}
               <p className="mt-2 text-xs text-muted-foreground">
                 {project.conversationCount}{" "}
-                {project.conversationCount === 1 ? "chat" : "chats"} · folder{" "}
-                {project.folderName}
+                {project.conversationCount === 1 ? "chat" : "chats"}
               </p>
             </Link>
           ))}
@@ -125,8 +124,8 @@ function CreateProjectDialog({
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
             <DialogDescription>
-              A result folder with the same name is created in your files. The
-              name cannot be changed later.
+              Files the agent saves in this project are kept together and show
+              up in your files. The name cannot be changed later.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">

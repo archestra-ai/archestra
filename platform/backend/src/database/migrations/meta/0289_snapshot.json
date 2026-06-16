@@ -1,5 +1,5 @@
 {
-  "id": "ec381871-a954-4416-b1aa-433dac52d52a",
+  "id": "8557f028-e3b1-4823-b71b-91fb23be1067",
   "prevId": "84f176fb-c2ef-4bd0-b392-8d92f973bb21",
   "version": "7",
   "dialect": "postgresql",
@@ -4978,8 +4978,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "folder_id": {
-          "name": "folder_id",
+        "project_id": {
+          "name": "project_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -5072,11 +5072,11 @@
           "method": "btree",
           "with": {}
         },
-        "files_folder_id_idx": {
-          "name": "files_folder_id_idx",
+        "files_project_id_idx": {
+          "name": "files_project_id_idx",
           "columns": [
             {
-              "expression": "folder_id",
+              "expression": "project_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5132,17 +5132,17 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "files_folder_id_folders_id_fk": {
-          "name": "files_folder_id_folders_id_fk",
+        "files_project_id_projects_id_fk": {
+          "name": "files_project_id_projects_id_fk",
           "tableFrom": "files",
-          "tableTo": "folders",
+          "tableTo": "projects",
           "columnsFrom": [
-            "folder_id"
+            "project_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "files_conversation_id_conversations_id_fk": {
@@ -5178,129 +5178,7 @@
       "checkConstraints": {
         "files_storage_payload_chk": {
           "name": "files_storage_payload_chk",
-          "value": "(\n        (\"files\".\"storage_provider\" = 'db' AND \"files\".\"data\" IS NOT NULL AND \"files\".\"object_key\" IS NULL)\n        OR (\"files\".\"storage_provider\" = 'filesystem' AND \"files\".\"object_key\" IS NOT NULL AND \"files\".\"data\" IS NULL)\n      )"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.folders": {
-      "name": "folders",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "folders_user_name_uidx": {
-          "name": "folders_user_name_uidx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"folders\".\"user_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "folders_project_uidx": {
-          "name": "folders_project_uidx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"folders\".\"project_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "folders_user_id_user_id_fk": {
-          "name": "folders_user_id_user_id_fk",
-          "tableFrom": "folders",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "folders_project_id_projects_id_fk": {
-          "name": "folders_project_id_projects_id_fk",
-          "tableFrom": "folders",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "folders_owner_chk": {
-          "name": "folders_owner_chk",
-          "value": "((\"folders\".\"user_id\" IS NOT NULL)::int + (\"folders\".\"project_id\" IS NOT NULL)::int) = 1"
+          "value": "(\n        (\"files\".\"storage_provider\" =  'db' AND \"files\".\"data\" IS NOT NULL AND \"files\".\"object_key\" IS NULL)\n        OR (\"files\".\"storage_provider\" <> 'db' AND \"files\".\"object_key\" IS NOT NULL AND \"files\".\"data\" IS NULL)\n      )"
         }
       },
       "isRLSEnabled": false

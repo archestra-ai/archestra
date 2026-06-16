@@ -11,14 +11,12 @@ import { team } from "./team";
 import usersTable from "./user";
 
 /**
- * A project: a named collection of chat conversations with a dedicated result
- * folder (`folders.project_id`). The folder is created together with the
- * project and shares its name — project names are validated with the
- * folder-name rules for exactly that reason.
+ * A project: a named collection of chat conversations that owns its result
+ * files directly (`files.project_id`, cascade on delete). Files belong to the
+ * project, not to any one member.
  *
  * Sharing (below) grants project access: browse chats, start your own, and
- * full rights over the result folder's files (list/download/delete) — the
- * folder belongs to the project, not to any one member.
+ * full rights over the project's files (list/download/delete).
  */
 const projectsTable = pgTable(
   "projects",
@@ -28,7 +26,7 @@ const projectsTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    /** Folder-name-validated; immutable in v1 (it names the result folder). */
+    /** Validated display name; immutable in v1. */
     name: text("name").notNull(),
     description: text("description"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

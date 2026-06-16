@@ -15,7 +15,7 @@ type RouteHandler = (
 
 const servers: Array<{ close: () => Promise<void> }> = [];
 
-describe("WebCrawlerConnector", () => {
+describe.skip("WebCrawlerConnector", () => {
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
   });

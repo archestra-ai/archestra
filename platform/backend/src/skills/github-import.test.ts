@@ -26,13 +26,14 @@ afterEach(() => {
 });
 
 /**
- * Stub GitHub, then delay specific raw-file responses so they resolve out of
- * tree order. Earlier files given longer delays surface any assembly that
- * tracks completion order instead of input order.
+ * Stub GitHub, then override specific raw-file responses by path: `delayMs`
+ * makes a file resolve later than its tree position (surfacing any assembly
+ * that tracks completion order instead of input order), `status` forces a
+ * non-200 so the fetch is treated as a skip.
  */
-function stubGithubWithRawDelays(
+function stubGithubWithRawBehavior(
   repos: Parameters<typeof stubGithub>[0],
-  delayByRawPath: Record<string, number>,
+  perPath: Record<string, { delayMs?: number; status?: number }>,
 ): void {
   const inner = stubGithub(repos) as unknown as (
     input: string | URL | Request,
@@ -51,8 +52,13 @@ function stubGithubWithRawDelays(
         const rawPath = decodeURIComponent(
           url.pathname.split(`/${COMMIT_SHA}/`)[1] ?? "",
         );
-        const delay = delayByRawPath[rawPath];
-        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        const behavior = perPath[rawPath];
+        if (behavior?.delayMs) {
+          await new Promise((resolve) => setTimeout(resolve, behavior.delayMs));
+        }
+        if (behavior?.status) {
+          return new Response("override", { status: behavior.status });
+        }
       }
       return inner(input);
     }),
@@ -122,7 +128,7 @@ describe("discoverSkills", () => {
   });
 
   it("keeps skills in tree order when manifest fetches resolve out of order", async () => {
-    stubGithubWithRawDelays(
+    stubGithubWithRawBehavior(
       [
         {
           owner: "disc-order",
@@ -134,7 +140,10 @@ describe("discoverSkills", () => {
           },
         },
       ],
-      { "skills/a/SKILL.md": 40, "skills/b/SKILL.md": 20 },
+      {
+        "skills/a/SKILL.md": { delayMs: 40 },
+        "skills/b/SKILL.md": { delayMs: 20 },
+      },
     );
 
     const result = await discoverSkills({ repoUrl: "disc-order/skills" });
@@ -443,7 +452,7 @@ describe("importSkills", () => {
   });
 
   it("keeps resource files in tree order when fetches resolve out of order", async () => {
-    stubGithubWithRawDelays(
+    stubGithubWithRawBehavior(
       [
         {
           owner: "imp-order",
@@ -458,7 +467,12 @@ describe("importSkills", () => {
           },
         },
       ],
-      { "s/a.txt": 50, "s/b.txt": 40, "s/c.txt": 30, "s/d.txt": 20 },
+      {
+        "s/a.txt": { delayMs: 50 },
+        "s/b.txt": { delayMs: 40 },
+        "s/c.txt": { delayMs: 30 },
+        "s/d.txt": { delayMs: 20 },
+      },
     );
 
     const [imported] = await importSkills({
@@ -473,6 +487,43 @@ describe("importSkills", () => {
       "d.txt",
       "e.txt",
     ]);
+  });
+
+  it("partitions files per skill when a fetch is skipped mid-batch", async () => {
+    // s1/b.txt 404s while the two skills' files are fetched as one concurrent
+    // batch; the cursor must not drift, so s2 keeps both its files and only
+    // s1 records the skip.
+    stubGithubWithRawBehavior(
+      [
+        {
+          owner: "imp-multi",
+          repo: "skills",
+          files: {
+            "s1/SKILL.md": manifest("s1-skill"),
+            "s1/a.txt": "a1",
+            "s1/b.txt": "b1",
+            "s2/SKILL.md": manifest("s2-skill"),
+            "s2/c.txt": "c2",
+            "s2/d.txt": "d2",
+          },
+        },
+      ],
+      { "s1/b.txt": { status: 404 } },
+    );
+
+    const imported = await importSkills({
+      repoUrl: "imp-multi/skills",
+      skillPaths: ["s1", "s2"],
+    });
+
+    expect(imported.map((skill) => skill.skillPath)).toEqual(["s1", "s2"]);
+    expect(imported[0].files.map((file) => file.path)).toEqual(["a.txt"]);
+    expect(imported[0].skippedFiles).toEqual(["b.txt"]);
+    expect(imported[1].files.map((file) => file.path)).toEqual([
+      "c.txt",
+      "d.txt",
+    ]);
+    expect(imported[1].skippedFiles).toEqual([]);
   });
 });
 

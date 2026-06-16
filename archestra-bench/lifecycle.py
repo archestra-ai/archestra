@@ -19,11 +19,13 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
 import time
 import urllib.parse
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -198,8 +200,21 @@ class Instance:
 # === pure helpers (offline-testable) ===
 
 
+_ENV_VAR_REF = re.compile(r"\$\{(\w+)\}|\$(\w+)")
+
+
+def _expand_env_refs(value: str, lookup: Mapping[str, str]) -> str:
+    """Expand `$VAR` / `${VAR}` references against `lookup`, undefined -> empty (shell semantics).
+
+    The dotenv extension Tilt loads does not interpolate either, so a `.env` value like
+    `$OPENROUTER_API_KEY` reaches the backend verbatim and is seeded as a bogus key; expanding here
+    forwards the resolved secret instead."""
+    return _ENV_VAR_REF.sub(lambda m: lookup.get(m.group(1) or m.group(2), ""), value)
+
+
 def parse_env_file(path: Path) -> dict[str, str]:
-    """Parse a dotenv file: `KEY=VALUE` lines, surrounding quotes stripped, comments/blanks skipped.
+    """Parse a dotenv file: `KEY=VALUE` lines, quotes stripped, comments/blanks skipped, `$VAR`
+    references expanded against the process env and earlier lines.
 
     The backend does not auto-load `.env` outside Tilt, so the harness loads it here and forwards it
     to the spawned backend."""
@@ -209,7 +224,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
         if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
         key, _, value = stripped.partition("=")
-        env[key.strip()] = value.strip().strip('"').strip("'")
+        env[key.strip()] = _expand_env_refs(value.strip().strip('"').strip("'"), {**os.environ, **env})
     return env
 
 

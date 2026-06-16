@@ -4958,7 +4958,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 export const getProjects = <ThrowOnError extends boolean = false>(options?: Options<GetProjectsData, ThrowOnError>) => (options?.client ?? client).get<GetProjectsResponses, GetProjectsErrors, ThrowOnError>({ url: '/api/projects', ...options });
 
 /**
- * Create a project. Its result folder is created with it, named after the project, in the caller's persistent file storage.
+ * Create a project. Files produced in its chats are owned by the project rather than the individual author.
  *
  * Authentication:
  *
@@ -4978,7 +4978,7 @@ export const createProject = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Delete a project (owner only). Its chats and result folder survive — chats become ordinary conversations, the folder stays browsable in X-Files.
+ * Delete a project (owner only). Its chats survive as ordinary conversations; its files are deleted with it.
  *
  * Authentication:
  *
@@ -5004,7 +5004,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
 /**
- * Update a project's description (owner only). The name is immutable — it names the result folder.
+ * Update a project's description (owner only). The name is immutable.
  *
  * Authentication:
  *
@@ -5044,7 +5044,7 @@ export const setProjectShare = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Files in the project's result folder, readable by anyone with project access.
+ * Files owned by the project, readable by anyone with project access.
  *
  * Authentication:
  *
@@ -5053,6 +5053,7 @@ export const setProjectShare = <ThrowOnError extends boolean = false>(options: O
  * Authorization:
  *
  * `project:read`: View projects and the chats inside them
+ * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
 
@@ -5704,7 +5705,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Delete a persistent file (artifact). Removes the record and, in filesystem storage mode, the file on disk. Allowed for the chat that produced it or the owner of the folder it sits in.
+ * Delete a persistent file. Allowed for the file's author, the owner of the personal folder it sits in, or anyone with access to the project owning its folder.
  *
  * Authentication:
  *
@@ -5743,7 +5744,7 @@ export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(op
 export const getSkillSandboxConversationArtifacts = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxConversationArtifactsData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxConversationArtifactsResponses, GetSkillSandboxConversationArtifactsErrors, ThrowOnError>({ url: '/api/skill-sandbox/conversations/{conversationId}/artifacts', ...options });
 
 /**
- * List the calling user's persistent files (X-Files): folders and artifact files across all conversations.
+ * List the calling user's persistent files (My Files): their own artifact files across all conversations, plus the files of projects shared with them.
  *
  * Authentication:
  *

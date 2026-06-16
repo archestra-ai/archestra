@@ -53263,7 +53263,6 @@ export type GetProjectsResponses = {
         name: string;
         description: string | null;
         isOwner: boolean;
-        folderName: string;
         conversationCount: number;
         visibility: 'organization' | 'team';
         createdAt: string;
@@ -53356,7 +53355,6 @@ export type CreateProjectResponses = {
         name: string;
         description: string | null;
         isOwner: boolean;
-        folderName: string;
         conversationCount: number;
         visibility: 'organization' | 'team';
         createdAt: string;
@@ -53533,7 +53531,6 @@ export type GetProjectResponses = {
         name: string;
         description: string | null;
         isOwner: boolean;
-        folderName: string;
         conversationCount: number;
         visibility: 'organization' | 'team';
         createdAt: string;
@@ -53803,7 +53800,8 @@ export type GetProjectFilesResponses = {
         sizeBytes: number;
         createdAt: string;
         downloadable: boolean;
-        folder: string | null;
+        projectId: string | null;
+        projectName: string | null;
     }>;
 };
 
@@ -58279,7 +58277,8 @@ export type GetSkillSandboxConversationArtifactsResponses = {
         sizeBytes: number;
         createdAt: string;
         downloadable: boolean;
-        folder: string | null;
+        projectId: string | null;
+        projectName: string | null;
     }>;
 };
 
@@ -58362,11 +58361,6 @@ export type GetSkillSandboxFilesResponses = {
      * Default Response
      */
     200: {
-        folders: Array<{
-            id: string | null;
-            name: string;
-            createdAt: string;
-        }>;
         files: Array<{
             id: string | null;
             filename: string;
@@ -58374,7 +58368,8 @@ export type GetSkillSandboxFilesResponses = {
             sizeBytes: number;
             createdAt: string;
             downloadable: boolean;
-            folder: string | null;
+            projectId: string | null;
+            projectName: string | null;
         }>;
     };
 };

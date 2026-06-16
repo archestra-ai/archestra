@@ -34975,7 +34975,7 @@
         "tags": [
           "A2A"
         ],
-        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload \u2014 non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
+        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         "requestBody": {
           "required": true,
           "content": {
@@ -202935,7 +202935,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Create a project. Its result folder is created with it, named after the project, in the caller's persistent file storage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
+        "description": "Create a project. Files produced in its chats are owned by the project rather than the individual author.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
         "requestBody": {
           "required": true,
           "content": {
@@ -202984,9 +202984,6 @@
                     "isOwner": {
                       "type": "boolean"
                     },
-                    "folderName": {
-                      "type": "string"
-                    },
                     "conversationCount": {
                       "type": "integer",
                       "minimum": 0,
@@ -203010,7 +203007,6 @@
                     "name",
                     "description",
                     "isOwner",
-                    "folderName",
                     "conversationCount",
                     "visibility",
                     "createdAt"
@@ -203287,9 +203283,6 @@
                       "isOwner": {
                         "type": "boolean"
                       },
-                      "folderName": {
-                        "type": "string"
-                      },
                       "conversationCount": {
                         "type": "integer",
                         "minimum": 0,
@@ -203313,7 +203306,6 @@
                       "name",
                       "description",
                       "isOwner",
-                      "folderName",
                       "conversationCount",
                       "visibility",
                       "createdAt"
@@ -203603,9 +203595,6 @@
                     "isOwner": {
                       "type": "boolean"
                     },
-                    "folderName": {
-                      "type": "string"
-                    },
                     "conversationCount": {
                       "type": "integer",
                       "minimum": 0,
@@ -203636,7 +203625,6 @@
                     "name",
                     "description",
                     "isOwner",
-                    "folderName",
                     "conversationCount",
                     "visibility",
                     "createdAt",
@@ -203888,7 +203876,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's description (owner only). The name is immutable \u2014 it names the result folder.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Update a project's description (owner only). The name is immutable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -204185,7 +204173,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Delete a project (owner only). Its chats and result folder survive \u2014 chats become ordinary conversations, the folder stays browsable in X-Files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Delete a project (owner only). Its chats survive as ordinary conversations; its files are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
         "parameters": [
           {
             "schema": {
@@ -204782,7 +204770,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files in the project's result folder, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {
@@ -204829,7 +204817,13 @@
                       "downloadable": {
                         "type": "boolean"
                       },
-                      "folder": {
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "projectName": {
                         "nullable": true,
                         "type": "string"
                       }
@@ -204841,7 +204835,8 @@
                       "sizeBytes",
                       "createdAt",
                       "downloadable",
-                      "folder"
+                      "projectId",
+                      "projectName"
                     ],
                     "additionalProperties": false
                   }
@@ -205081,7 +205076,8 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "project:read"
+            "project:read",
+            "sandbox:execute"
           ]
         }
       }
@@ -220375,7 +220371,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Delete a persistent file (artifact). Removes the record and, in filesystem storage mode, the file on disk. Allowed for the chat that produced it or the owner of the folder it sits in.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "Delete a persistent file. Allowed for the file's author, the owner of the personal folder it sits in, or anyone with access to the project owning its folder.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {
@@ -220701,7 +220697,13 @@
                       "downloadable": {
                         "type": "boolean"
                       },
-                      "folder": {
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "projectName": {
                         "nullable": true,
                         "type": "string"
                       }
@@ -220713,7 +220715,8 @@
                       "sizeBytes",
                       "createdAt",
                       "downloadable",
-                      "folder"
+                      "projectId",
+                      "projectName"
                     ],
                     "additionalProperties": false
                   }
@@ -220964,7 +220967,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List the calling user's persistent files (X-Files): folders and artifact files across all conversations.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
+        "description": "List the calling user's persistent files (My Files): their own artifact files across all conversations, plus the files of projects shared with them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -220973,33 +220976,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "folders": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "createdAt"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -221029,7 +221005,13 @@
                           "downloadable": {
                             "type": "boolean"
                           },
-                          "folder": {
+                          "projectId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "projectName": {
                             "nullable": true,
                             "type": "string"
                           }
@@ -221041,14 +221023,14 @@
                           "sizeBytes",
                           "createdAt",
                           "downloadable",
-                          "folder"
+                          "projectId",
+                          "projectName"
                         ],
                         "additionalProperties": false
                       }
                     }
                   },
                   "required": [
-                    "folders",
                     "files"
                   ],
                   "additionalProperties": false

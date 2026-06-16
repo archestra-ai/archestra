@@ -3,7 +3,8 @@
 //! Map-reduce over a benchmark run directory: each rollout's `trajectory.jsonl` is summarized by a
 //! one-shot LLM call (map), then a repo-grounded nitpicker agent turns the summaries + metrics into
 //! a recommendations report (reduce). The benchmarked model is fixed; recommendations target the
-//! surfaces we own (task prompts, schemas, verifiers, env/skill config, MCP tools, harness).
+//! surfaces we own, led by Tier 1 — the Archestra agentic loop and `archestra__*` tools — over
+//! Tier 2, the benchmark fixtures (task prompts, schemas, verifiers, env/skill config, runner).
 
 mod analyze;
 mod runmeta;
@@ -87,6 +88,20 @@ struct Rollout {
     markdown: String,
 }
 
+/// Path of `run_dir` relative to `explore_root`, for pointing the reduce agent at this run's
+/// `*.backend.log`. The reduce agent's read tools sandbox to `explore_root`, so logs are only
+/// reachable when `run_dir` sits under it. Returns `None` when `run_dir` is outside `explore_root`,
+/// cannot be canonicalized, or *is* `explore_root` (an empty relative path) — in every such case the
+/// reduce prompt simply omits the backend-log pointer. The empty case never arises in practice:
+/// `discover_rollouts` requires `run_dir` to hold nested `*/*__*/trajectory.jsonl` rollouts, so it
+/// is always a subdirectory, never the explore root itself.
+fn run_dir_rel(run_dir: &Path, explore_root: &Path) -> Option<String> {
+    let abs = run_dir.canonicalize().ok()?;
+    let rel = abs.strip_prefix(explore_root).ok()?;
+    let rel = rel.to_string_lossy().into_owned();
+    if rel.is_empty() { None } else { Some(rel) }
+}
+
 fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
     if !run_dir.is_dir() {
         bail!("run dir does not exist: {}", run_dir.display());
@@ -163,6 +178,7 @@ async fn main() -> Result<()> {
             args.explore_root.display()
         )
     })?;
+    let run_dir_rel = run_dir_rel(&args.run_dir, &explore_root);
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
 
     let mp = MultiProgress::new();
@@ -325,6 +341,7 @@ async fn main() -> Result<()> {
         &args.reduce_model,
         &analyses_doc,
         &explore_root,
+        run_dir_rel.as_deref(),
         args.max_turns,
         Some(progress),
     )
@@ -405,6 +422,41 @@ mod tests {
     fn empty_run_dir_is_an_error() {
         let run = tempfile::tempdir().unwrap();
         assert!(discover_rollouts(run.path()).is_err());
+    }
+
+    #[test]
+    fn run_dir_rel_resolves_nested_run_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("experiments").join("run-1");
+        std::fs::create_dir_all(&nested).unwrap();
+        // canonicalize both sides so the result is path-separator/realpath agnostic.
+        let root_c = root.path().canonicalize().unwrap();
+        assert_eq!(
+            run_dir_rel(&nested, &root_c).as_deref(),
+            Some("experiments/run-1")
+        );
+    }
+
+    #[test]
+    fn run_dir_rel_is_none_outside_root() {
+        let root = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let root_c = root.path().canonicalize().unwrap();
+        assert_eq!(run_dir_rel(other.path(), &root_c), None);
+    }
+
+    #[test]
+    fn run_dir_rel_is_none_when_equal_to_root() {
+        let root = tempfile::tempdir().unwrap();
+        let root_c = root.path().canonicalize().unwrap();
+        assert_eq!(run_dir_rel(&root_c, &root_c), None);
+    }
+
+    #[test]
+    fn run_dir_rel_is_none_when_run_dir_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let root_c = root.path().canonicalize().unwrap();
+        assert_eq!(run_dir_rel(&root_c.join("nope"), &root_c), None);
     }
 
     #[test]

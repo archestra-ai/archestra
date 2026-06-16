@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 
-const { provisionMock, hasPermissionsMock } = vi.hoisted(() => ({
-  provisionMock: vi.fn(),
-  hasPermissionsMock: vi.fn(),
-}));
+const { provisionMock, hasPermissionsMock, availableKeysMock } = vi.hoisted(
+  () => ({
+    provisionMock: vi.fn(),
+    hasPermissionsMock: vi.fn(),
+    availableKeysMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionVirtualKey: () => ({
@@ -18,6 +21,10 @@ vi.mock("@/lib/connection-setup.query", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => hasPermissionsMock(),
+}));
+
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => availableKeysMock(),
 }));
 
 // The component reads the selected provider from the URL and writes selections
@@ -50,6 +57,9 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     provisionMock.mockReset();
     hasPermissionsMock.mockReset();
     hasPermissionsMock.mockReturnValue({ data: true });
+    availableKeysMock.mockReset();
+    // the user has an anthropic provider key by default
+    availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
   it("offers the model router toggle and switches the URL to /openai/", async () => {
@@ -73,19 +83,20 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     expect(screen.getByText("https://api.openai.com/v1/")).toBeInTheDocument();
   });
 
-  it("auto-provisions a virtual key and shows its value", async () => {
+  it("auto-provisions a virtual key on tab select (no extra click)", async () => {
     const user = userEvent.setup();
     provisionMock.mockResolvedValue({ value: "arch_secret", name: "My Key" });
     renderInstructions();
 
+    // selecting the tab provisions automatically — there is no generate button
     await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-    await user.click(
-      screen.getByRole("button", { name: /Generate virtual key/i }),
-    );
 
     await waitFor(() =>
       expect(provisionMock).toHaveBeenCalledWith({ provider: "anthropic" }),
     );
+    expect(
+      screen.queryByRole("button", { name: /Generate virtual key/i }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByText("arch_secret")).toBeInTheDocument();
   });
 
@@ -94,5 +105,17 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     renderInstructions();
 
     expect(screen.getByRole("tab", { name: "Virtual key" })).toBeDisabled();
+  });
+
+  it("disables the virtual-key option when the provider has no configured key", () => {
+    // permission is fine, but there's no anthropic provider key to wrap
+    availableKeysMock.mockReturnValue({ data: [] });
+    renderInstructions();
+
+    expect(screen.getByRole("tab", { name: "Virtual key" })).toBeDisabled();
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/needs a configured Anthropic provider key first/i),
+    ).toBeInTheDocument();
   });
 });

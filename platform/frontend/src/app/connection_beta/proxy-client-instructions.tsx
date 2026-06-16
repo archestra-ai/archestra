@@ -7,13 +7,14 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConnectionVirtualKey } from "@/lib/connection-setup.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
@@ -287,10 +288,21 @@ function GenericProxyInstructions({
     llmVirtualKey: ["create"],
   });
   const provisionKey = useCreateConnectionVirtualKey();
+  const provisionAsync = provisionKey.mutateAsync;
   const [virtualKey, setVirtualKey] = useState<{
     value: string;
     name: string;
   } | null>(null);
+
+  // A virtual key can only wrap a provider key the user can resolve. Mirror the
+  // one-command flow: only offer the option when the selected provider has a
+  // configured key — otherwise provisioning would 400 ("no key configured").
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const providerHasKey = useMemo(
+    () => (availableKeys ?? []).some((k) => k.provider === selectedProvider),
+    [availableKeys, selectedProvider],
+  );
+  const offerVirtualKey = canCreateVirtualKey === true && providerHasKey;
 
   // A freshly provisioned key is scoped to the current provider; drop it when
   // the provider or auth mode changes so a stale key is never shown.
@@ -299,14 +311,38 @@ function GenericProxyInstructions({
     setVirtualKey(null);
   }, [selectedProvider, authMethod]);
 
-  // Per-user providers can't be auto-provisioned here (no shared passthrough);
-  // keep the manual flow simple and only offer virtual keys for the rest.
-  const offerVirtualKey = canCreateVirtualKey === true;
   useEffect(() => {
     if (!offerVirtualKey && authMethod === "virtual-key") {
       setAuthMethod("provider-key");
     }
   }, [offerVirtualKey, authMethod]);
+
+  // Auto-provision the moment the user picks the virtual-key tab — no extra
+  // "generate" click. ensureConnectionVirtualKey reuses an existing key, so a
+  // repeat call (e.g. React strict-mode double-invoke) is idempotent.
+  const provisioningRef = useRef(false);
+  useEffect(() => {
+    if (authMethod !== "virtual-key" || !offerVirtualKey || virtualKey) return;
+    if (provisioningRef.current) return;
+    provisioningRef.current = true;
+    let cancelled = false;
+    provisionAsync({ provider: selectedProvider })
+      .then((result) => {
+        if (!cancelled && result) setVirtualKey(result);
+      })
+      .finally(() => {
+        provisioningRef.current = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authMethod,
+    offerVirtualKey,
+    selectedProvider,
+    virtualKey,
+    provisionAsync,
+  ]);
 
   const routerUrl = `${baseUrl}/openai/${profileId}`;
   const providerUrl = `${baseUrl}/${selectedProvider}/${profileId}`;
@@ -314,13 +350,6 @@ function GenericProxyInstructions({
   const effectiveOriginalUrl = useRouter
     ? "https://api.openai.com/v1/"
     : originalUrl;
-
-  const onProvision = async () => {
-    const result = await provisionKey.mutateAsync({
-      provider: selectedProvider,
-    });
-    if (result) setVirtualKey(result);
-  };
 
   return (
     <div className="space-y-3">
@@ -367,8 +396,10 @@ function GenericProxyInstructions({
           </Tabs>
           <p className="text-xs text-muted-foreground">
             {authMethod === "provider-key"
-              ? "Passthrough — you keep using your own provider API key; only the base URL changes."
-              : "We provision a personal virtual key mapped to your provider key and show it once below."}
+              ? canCreateVirtualKey && !providerHasKey
+                ? `Passthrough — you keep using your own ${providerLabel} key. A virtual key needs a configured ${providerLabel} provider key first (add one under LLM provider keys).`
+                : "Passthrough — you keep using your own provider API key; only the base URL changes."
+              : "A personal virtual key mapped to your provider key is created automatically and shown below."}
           </p>
           {authMethod === "virtual-key" &&
             (virtualKey ? (
@@ -385,18 +416,10 @@ function GenericProxyInstructions({
                 </p>
               </div>
             ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={provisionKey.isPending}
-                onClick={onProvision}
-              >
-                {provisionKey.isPending && (
-                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                )}
-                Generate virtual key
-              </Button>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Creating your virtual key…
+              </div>
             ))}
         </div>
       </div>

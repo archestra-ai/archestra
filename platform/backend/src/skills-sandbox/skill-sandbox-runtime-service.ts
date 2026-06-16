@@ -229,14 +229,9 @@ class SkillSandboxRuntimeService {
         row = await FileModel.create({
           organizationId: sandbox.organizationId,
           userId: sandbox.userId,
-          namespace: params.namespace ?? {
-            kind: "user",
-            userId: sandbox.userId,
-          },
+          projectId: params.projectId ?? null,
           conversationId: sandbox.conversationId,
           sandboxId: params.sandboxId,
-          folderId: params.folder?.id ?? null,
-          folderName: params.folder?.name ?? null,
           filename: storageFilename({ originalName: null, path: resolvedPath }),
           mimeType,
           sizeBytes: data.byteLength,

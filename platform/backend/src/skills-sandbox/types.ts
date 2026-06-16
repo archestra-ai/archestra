@@ -1,5 +1,5 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
-import type { SandboxFileOrigin, SandboxId, StorageNamespace } from "@/types";
+import type { SandboxFileOrigin, SandboxId } from "@/types";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -71,13 +71,8 @@ export interface ExportArtifactParams {
   /** Path inside the container, either absolute or relative to `defaultCwd`. */
   path: string;
   mimeType?: string;
-  /** PFS folder to export into; resolved to a row by the caller. */
-  folder?: { id: string; name: string } | null;
-  /**
-   * Storage namespace for the export — the owning PROJECT in a project chat.
-   * Defaults to the sandbox owner's user namespace.
-   */
-  namespace?: StorageNamespace;
+  /** Owning project for the exported file; null = the author's own file. */
+  projectId?: string | null;
   /**
    * The agent's environment isolation target. Artifact extraction replays the
    * recorded commands, so it must target the same engine the sandbox ran on.

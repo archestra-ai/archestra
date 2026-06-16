@@ -1,5 +1,4 @@
 import {
-  FolderModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
@@ -11,13 +10,7 @@ async function makeProject(params: {
   userId: string;
   name: string;
 }) {
-  const project = await ProjectModel.create(params);
-  await FolderModel.createForProject({
-    organizationId: params.organizationId,
-    projectId: project.id,
-    name: params.name,
-  });
-  return project;
+  return ProjectModel.create(params);
 }
 
 describe("ProjectModel", () => {
@@ -81,7 +74,7 @@ describe("ProjectModel", () => {
     ).rejects.toBeInstanceOf(ProjectNameExistsError);
   });
 
-  test("deleting a project nulls its conversations and cascade-deletes its folder", async ({
+  test("deleting a project nulls its conversations", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -115,8 +108,6 @@ describe("ProjectModel", () => {
       .from(schema.conversationsTable)
       .where(eq(schema.conversationsTable.id, conv.id));
     expect(after.projectId).toBeNull();
-    // the result folder belongs to the project, so it dies with it.
-    expect(await FolderModel.findByProjectId(project.id)).toBeNull();
   });
 
   test("countConversations and listConversations", async ({

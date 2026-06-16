@@ -15,10 +15,6 @@ describe("getFileBytesStorage (db provider)", () => {
       fileId: "00000000-0000-0000-0000-000000000002",
       filename: "out.txt",
       data,
-      namespace: {
-        kind: "user",
-        userId: "00000000-0000-0000-0000-000000000001",
-      },
     });
     expect(stored.objectKey).toBeNull();
     expect(stored.dbData).toBe(data);

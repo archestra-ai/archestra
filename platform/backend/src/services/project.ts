@@ -4,7 +4,7 @@ import {
   ProjectNameExistsError,
   ProjectShareModel,
 } from "@/models";
-import { validateSandboxFolderName } from "@/skills-sandbox/folder-name";
+import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   Project,
   ProjectConversationItem,
@@ -46,7 +46,7 @@ class ProjectService {
     description: string | null;
   }): Promise<Project> {
     const name = params.name.trim();
-    const invalid = validateSandboxFolderName(name);
+    const invalid = validateProjectName(name);
     if (invalid) {
       throw new ApiError(400, `project name is invalid: ${invalid}`);
     }
@@ -177,15 +177,14 @@ class ProjectService {
   }): Promise<SandboxFileListItem[]> {
     const projects = await ProjectShareModel.listAccessibleProjects(params);
     if (projects.length === 0) return [];
-    const files: SandboxFileListItem[] = [];
-    for (const p of projects) {
-      const rows = await FileModel.listByProject({
-        organizationId: params.organizationId,
-        projectId: p.id,
-      });
-      files.push(...rows.map((r) => toFileListItem(r, p.name)));
-    }
-    return files;
+    const names = new Map(projects.map((p) => [p.id, p.name]));
+    const rows = await FileModel.listByProjects({
+      organizationId: params.organizationId,
+      projectIds: projects.map((p) => p.id),
+    });
+    return rows.map((r) =>
+      toFileListItem(r, r.projectId ? (names.get(r.projectId) ?? null) : null),
+    );
   }
 
   async listConversations(params: {

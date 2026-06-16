@@ -321,7 +321,7 @@ test("project chat: a requester without project access sees no project files", a
     data: Buffer.from("hi"),
   });
   // the outsider owns a chat in the project but the project is unshared (e.g.
-  // access was revoked) — the result folder must stay out of reach.
+  // access was revoked) — the project's files must stay out of reach.
   const conv = await ConversationModel.create({
     userId: outsider.id,
     organizationId: org.id,

@@ -426,10 +426,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of sandbox; uploaded input + exported artifact file bytes",
   },
-  foldersTable: {
-    audited: false,
-    reason: "user's own PFS folder names; file organization, no admin signal",
-  },
   filesTable: {
     audited: false,
     reason:

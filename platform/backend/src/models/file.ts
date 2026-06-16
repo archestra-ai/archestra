@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { getFileBytesStorage } from "@/skills-sandbox/file-storage";
 import type { PersistedFile, SandboxArtifactRow } from "@/types";
@@ -123,6 +123,24 @@ class FileModel {
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.projectId, params.projectId),
+        ),
+      )
+      .orderBy(desc(schema.filesTable.createdAt));
+  }
+
+  /** Files belonging to any of the given projects (newest first); org-scoped. */
+  static async listByProjects(params: {
+    organizationId: string;
+    projectIds: string[];
+  }): Promise<SandboxArtifactRow[]> {
+    if (params.projectIds.length === 0) return [];
+    return db
+      .select(artifactColumns)
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          inArray(schema.filesTable.projectId, params.projectIds),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));

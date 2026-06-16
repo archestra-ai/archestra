@@ -169,9 +169,8 @@ const DownloadFileSchema = z
   .describe(
     "Copy a file out of the sandbox into durable storage and return a " +
       "download URL. Use this for any binary or generated output — run_command " +
-      "only returns text. In a project chat the file is saved into the " +
-      "project's result folder. (To read a skill's source files, use " +
-      "load_skill with a path.)",
+      "only returns text. In a project chat the file is saved to the " +
+      "project. (To read a skill's source files, use load_skill with a path.)",
   );
 
 const DownloadFileOutputSchema = z.object({
@@ -333,8 +332,7 @@ const SaveResultSchema = z
   })
   .describe(
     "Save content straight to the user's persistent file storage — no " +
-      "sandbox needed. In a project chat the file lands in the project's " +
-      "result folder.",
+      "sandbox needed. In a project chat the file is saved to the project.",
   );
 
 const SaveResultOutputSchema = z.object({
@@ -566,10 +564,10 @@ const registry = defineArchestraTools([
     title: "Search Files",
     description:
       "Search the user's persistent file storage (My Files): files exported " +
-      "with download_file across ALL conversations, organized in flat " +
-      "folders, plus files the user added by hand. Returns metadata only. " +
-      "To work on a found file, copy it into the sandbox with upload_file's " +
-      "my_file source (by `id`, or by `filename` + `folder` when id is null). " +
+      "with download_file across ALL conversations, plus files the user added " +
+      "by hand. Returns metadata only. To work on a found file, copy it into " +
+      "the sandbox with upload_file's my_file source (by `id`, or by " +
+      "`filename`). In a project chat, searches the project's files instead. " +
       "Requires `sandbox:execute`.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
@@ -632,9 +630,9 @@ const registry = defineArchestraTools([
       "Save inline content directly to the user's persistent file storage " +
       "(My Files) and return a download URL — no sandbox roundtrip. Use it " +
       "for results you produced in the conversation itself (text, markdown, " +
-      "small data files). In a project chat the file is saved into the " +
-      "project's result folder. For files generated INSIDE the sandbox, use " +
-      "download_file instead. Requires `sandbox:execute`.",
+      "small data files). In a project chat the file is saved to the " +
+      "project. For files generated INSIDE the sandbox, use download_file " +
+      "instead. Requires `sandbox:execute`.",
     schema: SaveResultSchema,
     outputSchema: SaveResultOutputSchema,
     async handler({ args, context }) {

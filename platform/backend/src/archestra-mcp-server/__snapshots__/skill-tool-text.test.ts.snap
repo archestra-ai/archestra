@@ -61,7 +61,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved into the project's result folder. (To read a skill's source files, use load_skill with a path.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -230,11 +230,11 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 
 exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 {
-  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved into the project's result folder. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file lands in the project's result folder.",
+    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file is saved to the project.",
     "properties": {
       "content": {
         "description": "UTF-8 text content of the file.",
@@ -269,17 +269,12 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, organized in flat folders, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\` + \`folder\` when id is null). Requires \`sandbox:execute\`.",
+  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\`). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations, plus files added by hand.",
+    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations. In a project chat, searches the project's files instead.",
     "properties": {
-      "folder": {
-        "description": "Restrict matches to one persistent-storage folder (exact name). Omit to search the top level and every folder.",
-        "minLength": 1,
-        "type": "string",
-      },
       "query": {
         "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
         "minLength": 1,
@@ -450,12 +445,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
             "properties": {
               "filename": {
-                "description": "Exact filename of a persistent file. Use together with \`folder\`; the only way to reference files that have no id.",
-                "minLength": 1,
-                "type": "string",
-              },
-              "folder": {
-                "description": "Persistent-storage folder the file sits in. Omit for the top level.",
+                "description": "Exact filename of a persistent file (when you have no id).",
                 "minLength": 1,
                 "type": "string",
               },

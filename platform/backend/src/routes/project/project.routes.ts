@@ -12,9 +12,9 @@ import {
 } from "@/types";
 
 /**
- * Projects: named collections of chats with a dedicated PFS result folder.
- * Read access follows the project share (org / teams / owner-only);
- * mutations are owner-only and "not yours" is indistinguishable from 404.
+ * Projects: named collections of chats that own a set of files. Read access
+ * follows the project share (org / teams / owner-only); mutations are
+ * owner-only and "not yours" is indistinguishable from 404.
  */
 const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -23,8 +23,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateProject,
         description:
-          "Create a project. Its result folder is created with it, named " +
-          "after the project, in the caller's persistent file storage.",
+          "Create a project. Files produced in its chats are owned by the " +
+          "project rather than the individual author.",
         tags: ["Projects"],
         body: z.object({
           name: z.string().min(1).max(256),
@@ -91,7 +91,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateProject,
         description:
           "Update a project's description (owner only). The name is " +
-          "immutable — it names the result folder.",
+          "immutable.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -167,8 +167,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProjectFiles,
         description:
-          "Files in the project's result folder, readable by anyone with " +
-          "project access.",
+          "Files owned by the project, readable by anyone with project access.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.array(SandboxFileListItemSchema)),

@@ -441,11 +441,9 @@ describe("Cascade behavior", () => {
     const file = await FileModel.create({
       organizationId: org.id,
       userId: user.id,
-      namespace: { kind: "user", userId: user.id },
+      projectId: null,
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: null,
-      folderName: null,
       filename: "a.txt",
       mimeType: "text/plain",
       sizeBytes: 1,

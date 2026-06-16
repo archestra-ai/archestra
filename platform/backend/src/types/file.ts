@@ -22,11 +22,3 @@ export type StoredBlobRow = {
   storageProvider?: z.infer<typeof SkillSandboxFileStorageProviderSchema>;
   objectKey?: string | null;
 };
-
-/**
- * Whose storage a blob belongs to. The Postgres provider ignores it (bytes
- * live on the row); future external backends derive object placement from it.
- */
-export type StorageNamespace =
-  | { kind: "user"; userId: string }
-  | { kind: "project"; projectId: string };

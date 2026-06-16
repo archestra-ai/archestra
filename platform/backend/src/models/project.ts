@@ -4,9 +4,8 @@ import type { InsertProject, Project } from "@/types";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
- * {@link ProjectShareModel} (models/project-share.ts); the result folder is
- * created by the service right after the project row (it carries the project
- * id), and found via `FolderModel.findByProjectId`.
+ * {@link ProjectShareModel} (models/project-share.ts); the project's files
+ * (`files.project_id`) are deleted with the project via the FK cascade.
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {

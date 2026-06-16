@@ -157,6 +157,43 @@ describe("getArtifactForUser access", () => {
       }),
     ).toBeNull();
   });
+
+  test("project file: a user with no project access is denied; the owner is allowed", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    // owner-only project: no share row at all
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "owner-only",
+      description: null,
+    });
+    const file = await seed({
+      organizationId: org.id,
+      userId: owner.id,
+      filename: "r.txt",
+      projectId: project.id,
+    });
+
+    const nonMember = await makeUser({ email: "non-member@test.com" });
+    expect(
+      await skillSandboxArtifactService.getArtifactForUser({
+        artifactId: file.id,
+        organizationId: org.id,
+        userId: nonMember.id,
+      }),
+    ).toBeNull();
+
+    const seenByOwner = await skillSandboxArtifactService.getArtifactForUser({
+      artifactId: file.id,
+      organizationId: org.id,
+      userId: owner.id,
+    });
+    expect(seenByOwner?.id).toBe(file.id);
+  });
 });
 
 describe("resolveMyFileSource", () => {

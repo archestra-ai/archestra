@@ -51,7 +51,7 @@ import {
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { cn } from "@/lib/utils";
 
-const SIDEBAR_CHAT_SLOTS = 3;
+const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
@@ -63,7 +63,15 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   );
 }
 
-export function ChatSidebarSection() {
+export function ChatSidebarSection({
+  slots = DEFAULT_SIDEBAR_CHAT_SLOTS,
+  flat = false,
+}: {
+  /** How many chats to show before the "More" affordance. */
+  slots?: number;
+  /** Render without the sub-menu indentation (used by the Chats tab). */
+  flat?: boolean;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
@@ -100,12 +108,10 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const pinnedChats = conversations
-    .filter((c) => c.pinnedAt)
-    .slice(0, SIDEBAR_CHAT_SLOTS);
+  const pinnedChats = conversations.filter((c) => c.pinnedAt).slice(0, slots);
   const recentUnpinnedChats = conversations
     .filter((c) => !c.pinnedAt)
-    .slice(0, Math.max(0, SIDEBAR_CHAT_SLOTS - pinnedChats.length));
+    .slice(0, Math.max(0, slots - pinnedChats.length));
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -389,7 +395,9 @@ export function ChatSidebarSection() {
 
   return (
     <>
-      <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
+      <SidebarMenuSub
+        className={flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5"}
+      >
         {isLoading ? (
           <SidebarMenuSubItem>
             <div className="flex items-center gap-2 px-2 py-1.5">

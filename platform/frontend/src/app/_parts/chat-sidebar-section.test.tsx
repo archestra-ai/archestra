@@ -302,4 +302,21 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
+
+  it("honors a custom slots count (used by the Chats tab Recents list)", () => {
+    mockConversations = Array.from({ length: 6 }, (_, i) =>
+      makeConv(`c${i + 1}`, `Chat ${i + 1}`, {
+        updatedAt: `2026-01-0${6 - i}T00:00:00Z`,
+      }),
+    );
+
+    render(<ChatSidebarSection slots={5} />);
+
+    // First 5 show, the 6th is hidden behind "More"
+    for (let i = 1; i <= 5; i++) {
+      expect(screen.getByText(`Chat ${i}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Chat 6")).not.toBeInTheDocument();
+    expect(screen.getByText("More")).toBeInTheDocument();
+  });
 });

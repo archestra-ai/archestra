@@ -1,27 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`skill and sandbox tool text > archestra__activate_skill 1`] = `
-{
-  "description": "Activate a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available, then call this with a skill name to load its full instructions. Activate a skill before attempting the task it covers. To inspect bundled resources use read_skill_file. Where a sandbox is available, activation also mounts the skill under /skills.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "properties": {
-      "name": {
-        "description": "The skill to activate, as named by list_skills.",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "required": [
-      "name",
-    ],
-    "type": "object",
-  },
-  "name": "archestra__activate_skill",
-  "title": "Activate Skill",
-}
-`;
-
 exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 {
   "description": "Create a new Agent Skill from a SKILL.md manifest. The skill is created as a personal skill owned by you, available via list_skills and as a chat slash-command. Draft the SKILL.md (and any bundled resource files) with the user, then call this to persist it. To share a skill with a team or the whole organization, change its scope in the Skills UI.",
@@ -79,11 +57,11 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use read_skill_file instead. Requires \`sandbox:execute\`.",
+  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved into the project's result folder. (To read a skill's source files, use read_skill_file.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -142,7 +120,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 {
-  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call activate_skill with a skill name to load its full instructions.",
+  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call load_skill with a skill name to load its full instructions.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {},
@@ -153,35 +131,36 @@ exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 }
 `;
 
-exports[`skill and sandbox tool text > archestra__read_skill_file 1`] = `
+exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 {
-  "description": "Read a bundled resource file from a skill. Paths come from the <skill_resources> list returned by activate_skill. This returns file text for inspection only — to execute a script or run shell commands, use run_command (activated skills are mounted under /skills). Prefer running a skill's own scripts and modules over re-implementing them.",
+  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available. Call load_skill with just a name to load the skill's instructions and its bundled-file list; load it before attempting the task it covers. Call it with a name and a path from that list to read one bundled file. To run a bundled script, use run_command (loaded skills are available under /skills).",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
-      "path": {
-        "description": "Resource path from the skill, e.g. references/REFERENCE.md",
+      "name": {
+        "description": "The skill to load, as named by list_skills.",
+        "minLength": 1,
         "type": "string",
       },
-      "skill": {
-        "description": "The skill that owns the file",
+      "path": {
+        "description": "Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
+        "minLength": 1,
         "type": "string",
       },
     },
     "required": [
-      "skill",
-      "path",
+      "name",
     ],
     "type": "object",
   },
-  "name": "archestra__read_skill_file",
-  "title": "Read Skill File",
+  "name": "archestra__load_skill",
+  "title": "Load Skill",
 }
 `;
 
 exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 {
-  "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Activated skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
+  "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Loaded skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -249,71 +228,6 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 }
 `;
 
-exports[`skill and sandbox tool text > archestra__save_result 1`] = `
-{
-  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved into the project's result folder. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file lands in the project's result folder.",
-    "properties": {
-      "content": {
-        "description": "UTF-8 text content of the file.",
-        "type": "string",
-      },
-      "contentBase64": {
-        "description": "Base64-encoded binary content.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "filename": {
-        "description": "Plain filename including extension (e.g. "joke.md"). No paths.",
-        "maxLength": 256,
-        "minLength": 1,
-        "type": "string",
-      },
-      "mimeType": {
-        "description": "Optional MIME type. Sniffed from the bytes when omitted.",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "required": [
-      "filename",
-    ],
-    "type": "object",
-  },
-  "name": "archestra__save_result",
-  "title": "Save Result",
-}
-`;
-
-exports[`skill and sandbox tool text > archestra__search_files 1`] = `
-{
-  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, organized in flat folders, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\` + \`folder\` when id is null). Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations, plus files added by hand.",
-    "properties": {
-      "folder": {
-        "description": "Restrict matches to one persistent-storage folder (exact name). Omit to search the top level and every folder.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "query": {
-        "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "type": "object",
-  },
-  "name": "archestra__search_files",
-  "title": "Search Files",
-}
-`;
-
 exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 {
   "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
@@ -328,7 +242,7 @@ exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
         "type": "string",
       },
       "files": {
-        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file.",
+        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with load_skill (with and without a path).",
         "items": {
           "properties": {
             "content": {
@@ -463,35 +377,6 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "required": [
               "type",
               "text",
-            ],
-            "type": "object",
-          },
-          {
-            "additionalProperties": false,
-            "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
-            "properties": {
-              "filename": {
-                "description": "Exact filename of a persistent file. Use together with \`folder\`; the only way to reference files that have no id.",
-                "minLength": 1,
-                "type": "string",
-              },
-              "folder": {
-                "description": "Persistent-storage folder the file sits in. Omit for the top level.",
-                "minLength": 1,
-                "type": "string",
-              },
-              "id": {
-                "description": "Id of a persistent file, as returned by search_files.",
-                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                "type": "string",
-              },
-              "type": {
-                "const": "my_file",
-                "type": "string",
-              },
-            },
-            "required": [
-              "type",
             ],
             "type": "object",
           },

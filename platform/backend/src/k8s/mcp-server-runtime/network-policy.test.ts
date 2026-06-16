@@ -237,7 +237,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     ).toThrow("Cannot build FQDNNetworkPolicy with empty domain list");
   });
 
-  test("builds an AWS ApplicationNetworkPolicy with FQDN and CIDR egress", () => {
+  test("builds an AWS ApplicationNetworkPolicy with DNS bootstrap, FQDN and CIDR egress", () => {
     const manifest = buildManagedAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
       podSelectorLabels: {
@@ -249,11 +249,17 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
         allowedDomains: ["api.example.com", "*.example.org"],
         allowedCidrs: ["203.0.113.0/24"],
       }),
+      clusterDnsIps: ["172.20.0.10"],
     });
 
     expect(manifest).toMatchObject({
       apiVersion: "networking.k8s.aws/v1alpha1",
       kind: "ApplicationNetworkPolicy",
+      metadata: {
+        annotations: {
+          "archestra.io/network-policy-cluster-dns": "172.20.0.10",
+        },
+      },
       spec: {
         podSelector: {
           matchLabels: {
@@ -262,17 +268,61 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           },
         },
         policyTypes: ["Egress"],
-        egress: expect.arrayContaining([
+        egress: [
+          // ApplicationNetworkPolicy has no pod/namespace selector peers, so
+          // DNS must be allowlisted by the cluster DNS ClusterIP — without it
+          // the policy blocks all lookups and domainNames rules never match.
+          {
+            to: [{ ipBlock: { cidr: "172.20.0.10/32" } }],
+            ports: [
+              { protocol: "UDP", port: 53 },
+              { protocol: "TCP", port: 53 },
+            ],
+          },
           {
             to: [{ ipBlock: { cidr: "203.0.113.0/24" } }],
           },
           {
-            to: [{ domainNames: ["api.example.com"] }],
+            to: [{ domainNames: ["api.example.com", "*.example.org"] }],
+          },
+        ],
+      },
+    });
+  });
+
+  test("falls back to DNS egress anywhere when the cluster DNS IP is unknown", () => {
+    const manifest = buildManagedAwsApplicationNetworkPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels: {
+        app: "mcp-server",
+        "mcp-server-id": "server-id",
+      },
+      effectivePolicy: makeEffectivePolicy({
+        egressMode: "restricted",
+        allowedDomains: ["api.example.com"],
+      }),
+      clusterDnsIps: [],
+    });
+
+    expect(manifest).toMatchObject({
+      metadata: {
+        annotations: {
+          "archestra.io/network-policy-cluster-dns": "any",
+        },
+      },
+      spec: {
+        egress: [
+          {
+            to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+            ports: [
+              { protocol: "UDP", port: 53 },
+              { protocol: "TCP", port: 53 },
+            ],
           },
           {
-            to: [{ domainNames: ["*.example.org"] }],
+            to: [{ domainNames: ["api.example.com"] }],
           },
-        ]),
+        ],
       },
     });
   });

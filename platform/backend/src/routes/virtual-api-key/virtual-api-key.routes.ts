@@ -1,6 +1,7 @@
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -10,6 +11,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import {
   LlmProviderApiKeyModel,
+  MemberModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -42,7 +44,15 @@ const CreateOrUpdateVirtualApiKeyBodySchema = z.object({
     .min(1, "At least one provider API key is required"),
 });
 
-const CreateVirtualApiKeyBodySchema = CreateOrUpdateVirtualApiKeyBodySchema;
+const CreateVirtualApiKeyBodySchema =
+  CreateOrUpdateVirtualApiKeyBodySchema.extend({
+    /**
+     * Owner the key is created on behalf of. Defaults to the creator. Setting
+     * it to a different user requires llmVirtualKey:admin and that user must
+     * belong to the organization.
+     */
+    ownerId: z.string().optional(),
+  });
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -162,7 +172,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default virtualApiKeysRoutes;
 
 async function createVirtualApiKey(params: {
-  body: z.infer<typeof CreateOrUpdateVirtualApiKeyBodySchema>;
+  body: z.infer<typeof CreateVirtualApiKeyBodySchema>;
   organizationId: string;
   user: User;
 }): Promise<z.infer<typeof VirtualApiKeyWithValueSchema>> {
@@ -176,6 +186,12 @@ async function createVirtualApiKey(params: {
     TeamModel.getUserTeamIds(user.id),
     userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
   ]);
+  const ownerId = await resolveKeyOwner({
+    requestedOwnerId: body.ownerId,
+    creatorId: user.id,
+    organizationId,
+    isAdmin: isVirtualKeyAdmin,
+  });
   await validateVirtualKeyScope({
     scope: body.scope,
     teamIds: body.teams,
@@ -187,6 +203,8 @@ async function createVirtualApiKey(params: {
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
+    scope: body.scope,
+    userId: user.id,
   });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
@@ -195,7 +213,7 @@ async function createVirtualApiKey(params: {
       name: body.name,
       expiresAt: body.expiresAt ?? null,
       scope: body.scope,
-      authorId: user.id,
+      authorId: ownerId,
       teamIds: body.teams,
       providerApiKeys: body.providerApiKeys,
     });
@@ -248,6 +266,8 @@ async function updateVirtualApiKey(params: {
   await validateProviderApiKeys({
     mappings: body.providerApiKeys,
     organizationId,
+    scope: body.scope,
+    userId: user.id,
   });
 
   const updatedVirtualKey = await VirtualApiKeyModel.update({
@@ -255,7 +275,9 @@ async function updateVirtualApiKey(params: {
     name: body.name,
     expiresAt: body.expiresAt ?? null,
     scope: body.scope,
-    authorId: user.id,
+    // Preserve the key's owner; an edit must not transfer it to the editor
+    // (e.g. an admin editing a key minted on behalf of another user).
+    authorId: accessContext.authorId,
     teamIds: body.teams,
     providerApiKeys: body.providerApiKeys,
   });
@@ -299,6 +321,36 @@ async function deleteVirtualApiKey(params: {
 
   await VirtualApiKeyModel.delete(id);
   return { success: true };
+}
+
+async function resolveKeyOwner(params: {
+  requestedOwnerId: string | undefined;
+  creatorId: string;
+  organizationId: string;
+  isAdmin: boolean;
+}): Promise<string> {
+  const { requestedOwnerId, creatorId, organizationId, isAdmin } = params;
+
+  if (!requestedOwnerId || requestedOwnerId === creatorId) {
+    return creatorId;
+  }
+
+  if (!isAdmin) {
+    throw new ApiError(
+      403,
+      "You need llmVirtualKey:admin permission to create a virtual key for another user",
+    );
+  }
+
+  const member = await MemberModel.getByUserId(
+    requestedOwnerId,
+    organizationId,
+  );
+  if (!member) {
+    throw new ApiError(404, "User is not a member of this organization");
+  }
+
+  return requestedOwnerId;
 }
 
 async function validateVirtualKeyScope(params: {
@@ -356,8 +408,10 @@ async function validateVirtualKeyScope(params: {
 async function validateProviderApiKeys(params: {
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
+  scope: ResourceVisibilityScope;
+  userId: string;
 }): Promise<void> {
-  const { mappings, organizationId } = params;
+  const { mappings, organizationId, scope, userId } = params;
   if (mappings.length === 0) {
     return;
   }
@@ -386,6 +440,26 @@ async function validateProviderApiKeys(params: {
         400,
         `Provider API key "${apiKey.name}" is for provider "${apiKey.provider}", not "${mapping.provider}".`,
       );
+    }
+
+    // Per-user-credential providers (GitHub Copilot) are individual tokens. A
+    // virtual key is itself a shareable secret, so it may only wrap a per-user
+    // key when it is the user's OWN personal key in their OWN personal virtual
+    // key, and never bundled with other providers (a shared model-router key
+    // would expose one user's token to everyone routing through it).
+    if (providerRequiresPerUserCredential(mapping.provider)) {
+      if (scope !== "personal" || mappings.length > 1) {
+        throw new ApiError(
+          400,
+          `${mapping.provider} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
+        );
+      }
+      if (apiKey.scope !== "personal" || apiKey.userId !== userId) {
+        throw new ApiError(
+          403,
+          `You can only map your own personal ${mapping.provider} key.`,
+        );
+      }
     }
   }
 }

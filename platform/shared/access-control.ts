@@ -27,6 +27,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   skill: ["read", "create", "update", "delete", "team-admin", "admin"],
+  app: ["read", "create", "update", "delete", "team-admin", "admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
@@ -91,6 +92,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   skill: ["read", "create", "update", "delete", "team-admin"],
+  app: ["read", "create", "update", "delete", "team-admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -155,6 +157,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
+  app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -253,6 +256,14 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
+  "app:read":
+    "View and run MCP Apps within your scope (org, your teams, your own)",
+  "app:create": "Create new MCP Apps",
+  "app:update": "Modify MCP Apps, their tools, and their team assignments",
+  "app:delete": "Delete MCP Apps",
+  "app:team-admin": "Manage team assignments for MCP Apps",
+  "app:admin":
+    "Full administrative control over all MCP Apps, bypassing team restrictions",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
@@ -444,6 +455,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   [RouteId.CompleteOnboarding]: {},
 
+  // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
+  // skill admin) are conditional on what the setup includes and enforced in
+  // the route handler. The script GET is public (token-authenticated).
+  [RouteId.CreateConnectionSetup]: {},
+
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
@@ -474,6 +490,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
+  [RouteId.GrantToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
     toolPolicy: ["update"],
@@ -689,6 +706,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["read"],
   },
+  [RouteId.GetTeamLabelKeys]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamLabelValues]: {
+    team: ["read"],
+  },
   // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],
@@ -741,6 +764,9 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.StreamChat]: {
+    chat: ["read"],
+  },
+  [RouteId.ResolveChatMcpElicitation]: {
     chat: ["read"],
   },
   [RouteId.StopChatStream]: {
@@ -833,9 +859,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAvailableLlmProviderApiKeys]: {
     llmProviderApiKey: ["read"],
   },
-  [RouteId.CreateLlmProviderApiKey]: {
-    llmProviderApiKey: ["create"],
-  },
+  // Personal-scoped keys are self-service (any authenticated user can connect
+  // their own account / create a key only they can use); the handler requires
+  // llmProviderApiKey:create for team scope and :admin for org scope. Gating
+  // the route on :create would block "basic users" from linking their own
+  // GitHub Copilot account.
+  [RouteId.CreateLlmProviderApiKey]: {},
+  // Device-flow sign-in exists solely to obtain the GitHub token for a new
+  // personal github-copilot key, so it's self-service like the create route.
+  [RouteId.GithubCopilotDeviceAuthStart]: {},
+  [RouteId.GithubCopilotDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
@@ -1039,6 +1072,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
+  },
+  // Installers need to know whether they must link a downstream IdP, but this
+  // endpoint does not expose identity-provider configuration or secrets.
+  [RouteId.GetIdentityProviderLinkStatus]: {
+    mcpServerInstallation: ["create"],
   },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],
@@ -1270,6 +1308,26 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
+
+  // MCP App Routes - per-instance scope is enforced in the handlers
+  [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.CreateApp]: { app: ["create"] },
+  [RouteId.GetApp]: { app: ["read"] },
+  [RouteId.UpdateApp]: { app: ["update"] },
+  [RouteId.DeleteApp]: { app: ["delete"] },
+  [RouteId.GetAppVersions]: { app: ["read"] },
+  [RouteId.GetAppVersion]: { app: ["read"] },
+  [RouteId.GetAppTools]: { app: ["read"] },
+  [RouteId.AssignToolToApp]: { app: ["update"] },
+  [RouteId.UnassignToolFromApp]: { app: ["update"] },
+  [RouteId.GetAppTemplates]: { app: ["read"] },
+  // The trusted host page reports a viewer's render diagnostics; the handler
+  // re-checks app-visibility, so app:read is the right coarse gate.
+  [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },
+  // Same trust model as diagnostics: the host page posts the viewer's render
+  // screenshot, the handler re-checks app-visibility.
+  [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -1299,6 +1357,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+  // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
+  [RouteId.McpAppProxyPost]: {},
 };
 
 /**
@@ -1322,6 +1382,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/skills": { skill: ["read"] },
   "/agents/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
+
+  // Apps
+  "/apps": { app: ["read"] },
+  "/apps/[id]": { app: ["read"] },
+  "/apps/[id]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

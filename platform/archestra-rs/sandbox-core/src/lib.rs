@@ -223,11 +223,87 @@ pub struct Limits {
     pub memory_bytes: u32,
 }
 
+/// JS input identifying a per-environment isolation target. Omitting it (null)
+/// runs on the process-default engine. The Dagger transport address (`kube-pod://…`)
+/// is constructed inside the Dagger backend from this — it is never carried
+/// across the public API.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentTarget {
+    #[cfg_attr(feature = "napi", napi(js_name = "environmentId"))]
+    pub environment_id: String,
+    pub namespace: String,
+}
+
+/// The domain target the session pool keys by and the Dagger backend resolves to
+/// an engine address. Validated at the NAPI boundary so the core only ever sees
+/// a well-formed target.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum RuntimeTarget {
+    Default,
+    Environment {
+        environment_id: String,
+        namespace: String,
+    },
+}
+
+/// Validate untrusted JS input and convert it into the domain [`RuntimeTarget`].
+/// `environment_id` must be a UUID and `namespace` an RFC1123 label, so a
+/// malformed environment can neither produce an invalid transport address nor
+/// reach another tenant's namespace.
+fn runtime_target_from(env: Option<EnvironmentTarget>) -> Result<RuntimeTarget> {
+    let Some(env) = env else {
+        return Ok(RuntimeTarget::Default);
+    };
+    if !is_uuid(&env.environment_id) {
+        return Err(SandboxError::InvalidInput(format!(
+            "environment id is not a UUID: {:?}",
+            env.environment_id
+        )));
+    }
+    if !is_rfc1123_label(&env.namespace) {
+        return Err(SandboxError::InvalidInput(format!(
+            "namespace is not an RFC1123 label: {:?}",
+            env.namespace
+        )));
+    }
+    Ok(RuntimeTarget::Environment {
+        environment_id: env.environment_id,
+        namespace: env.namespace,
+    })
+}
+
+/// A lowercase-canonical UUID. Lowercase is required (not merely accepted) so the
+/// validated id matches the engine pod name the TS side builds, which lowercases
+/// the environment id (`daggerEngineDeploymentName`). An uppercase id would format
+/// a `kube-pod://` address pointing at a pod Kubernetes never created.
+fn is_uuid(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 36
+        && b.iter().enumerate().all(|(i, &c)| match i {
+            8 | 13 | 18 | 23 => c == b'-',
+            _ => c.is_ascii_digit() || (b'a'..=b'f').contains(&c),
+        })
+}
+
+fn is_rfc1123_label(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 63
+        && s.bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
 pub struct CheckSessionInput {
     pub traceparent: Option<String>,
+    /// The isolation target for this session; omit (null) for the process-default
+    /// engine. The Dagger address is built in the backend from this.
+    pub environment: Option<EnvironmentTarget>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -242,6 +318,9 @@ pub struct RunSandboxInput {
     pub cwd: String,
     #[cfg_attr(feature = "napi", napi(js_name = "timeoutSeconds"))]
     pub timeout_seconds: u32,
+    /// The isolation target for this run; omit (null) for the process-default
+    /// engine. The Dagger address is built in the backend from this.
+    pub environment: Option<EnvironmentTarget>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -258,6 +337,9 @@ pub struct ReadArtifactInput {
     /// the same directory as the original commands.
     #[cfg_attr(feature = "napi", napi(js_name = "defaultCwd"))]
     pub default_cwd: String,
+    /// The isolation target the artifact must be read from — the same engine the
+    /// sandbox ran on; omit (null) for the process-default engine.
+    pub environment: Option<EnvironmentTarget>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -290,9 +372,11 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     let span = tracing::Span::current();
     tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
     let traceparent = tracing_ctx::current_traceparent(&span).or(input.traceparent);
-    session::submit(move |reply| session::SessionMsg::CheckSession {
-        traceparent: traceparent.clone(),
-        reply,
+    session::submit(runtime_target_from(input.environment)?, move |reply| {
+        session::SessionMsg::CheckSession {
+            traceparent: traceparent.clone(),
+            reply,
+        }
     })
     .await
 }
@@ -309,6 +393,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     // nests under it; fall back to the caller traceparent when otel is inactive.
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_cwd(&input.cwd)?;
+    let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::RunRequest {
         replay_steps,
@@ -318,7 +403,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
         timeout_seconds: input.timeout_seconds,
         traceparent,
     };
-    session::submit(move |reply| session::SessionMsg::Run {
+    session::submit(target, move |reply| session::SessionMsg::Run {
         req: req.clone(),
         reply,
     })
@@ -332,6 +417,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
+    let target = runtime_target_from(input.environment)?;
     let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::ArtifactRequest {
         replay_steps,
@@ -340,9 +426,70 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         default_cwd: input.default_cwd,
         traceparent,
     };
-    session::submit(move |reply| session::SessionMsg::ReadArtifact {
+    session::submit(target, move |reply| session::SessionMsg::ReadArtifact {
         req: req.clone(),
         reply,
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VALID_ID: &str = "abcdef00-1111-2222-3333-444455556666";
+
+    fn env(id: &str, ns: &str) -> EnvironmentTarget {
+        EnvironmentTarget {
+            environment_id: id.into(),
+            namespace: ns.into(),
+        }
+    }
+
+    #[test]
+    fn omitted_environment_is_the_default_target() {
+        assert_eq!(runtime_target_from(None).unwrap(), RuntimeTarget::Default);
+    }
+
+    #[test]
+    fn valid_environment_converts_to_the_domain_target() {
+        assert_eq!(
+            runtime_target_from(Some(env(VALID_ID, "ns-production"))).unwrap(),
+            RuntimeTarget::Environment {
+                environment_id: VALID_ID.to_string(),
+                namespace: "ns-production".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn non_uuid_environment_id_is_rejected() {
+        for bad in [
+            "not-a-uuid",
+            "../../etc",
+            "abcdef00-1111-2222-3333-44445555666",
+            // uppercase hex is rejected: the TS side lowercases the id when naming
+            // the engine pod, so an uppercase id would target a nonexistent pod.
+            "ABCDEF00-1111-2222-3333-444455556666",
+            "",
+        ] {
+            assert!(
+                matches!(
+                    runtime_target_from(Some(env(bad, "ns-production"))),
+                    Err(SandboxError::InvalidInput(_))
+                ),
+                "expected reject for id {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_namespace_is_rejected() {
+        for bad in ["Bad NS", "ns?injection", "-leading", "trailing-", ""] {
+            assert!(
+                runtime_target_from(Some(env(VALID_ID, bad))).is_err(),
+                "expected reject for namespace {bad:?}"
+            );
+        }
+    }
 }

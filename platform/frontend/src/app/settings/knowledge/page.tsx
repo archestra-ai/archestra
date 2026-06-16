@@ -209,6 +209,7 @@ function AddApiKeyDialog({
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
             hideScopeAndPrimary
+            forEmbedding={forEmbedding}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">

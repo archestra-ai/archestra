@@ -51,6 +51,13 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as appsTable } from "./app";
+export { default as appDataTable } from "./app-data";
+export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
+export { default as appRenderScreenshotTable } from "./app-render-screenshot";
+export { default as appTeamTable } from "./app-team";
+export { default as appToolsTable } from "./app-tool";
+export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
@@ -60,6 +67,10 @@ export {
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
+export {
+  connectionSetupSkillsTable,
+  default as connectionSetupsTable,
+} from "./connection-setup";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationAttachmentsTable } from "./conversation-attachment";
@@ -145,6 +156,7 @@ export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
+export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";

@@ -1,24 +1,40 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: tests inspect MCP tool payloads dynamically
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   slugify,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
-import type { Agent } from "@/types";
+import config from "@/config";
+import {
+  ConversationEnabledToolModel,
+  OrganizationModel,
+  ToolModel,
+} from "@/models";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
+import { type Agent, agentOwner } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 const mockExecuteA2AMessage = vi.fn();
 
 vi.mock("@/clients/mcp-client", () => ({
   default: {
-    executeToolCall: vi.fn(),
+    executeToolCallForOwner: vi.fn(),
   },
 }));
 
@@ -81,7 +97,7 @@ describe("run_tool", () => {
       "Validation error in archestra__run_tool",
     );
     expect((result.content[0] as any).text).toContain("tool_name:");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("prevents run_tool from invoking itself by full name", async () => {
@@ -95,7 +111,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool cannot invoke itself",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("prevents run_tool from invoking itself by short name", async () => {
@@ -109,7 +125,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool cannot invoke itself",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches built-in tools by short name", async ({
@@ -127,7 +143,7 @@ describe("run_tool", () => {
       agentId: testAgent.id,
       agentName: testAgent.name,
     });
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches built-in tools by full name", async ({
@@ -145,7 +161,7 @@ describe("run_tool", () => {
       agentId: testAgent.id,
       agentName: testAgent.name,
     });
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("returns target built-in tool validation errors", async ({
@@ -174,7 +190,7 @@ describe("run_tool", () => {
       "Validation error in archestra__todo_write",
     );
     expect((result.content[0] as any).text).toContain("todos[0].status:");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks built-in Archestra tools that are not assigned to the agent", async ({
@@ -203,7 +219,7 @@ describe("run_tool", () => {
     expect((result._meta?.archestraError as any)?.code).toBe(
       "tool_not_assigned",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("routes agent delegation tool names through the built-in dispatcher", async ({
@@ -242,7 +258,7 @@ describe("run_tool", () => {
         parentDelegationChain: testAgent.id,
       }),
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("requires agent context before dispatching third-party MCP tools", async () => {
@@ -256,7 +272,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool requires agent context to dispatch to third-party MCP tools",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches third-party MCP tools through the MCP client", async ({
@@ -271,7 +287,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Third-party response" }],
       isError: false,
       _meta: { requestId: "request-1" },
@@ -287,13 +303,13 @@ describe("run_tool", () => {
       mockContext,
     );
 
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       {
         id: expect.stringMatching(/^run-tool-/),
         name: "github__search_repositories",
         arguments: { query: "archestra" },
       },
-      testAgent.id,
+      agentOwner(testAgent.id),
       mockContext.tokenAuth,
       { conversationId: testConversationId },
     );
@@ -305,6 +321,428 @@ describe("run_tool", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Third-party response" },
     ]);
+  });
+
+  describe("unassigned tool dispatch (grant flow)", () => {
+    test("does not assign or run an accessible-but-unassigned tool (grant happens via approval)", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "github__search_repositories",
+          tool_args: { query: "archestra" },
+        },
+        mockContext,
+      );
+
+      // First use never runs silently; the grant approval + assign endpoint put
+      // the tool on the agent. Reaching execute unassigned yields a recovery.
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("tells the model to involve an admin when the user cannot modify the agent", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTool,
+      makeUser,
+    }) => {
+      const memberUser = await makeUser();
+      await makeMember(memberUser.id, mockContext.organizationId as string, {
+        role: "member",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        { ...mockContext, userId: memberUser.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("does not auto-assign when the conversation's custom tool selection blocks the tool", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const enabled = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, enabled.id);
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        enabled.id,
+      ]);
+      // accessible but unassigned, and excluded by the custom selection
+      await makeTool({
+        name: "giphy__image_search",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "giphy__image_search", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "giphy__image_search"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      // the blocked call must not leave a persistent agent mutation behind
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("giphy__image_search")).toBe(false);
+    });
+
+    test("does not auto-assign for sessions without a user (org/team tokens)", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        { ...mockContext, userId: undefined },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("keeps the strict behavior when the org disables tool auto-assignment", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await OrganizationModel.patch(organizationId, {
+        allowToolAutoAssignment: false,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("tells a team-admin to involve an admin for a team-scoped agent outside their teams", async ({
+      makeAgent,
+      makeCustomRole,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTeam,
+      makeTool,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const teamAdminUser = await makeUser();
+      const role = await makeCustomRole(organizationId, {
+        permission: { agent: ["read", "update", "team-admin"] },
+      });
+      await makeMember(teamAdminUser.id, organizationId, { role: role.role });
+      // the agent's team — teamAdminUser is not a member of it
+      const team = await makeTeam(organizationId, teamAdminUser.id);
+      const teamAgent = await makeAgent({
+        name: "Team Agent",
+        organizationId,
+        scope: "team",
+        teams: [team.id],
+      });
+      const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        {
+          ...mockContext,
+          agent: { id: teamAgent.id, name: teamAgent.name },
+          agentId: teamAgent.id,
+          userId: teamAdminUser.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(teamAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("keeps the unavailable recovery message for a tool whose catalog the user cannot access", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTeam,
+      makeTool,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const memberUser = await makeUser();
+      await makeMember(memberUser.id, organizationId, { role: "member" });
+      // memberUser creates the team but is not a member of it
+      const team = await makeTeam(organizationId, memberUser.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        scope: "team",
+        teams: [team.id],
+      });
+      await makeTool({
+        name: "giphy__image_search",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "giphy__image_search", tool_args: {} },
+        { ...mockContext, userId: memberUser.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "giphy__image_search"',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("giphy__image_search")).toBe(false);
+    });
+  });
+
+  // Sandbox built-ins (run_command/upload_file/download_file) are Archestra
+  // built-ins but ride the same first-use auto-assignment relaxation as
+  // third-party tools, gated on sandbox:execute. Distinct from the third-party
+  // path above because they route through executeArchestraTool, not the gateway.
+  describe("sandbox built-in grant flow", () => {
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+
+    beforeAll(() => {
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    });
+
+    afterAll(() => {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // run_command is seeded into the (org-accessible) Archestra catalog but left
+    // unassigned, so every test below exercises the first-use path.
+    beforeEach(async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    });
+
+    function stubRunCommand() {
+      return vi
+        .spyOn(skillSandboxRuntimeService, "runCommand")
+        .mockResolvedValue({
+          commandId: "cmd-1",
+          sandboxId: "sb-1" as any,
+          command: "echo hi",
+          cwd: null,
+          stdout: "hi\n",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+          stagingNotices: [],
+        });
+    }
+
+    test("does not assign or run an unassigned sandbox tool (grant happens via approval)", async () => {
+      const runSpy = stubRunCommand();
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      expect(runSpy).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("does not assign or run on a direct unassigned sandbox tool call", async () => {
+      const runSpy = stubRunCommand();
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      expect(runSpy).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("denies before assignment when the user lacks sandbox:execute", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const user = await makeUser();
+      // catalog access + agent rights, but no sandbox:execute
+      const role = await makeCustomRole(organizationId, {
+        permission: { agent: ["read", "update"] },
+      });
+      await makeMember(user.id, organizationId, { role: role.role });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        { ...mockContext, userId: user.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("sandbox:execute");
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("tells the model to involve an admin when the user has sandbox:execute but cannot modify the agent", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const user = await makeUser();
+      const role = await makeCustomRole(organizationId, {
+        permission: { sandbox: ["execute"], agent: ["read"] },
+      });
+      await makeMember(user.id, organizationId, { role: role.role });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        { ...mockContext, userId: user.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("keeps the strict not-assigned error when the org disables tool auto-assignment", async () => {
+      await OrganizationModel.patch(mockContext.organizationId as string, {
+        allowToolAutoAssignment: false,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+  });
+
+  // With the sandbox feature off, a stale catalog row must not be discoverable
+  // or auto-assignable even though run_command stays in the static name list.
+  describe("sandbox built-in grant flow (runtime disabled)", () => {
+    test("does not auto-assign sandbox tools when the feature is off", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: TOOL_RUN_COMMAND_FULL_NAME,
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
   });
 
   test("headless dispatch scopes the MCP session by the isolation key", async ({
@@ -319,7 +757,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "ok" }],
       isError: false,
     } as any);
@@ -336,9 +774,9 @@ describe("run_tool", () => {
 
     // concurrent headless executions must not share an MCP session (e.g. a
     // browser context), so the per-execution key scopes the connection.
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({ name: "github__search_repositories" }),
-      testAgent.id,
+      agentOwner(testAgent.id),
       mockContext.tokenAuth,
       { conversationId: isolationKey },
     );
@@ -377,7 +815,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         "not enabled for this conversation",
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("dispatches a third-party tool enabled for the conversation", async ({
@@ -395,7 +833,7 @@ describe("run_tool", () => {
         tool.id,
       ]);
 
-      vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
         content: [{ type: "text", text: "ok" }],
         isError: false,
         _meta: {},
@@ -409,7 +847,7 @@ describe("run_tool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect(mcpClient.executeToolCall).toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
     });
 
     test("allows Archestra built-ins under an empty custom selection", async ({
@@ -461,7 +899,7 @@ describe("run_tool", () => {
       // merely "not enabled for this conversation".
       expect(text).toContain('No tool named "giphy__image_search"');
       expect(text).not.toContain("not enabled for this conversation");
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("rejects an agent-delegation tool disabled for the conversation", async ({
@@ -521,7 +959,7 @@ describe("run_tool", () => {
     expect(text).toContain('No tool named "giphy__image_search_tool"');
     expect(text).toContain("search_tools");
     expect(text).not.toContain("not enabled for this conversation");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("recovery message wins over the policy refusal when the agent has other tools", async ({
@@ -550,7 +988,7 @@ describe("run_tool", () => {
     const text = (result.content[0] as any).text;
     expect(text).toContain('No tool named "giphy__image_search_tool"');
     expect(text).not.toContain("not enabled for this conversation");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks third-party MCP tools when target invocation policy denies the call", async ({
@@ -604,7 +1042,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "External export blocked",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks third-party MCP tools that require approval when approval was not handled", async ({
@@ -655,7 +1093,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches approval-required third-party MCP tools after chat approval was handled", async ({
@@ -685,7 +1123,7 @@ describe("run_tool", () => {
       action: "require_approval",
       conditions: [],
     });
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Approved response" }],
       isError: false,
     } as any);
@@ -707,12 +1145,12 @@ describe("run_tool", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: tool.name,
         arguments: { destination: "external" },
       }),
-      agent.id,
+      agentOwner(agent.id),
       mockContext.tokenAuth,
       { conversationId: testConversationId },
     );
@@ -733,7 +1171,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: { ok: true },
       isError: false,
     } as any);

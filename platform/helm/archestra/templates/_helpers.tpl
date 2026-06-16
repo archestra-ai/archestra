@@ -284,7 +284,9 @@ ServiceAccount name for the Archestra Platform
 
 {{/*
 RBAC rules granting the platform ServiceAccount the permissions it needs to
-manage MCP server workloads in a namespace. Shared by the release-namespace Role
+manage MCP server workloads AND the per-environment Dagger sandbox engine
+(StatefulSet + engine-config ConfigMap + egress NetworkPolicy, reached via
+pods/exec + pods/attach) in a namespace. Shared by the release-namespace Role
 and the per-namespace Roles generated from rbac.environmentNamespaces, so both
 grant exactly the same access (no drift).
 */}}
@@ -307,8 +309,13 @@ grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# ConfigMaps for the per-environment Dagger engine config (engine.json).
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Deployments for MCP servers; StatefulSets for the per-environment Dagger engine.
 - apiGroups: ["apps"]
-  resources: ["deployments"]
+  resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]

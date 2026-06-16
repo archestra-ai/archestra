@@ -26,6 +26,7 @@ export const actions = [
 export const resources = [
   "agent",
   "skill",
+  "app",
   "sandbox",
   "mcpGateway",
   "llmProxy",
@@ -87,6 +88,7 @@ export const resources = [
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
   skill: "Skills",
+  app: "Apps",
   sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxies",
@@ -134,6 +136,7 @@ export const resourceLabels: Record<Resource, string> = {
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
   skill: "Agent skills — reusable SKILL.md instruction bundles",
+  app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   sandbox:
     "Code execution sandboxes — run commands, upload/download files, run activated skills",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
@@ -201,6 +204,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Agents: [
     "agent",
     "skill",
+    "app",
     "sandbox",
     "agentTrigger",
     "scheduledTask",

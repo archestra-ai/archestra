@@ -65,6 +65,11 @@ export default defineConfig({
     reuseExistingServer: !IS_CI,
     timeout: 120_000,
     env: {
+      // Same dist dir the Tilt-managed int-tests frontend uses
+      // (dev/Tiltfile.dev). Without it, a self-started server would share
+      // `.next` with the main `pnpm dev` server — since Next 16.3 that fails
+      // outright on the `.next/dev/lock` single-instance guard.
+      NEXT_DIST_DIR: ".next-pw",
       NEXT_PUBLIC_API_MOCKING: "enabled",
       // Point the SDK at an unreachable port instead of the real backend so
       // any SSR fetch that escapes MSW fails loudly with ECONNREFUSED rather

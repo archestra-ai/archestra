@@ -32,12 +32,18 @@ export const CacheKey = {
   ChatStop: "chat-stop",
   /** Maps a conversation to the id of its currently-running chat stream */
   ChatActiveStream: "chat-active-stream",
+  /** Pending MCP elicitation responses from the chat UI */
+  ChatMcpElicitation: "chat-mcp-elicitation",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
   VirtualKeyRateLimit: "virtual-key-rate-limit",
+  /** Connection-setup script token brute-force rate limiting per IP */
+  ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  /** GitHub Copilot device-flow sign-in rate limiting per user */
+  GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */

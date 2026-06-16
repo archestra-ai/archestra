@@ -226,9 +226,39 @@ export const ChatSkillMetadataSchema = z.object({
 
 export type ChatSkillMetadata = z.infer<typeof ChatSkillMetadataSchema>;
 
+/**
+ * Render-loop diagnostics from owned MCP App renders, attached once by the
+ * chat UI to the next outgoing user message. Collected inside an untrusted
+ * sandboxed iframe — the backend re-validates and frames them as data, never
+ * as instructions, when injecting into the prompt.
+ */
+export const ChatAppDiagnosticsMetadataSchema = z
+  .array(
+    z.object({
+      appId: z.string().uuid(),
+      version: z.number().nullable(),
+      entries: z
+        .array(
+          z.object({
+            type: z.string().max(32),
+            message: z.string().max(1000),
+          }),
+        )
+        .max(50),
+    }),
+  )
+  .max(10);
+
+export type ChatAppDiagnosticsMetadata = z.infer<
+  typeof ChatAppDiagnosticsMetadataSchema
+>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
-  .object({ skill: ChatSkillMetadataSchema.optional() })
+  .object({
+    skill: ChatSkillMetadataSchema.optional(),
+    appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+  })
   .passthrough();
 
 // ============================================================================

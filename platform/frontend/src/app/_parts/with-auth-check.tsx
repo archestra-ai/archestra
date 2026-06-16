@@ -32,11 +32,14 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
  * - /auth/two-factor is used for both:
  *   1. 2FA verification during login (user not fully logged in yet)
  *   2. 2FA setup after enabling 2FA (user is logged in)
+ * - /auth/recover-account completes a 2FA sign-in with a backup code, so the
+ *   user is not fully logged in yet either
  * - /auth/sign-out must be accessible when logged in to perform sign-out
  */
 const isSpecialAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/two-factor") ||
+    pathname?.startsWith("/auth/recover-account") ||
     pathname?.startsWith("/auth/sso") ||
     pathname?.startsWith("/auth/sign-out")
   );

@@ -9,7 +9,9 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import MemberModel from "./member";
+import ModelModel from "./model";
 import TeamModel from "./team";
 
 describe("AgentModel", () => {
@@ -18,6 +20,95 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
+  });
+
+  describe("resolved LLM metadata", () => {
+    test("resolves provider + per-user flag from the agent's configured key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const copilotKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+      });
+      const copilotModel = await ModelModel.create({
+        externalId: "github-copilot/gpt-4",
+        provider: "github-copilot",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Copilot Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: copilotKey.id,
+        modelId: copilotModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      // The model's human name, so a viewer without key access sees "gpt-4"
+      // rather than the model row's UUID.
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
+
+      // The same metadata must appear on list responses, not just findById.
+      const listed = (await AgentModel.findAll()).find(
+        (a) => a.id === agent.id,
+      );
+      expect(listed?.resolvedLlmProvider).toBe("github-copilot");
+      expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
+    });
+
+    test("falls back to the pinned model's provider with the flag false", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const anthropicModel = await ModelModel.create({
+        externalId: "anthropic/claude-3-5-sonnet",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Anthropic Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: anthropicModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("anthropic");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(false);
+    });
+
+    test("leaves provider null when no LLM is configured", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "No LLM Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider ?? null).toBeNull();
+      expect(fetched?.llmProviderRequiresPerUserCredential ?? false).toBe(
+        false,
+      );
+    });
   });
 
   describe("findBasicByOrganizationIdAndIds", () => {
@@ -2359,6 +2450,104 @@ describe("AgentModel", () => {
       );
       expect(stillGatewayA?.id).toBe(gatewayA?.id);
       expect(stillGatewayB?.id).toBe(gatewayB?.id);
+    });
+  });
+
+  describe("ensurePersonalLlmProxy", () => {
+    test("creates a personal llm_proxy with the expected fields when none exists", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const proxy = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(proxy.name).toBe("My Proxy");
+      expect(proxy.agentType).toBe("llm_proxy");
+      expect(proxy.scope).toBe("personal");
+      expect(proxy.isPersonalProxy).toBe(true);
+      expect(proxy.authorId).toBe(user.id);
+      expect(proxy.organizationId).toBe(org.id);
+    });
+
+    test("is idempotent within the same (user, org) - second call returns the same row", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const first = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const second = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(first.id).toBe(second.id);
+
+      const allAgents = await AgentModel.findAll(user.id, true);
+      const personalProxies = allAgents.filter(
+        (a) =>
+          a.agentType === "llm_proxy" &&
+          a.isPersonalProxy === true &&
+          a.authorId === user.id,
+      );
+      expect(personalProxies).toHaveLength(1);
+    });
+  });
+
+  describe("bulkBackfillPersonalLlmProxies", () => {
+    test("creates rows for members who lack a personal proxy and is idempotent on a second call", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const userA = await makeUser();
+      const userB = await makeUser();
+      await makeMember(userA.id, org.id);
+      await makeMember(userB.id, org.id);
+
+      const firstCount = await AgentModel.bulkBackfillPersonalLlmProxies();
+      expect(firstCount).toBeGreaterThanOrEqual(2);
+
+      const proxyA = await AgentModel.getPersonalLlmProxy(userA.id, org.id);
+      const proxyB = await AgentModel.getPersonalLlmProxy(userB.id, org.id);
+      expect(proxyA?.isPersonalProxy).toBe(true);
+      expect(proxyB?.isPersonalProxy).toBe(true);
+      expect(proxyA?.id).not.toBe(proxyB?.id);
+
+      const secondCount = await AgentModel.bulkBackfillPersonalLlmProxies();
+      expect(secondCount).toBe(0);
+    });
+
+    test("deletePersonalLlmProxiesForUser soft-deletes the user's personal proxy", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      await AgentModel.deletePersonalLlmProxiesForUser(user.id);
+
+      expect(await AgentModel.getPersonalLlmProxy(user.id, org.id)).toBeNull();
     });
   });
 

@@ -1,3 +1,4 @@
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type { SandboxFileOrigin, SandboxId, StorageNamespace } from "@/types";
 
 /**
@@ -34,6 +35,13 @@ export interface RunCommandParams {
   cwd?: string;
   /** Caller-requested wall-clock cap in seconds; clamped to the configured maximum. */
   timeoutSeconds?: number;
+  /**
+   * The agent's environment isolation target. Omitted runs on the
+   * process-default engine; otherwise the sandbox-core backend builds that
+   * environment's engine address from it. Resolved by the MCP tool from the
+   * agent's `environmentId`.
+   */
+  environment?: EnvironmentTarget;
 }
 
 export interface CommandResult {
@@ -70,6 +78,12 @@ export interface ExportArtifactParams {
    * Defaults to the sandbox owner's user namespace.
    */
   namespace?: StorageNamespace;
+  /**
+   * The agent's environment isolation target. Artifact extraction replays the
+   * recorded commands, so it must target the same engine the sandbox ran on.
+   * Resolved by the MCP tool from the agent's `environmentId`.
+   */
+  environment?: EnvironmentTarget;
 }
 
 export interface ArtifactRef {

@@ -9,7 +9,7 @@ export function LightDarkToggle() {
     <Card>
       <SettingsCardHeader
         title="Theme Mode"
-        description="Switch between light and dark modes for your interface."
+        description="Switch between system, light, and dark modes for your interface."
         action={<LightDarkButtons />}
       />
     </Card>

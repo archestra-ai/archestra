@@ -43,6 +43,7 @@ const PROVIDER_ICONS: Record<
   deepseek: { bg: "#4d6bfe", fg: "#fff", glyph: "D" },
   minimax: { bg: "#0ea5a4", fg: "#fff", glyph: "M" },
   zhipuai: { bg: "#dc2626", fg: "#fff", glyph: "Z" },
+  "github-copilot": { bg: "#24292f", fg: "#fff", glyph: "gh" },
 };
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
@@ -64,6 +65,7 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com/",
   minimax: "https://api.minimax.io/v1/",
   zhipuai: "https://open.bigmodel.cn/api/",
+  "github-copilot": "https://api.githubcopilot.com/",
 };
 
 interface ProxyClientInstructionsProps {

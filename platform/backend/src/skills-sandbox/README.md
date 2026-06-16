@@ -137,7 +137,7 @@ The sandbox MCP tools (`run_command`, `upload_file`, `download_file`,
 scoped to the caller's organization + user + **conversation**: a `target: { id }`
 referencing a sandbox outside that scope is rejected.
 
-Skills are mounted into the default sandbox by `activate_skill` (and
+Skills are mounted into the default sandbox by `load_skill` (and
 slash-command activation), which enforces `skill:read` + per-skill team scope
 for the activating user. Before building any container, `run_command` and
 `download_file` re-check that every mounted skill is still readable by the

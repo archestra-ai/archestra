@@ -5,6 +5,7 @@ import {
   SkillSandboxReplayEventModel,
 } from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
+import { asSandboxId } from "@/types";
 import {
   __internals,
   skillSandboxRuntimeService,
@@ -49,7 +50,7 @@ describe("skillSandboxRuntimeService", () => {
   test("runCommand rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
       }),
@@ -59,7 +60,7 @@ describe("skillSandboxRuntimeService", () => {
   test("exportArtifact rejects with SkillSandboxError while disabled", async () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         path: "out/report.txt",
       }),
@@ -76,7 +77,7 @@ describe("skillSandboxRuntimeService", () => {
 
     await expect(
       enabled.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
         timeoutSeconds,
@@ -89,7 +90,7 @@ describe("skillSandboxRuntimeService", () => {
 
     await expect(
       enabled.runCommand({
-        sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        sandboxId: asSandboxId(crypto.randomUUID()),
         caller: { userId: "u", organizationId: "o" },
         command: "   ",
       }),
@@ -100,7 +101,7 @@ describe("skillSandboxRuntimeService", () => {
     const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
-    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    const sandboxId = asSandboxId(crypto.randomUUID());
     // all N+1 calls are created synchronously, so the first N take queue slots
     // (and later fail — no real Dagger engine) while only the last one trips
     // the guard before any await.
@@ -129,7 +130,7 @@ describe("skillSandboxRuntimeService", () => {
     const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
-    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    const sandboxId = asSandboxId(crypto.randomUUID());
     await Promise.allSettled(
       Array.from(
         { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
@@ -160,7 +161,7 @@ describe("skillSandboxRuntimeService", () => {
   test("a call enqueued right as the previous one settles is not lost", async () => {
     const enabled = await importEnabledService();
 
-    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    const sandboxId = asSandboxId(crypto.randomUUID());
     const run = () =>
       enabled.runCommand({
         sandboxId,

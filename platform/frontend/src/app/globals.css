@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@daveyplate/better-auth-ui/css";
 /* Streamdown animation keyframes (sd-fadeIn, sd-blurIn, sd-slideUp) and the
    [data-sd-animate] rule. Required for the word-by-word fade-in animation
    during chat streaming (animated={{ animation: "fadeIn", sep: "word" }}).

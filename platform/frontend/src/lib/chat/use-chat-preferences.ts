@@ -1,4 +1,5 @@
 import {
+  type archestraApiTypes,
   deriveModelSource as deriveModelSourceShared,
   type ModelSelection,
   type ModelSource,
@@ -8,6 +9,9 @@ import {
 } from "@archestra/shared";
 
 export type { ModelSource };
+
+/** The agent's resolved LLM config, as returned by the agents API. */
+type AgentLlmConfig = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 // ===== LocalStorage Keys =====
 
@@ -169,6 +173,28 @@ export function resolveModelForAgent(params: {
   context: ChatContext;
 }): ResolvedModel | null {
   return resolveInitialModel({ ...params.context, agent: params.agent });
+}
+
+// ===== Per-user-credential agent gating =====
+
+/**
+ * True when a (shared) agent pins a model from a per-user-credential provider
+ * (e.g. GitHub Copilot) that the viewer hasn't connected: the agent's model is
+ * the current selection but isn't in the viewer's available models. In that
+ * case the chat keeps the agent's model selected instead of auto-swapping to a
+ * fallback, so sending it surfaces an inline "connect your account" prompt.
+ */
+export function agentRequiresPerUserConnect(params: {
+  agent:
+    | Pick<AgentLlmConfig, "modelId" | "llmProviderRequiresPerUserCredential">
+    | undefined;
+  selectedModelId: string | null | undefined;
+  isModelAvailable: boolean;
+}): boolean {
+  const { agent, selectedModelId, isModelAvailable } = params;
+  if (!agent?.llmProviderRequiresPerUserCredential) return false;
+  if (!selectedModelId || selectedModelId !== agent.modelId) return false;
+  return !isModelAvailable;
 }
 
 // ===== Model source =====

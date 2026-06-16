@@ -1,11 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
-  buildClaudeMarketplaceManifest,
-  buildClaudePluginManifest,
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
-  buildCursorMarketplaceManifest,
-  buildCursorPluginManifest,
+  buildSimpleMarketplaceManifest,
+  buildSimplePluginManifest,
   isReservedMarketplaceName,
   type MarketplaceSkillInput,
   RESERVED_MARKETPLACE_NAMES,
@@ -109,9 +107,9 @@ describe("resolveMarketplaceSkills", () => {
   });
 });
 
-describe("buildClaudeMarketplaceManifest", () => {
+describe("buildSimpleMarketplaceManifest (Claude Code + Cursor)", () => {
   test("emits a single bundle plugin pointing at plugins/<marketplaceName>", () => {
-    const manifest = buildClaudeMarketplaceManifest({
+    const manifest = buildSimpleMarketplaceManifest({
       marketplaceName: "archestra-acme-skills",
       ownerName: "Acme Corp",
       skills: [
@@ -134,7 +132,7 @@ describe("buildClaudeMarketplaceManifest", () => {
   });
 
   test("uses singular 'skill' when exactly one is shared", () => {
-    const manifest = buildClaudeMarketplaceManifest({
+    const manifest = buildSimpleMarketplaceManifest({
       marketplaceName: "m",
       ownerName: "Owner",
       skills: [makeSkill()],
@@ -173,14 +171,14 @@ describe("buildCodexMarketplaceManifest", () => {
   });
 });
 
-describe("buildClaudePluginManifest", () => {
+describe("buildSimplePluginManifest (Claude Code + Cursor)", () => {
   test("returns the bundle's name/description/version", () => {
     const skills = [
       makeSkill({ id: "a", name: "Alpha" }),
       makeSkill({ id: "b", name: "Beta" }),
     ];
     expect(
-      buildClaudePluginManifest({
+      buildSimplePluginManifest({
         marketplaceName: "archestra-acme-skills",
         ownerName: "Acme Corp",
         skills,
@@ -208,45 +206,6 @@ describe("buildCodexPluginManifest", () => {
       description: "1 skill shared from Acme Skills",
       skills: "./skills/",
       interface: { displayName: "Acme Skills" },
-    });
-  });
-});
-
-describe("buildCursorMarketplaceManifest", () => {
-  test("mirrors Claude's shape under .cursor-plugin/", () => {
-    const manifest = buildCursorMarketplaceManifest({
-      marketplaceName: "archestra-acme-skills",
-      ownerName: "Acme Corp",
-      skills: [makeSkill({ name: "PDF Helper" })],
-    });
-    expect(manifest).toEqual({
-      name: "archestra-acme-skills",
-      owner: { name: "Acme Corp" },
-      plugins: [
-        {
-          name: "archestra-acme-skills",
-          source: "./plugins/archestra-acme-skills",
-          description: "1 skill shared from Acme Corp",
-          version: expect.stringMatching(/^0\.0\.0\+[a-f0-9]{12}$/),
-        },
-      ],
-    });
-  });
-});
-
-describe("buildCursorPluginManifest", () => {
-  test("returns the bundle's name/description/version", () => {
-    const skills = [makeSkill()];
-    expect(
-      buildCursorPluginManifest({
-        marketplaceName: "archestra-acme-skills",
-        ownerName: "Acme Corp",
-        skills,
-      }),
-    ).toEqual({
-      name: "archestra-acme-skills",
-      description: "1 skill shared from Acme Corp",
-      version: resolveBundleVersion(skills),
     });
   });
 });

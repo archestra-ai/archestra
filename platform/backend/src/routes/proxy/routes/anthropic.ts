@@ -19,6 +19,16 @@ import {
 } from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
+function summarizeAnthropicRequestHeaders(headers: FastifyRequest["headers"]) {
+  return {
+    contentType: headers["content-type"],
+    contentLength: headers["content-length"],
+    anthropicVersion: headers["anthropic-version"],
+    hasAuthorization: Boolean(headers.authorization),
+    hasXApiKey: Boolean(headers["x-api-key"]),
+  };
+}
+
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
@@ -67,10 +77,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       logger.info(
         {
           url: request.url,
-          headers: request.headers,
+          headers: summarizeAnthropicRequestHeaders(request.headers),
           bodyKeys: Object.keys(request.body || {}),
         },
-        "[UnifiedProxy] Handling Anthropic request (default agent) - FULL REQUEST DEBUG",
+        "[UnifiedProxy] Handling Anthropic request (default agent)",
       );
       return handleLLMProxy(
         request.body,
@@ -109,10 +119,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           url: request.url,
           agentId: request.params.agentId,
-          headers: request.headers,
+          headers: summarizeAnthropicRequestHeaders(request.headers),
           bodyKeys: Object.keys(request.body || {}),
         },
-        "[UnifiedProxy] Handling Anthropic request (with agent) - FULL REQUEST DEBUG",
+        "[UnifiedProxy] Handling Anthropic request (with agent)",
       );
       return handleLLMProxy(
         request.body,

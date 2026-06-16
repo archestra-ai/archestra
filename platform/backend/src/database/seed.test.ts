@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
@@ -7,9 +8,10 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { afterEach } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { SkillFileModel, SkillModel } from "@/models";
+import { OrganizationModel, SkillFileModel, SkillModel } from "@/models";
 import AgentModel from "@/models/agent";
 import {
   BUILT_IN_SKILLS,
@@ -146,6 +148,12 @@ Examples:
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
 
 describe("syncBuiltInSkills", () => {
+  // syncBuiltInSkills syncs branding per org; reset the singleton so it never
+  // leaks an app name into a later (shuffled) test.
+  afterEach(() => {
+    archestraMcpBranding.syncFromOrganization(null);
+  });
+
   async function countBuiltInSkills(organizationId: string): Promise<number> {
     const rows = await db
       .select()
@@ -283,6 +291,60 @@ describe("syncBuiltInSkills", () => {
       sourceRef,
     });
     expect(preserved?.content).toBe("EDITED BY USER");
+  });
+
+  test("brands the seeded skill under the org's white-label app name", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+
+    await syncBuiltInSkills();
+
+    const skill = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
+    });
+    // the stored row itself is branded, so every read path (catalog, load_skill,
+    // sandbox mount) shows the app name with no per-read rewriting.
+    expect(skill?.name).toBe("Acme Copilot Platform Operations");
+    expect(skill?.content).not.toContain("Archestra");
+    expect(skill?.content).not.toContain(ARCHESTRA_TOOL_PREFIX);
+    // sourceCommit is hashed over the branded body, so a pristine branded copy
+    // is recognised on re-sync (and re-brands if the app name later changes).
+    expect(skill?.sourceCommit).not.toBe(builtInSkillVersion(BASE_SKILL));
+
+    const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+    for (const file of files) {
+      expect(file.content).not.toContain("Archestra");
+    }
+  });
+
+  test("re-brands a pristine copy when the app name changes", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    // first seed with no app name → canonical "Archestra" copy.
+    await syncBuiltInSkills();
+    const before = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(before?.name).toBe("Archestra Platform Operations");
+
+    // set an app name and re-sync — the untouched copy auto-upgrades to branded.
+    await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+    await syncBuiltInSkills();
+
+    const after = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(after?.id).toBe(before?.id);
+    expect(after?.name).toBe("Acme Copilot Platform Operations");
+    expect(after?.content).not.toContain("Archestra");
   });
 });
 

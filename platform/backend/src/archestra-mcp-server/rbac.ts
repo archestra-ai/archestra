@@ -129,21 +129,40 @@ export const TOOL_PERMISSIONS: Record<
 
   // skills — require skill:read; handlers further filter by per-skill scope.
   list_skills: { resource: "skill", action: "read" },
-  activate_skill: { resource: "skill", action: "read" },
-  read_skill_file: { resource: "skill", action: "read" },
+  load_skill: { resource: "skill", action: "read" },
   // Skill authoring — writes need skill:create/update; create_skill always
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
-  // create step is not a tool. activate_skill (skill:read) mounts a skill into
+  // create step is not a tool. load_skill (skill:read) mounts a skill into
   // the sandbox when the caller also has sandbox:execute.
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
   search_files: { resource: "sandbox", action: "execute" },
   save_result: { resource: "sandbox", action: "execute" },
+
+  // MCP Apps. The data-store tools gate on app:read/update; the running app's
+  // appId is route-bound (set by the app MCP proxy), so the permission check
+  // plus that binding together confine a caller to apps it may use.
+  create_app: { resource: "app", action: "create" },
+  list_apps: { resource: "app", action: "read" },
+  render_app: { resource: "app", action: "read" },
+  read_app: { resource: "app", action: "read" },
+  update_app: { resource: "app", action: "update" },
+  edit_app: { resource: "app", action: "update" },
+  delete_app: { resource: "app", action: "delete" },
+  // Authoring intent: the preview is exercised while building/fixing an app.
+  preview_app_tool: { resource: "app", action: "update" },
+  get_app_diagnostics: { resource: "app", action: "read" },
+  app_data_get: { resource: "app", action: "read" },
+  app_data_set: { resource: "app", action: "update" },
+  app_data_list: { resource: "app", action: "read" },
+  app_data_delete: { resource: "app", action: "update" },
+  // A viewer who can use an app can run its archestra.llm.complete() calls.
+  llm_complete: { resource: "app", action: "read" },
 };
 
 /**
@@ -153,8 +172,7 @@ export const TOOL_PERMISSIONS: Record<
  */
 const ORG_CONTEXT_READ_TOOLS: ReadonlySet<ArchestraToolShortName> = new Set([
   "list_skills",
-  "activate_skill",
-  "read_skill_file",
+  "load_skill",
 ]);
 
 /**

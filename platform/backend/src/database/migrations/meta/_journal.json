@@ -1979,8 +1979,57 @@
     {
       "idx": 282,
       "version": "7",
-      "when": 1781566283757,
-      "tag": "0282_files_overhaul",
+      "when": 1781148753123,
+      "tag": "0282_colossal_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "7",
+      "when": 1781180160590,
+      "tag": "0283_safe_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1781186651182,
+      "tag": "0284_odd_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 285,
+      "version": "7",
+      "when": 1781274807410,
+      "tag": "0285_dedup_archestra_builtin_tools_by_short_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1781294131210,
+      "tag": "0286_glamorous_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1781344711260,
+      "tag": "0287_mcp_apps",
+      "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "7",
+      "when": 1781515672027,
+      "tag": "0288_agent_environment_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1781602137639,
+      "tag": "0289_skill_sandbox_projects_files",
       "breakpoints": true
     }
   ]

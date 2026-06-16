@@ -48,6 +48,17 @@ describe("TOOL_PERMISSIONS map", () => {
       expect(typeof perm.action).toBe("string");
     }
   });
+
+  test("read_app reads and edit_app updates", () => {
+    expect(TOOL_PERMISSIONS.read_app).toEqual({
+      resource: "app",
+      action: "read",
+    });
+    expect(TOOL_PERMISSIONS.edit_app).toEqual({
+      resource: "app",
+      action: "update",
+    });
+  });
 });
 
 // === checkToolPermission ===
@@ -171,8 +182,8 @@ describe("checkToolPermission", () => {
       userId: user.id,
     };
 
-    // skill:read allows activate_skill...
-    expect(await checkToolPermission(t("activate_skill"), ctx)).toBeNull();
+    // skill:read allows load_skill...
+    expect(await checkToolPermission(t("load_skill"), ctx)).toBeNull();
     // ...but does NOT allow run_command (needs sandbox:execute)
     const denied = await checkToolPermission(t("run_command"), ctx);
     expect(denied).not.toBeNull();

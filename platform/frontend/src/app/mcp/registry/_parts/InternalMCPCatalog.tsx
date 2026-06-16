@@ -45,6 +45,13 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import {
+  clearPendingEnterpriseManagedInstall,
+  type EnterpriseManagedInstallIntent,
+  getPendingEnterpriseManagedInstall,
+  setPendingEnterpriseManagedInstall,
+  useEnterpriseManagedInstallConnectUrl,
+} from "@/lib/mcp/enterprise-managed-install-auth";
 import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
 import {
   useInternalMcpCatalog,
@@ -217,6 +224,28 @@ export function InternalMCPCatalog({
   });
 
   const queryClient = useQueryClient();
+  const getEnterpriseManagedInstallConnectUrl =
+    useEnterpriseManagedInstallConnectUrl();
+
+  const ensureEnterpriseManagedInstallAuth = useCallback(
+    async (
+      catalogItem: CatalogItem,
+      intent: EnterpriseManagedInstallIntent,
+    ): Promise<boolean> => {
+      const connectUrl = await getEnterpriseManagedInstallConnectUrl({
+        catalogItem,
+        redirectTo: "/mcp/registry",
+      });
+      if (!connectUrl) {
+        return true;
+      }
+
+      setPendingEnterpriseManagedInstall(intent);
+      window.location.assign(connectUrl);
+      return false;
+    },
+    [getEnterpriseManagedInstallConnectUrl],
+  );
 
   // Remove servers from installing set when installation completes (success or error)
   useEffect(() => {
@@ -441,12 +470,35 @@ export function InternalMCPCatalog({
     _teamMode: boolean,
     options?: {
       preserveInstallTarget?: boolean;
+      scope?: McpServerInstallScope;
+      teamId?: string;
     },
   ) => {
     if (!options?.preserveInstallTarget) {
       setPreselectedTeamId(null);
       setInstallPersonalOnly(false);
       setInstallOrgOnly(false);
+    }
+
+    const scope = options?.scope
+      ? options.scope
+      : installOrgOnly
+        ? "org"
+        : preselectedTeamId
+          ? "team"
+          : installPersonalOnly
+            ? "personal"
+            : undefined;
+    const teamId = options?.teamId ?? preselectedTeamId ?? undefined;
+    if (
+      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
+        action: "open-remote",
+        catalogId: catalogItem.id,
+        scope,
+        ...(teamId ? { teamId } : {}),
+      }))
+    ) {
+      return;
     }
 
     const hasUserConfig =
@@ -467,12 +519,35 @@ export function InternalMCPCatalog({
     catalogItem: CatalogItem,
     options?: {
       preserveInstallTarget?: boolean;
+      scope?: McpServerInstallScope;
+      teamId?: string;
     },
   ) => {
     if (!options?.preserveInstallTarget) {
       setPreselectedTeamId(null);
       setInstallPersonalOnly(false);
       setInstallOrgOnly(false);
+    }
+
+    const scope = options?.scope
+      ? options.scope
+      : installOrgOnly
+        ? "org"
+        : preselectedTeamId
+          ? "team"
+          : installPersonalOnly
+            ? "personal"
+            : undefined;
+    const teamId = options?.teamId ?? preselectedTeamId ?? undefined;
+    if (
+      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
+        action: "open-local",
+        catalogId: catalogItem.id,
+        scope,
+        ...(teamId ? { teamId } : {}),
+      }))
+    ) {
+      return;
     }
 
     // Check if this local server requires OAuth authentication
@@ -558,9 +633,22 @@ export function InternalMCPCatalog({
       scope?: McpServerInstallScope;
     },
   ) => {
-    setInstallingItemId(catalogItem.id);
     const scope: McpServerInstallScope =
       target?.scope ?? (target?.teamId ? "team" : "personal");
+    if (
+      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
+        action: "direct",
+        catalogId: catalogItem.id,
+        scope,
+        ...(scope === "team" && target?.teamId
+          ? { teamId: target.teamId }
+          : {}),
+      }))
+    ) {
+      return;
+    }
+
+    setInstallingItemId(catalogItem.id);
     const result = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
@@ -593,10 +681,12 @@ export function InternalMCPCatalog({
       if (catalogItem.serverType === "local") {
         handleInstallLocalServer(catalogItem, {
           preserveInstallTarget: true,
+          scope: "personal",
         });
       } else {
         handleInstallRemoteServer(catalogItem, false, {
           preserveInstallTarget: true,
+          scope: "personal",
         });
       }
     }
@@ -617,10 +707,14 @@ export function InternalMCPCatalog({
       if (catalogItem.serverType === "local") {
         handleInstallLocalServer(catalogItem, {
           preserveInstallTarget: true,
+          scope: "team",
+          teamId,
         });
       } else {
         handleInstallRemoteServer(catalogItem, false, {
           preserveInstallTarget: true,
+          scope: "team",
+          teamId,
         });
       }
     }
@@ -636,20 +730,66 @@ export function InternalMCPCatalog({
       if (catalogItem.serverType === "local") {
         handleInstallLocalServer(catalogItem, {
           preserveInstallTarget: true,
+          scope: "org",
         });
       } else {
         handleInstallRemoteServer(catalogItem, false, {
           preserveInstallTarget: true,
+          scope: "org",
         });
       }
     }
   };
 
+  // Resume an enterprise-managed install after linking the configured IdP.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: consume the one-shot sessionStorage intent when catalog data becomes available
+  useEffect(() => {
+    if (!catalogItems) return;
+
+    const intent = getPendingEnterpriseManagedInstall();
+    if (!intent) return;
+
+    const catalogItem = catalogItems.find(
+      (item) => item.id === intent.catalogId,
+    );
+    if (!catalogItem) return;
+
+    clearPendingEnterpriseManagedInstall();
+
+    setPreselectedTeamId(
+      intent.scope === "team" ? (intent.teamId ?? null) : null,
+    );
+    setInstallPersonalOnly(intent.scope === "personal");
+    setInstallOrgOnly(intent.scope === "org");
+
+    switch (intent.action) {
+      case "direct":
+        void handleDirectInstall(catalogItem, {
+          scope: intent.scope,
+          teamId: intent.teamId,
+        });
+        return;
+      case "open-local":
+        void handleInstallLocalServer(catalogItem, {
+          preserveInstallTarget: true,
+          scope: intent.scope,
+          teamId: intent.teamId,
+        });
+        return;
+      case "open-remote":
+        void handleInstallRemoteServer(catalogItem, false, {
+          preserveInstallTarget: true,
+          scope: intent.scope,
+          teamId: intent.teamId,
+        });
+        return;
+    }
+  }, [catalogItems]);
+
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;
 
     const catalogItem = noAuthCatalogItem;
-
     setInstallingItemId(catalogItem.id);
     await installMutation.mutateAsync({
       name: catalogItem.name,

@@ -3,8 +3,12 @@ import {
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILE_CONTENT_CHARS,
 } from "@/skills/github-import";
-import { deriveSkillFileKind } from "@/skills/parser";
-import { SkillFileEncodingSchema } from "@/types";
+import { deriveSkillFileKind, type ParsedSkill } from "@/skills/parser";
+import {
+  type InsertSkill,
+  SkillFileEncodingSchema,
+  type UpdateSkill,
+} from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
 /**
@@ -46,6 +50,41 @@ export const SkillManifestContentSchema = z
       "`{{user.name}}`) at activation. `allowed-tools` is a space-separated " +
       "list of tools the skill is pre-approved to use.",
   );
+
+type SkillManifestFieldKey =
+  | "name"
+  | "description"
+  | "content"
+  | "license"
+  | "compatibility"
+  | "allowedTools"
+  | "templated"
+  | "metadata";
+
+/** Manifest-derived columns valid in both insert and update rows, so a schema
+ * divergence is caught here rather than at a spread site. */
+type SkillManifestFields = Pick<InsertSkill, SkillManifestFieldKey> &
+  Pick<UpdateSkill, SkillManifestFieldKey>;
+
+/**
+ * The skill-row columns every write surface (REST create/update, agent
+ * conversion, MCP create_skill/update_skill) copies from a parsed manifest or
+ * draft, so a new manifest field is mapped in one place. The REST routes
+ * override `allowedTools` after the spread when the request body provides an
+ * explicit list.
+ */
+export function toSkillInsertFields(draft: ParsedSkill): SkillManifestFields {
+  return {
+    name: draft.name,
+    description: draft.description,
+    content: draft.content,
+    license: draft.license,
+    compatibility: draft.compatibility,
+    allowedTools: draft.allowedTools,
+    templated: draft.templated,
+    metadata: draft.metadata,
+  };
+}
 
 /** Classify each submitted resource file by its path prefix. */
 export function toSkillFiles(files: z.infer<typeof SkillFileInputSchema>[]) {

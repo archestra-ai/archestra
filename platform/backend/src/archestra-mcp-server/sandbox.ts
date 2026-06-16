@@ -1,3 +1,4 @@
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
@@ -7,9 +8,12 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
 import {
+  AgentModel,
   ConversationAttachmentModel,
+  EnvironmentModel,
   FileModel,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
@@ -50,7 +54,7 @@ import type { ArchestraContext } from "./types";
  *
  * RBAC: every tool is gated by `sandbox:execute` (see `rbac.ts`, enforced in
  * the dispatch path before the handler runs). Skills become runnable here by
- * activating them (`activate_skill`), which mounts them into the default
+ * loading them (`load_skill`), which mounts them into the default
  * sandbox; that path is `skill:read`-gated.
  *
  * Model-facing text in this file follows the skill terminology glossary in
@@ -167,7 +171,7 @@ const DownloadFileSchema = z
       "download URL. Use this for any binary or generated output — run_command " +
       "only returns text. In a project chat the file is saved into the " +
       "project's result folder. (To read a skill's source files, use " +
-      "read_skill_file.)",
+      "load_skill with a path.)",
   );
 
 const DownloadFileOutputSchema = z.object({
@@ -386,7 +390,7 @@ const registry = defineArchestraTools([
       "runs in a uv project at /home/sandbox: `python3` is the project venv; " +
       "install packages with `uv add --project /home/sandbox <pkg>` (pip is " +
       `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
-      "Activated skills are mounted under /skills and are on PYTHONPATH, so " +
+      "Loaded skills are mounted under /skills and are on PYTHONPATH, so " +
       "their modules import directly. Returns stdout, stderr, " +
       "exit code, and timing (text only — use download_file for generated " +
       "files). Requires `sandbox:execute`.",
@@ -410,6 +414,7 @@ const registry = defineArchestraTools([
           command: args.command,
           cwd: args.cwd,
           timeoutSeconds: args.timeoutSeconds,
+          environment: await resolveEnvironmentTarget(context),
         });
 
         logger.info(
@@ -442,7 +447,7 @@ const registry = defineArchestraTools([
       "Copy a file out of the conversation's sandbox into durable storage and " +
       "return a download URL. Use this for any binary or generated output — " +
       "run_command only returns text. To read a skill's own source files, use " +
-      "read_skill_file instead. Requires `sandbox:execute`.",
+      "load_skill with a path instead. Requires `sandbox:execute`.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
@@ -471,6 +476,7 @@ const registry = defineArchestraTools([
           mimeType: args.mimeType,
           folder: scope ? { id: scope.folderId, name: scope.folderName } : null,
           namespace: scope?.namespace,
+          environment: await resolveEnvironmentTarget(context),
         });
 
         logger.info(
@@ -787,6 +793,51 @@ export const tools = registry.tools;
 interface UserContext {
   organizationId: string;
   userId: string;
+}
+
+/**
+ * Resolve the Dagger runner host for the calling agent's Environment, so its
+ * sandbox runs on that environment's per-env engine (with the environment's
+ * egress NetworkPolicy). Returns undefined when the agent has no environment,
+ * the environment is missing, or k8s isn't configured — the run then uses the
+ * process-default engine.
+ */
+async function resolveEnvironmentTarget(
+  context: ArchestraContext,
+): Promise<EnvironmentTarget | undefined> {
+  const { organizationId } = context;
+  const agentId = context.agent?.id;
+  if (!agentId || !organizationId) return undefined;
+
+  const agent = await AgentModel.findById(agentId);
+  // Unbound agent → no environment isolation requested; the default engine is
+  // the correct runtime.
+  if (!agent?.environmentId) return undefined;
+
+  // The agent IS bound to an environment, so its sandbox MUST run on that
+  // environment's isolated engine (carrying the environment's egress policy).
+  // Fail closed if that engine can't be resolved — never fall back to the shared
+  // default engine, which would run the agent's code with unrestricted egress
+  // and silently defeat the environment's network isolation.
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    agent.environmentId,
+    organizationId,
+  );
+  if (!environment) {
+    throw new Error(
+      `Agent is bound to environment ${agent.environmentId}, which was not found — refusing to run on the shared runtime.`,
+    );
+  }
+  const target =
+    daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+      environment,
+    );
+  if (!target) {
+    throw new Error(
+      `Could not resolve the isolated runtime for environment "${environment.name}" — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
+    );
+  }
+  return target;
 }
 
 /**

@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -49,9 +46,6 @@ import { cn } from "@/lib/utils";
 import { SkillEditorDialog } from "./skill-editor-dialog";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
-type DiscoveredSkill =
-  archestraApiTypes.DiscoverGithubSkillsResponses["200"]["skills"][number];
-
 /**
  * Skill metadata already held from the local skill index — enough to render the
  * confirm step without re-scanning the whole repository over the network.
@@ -62,6 +56,22 @@ export interface IndexedSkillSelection {
   description: string;
   compatibility: string | null;
   fileCount: number;
+}
+
+/**
+ * A row on the select step: exactly the fields the step renders. Discovered
+ * rows (a subset of the discover response) carry a server-checked `exists`
+ * collision flag; indexed rows haven't been checked, so they enter as
+ * importable and a name collision surfaces at import time instead (the
+ * import response reports it as skipped and the dialog stays open).
+ */
+interface SelectStepSkill {
+  skillPath: string;
+  name: string;
+  description: string;
+  compatibility: string | null;
+  fileCount: number;
+  exists: boolean;
 }
 
 export function ImportSkillsDialog({
@@ -88,7 +98,7 @@ export function ImportSkillsDialog({
   const [authMethod, setAuthMethod] = useState<"pat" | "github_app">("pat");
   const [githubToken, setGithubToken] = useState("");
   const [githubAppConfigId, setGithubAppConfigId] = useState("");
-  const [discovered, setDiscovered] = useState<DiscoveredSkill[] | null>(null);
+  const [discovered, setDiscovered] = useState<SelectStepSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
@@ -107,14 +117,17 @@ export function ImportSkillsDialog({
         ? { githubToken: githubToken.trim() }
         : {};
 
-  const previewBody = previewSkillPath
-    ? {
-        repoUrl,
-        ...(path.trim() && { path: path.trim() }),
-        ...githubAuthFields,
-        skillPath: previewSkillPath,
-      }
-    : null;
+  // strict null check: a repo-root skill's path is "", which is still a
+  // previewable selection
+  const previewBody =
+    previewSkillPath !== null
+      ? {
+          repoUrl,
+          ...(path.trim() && { path: path.trim() }),
+          ...githubAuthFields,
+          skillPath: previewSkillPath,
+        }
+      : null;
   const { data: previewData, isPending: isPreviewLoading } =
     usePreviewGithubSkill(previewBody);
 
@@ -174,17 +187,8 @@ export function ImportSkillsDialog({
     if (!autoDiscover) return;
     if (initialSkill) {
       // launched from the skill index: the exact skill is already known, so
-      // skip the repo-wide scan and go straight to the confirm step. the index
-      // doesn't carry allowedTools/templated (the server reads them from the
-      // manifest at import time), so default them for the preview row.
-      setDiscovered([
-        {
-          ...initialSkill,
-          allowedTools: null,
-          templated: false,
-          exists: false,
-        },
-      ]);
+      // skip the repo-wide scan and go straight to the confirm step.
+      setDiscovered([{ ...initialSkill, exists: false }]);
       setSelected(new Set([initialSkill.skillPath]));
     } else if (initialRepoUrl) {
       handleDiscover(initialRepoUrl);

@@ -1,6 +1,5 @@
 "use client";
 
-import { WEBSITE_URL } from "@archestra/shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -17,6 +16,7 @@ import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops/chatops-config
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { buildTeamsManifest } from "@/lib/ms-teams/teams-manifest";
 
 interface MsTeamsSetupDialogProps {
   open: boolean;
@@ -507,80 +507,6 @@ function StepInstallAndConnect({
   );
 }
 
-function buildManifest(params: {
-  botAppId: string;
-  nameShort: string;
-  nameFull: string;
-  version: string;
-}) {
-  const { botAppId, nameShort, nameFull, version } = params;
-  return {
-    $schema:
-      "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
-    manifestVersion: "1.21",
-    version: version || "1.0.0",
-    id: botAppId || "{{BOT_MS_APP_ID}}",
-    developer: {
-      name: nameShort,
-      websiteUrl: WEBSITE_URL,
-      privacyUrl: `${WEBSITE_URL}/privacy`,
-      termsOfUseUrl: `${WEBSITE_URL}/terms`,
-    },
-    name: { short: nameShort, full: nameFull },
-    description: {
-      short: `Ask ${nameShort}`,
-      full: `Chat with ${nameShort} agents`,
-    },
-    icons: { outline: "outline.png", color: "color.png" },
-    accentColor: "#FFFFFF",
-    bots: [
-      {
-        botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupChat", "personal", "copilot"],
-        supportsFiles: false,
-        isNotificationOnly: false,
-        commandLists: [
-          {
-            scopes: ["team", "groupChat", "personal"],
-            commands: [
-              {
-                title: "/select-agent",
-                description: "Change which agent handles this conversation",
-              },
-              {
-                title: "/status",
-                description: "Show current agent for this conversation",
-              },
-              { title: "/help", description: "Show available commands" },
-            ],
-          },
-        ],
-      },
-    ],
-    copilotAgents: {
-      customEngineAgents: [
-        { type: "bot", id: botAppId || "{{BOT_MS_APP_ID}}" },
-      ],
-    },
-    permissions: ["identity", "messageTeamMembers"],
-    validDomains: [],
-    webApplicationInfo: {
-      id: botAppId || "{{BOT_MS_APP_ID}}",
-      resource: "https://graph.microsoft.com",
-    },
-    authorization: {
-      permissions: {
-        resourceSpecific: [
-          { name: "ChannelMessage.Read.Group", type: "Application" },
-          { name: "ChatMessage.Read.Chat", type: "Application" },
-          { name: "TeamMember.Read.Group", type: "Application" },
-          { name: "ChatMember.Read.Chat", type: "Application" },
-        ],
-      },
-    },
-  };
-}
-
 function StepManifest({
   stepNumber,
   prefillAppId,
@@ -596,7 +522,7 @@ function StepManifest({
   const [downloading, setDownloading] = useState(false);
 
   const effectiveAppId = botAppId || prefillAppId || "";
-  const manifest = buildManifest({
+  const manifest = buildTeamsManifest({
     botAppId: effectiveAppId,
     nameShort,
     nameFull,

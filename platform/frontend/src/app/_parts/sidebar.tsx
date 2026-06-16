@@ -7,8 +7,8 @@ import {
   GITHUB_REPO_URL,
 } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
-import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import {
+  AppWindow,
   BookOpen,
   Bot,
   Bug,
@@ -24,7 +24,6 @@ import {
   Network,
   PencilRuler,
   Route,
-  Settings,
   Slack,
   Star,
 } from "lucide-react";
@@ -32,6 +31,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
@@ -231,6 +231,17 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/agents/triggers"),
           },
         ],
+      },
+    ],
+  },
+  {
+    label: "Apps",
+    items: [
+      {
+        title: "Apps",
+        url: "/apps",
+        icon: AppWindow,
+        customIsActive: (pathname: string) => pathname.startsWith("/apps"),
       },
     ],
   },
@@ -579,6 +590,8 @@ export function AppSidebar() {
   // My Files (sandbox artifacts) are gated behind the sandbox feature flag.
   const sandboxEnabled = useFeature("sandbox") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
+  // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
+  const appsEnabled = useFeature("appsEnabled") === true;
 
   // Projects and My Files exist only when the sandbox runtime is on.
   const filteredChatsNavItems = React.useMemo(
@@ -591,44 +604,27 @@ export function AppSidebar() {
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items
-        .filter((item) => {
-          if (item.title === "Connect" && !showConnect) return false;
-          return true;
-        })
-        .map((item) =>
-          item.subItems
-            ? {
-                ...item,
-                subItems: item.subItems.filter(
-                  (sub) => sub.url !== "/agents/skills" || skillsEnabled,
-                ),
-              }
-            : item,
-        ),
-    }));
-  }, [showConnect, skillsEnabled]);
-
-  // Build additional links for UserButton popout menu
-  const userMenuLinks = React.useMemo(() => {
-    const links: {
-      href: string;
-      icon?: React.ReactNode;
-      label: React.ReactNode;
-      separator?: boolean;
-    }[] = [];
-
-    links.push({
-      href: "/settings/account",
-      icon: <Settings className="h-4 w-4" />,
-      label: "Settings",
-      separator: true,
-    });
-
-    return links;
-  }, []);
+    return contentNavGroups
+      .filter((group) => group.label !== "Apps" || appsEnabled)
+      .map((group) => ({
+        ...group,
+        items: group.items
+          .filter((item) => {
+            if (item.title === "Connect" && !showConnect) return false;
+            return true;
+          })
+          .map((item) =>
+            item.subItems
+              ? {
+                  ...item,
+                  subItems: item.subItems.filter(
+                    (sub) => sub.url !== "/agents/skills" || skillsEnabled,
+                  ),
+                }
+              : item,
+          ),
+      }));
+  }, [showConnect, skillsEnabled, appsEnabled]);
 
   return (
     <Sidebar collapsible="icon">
@@ -702,7 +698,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarWarningsAccordion />
-        <SignedIn>
+        {isAuthenticated && (
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
               <div
@@ -719,18 +715,11 @@ export function AppSidebar() {
                   "group-data-[collapsible=icon]:[&_button>svg]:hidden",
                 )}
               >
-                <UserButton
-                  size="default"
-                  align="center"
-                  side="top"
-                  className="w-full bg-transparent hover:bg-transparent text-foreground"
-                  disableDefaultLinks
-                  additionalLinks={userMenuLinks}
-                />
+                <SidebarUserMenu />
               </div>
             </SidebarGroupContent>
           </SidebarGroup>
-        </SignedIn>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

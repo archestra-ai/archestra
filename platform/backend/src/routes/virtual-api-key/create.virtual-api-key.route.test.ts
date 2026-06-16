@@ -76,6 +76,85 @@ describe("POST /api/llm-virtual-keys", () => {
     });
   });
 
+  test("per-user provider (github-copilot): allows a personal self-mapped virtual key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "gho_self" } });
+    const copilotKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "My Copilot VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("per-user provider: rejects org-scoped or model-router virtual keys containing it", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
+    const copilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      copilotSecret.id,
+      { provider: "github-copilot", scope: "personal", userId: user.id },
+    );
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", scope: "org" },
+    );
+
+    // Org-scoped (shared) virtual key wrapping the per-user key → rejected
+    const orgScoped = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Shared Copilot VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+        ],
+        scope: "org",
+        teams: [],
+      },
+    });
+    expect(orgScoped.statusCode).toBe(400);
+    expect(orgScoped.json().error.message).toContain("per-user");
+
+    // Multi-provider (model-router) bundle containing the per-user key → rejected
+    const bundle = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Router VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+      },
+    });
+    expect(bundle.statusCode).toBe(400);
+    expect(bundle.json().error.message).toContain("per-user");
+  });
+
   test("POST /api/llm-virtual-keys allows llmVirtualKey admins to assign any team", async ({
     makeLlmProviderApiKey,
     makeSecret,
@@ -376,5 +455,182 @@ describe("POST /api/llm-virtual-keys", () => {
         message: "Expiration date must be in the future",
       },
     });
+  });
+
+  test("admin can create a personal key on behalf of another member", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    makeMember,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const target = await makeUser();
+    await makeMember(target.id, organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Key for member",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: target.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().authorId).toBe(target.id);
+  });
+
+  test("non-admins cannot create a key on behalf of another user", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    makeMember,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(false);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const target = await makeUser();
+    await makeMember(target.id, organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Key for member",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: target.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "llmVirtualKey:admin permission to create a virtual key for another user",
+    );
+  });
+
+  test("admins cannot assign ownership to a non-member", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const outsider = await makeUser();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Key for outsider",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: outsider.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain(
+      "User is not a member of this organization",
+    );
+  });
+
+  test("defaults ownership to the creator when ownerId is omitted", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(false);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "My own key",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().authorId).toBe(user.id);
+  });
+
+  test("non-admins may pass their own id as ownerId", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(false);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "My own key",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: user.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().authorId).toBe(user.id);
+  });
+
+  test("admins cannot assign ownership to a member of another organization", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    makeMember,
+    makeOrganization,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser();
+    await makeMember(outsider.id, otherOrg.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Cross-org key",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: outsider.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain(
+      "User is not a member of this organization",
+    );
   });
 });

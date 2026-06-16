@@ -3,6 +3,7 @@ import type { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import GithubAppConfigModel from "@/models/github-app-config";
@@ -292,6 +293,35 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  // Apps are a resource-shaped table with admin-facing CRUD via /api/apps.
+  appsTable: { audited: true, model: AppModel },
+  appVersionsTable: {
+    audited: false,
+    reason: "child of app; immutable version snapshot, parent audited",
+  },
+  appTeamTable: {
+    audited: false,
+    reason: "join: app × team; parent (app) audited",
+  },
+  appToolsTable: {
+    audited: false,
+    reason: "tools attached to an app; parent (app) carries the signal",
+  },
+  appDataTable: {
+    audited: false,
+    reason:
+      "app-scoped runtime data store; written by app HTML, no admin signal",
+  },
+  appRenderDiagnosticsTable: {
+    audited: false,
+    reason:
+      "ephemeral per-viewer render diagnostics; best-effort, not admin state",
+  },
+  appRenderScreenshotTable: {
+    audited: false,
+    reason:
+      "ephemeral per-viewer render screenshot; best-effort, not admin state",
+  },
   labelKeysTable: { audited: false, reason: "label taxonomy; low-value churn" },
   labelValuesTable: {
     audited: false,
@@ -305,6 +335,10 @@ export const AUDIT_DECISIONS = {
   mcpCatalogLabelsTable: {
     audited: false,
     reason: "join: catalog × label; parent (catalog) audited",
+  },
+  teamLabelsTable: {
+    audited: false,
+    reason: "join: team × label; parent (team) audited",
   },
   mcpCatalogTeamsTable: {
     audited: false,
@@ -351,6 +385,16 @@ export const AUDIT_DECISIONS = {
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",
+  },
+  connectionSetupsTable: {
+    audited: false,
+    reason:
+      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+  },
+  connectionSetupSkillsTable: {
+    audited: false,
+    reason:
+      "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
   skillShareLinksTable: {
     audited: false,

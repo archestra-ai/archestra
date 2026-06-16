@@ -30,6 +30,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",
+  // App
+  "app.created": "App created",
+  "app.updated": "App updated",
+  "app.deleted": "App deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",

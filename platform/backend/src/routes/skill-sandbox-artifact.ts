@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { projectService } from "@/services/project";
 import {
   FileBytesMissingError,
@@ -50,8 +51,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { artifactId }, organizationId, user }, reply) => {
       // "wrong owner" and "missing" collapse into the same 404 inside the
       // service so cross-org probes can't tell them apart. Access: the file's
-      // author, the personal-folder owner, or anyone with access to the
-      // project owning the folder.
+      // author, or anyone with access to the project owning the file.
       const artifact = await skillSandboxArtifactService.getArtifactForUser({
         artifactId,
         organizationId,
@@ -95,82 +95,85 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.delete(
-    "/api/skill-sandbox/artifacts/:artifactId",
-    {
-      schema: {
-        operationId: RouteId.DeleteSkillSandboxArtifact,
-        description:
-          "Delete a persistent file. Allowed for the file's author, the owner " +
-          "of the personal folder it sits in, or anyone with access to the " +
-          "project owning its folder.",
-        tags: ["Skills"],
-        params: z.object({ artifactId: z.string().uuid() }),
-        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+  if (config.projects.enabled) {
+    fastify.delete(
+      "/api/skill-sandbox/artifacts/:artifactId",
+      {
+        schema: {
+          operationId: RouteId.DeleteSkillSandboxArtifact,
+          description:
+            "Delete a persistent file. Allowed for the file's author, or " +
+            "anyone with access to the project owning the file.",
+          tags: ["Skills"],
+          params: z.object({ artifactId: z.string().uuid() }),
+          response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+        },
       },
-    },
-    async ({ params: { artifactId }, organizationId, user }) => {
-      const deleted = await skillSandboxArtifactService.deleteArtifactForUser({
-        artifactId,
-        organizationId,
-        userId: user.id,
-      });
-      if (!deleted) {
-        throw new ApiError(404, "Artifact not found");
-      }
-      return { ok: true as const };
-    },
-  );
+      async ({ params: { artifactId }, organizationId, user }) => {
+        const deleted = await skillSandboxArtifactService.deleteArtifactForUser(
+          {
+            artifactId,
+            organizationId,
+            userId: user.id,
+          },
+        );
+        if (!deleted) {
+          throw new ApiError(404, "Artifact not found");
+        }
+        return { ok: true as const };
+      },
+    );
 
-  fastify.get(
-    "/api/skill-sandbox/conversations/:conversationId/artifacts",
-    {
-      schema: {
-        operationId: RouteId.GetSkillSandboxConversationArtifacts,
-        description:
-          "List the artifact files produced in a conversation's sandbox.",
-        tags: ["Skills"],
-        params: z.object({ conversationId: z.string().uuid() }),
-        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+    fastify.get(
+      "/api/skill-sandbox/conversations/:conversationId/artifacts",
+      {
+        schema: {
+          operationId: RouteId.GetSkillSandboxConversationArtifacts,
+          description:
+            "List the artifact files produced in a conversation's sandbox.",
+          tags: ["Skills"],
+          params: z.object({ conversationId: z.string().uuid() }),
+          response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+        },
       },
-    },
-    async ({ params: { conversationId }, organizationId, user }) =>
-      skillSandboxArtifactService.listForConversation({
-        organizationId,
-        userId: user.id,
-        conversationId,
-      }),
-  );
-
-  fastify.get(
-    "/api/skill-sandbox/files",
-    {
-      schema: {
-        operationId: RouteId.GetSkillSandboxFiles,
-        description:
-          "List the calling user's persistent files (My Files): their own " +
-          "artifact files across all conversations, plus the files of " +
-          "projects shared with them.",
-        tags: ["Skills"],
-        response: constructResponseSchema(
-          z.object({ files: z.array(SandboxFileListItemSchema) }),
-        ),
-      },
-    },
-    async ({ organizationId, user }) => {
-      const [own, shared] = await Promise.all([
-        skillSandboxArtifactService.listAllForUser({
+      async ({ params: { conversationId }, organizationId, user }) =>
+        skillSandboxArtifactService.listForConversation({
           organizationId,
           userId: user.id,
+          conversationId,
         }),
-        projectService.listSharedProjectFiles({
-          organizationId,
-          userId: user.id,
-        }),
-      ]);
-      return { files: [...own, ...shared] };
-    },
-  );
+    );
+
+    fastify.get(
+      "/api/skill-sandbox/files",
+      {
+        schema: {
+          operationId: RouteId.GetSkillSandboxFiles,
+          description:
+            "List the calling user's persistent files (My Files): their own " +
+            "artifact files across all conversations, plus the files of " +
+            "projects shared with them.",
+          tags: ["Skills"],
+          response: constructResponseSchema(
+            z.object({ files: z.array(SandboxFileListItemSchema) }),
+          ),
+        },
+      },
+      async ({ organizationId, user }) => {
+        const [own, shared] = await Promise.all([
+          skillSandboxArtifactService.listAllForUser({
+            organizationId,
+            userId: user.id,
+          }),
+          projectService.listSharedProjectFiles({
+            organizationId,
+            userId: user.id,
+          }),
+        ]);
+        return { files: [...own, ...shared] };
+      },
+    );
+  }
 };
 
 export default skillSandboxArtifactRoutes;

@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { projectService } from "@/services/project";
 import {
   constructResponseSchema,
@@ -17,6 +18,8 @@ import {
  * owner-only and "not yours" is indistinguishable from 404.
  */
 const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  if (!config.projects.enabled) return;
+
   fastify.post(
     "/api/projects",
     {

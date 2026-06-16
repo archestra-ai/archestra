@@ -1,3 +1,4 @@
+import config from "@/config";
 import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -651,5 +652,94 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     expect(del.statusCode).toBe(200);
     expect(await FileModel.findById(produced.id)).toBeNull();
+  });
+});
+
+describe("projects feature gating", () => {
+  let user: User;
+  let organizationId: string;
+  const original = config.projects.enabled;
+
+  // The plugin reads the flag at registration time, so each test builds its own
+  // app after setting the flag to the value it needs.
+  async function buildApp() {
+    const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+    await app.ready();
+    return app;
+  }
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+  });
+
+  afterEach(() => {
+    (config.projects as { enabled: boolean }).enabled = original;
+  });
+
+  test("My Files list 404s when off, but the byte route still streams", async () => {
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "image/png",
+      data: PNG_FAKE,
+    });
+
+    (config.projects as { enabled: boolean }).enabled = false;
+    const app = await buildApp();
+    try {
+      const files = await app.inject({
+        method: "GET",
+        url: "/api/skill-sandbox/files",
+      });
+      expect(files.statusCode).toBe(404);
+
+      // the byte endpoint is always registered regardless of the flag
+      const bytes = await app.inject({
+        method: "GET",
+        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      });
+      expect(bytes.statusCode).toBe(200);
+      expect(bytes.rawPayload).toEqual(PNG_FAKE);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("My Files list 200s when on", async () => {
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("hi"),
+      path: "/sandbox/skills/example/out.txt",
+    });
+
+    (config.projects as { enabled: boolean }).enabled = true;
+    const app = await buildApp();
+    try {
+      const files = await app.inject({
+        method: "GET",
+        url: "/api/skill-sandbox/files",
+      });
+      expect(files.statusCode).toBe(200);
+      const body = files.json<{ files: Array<{ filename: string }> }>();
+      expect(body.files.map((f) => f.filename)).toEqual(["out.txt"]);
+    } finally {
+      await app.close();
+    }
   });
 });

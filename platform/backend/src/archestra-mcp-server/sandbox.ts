@@ -502,6 +502,12 @@ const registry = defineArchestraTools([
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
+      if (!config.projects.enabled && args.source.type === "my_file") {
+        return errorResult(
+          "Referencing persistent files (the my_file source) is not available on this deployment.",
+        );
+      }
+
       const resolved = await resolveTarget({
         target: args.target,
         userCtx: guard.userCtx,

@@ -1192,6 +1192,15 @@ const config = {
   apps: {
     enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
   },
+  /**
+   * Projects + the persistent "My Files" file system on top of the skill
+   * sandbox. Ships dark: off by default until ready to surface. Gates the
+   * project APIs, the My Files endpoints, the search_files / save_result MCP
+   * tools, and the my_file upload source.
+   */
+  projects: {
+    enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
+  },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },

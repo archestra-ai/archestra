@@ -1,3 +1,4 @@
+import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
@@ -84,6 +85,10 @@ class ConversationFilesService {
     conversationOwnerUserId: string;
     requestingUserId: string;
   }): Promise<{ files: SandboxFileListItem[]; projectName: string | null }> {
+    if (!config.projects.enabled) {
+      return { files: [], projectName: null };
+    }
+
     let scope: Awaited<ReturnType<typeof resolveProjectFileScope>>;
     try {
       scope = await resolveProjectFileScope({

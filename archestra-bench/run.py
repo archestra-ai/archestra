@@ -279,6 +279,10 @@ def _cell_id(task: Task, lane: Lane) -> str:
     return f"{lane.slug}/{task.id}"
 
 
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
 @dataclass(frozen=True)
 class _RunCtx:
     """Run-wide config threaded into every lane unit."""
@@ -305,9 +309,11 @@ def _execute_plan(plan: list[EnvPlan], ctx: _RunCtx, *, max_workers: int) -> lis
             builder = _shared_env_units if env_plan.share_backend else _isolated_env_units
             units.extend(builder(env_plan, ctx, stack, reporter))
         n_jobs = min(max_workers, len(units)) or 1
+        n_lanes = len(plan[0].lanes) if plan else 0
         logger.info(
-            "running %d lane unit(s) / %d task(s) across %d env(s) with up to %d worker(s)",
-            len(units), total_cells, len(plan), n_jobs,
+            "running %s: %s × %s, %s",
+            _plural(total_cells, "task"), _plural(len(plan), "env"),
+            _plural(n_lanes, "lane"), _plural(n_jobs, "worker"),
         )
         generator = Parallel(n_jobs=n_jobs, backend="threading", return_as="generator")(
             delayed(unit)() for unit in units
@@ -1186,11 +1192,11 @@ def _repo_root() -> Path:
 
 
 def _run_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def _default_run_dir(run_id: str) -> Path:
-    return Path(__file__).resolve().parent / "experiments" / f"run_{run_id}"
+    return Path(__file__).resolve().parent / "experiments" / run_id
 
 
 def _write_run_config(

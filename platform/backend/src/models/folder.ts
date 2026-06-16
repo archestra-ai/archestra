@@ -27,6 +27,25 @@ class FolderModel {
     }
   }
 
+  /** Create a project's result folder (owned by the project, no user). */
+  static async createForProject(params: {
+    organizationId: string;
+    projectId: string;
+    name: string;
+  }): Promise<SkillSandboxFolder> {
+    const [row] = await db
+      .insert(schema.foldersTable)
+      .values({
+        organizationId: params.organizationId,
+        projectId: params.projectId,
+        name: params.name,
+      })
+      .returning();
+    if (!row) throw new Error("failed to insert project folder");
+    return row;
+  }
+
+  /** A user's PERSONAL folders only (project folders have a null user_id). */
   static async listByUser(params: {
     organizationId: string;
     userId: string;
@@ -41,6 +60,31 @@ class FolderModel {
         ),
       )
       .orderBy(asc(schema.foldersTable.name));
+  }
+
+  /** A project's result folder, or null if it no longer exists. */
+  static async findByProjectId(
+    projectId: string,
+  ): Promise<SkillSandboxFolder | null> {
+    const [row] = await db
+      .select()
+      .from(schema.foldersTable)
+      .where(eq(schema.foldersTable.projectId, projectId));
+    return row ?? null;
+  }
+
+  /** Batch variant of {@link findByProjectId}, keyed by project id. */
+  static async findByProjectIds(
+    projectIds: string[],
+  ): Promise<Map<string, SkillSandboxFolder>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.foldersTable)
+      .where(inArray(schema.foldersTable.projectId, projectIds));
+    return new Map(
+      rows.flatMap((row) => (row.projectId ? [[row.projectId, row]] : [])),
+    );
   }
 
   static async findByName(params: {

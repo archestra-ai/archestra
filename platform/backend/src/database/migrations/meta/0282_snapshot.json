@@ -1,5 +1,5 @@
 {
-  "id": "498d7f7d-0462-4ca9-8c68-ba1d5d4ff74d",
+  "id": "3b350165-0cc3-4102-ba7a-698eac45653d",
   "prevId": "2813db77-d3d9-4acf-afb5-6a666eee1ded",
   "version": "7",
   "dialect": "postgresql",
@@ -3965,7 +3965,13 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -3999,6 +4005,23 @@
             }
           ],
           "isUnique": true,
+          "where": "\"folders\".\"user_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "folders_project_uidx": {
+          "name": "folders_project_uidx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"folders\".\"project_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4017,12 +4040,30 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "folders_project_id_projects_id_fk": {
+          "name": "folders_project_id_projects_id_fk",
+          "tableFrom": "folders",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "folders_owner_chk": {
+          "name": "folders_owner_chk",
+          "value": "((\"folders\".\"user_id\" IS NOT NULL)::int + (\"folders\".\"project_id\" IS NOT NULL)::int) = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.github_app_configs": {
@@ -9514,12 +9555,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "folder_id": {
-          "name": "folder_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -9570,19 +9605,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "projects_folder_id_folders_id_fk": {
-          "name": "projects_folder_id_folders_id_fk",
-          "tableFrom": "projects",
-          "tableTo": "folders",
-          "columnsFrom": [
-            "folder_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

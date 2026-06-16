@@ -1,8 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import { getFileBytesStorage } from "@/skills-sandbox/file-storage";
-import type { PersistedFile, SandboxArtifactRow } from "@/types";
+import type {
+  PersistedFile,
+  SandboxArtifactRow,
+  StorageNamespace,
+} from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** File row without its bytes — what the chat Files panel needs. */
@@ -26,11 +39,11 @@ class FileModel {
     /** Author — whoever produced the file. */
     userId: string;
     /**
-     * Storage namespace owner: the FOLDER OWNER for project results, else the
-     * author. The Postgres backend ignores it (bytes live on the row); it is
-     * the placement seam a future external backend would read.
+     * Whose storage the bytes belong to: the owning PROJECT for project
+     * results, else the author. The Postgres backend ignores it (bytes live on
+     * the row); it is the placement seam a future external backend would read.
      */
-    namespaceUserId: string;
+    namespace: StorageNamespace;
     conversationId: string | null;
     /** Producing sandbox — provenance only; omit when none (save_result). */
     sandboxId?: string | null;
@@ -49,7 +62,7 @@ class FileModel {
       fileId,
       filename: params.filename,
       data: params.data,
-      namespace: { kind: "user", userId: params.namespaceUserId },
+      namespace: params.namespace,
       folder: params.folderName ?? null,
     });
     let row: PersistedFile | undefined;
@@ -97,10 +110,10 @@ class FileModel {
   }
 
   /**
-   * All files a user can see in My Files (newest first), metadata only.
-   * Ownership has two faces, exactly as before the extraction: files the
-   * user AUTHORED (`files.user_id`) and files sitting in a folder the user
-   * OWNS (project folders collect results from every member's chats).
+   * The user's PERSONAL My Files (newest first), metadata only: files they
+   * authored that sit at the root or in one of their personal folders. Files
+   * in PROJECT folders are excluded — those surface through the project
+   * listing instead (so a member's own project file is never listed twice).
    */
   static async listForUser(params: {
     organizationId: string;
@@ -126,10 +139,50 @@ class FileModel {
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.userId, params.userId),
+          // root files, or files in a personal folder (project folders have a
+          // null user_id) — never project-folder files.
           or(
-            eq(schema.filesTable.userId, params.userId),
-            eq(schema.foldersTable.userId, params.userId),
+            isNull(schema.filesTable.folderId),
+            isNotNull(schema.foldersTable.userId),
           ),
+        ),
+      )
+      .orderBy(desc(schema.filesTable.createdAt));
+    return rows;
+  }
+
+  /**
+   * Files sitting in the given folders (newest first), metadata only — the
+   * project surfaces (My Files project section, project files API, chat panel
+   * in a project chat). Any author; org-scoped.
+   */
+  static async listByFolders(params: {
+    organizationId: string;
+    folderIds: string[];
+  }): Promise<SandboxArtifactRow[]> {
+    if (params.folderIds.length === 0) return [];
+    const rows = await db
+      .select({
+        id: schema.filesTable.id,
+        filename: schema.filesTable.filename,
+        mimeType: schema.filesTable.mimeType,
+        sizeBytes: schema.filesTable.sizeBytes,
+        createdAt: schema.filesTable.createdAt,
+        storageProvider: schema.filesTable.storageProvider,
+        objectKey: schema.filesTable.objectKey,
+        folderId: schema.filesTable.folderId,
+        folderName: schema.foldersTable.name,
+      })
+      .from(schema.filesTable)
+      .leftJoin(
+        schema.foldersTable,
+        eq(schema.filesTable.folderId, schema.foldersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          inArray(schema.filesTable.folderId, params.folderIds),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));

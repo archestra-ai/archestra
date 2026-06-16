@@ -143,7 +143,11 @@ describe("GET /api/projects/:id/files", () => {
       teamIds: [],
     });
 
-    const { FileModel, SkillSandboxModel } = await import("@/models");
+    const { FileModel, FolderModel, SkillSandboxModel } = await import(
+      "@/models"
+    );
+    const folder = await FolderModel.findByProjectId(project.id);
+    if (!folder) throw new Error("project folder missing");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId: owner.id,
@@ -153,10 +157,10 @@ describe("GET /api/projects/:id/files", () => {
     await FileModel.create({
       organizationId,
       userId: owner.id,
-      namespaceUserId: owner.id,
+      namespace: { kind: "user", userId: owner.id },
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: project.folderId,
+      folderId: folder.id,
       folderName: "filed",
       filename: "in-folder.txt",
       mimeType: "text/plain",
@@ -166,7 +170,7 @@ describe("GET /api/projects/:id/files", () => {
     await FileModel.create({
       organizationId,
       userId: owner.id,
-      namespaceUserId: owner.id,
+      namespace: { kind: "user", userId: owner.id },
       conversationId: null,
       sandboxId: sandbox.id,
       folderId: null,

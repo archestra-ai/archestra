@@ -1,4 +1,4 @@
-import type { SandboxFileOrigin, SandboxId } from "@/types";
+import type { SandboxFileOrigin, SandboxId, StorageNamespace } from "@/types";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -66,11 +66,10 @@ export interface ExportArtifactParams {
   /** PFS folder to export into; resolved to a row by the caller. */
   folder?: { id: string; name: string } | null;
   /**
-   * Storage namespace owner for the export. Set for project chats, where the
-   * result folder belongs to the project owner — possibly not the sandbox
-   * owner. Defaults to the sandbox owner.
+   * Storage namespace for the export — the owning PROJECT in a project chat.
+   * Defaults to the sandbox owner's user namespace.
    */
-  folderOwnerUserId?: string;
+  namespace?: StorageNamespace;
 }
 
 export interface ArtifactRef {

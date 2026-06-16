@@ -11,8 +11,13 @@ async function makeProject(params: {
   userId: string;
   name: string;
 }) {
-  const folder = await FolderModel.create(params);
-  return ProjectModel.create({ ...params, folderId: folder.id });
+  const project = await ProjectModel.create(params);
+  await FolderModel.createForProject({
+    organizationId: params.organizationId,
+    projectId: project.id,
+    name: params.name,
+  });
+  return project;
 }
 
 describe("ProjectModel", () => {
@@ -67,22 +72,16 @@ describe("ProjectModel", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeProject({ organizationId: org.id, userId: user.id, name: "p" });
-    const folder2 = await FolderModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      name: "p2",
-    });
     await expect(
       ProjectModel.create({
         organizationId: org.id,
         userId: user.id,
         name: "p",
-        folderId: folder2.id,
       }),
     ).rejects.toBeInstanceOf(ProjectNameExistsError);
   });
 
-  test("deleting a project nulls conversations and keeps the folder", async ({
+  test("deleting a project nulls its conversations and cascade-deletes its folder", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -116,13 +115,8 @@ describe("ProjectModel", () => {
       .from(schema.conversationsTable)
       .where(eq(schema.conversationsTable.id, conv.id));
     expect(after.projectId).toBeNull();
-    expect(
-      await FolderModel.findByName({
-        organizationId: org.id,
-        userId: user.id,
-        name: "doomed",
-      }),
-    ).not.toBeNull();
+    // the result folder belongs to the project, so it dies with it.
+    expect(await FolderModel.findByProjectId(project.id)).toBeNull();
   });
 
   test("countConversations and listConversations", async ({

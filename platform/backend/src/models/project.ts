@@ -4,8 +4,9 @@ import type { InsertProject, Project } from "@/types";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
- * {@link ProjectShareModel} (models/project-share.ts); folder creation is the
- * service's job — by the time a project row is inserted its folder row exists.
+ * {@link ProjectShareModel} (models/project-share.ts); the result folder is
+ * created by the service right after the project row (it carries the project
+ * id), and found via `FolderModel.findByProjectId`.
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {
@@ -29,15 +30,6 @@ class ProjectModel {
       .select()
       .from(schema.projectsTable)
       .where(eq(schema.projectsTable.id, id));
-    return row ?? null;
-  }
-
-  /** The project a result folder belongs to, if any. */
-  static async findByFolderId(folderId: string): Promise<Project | null> {
-    const [row] = await db
-      .select()
-      .from(schema.projectsTable)
-      .where(eq(schema.projectsTable.folderId, folderId));
     return row ?? null;
   }
 

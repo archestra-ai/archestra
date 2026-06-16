@@ -1,28 +1,42 @@
 import {
+  FileModel,
   FolderModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
-  SandboxFolderExistsError,
 } from "@/models";
 import { validateSandboxFolderName } from "@/skills-sandbox/folder-name";
-import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import type {
   Project,
   ProjectConversationItem,
   ProjectDetail,
   ProjectListItem,
   ProjectShareVisibility,
+  SandboxArtifactRow,
   SandboxFileListItem,
   SandboxFolderListItem,
 } from "@/types";
 import { ApiError } from "@/types";
 
+/** Map a stored file row to the wire shape the file surfaces use. */
+function toFileListItem(row: SandboxArtifactRow): SandboxFileListItem {
+  return {
+    id: row.id,
+    filename: row.filename,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt,
+    downloadable: true,
+    folder: row.folderName,
+  };
+}
+
 /**
- * Projects: named collections of chats with a dedicated PFS result folder.
- * Creating a project creates its folder (same name, owner's namespace) —
- * users no longer create folders directly. Mutations are owner-only; read
- * access is governed by the project share (see ProjectShareModel).
+ * Projects: named collections of chats with a dedicated result folder owned by
+ * the project (`folders.project_id`). Creating a project creates its folder —
+ * users no longer create folders directly. Mutations are owner-only; access to
+ * the project (and so its folder's files) is governed by the project share
+ * (see ProjectShareModel).
  */
 class ProjectService {
   async create(params: {
@@ -37,41 +51,35 @@ class ProjectService {
       throw new ApiError(400, `project name is invalid: ${invalid}`);
     }
 
-    let folderId: string;
+    // The project row carries the unique (user, name) — create it first so a
+    // name clash is caught here, then attach its result folder.
+    let project: Project;
     try {
-      const folder = await FolderModel.create({
+      project = await ProjectModel.create({
         organizationId: params.organizationId,
         userId: params.userId,
         name,
+        description: params.description,
       });
-      folderId = folder.id;
     } catch (error) {
-      if (error instanceof SandboxFolderExistsError) {
-        throw new ApiError(
-          409,
-          `a project or folder named "${name}" already exists`,
-        );
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(409, `a project named "${name}" already exists`);
       }
       throw error;
     }
 
     try {
-      return await ProjectModel.create({
+      await FolderModel.createForProject({
         organizationId: params.organizationId,
-        userId: params.userId,
+        projectId: project.id,
         name,
-        description: params.description,
-        folderId,
       });
     } catch (error) {
-      // roll the folder row back so a failed create leaves nothing behind
-      // (no bytes exist yet; the empty directory is harmless and adoptable).
-      await FolderModel.deleteById(folderId).catch(() => {});
-      if (error instanceof ProjectNameExistsError) {
-        throw new ApiError(409, error.message);
-      }
+      // roll the project row back so a failed create leaves nothing behind.
+      await ProjectModel.delete(project.id).catch(() => {});
       throw error;
     }
+    return project;
   }
 
   async list(params: {
@@ -81,14 +89,14 @@ class ProjectService {
     const projects = await ProjectShareModel.listAccessibleProjects(params);
     const [counts, folders] = await Promise.all([
       ProjectModel.countConversations(projects.map((p) => p.id)),
-      FolderModel.findByIds(projects.map((p) => p.folderId)),
+      FolderModel.findByProjectIds(projects.map((p) => p.id)),
     ]);
     return projects.map((p) => ({
       id: p.id,
       name: p.name,
       description: p.description,
       isOwner: p.userId === params.userId,
-      folderName: folders.get(p.folderId)?.name ?? p.name,
+      folderName: folders.get(p.id)?.name ?? p.name,
       conversationCount: counts.get(p.id) ?? 0,
       visibility: p.visibility,
       createdAt: p.createdAt,
@@ -101,10 +109,10 @@ class ProjectService {
     userId: string;
   }): Promise<ProjectDetail> {
     const project = await this.requireReadable(params);
-    const [share, counts, folders] = await Promise.all([
+    const [share, counts, folder] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
-      FolderModel.findByIds([project.folderId]),
+      FolderModel.findByProjectId(project.id),
     ]);
     const isOwner = project.userId === params.userId;
     return {
@@ -112,7 +120,7 @@ class ProjectService {
       name: project.name,
       description: project.description,
       isOwner,
-      folderName: folders.get(project.folderId)?.name ?? project.name,
+      folderName: folder?.name ?? project.name,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       // share targets are the owner's business only
@@ -164,9 +172,8 @@ class ProjectService {
   }
 
   /**
-   * Files in the project's result folder. The listing runs in the FOLDER
-   * OWNER's namespace — project read access (not file ownership) is the
-   * authorization, mirroring the in-chat tool scope.
+   * Files in the project's result folder. Project access (not file ownership)
+   * is the authorization, mirroring the in-chat tool scope.
    */
   async listFiles(params: {
     id: string;
@@ -174,20 +181,20 @@ class ProjectService {
     userId: string;
   }): Promise<SandboxFileListItem[]> {
     const project = await this.requireReadable(params);
-    const folders = await FolderModel.findByIds([project.folderId]);
-    const folderName = folders.get(project.folderId)?.name;
-    if (!folderName) return [];
-    const { files } = await skillSandboxArtifactService.listAllForUser({
+    const folder = await FolderModel.findByProjectId(project.id);
+    if (!folder) return [];
+    const rows = await FileModel.listByFolders({
       organizationId: params.organizationId,
-      userId: project.userId,
+      folderIds: [folder.id],
     });
-    return files.filter((f) => f.folder === folderName);
+    return rows.map(toFileListItem);
   }
 
   /**
-   * Result folders of projects shared TO the user (not owned), with their
-   * files — merged into the My Files page next to the user's own PFS. Each
-   * owner's namespace is listed once and filtered per project folder.
+   * Result folders of EVERY project the user can access (owned or shared),
+   * with their files — merged into the My Files page next to the user's own
+   * PFS. The owner sees their project folders the same way every member does
+   * (project folders never appear in the personal `listForUser`).
    */
   async listSharedFolders(params: {
     organizationId: string;
@@ -196,39 +203,25 @@ class ProjectService {
     folders: SandboxFolderListItem[];
     files: SandboxFileListItem[];
   }> {
-    const shared = (
-      await ProjectShareModel.listAccessibleProjects(params)
-    ).filter((p) => p.userId !== params.userId);
+    const shared = await ProjectShareModel.listAccessibleProjects(params);
     if (shared.length === 0) return { folders: [], files: [] };
-    const folderRows = await FolderModel.findByIds(
-      shared.map((p) => p.folderId),
+    const folderRows = await FolderModel.findByProjectIds(
+      shared.map((p) => p.id),
     );
-
-    const byOwner = new Map<string, typeof shared>();
-    for (const p of shared) {
-      byOwner.set(p.userId, [...(byOwner.get(p.userId) ?? []), p]);
-    }
-
-    const folders: SandboxFolderListItem[] = [];
-    const files: SandboxFileListItem[] = [];
-    for (const [ownerUserId, ownerProjects] of byOwner) {
-      const { files: ownerFiles } =
-        await skillSandboxArtifactService.listAllForUser({
-          organizationId: params.organizationId,
-          userId: ownerUserId,
-        });
-      for (const p of ownerProjects) {
-        const folder = folderRows.get(p.folderId);
-        if (!folder) continue;
-        folders.push({
-          id: folder.id,
-          name: folder.name,
-          createdAt: folder.createdAt,
-        });
-        files.push(...ownerFiles.filter((f) => f.folder === folder.name));
-      }
-    }
-    return { folders, files };
+    const folderList = [...folderRows.values()];
+    if (folderList.length === 0) return { folders: [], files: [] };
+    const fileRows = await FileModel.listByFolders({
+      organizationId: params.organizationId,
+      folderIds: folderList.map((f) => f.id),
+    });
+    return {
+      folders: folderList.map((f) => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.createdAt,
+      })),
+      files: fileRows.map(toFileListItem),
+    };
   }
 
   async listConversations(params: {

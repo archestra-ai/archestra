@@ -47,12 +47,8 @@ describe("POST /api/projects", () => {
       visibility: null,
     });
 
-    const folder = await FolderModel.findByName({
-      organizationId,
-      userId: user.id,
-      name: "research",
-    });
-    expect(folder).not.toBeNull();
+    const folder = await FolderModel.findByProjectId(body.id);
+    expect(folder?.name).toBe("research");
   });
 
   test("rejects invalid names with 400 and duplicates with 409", async () => {
@@ -77,7 +73,9 @@ describe("POST /api/projects", () => {
     expect(second.statusCode).toBe(409);
   });
 
-  test("a name colliding with an existing folder is a 409 too", async () => {
+  test("a project name is independent of a personal folder of the same name", async () => {
+    // project folders are owned by the project, not the user, so they no
+    // longer share a namespace with personal folders.
     await FolderModel.create({
       organizationId,
       userId: user.id,
@@ -88,6 +86,6 @@ describe("POST /api/projects", () => {
       url: "/api/projects",
       payload: { name: "taken" },
     });
-    expect(response.statusCode).toBe(409);
+    expect(response.statusCode).toBe(200);
   });
 });

@@ -31,14 +31,12 @@ async function seedArtifact(params: {
   path?: string;
   folderId?: string | null;
   folderName?: string | null;
-  /** Storage namespace owner; defaults to the author. */
-  namespaceUserId?: string;
 }) {
   const path = params.path ?? "/sandbox/skills/example/out.png";
   return await FileModel.create({
     organizationId: params.organizationId,
     userId: params.userId,
-    namespaceUserId: params.namespaceUserId ?? params.userId,
+    namespace: { kind: "user", userId: params.userId },
     conversationId: null,
     sandboxId: params.sandboxId ?? null,
     folderId: params.folderId ?? null,
@@ -348,42 +346,56 @@ describe("project folder cross-user access", () => {
     await app.close();
   });
 
-  test("the folder owner sees and downloads files produced by other members", async ({
-    makeUser,
-  }) => {
-    // `user` owns the project/folder; `member` produced a file into it.
+  async function seedProjectFile(params: {
+    ownerId: string;
+    authorId: string;
+    name: string;
+    content: string;
+    filename: string;
+  }) {
     const { projectService } = await import("@/services/project");
     const { FolderModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
-      userId: user.id,
-      name: "crossuser",
+      userId: params.ownerId,
+      name: params.name,
       description: null,
     });
-
-    const member = await makeUser({ email: "cross-member@test.com" });
-    const memberSandbox = await SkillSandboxModel.create({
+    const folder = await FolderModel.findByProjectId(project.id);
+    if (!folder) throw new Error("project folder missing");
+    const sandbox = await SkillSandboxModel.create({
       organizationId,
-      userId: member.id,
+      userId: params.authorId,
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    const folder = (await FolderModel.findByIds([project.folderId])).get(
-      project.folderId,
-    );
-    const produced = await seedArtifact({
-      sandboxId: memberSandbox.id,
-      userId: member.id, // author
-      namespaceUserId: user.id, // folder owner's namespace
+    const file = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: params.authorId,
       organizationId,
       mimeType: "text/plain",
-      data: Buffer.from("member"),
-      path: "/sandbox/member-output.txt",
-      folderId: project.folderId,
-      folderName: folder?.name ?? null,
+      data: Buffer.from(params.content),
+      path: `/sandbox/${params.filename}`,
+      folderId: folder.id,
+      folderName: folder.name,
+    });
+    return { project, folder, file };
+  }
+
+  test("project members see and download files produced by others", async ({
+    makeUser,
+  }) => {
+    // `user` owns the project; `member` produced a file into its folder.
+    const member = await makeUser({ email: "cross-member@test.com" });
+    const { file } = await seedProjectFile({
+      ownerId: user.id,
+      authorId: member.id,
+      name: "crossuser",
+      content: "member",
+      filename: "member-output.txt",
     });
 
-    // listing: the folder owner's My Files include it
+    // listing: the owner's My Files include the project folder's file
     const files = await app.inject({
       method: "GET",
       url: "/api/skill-sandbox/files",
@@ -397,53 +409,37 @@ describe("project folder cross-user access", () => {
     }>();
     expect(body.files).toEqual([
       expect.objectContaining({
-        id: produced.id,
+        id: file.id,
         filename: "member-output.txt",
         folder: "crossuser",
       }),
     ]);
 
-    // bytes: downloadable by the folder owner
+    // bytes: downloadable by any project member (here, the owner)
     const bytes = await app.inject({
       method: "GET",
-      url: `/api/skill-sandbox/artifacts/${produced.id}`,
+      url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(bytes.statusCode).toBe(200);
     expect(bytes.body).toBe("member");
   });
 
-  test("a third user still gets 404 for folder files they don't own", async ({
+  test("a non-member gets 404 for a project's folder files", async ({
     makeUser,
   }) => {
-    const { projectService } = await import("@/services/project");
     const owner = await makeUser({ email: "cross-owner@test.com" });
-    const project = await projectService.create({
-      organizationId,
-      userId: owner.id,
+    const { file } = await seedProjectFile({
+      ownerId: owner.id,
+      authorId: owner.id,
       name: "notmine",
-      description: null,
-    });
-    const ownerSandbox = await SkillSandboxModel.create({
-      organizationId,
-      userId: owner.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
-    });
-    const artifact = await seedArtifact({
-      sandboxId: ownerSandbox.id,
-      userId: owner.id,
-      organizationId,
-      mimeType: "text/plain",
-      data: Buffer.from("secret"),
-      path: "/sandbox/secret.txt",
-      folderId: project.folderId,
-      folderName: "notmine",
+      content: "secret",
+      filename: "secret.txt",
     });
 
-    // `user` (the request principal) is neither producer nor folder owner
+    // `user` (the request principal) has no access to the project
     const denied = await app.inject({
       method: "GET",
-      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(denied.statusCode).toBe(404);
     const files = await app.inject({
@@ -453,19 +449,19 @@ describe("project folder cross-user access", () => {
     expect(files.json<{ files: unknown[] }>().files).toEqual([]);
   });
 
-  test("a shared project's folder shows in members' My Files with readable bytes", async ({
+  test("a shared project grants members full rights — list, read, AND delete", async ({
     makeUser,
     makeMember,
   }) => {
-    const { projectService } = await import("@/services/project");
     const { ProjectShareModel } = await import("@/models");
     await makeMember(user.id, organizationId, {});
     const owner = await makeUser({ email: "share-owner@test.com" });
-    const project = await projectService.create({
-      organizationId,
-      userId: owner.id,
+    const { project, file } = await seedProjectFile({
+      ownerId: owner.id,
+      authorId: owner.id,
       name: "teamshared",
-      description: null,
+      content: "shared",
+      filename: "shared.txt",
     });
     await ProjectShareModel.upsert({
       projectId: project.id,
@@ -473,22 +469,6 @@ describe("project folder cross-user access", () => {
       createdByUserId: owner.id,
       visibility: "organization",
       teamIds: [],
-    });
-    const ownerSandbox = await SkillSandboxModel.create({
-      organizationId,
-      userId: owner.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
-    });
-    const artifact = await seedArtifact({
-      sandboxId: ownerSandbox.id,
-      userId: owner.id,
-      organizationId,
-      mimeType: "text/plain",
-      data: Buffer.from("shared"),
-      path: "/sandbox/shared.txt",
-      folderId: project.folderId,
-      folderName: "teamshared",
     });
 
     // the member's My Files include the shared folder and its files
@@ -502,29 +482,67 @@ describe("project folder cross-user access", () => {
     }>();
     expect(body.folders.map((f) => f.name)).toContain("teamshared");
     expect(body.files).toEqual([
-      expect.objectContaining({ id: artifact.id, filename: "shared.txt" }),
+      expect.objectContaining({ id: file.id, filename: "shared.txt" }),
     ]);
 
     // bytes are readable through the share...
     const bytes = await app.inject({
       method: "GET",
-      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(bytes.statusCode).toBe(200);
     expect(bytes.body).toBe("shared");
 
-    // ...but the share does not grant deletion
+    // ...and project access is full rights — deletion is allowed too.
     const del = await app.inject({
       method: "DELETE",
-      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
-    expect(del.statusCode).toBe(404);
+    expect(del.statusCode).toBe(200);
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    expect(after.json<{ files: unknown[] }>().files).toEqual([]);
+  });
 
-    // unsharing revokes both the listing and the bytes
+  test("unsharing a project revokes access to its folder files", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { ProjectShareModel } = await import("@/models");
+    await makeMember(user.id, organizationId, {});
+    const owner = await makeUser({ email: "unshare-owner@test.com" });
+    const { project, file } = await seedProjectFile({
+      ownerId: owner.id,
+      authorId: owner.id,
+      name: "unshared",
+      content: "bytes",
+      filename: "doc.txt",
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    // shared: reachable
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/skill-sandbox/artifacts/${file.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+
     await ProjectShareModel.remove(project.id);
+
+    // revoked: both the bytes and the listing
     const denied = await app.inject({
       method: "GET",
-      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(denied.statusCode).toBe(404);
     const after = await app.inject({
@@ -586,16 +604,19 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(bytes.statusCode).toBe(404);
   });
 
-  test("the folder owner can delete a member-produced file; strangers cannot", async ({
+  test("a project member can delete a member-produced file; non-members cannot", async ({
     makeUser,
   }) => {
     const { projectService } = await import("@/services/project");
+    const { FolderModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId: user.id,
       name: "deletable",
       description: null,
     });
+    const folder = await FolderModel.findByProjectId(project.id);
+    if (!folder) throw new Error("project folder missing");
     const member = await makeUser({ email: "delete-member@test.com" });
     const memberSandbox = await SkillSandboxModel.create({
       organizationId,
@@ -606,17 +627,15 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     const produced = await seedArtifact({
       sandboxId: memberSandbox.id,
       userId: member.id, // author
-      namespaceUserId: user.id, // folder owner's namespace
       organizationId,
       mimeType: "text/plain",
       data: Buffer.from("x"),
       path: "/sandbox/member.txt",
-      folderId: project.folderId,
-      folderName: "deletable",
+      folderId: folder.id,
+      folderName: folder.name,
     });
 
-    // a third user (still the request principal would be `user`; simulate a
-    // stranger by checking the service directly)
+    // a non-member of the project cannot delete (checked via the service)
     const { skillSandboxArtifactService } = await import(
       "@/skills-sandbox/skill-sandbox-artifact-service"
     );
@@ -629,7 +648,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       }),
     ).toBe(false);
 
-    // the folder owner (the request principal) deletes via the route
+    // the project owner (a member) deletes via the route
     const del = await app.inject({
       method: "DELETE",
       url: `/api/skill-sandbox/artifacts/${produced.id}`,

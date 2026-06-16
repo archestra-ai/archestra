@@ -441,7 +441,7 @@ describe("Cascade behavior", () => {
     const file = await FileModel.create({
       organizationId: org.id,
       userId: user.id,
-      namespaceUserId: user.id,
+      namespace: { kind: "user", userId: user.id },
       conversationId: null,
       sandboxId: sandbox.id,
       folderId: null,

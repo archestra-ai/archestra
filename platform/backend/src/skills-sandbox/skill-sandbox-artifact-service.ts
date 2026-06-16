@@ -78,46 +78,46 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Fetch a file the caller may access: its author, the owner of the folder
-   * it sits in (project folders collect results from every project member's
-   * chats), or — with `allowSharedProjectRead` — a member of the project
-   * sharing that folder (byte reads only; deletion keeps the stricter rule).
-   * Null for "not found" AND "not yours" alike, so 404s can't probe ids.
+   * Fetch a file the caller may access — the SAME rule for reading and
+   * deleting: the file's author, the personal-folder owner, or (project
+   * folders) anyone with access to the owning project. Null for "not found"
+   * AND "not yours" alike, so 404s can't probe ids.
    */
   async getArtifactForUser(params: {
     artifactId: string;
     organizationId: string;
     userId: string;
-    allowSharedProjectRead?: boolean;
   }): Promise<PersistedFile | null> {
     const file = await FileModel.findById(params.artifactId);
     if (!file || file.organizationId !== params.organizationId) return null;
-    if (file.userId !== params.userId) {
-      const folder = file.folderId
-        ? (await FolderModel.findByIds([file.folderId])).get(file.folderId)
-        : undefined;
-      if (!folder || folder.organizationId !== params.organizationId) {
-        return null;
-      }
-      if (folder.userId !== params.userId) {
-        if (!params.allowSharedProjectRead) return null;
-        const project = await ProjectModel.findByFolderId(folder.id);
-        if (!project) return null;
-        const canAccess = await ProjectShareModel.userCanAccessProject({
-          project,
-          userId: params.userId,
-          organizationId: params.organizationId,
-        });
-        if (!canAccess) return null;
-      }
+    if (file.userId === params.userId) return file;
+    if (!file.folderId) return null;
+    const folder = (await FolderModel.findByIds([file.folderId])).get(
+      file.folderId,
+    );
+    if (!folder || folder.organizationId !== params.organizationId) {
+      return null;
     }
-    return file;
+    if (folder.userId) {
+      // personal folder: the owner has full rights.
+      return folder.userId === params.userId ? file : null;
+    }
+    // project folder: project access = full rights over its files.
+    if (!folder.projectId) return null;
+    const project = await ProjectModel.findById(folder.projectId);
+    if (!project) return null;
+    const canAccess = await ProjectShareModel.userCanAccessProject({
+      project,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    return canAccess ? file : null;
   }
 
   /**
    * Delete a file: the row first (the DB is authoritative), then any external
    * bytes, best-effort (a no-op under Postgres storage — the bytes die with
-   * the row). Author or folder owner only.
+   * the row). Same access rule as reading.
    */
   async deleteArtifactForUser(params: {
     artifactId: string;
@@ -151,7 +151,6 @@ class SkillSandboxArtifactService {
     scope?: {
       folderId: string;
       folderName: string;
-      folderOwnerUserId: string;
     } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
     const scope = params.scope ?? null;
@@ -188,12 +187,26 @@ class SkillSandboxArtifactService {
       return { error: "outside_project_folder" };
     }
     const filename = params.filename ?? "";
-    const namespaceUserId = scope ? scope.folderOwnerUserId : params.userId;
-    const { files } = await this.listAllForUser({
-      organizationId: params.organizationId,
-      userId: namespaceUserId,
-    });
-    const matches = files.filter(
+    // project chat: the candidate set is the project folder's files; personal
+    // chat: the user's own My Files.
+    const candidates = scope
+      ? (
+          await FileModel.listByFolders({
+            organizationId: params.organizationId,
+            folderIds: [scope.folderId],
+          })
+        ).map((r) => ({
+          id: r.id,
+          filename: r.filename,
+          folder: r.folderName,
+        }))
+      : (
+          await this.listAllForUser({
+            organizationId: params.organizationId,
+            userId: params.userId,
+          })
+        ).files;
+    const matches = candidates.filter(
       (f) => f.filename === filename && f.folder === folder,
     );
     if (matches.length === 0) return { error: "not_found" };

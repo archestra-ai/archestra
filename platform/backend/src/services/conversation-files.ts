@@ -72,11 +72,11 @@ class ConversationFilesService {
 
   /**
    * The PFS files the agent can reach from this chat — mirrors the
-   * search_files tool's scope. Project chat: the project's result folder, in
-   * the folder owner's namespace (project membership is the authorization —
-   * the route verified conversation access). Personal chat: the owner's whole
-   * PFS, but only when the owner themself is asking, so a shared chat doesn't
-   * expose unrelated personal files to its viewers.
+   * search_files tool's scope. Project chat: the project's result folder
+   * (project membership is the authorization — the route verified conversation
+   * access). Personal chat: the owner's whole PFS, but only when the owner
+   * themself is asking, so a shared chat doesn't expose unrelated personal
+   * files to its viewers.
    */
   private async listAccessibleFiles(params: {
     conversationId: string;
@@ -97,12 +97,20 @@ class ConversationFilesService {
     }
 
     if (scope) {
-      const { files } = await skillSandboxArtifactService.listAllForUser({
+      const rows = await FileModel.listByFolders({
         organizationId: params.organizationId,
-        userId: scope.folderOwnerUserId,
+        folderIds: [scope.folderId],
       });
       return {
-        files: files.filter((f) => f.folder === scope.folderName),
+        files: rows.map((row) => ({
+          id: row.id,
+          filename: row.filename,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+          createdAt: row.createdAt,
+          downloadable: true,
+          folder: row.folderName,
+        })),
         projectName: scope.projectName,
       };
     }

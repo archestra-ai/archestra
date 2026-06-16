@@ -893,7 +893,7 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
     return FileModel.create({
       organizationId,
       userId,
-      namespaceUserId: userId,
+      namespace: { kind: "user", userId: userId },
       conversationId: null,
       sandboxId: sandbox.id,
       folderId: null,
@@ -958,7 +958,7 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
       await FileModel.create({
         organizationId,
         userId: stranger.id,
-        namespaceUserId: stranger.id,
+        namespace: { kind: "user", userId: stranger.id },
         conversationId: null,
         sandboxId: strangerSandbox.id,
         folderId: null,
@@ -1057,10 +1057,10 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
       );
       expect(result.isError).toBe(false);
       expect(spy.mock.calls[0][0].folder).toBeNull();
-      expect(spy.mock.calls[0][0].folderOwnerUserId).toBeUndefined();
+      expect(spy.mock.calls[0][0].namespace).toBeUndefined();
     });
 
-    test("project chats force the project folder and its owner namespace", async () => {
+    test("project chats force the project folder and the project namespace", async () => {
       const { projectService } = await import("@/services/project");
       const project = await projectService.create({
         organizationId,
@@ -1096,7 +1096,10 @@ describe("PFS tools (search_files, my_file source, download_file folder)", () =>
       expect(result.isError).toBe(false);
       const call = spy.mock.calls[0][0];
       expect(call.folder?.name).toBe("tool-proj");
-      expect(call.folderOwnerUserId).toBe(userId);
+      expect(call.namespace).toEqual({
+        kind: "project",
+        projectId: project.id,
+      });
     });
   });
 });
@@ -1143,12 +1146,15 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
 
   async function makeProjectChatCtx(name: string) {
     const { projectService } = await import("@/services/project");
+    const { FolderModel } = await import("@/models");
     const project = await projectService.create({
       organizationId,
       userId,
       name,
       description: null,
     });
+    const folder = await FolderModel.findByProjectId(project.id);
+    if (!folder) throw new Error("project folder missing");
     const conversation = await ConversationModel.create({
       userId,
       organizationId,
@@ -1156,7 +1162,11 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
       projectId: project.id,
       title: name,
     });
-    return { project, ctx: { ...context, conversationId: conversation.id } };
+    return {
+      project,
+      folder,
+      ctx: { ...context, conversationId: conversation.id },
+    };
   }
 
   async function makePlainChatCtx() {
@@ -1194,7 +1204,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   });
 
   test("save_result lands in the project folder in a project chat", async () => {
-    const { project, ctx } = await makeProjectChatCtx("save-here");
+    const { folder, ctx } = await makeProjectChatCtx("save-here");
     const result = await executeArchestraTool(
       SAVE_RESULT_FULL_NAME,
       { filename: "result.md", content: "done" },
@@ -1206,7 +1216,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
 
     const { FileModel } = await import("@/models");
     const row = await FileModel.findById(out.fileId);
-    expect(row?.folderId).toBe(project.folderId);
+    expect(row?.folderId).toBe(folder.id);
   });
 
   test("save_result validates filename, content presence, and size", async () => {
@@ -1234,7 +1244,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   });
 
   test("search_files in a project chat sees only the project folder", async () => {
-    const { project, ctx } = await makeProjectChatCtx("searchable");
+    const { folder, ctx } = await makeProjectChatCtx("searchable");
     const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
@@ -1245,10 +1255,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     await FileModel.create({
       organizationId,
       userId,
-      namespaceUserId: userId,
+      namespace: { kind: "user", userId: userId },
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: project.folderId,
+      folderId: folder.id,
       folderName: "searchable",
       filename: "inside.txt",
       mimeType: "text/plain",
@@ -1258,7 +1268,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     await FileModel.create({
       organizationId,
       userId,
-      namespaceUserId: userId,
+      namespace: { kind: "user", userId: userId },
       conversationId: null,
       sandboxId: sandbox.id,
       folderId: null,
@@ -1291,7 +1301,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   });
 
   test("my_file uploads in a project chat are confined to the project folder", async () => {
-    const { project, ctx } = await makeProjectChatCtx("confined");
+    const { folder, ctx } = await makeProjectChatCtx("confined");
     const { FileModel, SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
@@ -1302,10 +1312,10 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     const inside = await FileModel.create({
       organizationId,
       userId,
-      namespaceUserId: userId,
+      namespace: { kind: "user", userId: userId },
       conversationId: null,
       sandboxId: sandbox.id,
-      folderId: project.folderId,
+      folderId: folder.id,
       folderName: "confined",
       filename: "in.txt",
       mimeType: "text/plain",
@@ -1315,7 +1325,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     const outside = await FileModel.create({
       organizationId,
       userId,
-      namespaceUserId: userId,
+      namespace: { kind: "user", userId: userId },
       conversationId: null,
       sandboxId: sandbox.id,
       folderId: null,

@@ -17,7 +17,7 @@ async function seedFile(params: {
     conversationId: params.conversationId ?? null,
     folderId: params.folderId ?? null,
     folderName: null,
-    namespaceUserId: params.userId,
+    namespace: { kind: "user", userId: params.userId },
     filename: params.filename ?? "out.png",
     mimeType: "image/png",
     sizeBytes: PNG.byteLength,
@@ -43,43 +43,57 @@ describe("FileModel", () => {
     expect(Buffer.from(found?.data ?? []).equals(PNG)).toBe(true);
   });
 
-  test("listForUser shows the author face and the folder-owner face, nothing else", async ({
+  test("listForUser shows the user's own files (root + personal folders), and excludes project-folder files", async ({
     makeOrganization,
     makeUser,
   }) => {
-    const folderOwner = await makeUser();
     const author = await makeUser();
     const stranger = await makeUser();
     const org = await makeOrganization();
 
-    // a result folder owned by folderOwner (project-chat shape) …
-    const [folder] = await db
+    // a personal folder owned by the author …
+    const [personal] = await db
       .insert(schema.foldersTable)
-      .values({
-        organizationId: org.id,
-        userId: folderOwner.id,
-        name: "results",
-      })
+      .values({ organizationId: org.id, userId: author.id, name: "notes" })
       .returning();
-    // … into which another member authored a file
+    // … a project folder (no user owner) …
+    const [project] = await db
+      .insert(schema.projectsTable)
+      .values({ organizationId: org.id, userId: author.id, name: "proj" })
+      .returning();
+    const [projectFolder] = await db
+      .insert(schema.foldersTable)
+      .values({ organizationId: org.id, projectId: project.id, name: "proj" })
+      .returning();
+
     await seedFile({
       organizationId: org.id,
       userId: author.id,
-      folderId: folder.id,
-      filename: "shared.png",
+      filename: "root.png",
     });
-
-    const ownerRows = await FileModel.listForUser({
+    await seedFile({
       organizationId: org.id,
-      userId: folderOwner.id,
+      userId: author.id,
+      folderId: personal.id,
+      filename: "in-personal.png",
     });
-    expect(ownerRows.map((r) => r.filename)).toContain("shared.png");
+    // a file the author produced into a project folder — surfaces via the
+    // project listing, NOT here.
+    await seedFile({
+      organizationId: org.id,
+      userId: author.id,
+      folderId: projectFolder.id,
+      filename: "in-project.png",
+    });
 
     const authorRows = await FileModel.listForUser({
       organizationId: org.id,
       userId: author.id,
     });
-    expect(authorRows.map((r) => r.filename)).toContain("shared.png");
+    expect(authorRows.map((r) => r.filename).sort()).toEqual([
+      "in-personal.png",
+      "root.png",
+    ]);
 
     const strangerRows = await FileModel.listForUser({
       organizationId: org.id,

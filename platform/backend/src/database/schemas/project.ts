@@ -7,20 +7,18 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import foldersTable from "./folder";
 import { team } from "./team";
 import usersTable from "./user";
 
 /**
  * A project: a named collection of chat conversations with a dedicated result
- * folder in the owner's persistent file system (PFS / My Files). The folder is
- * created together with the project and shares its name — project names are
- * validated with the folder-name rules for exactly that reason.
+ * folder (`folders.project_id`). The folder is created together with the
+ * project and shares its name — project names are validated with the
+ * folder-name rules for exactly that reason.
  *
- * Sharing (below) grants project READ access (browse chats, start your own,
- * read the folder through chats); writing in a chat always stays with that
- * chat's author, and the result folder is only reachable through project-chat
- * tools.
+ * Sharing (below) grants project access: browse chats, start your own, and
+ * full rights over the result folder's files (list/download/delete) — the
+ * folder belongs to the project, not to any one member.
  */
 const projectsTable = pgTable(
   "projects",
@@ -30,23 +28,14 @@ const projectsTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    /** Folder-name-validated; immutable in v1 (it names the folder on disk). */
+    /** Folder-name-validated; immutable in v1 (it names the result folder). */
     name: text("name").notNull(),
     description: text("description"),
-    /**
-     * The project's result folder in the OWNER's PFS namespace. Created with
-     * the project; survives project deletion as a plain browsable folder
-     * (hence no cascade — the folder has no delete path at all).
-     */
-    folderId: uuid("folder_id")
-      .notNull()
-      .references(() => foldersTable.id),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    // one project name per user — must agree with the folder uniqueness
-    // (skill_sandbox_folders is unique on (user_id, name) too).
+    // one project name per user.
     uniqueIndex("projects_user_name_uidx").on(table.userId, table.name),
   ],
 );

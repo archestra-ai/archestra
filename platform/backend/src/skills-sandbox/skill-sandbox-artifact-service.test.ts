@@ -12,7 +12,7 @@ async function seed(params: {
   return FileModel.create({
     organizationId: params.organizationId,
     userId: params.userId,
-    namespaceUserId: params.userId,
+    namespace: { kind: "user", userId: params.userId },
     conversationId: params.conversationId ?? null,
     sandboxId: params.sandboxId,
     folderId: null,

@@ -9,8 +9,8 @@ export interface ProjectFileScope {
   projectName: string;
   folderId: string;
   folderName: string;
-  /** The project owner — the folder lives in THEIR storage namespace. */
-  folderOwnerUserId: string;
+  /** The bytes belong to the project, not to any one member. */
+  namespace: { kind: "project"; projectId: string };
 }
 
 /**
@@ -39,8 +39,7 @@ export async function resolveProjectFileScope(
     .where(eq(schema.projectsTable.id, conversation.projectId));
   if (!project) return null;
 
-  const folders = await FolderModel.findByIds([project.folderId]);
-  const folder = folders.get(project.folderId);
+  const folder = await FolderModel.findByProjectId(project.id);
   if (!folder) {
     throw new SkillSandboxError(
       `the result folder of project "${project.name}" no longer exists; file operations are disabled in this chat`,
@@ -52,6 +51,6 @@ export async function resolveProjectFileScope(
     projectName: project.name,
     folderId: folder.id,
     folderName: folder.name,
-    folderOwnerUserId: project.userId,
+    namespace: { kind: "project", projectId: project.id },
   };
 }

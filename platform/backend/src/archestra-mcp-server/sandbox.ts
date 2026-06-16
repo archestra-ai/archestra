@@ -30,7 +30,7 @@ import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
 } from "@/skills-sandbox/types";
-import { asSandboxId, type SandboxId } from "@/types";
+import { asSandboxId, type SandboxFileListItem, type SandboxId } from "@/types";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -470,7 +470,7 @@ const registry = defineArchestraTools([
           path: args.path,
           mimeType: args.mimeType,
           folder: scope ? { id: scope.folderId, name: scope.folderName } : null,
-          folderOwnerUserId: scope?.folderOwnerUserId,
+          namespace: scope?.namespace,
         });
 
         logger.info(
@@ -608,18 +608,37 @@ const registry = defineArchestraTools([
         );
       }
 
-      // in a project chat the listing comes from the FOLDER OWNER's
-      // namespace (project membership is the authorization) and is confined
-      // to the project folder.
-      const { folders, files } =
-        await skillSandboxArtifactService.listAllForUser({
+      // in a project chat the listing is the project folder's files (project
+      // membership is the authorization); in a personal chat it is the user's
+      // own My Files.
+      let files: SandboxFileListItem[];
+      let folderNames: string[];
+      if (scope) {
+        const rows = await FileModel.listByFolders({
           organizationId: guard.userCtx.organizationId,
-          userId: scope ? scope.folderOwnerUserId : guard.userCtx.userId,
+          folderIds: [scope.folderId],
         });
+        files = rows.map((r) => ({
+          id: r.id,
+          filename: r.filename,
+          mimeType: r.mimeType,
+          sizeBytes: r.sizeBytes,
+          createdAt: r.createdAt,
+          downloadable: true,
+          folder: r.folderName,
+        }));
+        folderNames = [scope.folderName];
+      } else {
+        const all = await skillSandboxArtifactService.listAllForUser({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+        });
+        files = all.files;
+        folderNames = all.folders.map((f) => f.name);
+      }
 
       const query = args.query?.toLowerCase() ?? null;
       const matches = files.filter((f) => {
-        if (scope && f.folder !== scope.folderName) return false;
         if (query && !f.filename.toLowerCase().includes(query)) return false;
         if (!scope && args.folder && f.folder !== args.folder) return false;
         return true;
@@ -634,7 +653,7 @@ const registry = defineArchestraTools([
           sizeBytes: f.sizeBytes,
           createdAt: f.createdAt.toISOString(),
         })),
-        folders: scope ? [scope.folderName] : folders.map((f) => f.name),
+        folders: folderNames,
       };
 
       const summary =
@@ -713,7 +732,10 @@ const registry = defineArchestraTools([
         const row = await FileModel.create({
           organizationId: guard.userCtx.organizationId,
           userId: guard.userCtx.userId,
-          namespaceUserId: scope?.folderOwnerUserId ?? guard.userCtx.userId,
+          namespace: scope?.namespace ?? {
+            kind: "user",
+            userId: guard.userCtx.userId,
+          },
           conversationId: context.conversationId ?? null,
           folderId: scope?.folderId ?? null,
           folderName: scope?.folderName ?? null,

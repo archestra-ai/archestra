@@ -1,6 +1,7 @@
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
+import FolderModel from "@/models/folder";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
@@ -31,7 +32,7 @@ test("conversationFilesService.list groups generated + attachments with basename
   const artifact = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespaceUserId: user.id,
+    namespace: { kind: "user", userId: user.id },
     conversationId: conv.id,
     sandboxId: sandbox.id,
     folderId: null,
@@ -142,7 +143,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   const ownOutput = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespaceUserId: user.id,
+    namespace: { kind: "user", userId: user.id },
     conversationId: conv.id,
     sandboxId: convSandbox.id,
     folderId: null,
@@ -174,7 +175,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   const elsewhere = await FileModel.create({
     organizationId: org.id,
     userId: user.id,
-    namespaceUserId: user.id,
+    namespace: { kind: "user", userId: user.id },
     conversationId: null,
     sandboxId: otherSandbox.id,
     folderId: null,
@@ -229,6 +230,8 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
     name: "filespanel",
     description: null,
   });
+  const folder = await FolderModel.findByProjectId(project.id);
+  if (!folder) throw new Error("project folder missing");
   const conv = await ConversationModel.create({
     userId: member.id,
     organizationId: org.id,
@@ -245,10 +248,10 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
   const inFolder = await FileModel.create({
     organizationId: org.id,
     userId: owner.id,
-    namespaceUserId: owner.id,
+    namespace: { kind: "user", userId: owner.id },
     conversationId: null,
     sandboxId: ownerSandbox.id,
-    folderId: project.folderId,
+    folderId: folder.id,
     folderName: "filespanel",
     filename: "result.txt",
     mimeType: "text/plain",
@@ -259,7 +262,7 @@ test("project chat: myFiles is the project's result folder in the owner's namesp
   await FileModel.create({
     organizationId: org.id,
     userId: owner.id,
-    namespaceUserId: owner.id,
+    namespace: { kind: "user", userId: owner.id },
     conversationId: null,
     sandboxId: ownerSandbox.id,
     folderId: null,

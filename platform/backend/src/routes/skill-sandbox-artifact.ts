@@ -50,14 +50,13 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { artifactId }, organizationId, user }, reply) => {
       // "wrong owner" and "missing" collapse into the same 404 inside the
-      // service so cross-org probes can't tell them apart. Access: the
-      // producing sandbox's owner, the owner of the artifact's folder, or
-      // (read-only, this route) a member of the project sharing that folder.
+      // service so cross-org probes can't tell them apart. Access: the file's
+      // author, the personal-folder owner, or anyone with access to the
+      // project owning the folder.
       const artifact = await skillSandboxArtifactService.getArtifactForUser({
         artifactId,
         organizationId,
         userId: user.id,
-        allowSharedProjectRead: true,
       });
       if (!artifact) {
         throw new ApiError(404, "Artifact not found");

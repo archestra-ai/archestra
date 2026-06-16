@@ -641,6 +641,42 @@ export function getAcceptedFileTypes(
 }
 
 /**
+ * The MIME types a model can ingest directly, derived from its input
+ * modalities. Unlike {@link getAcceptedFileTypes} (a comma-joined string for the
+ * HTML `accept` attribute), this returns a Set for membership checks on the
+ * provider-prep path: a file part whose mediaType is absent is not sent as a
+ * document the provider would reject — it is referenced as a sandbox file
+ * instead. Pass `undefined`/`null` modalities to fall back to a safe readable
+ * default (text + images + PDF).
+ */
+export function getModelReadableMimeTypes(
+  modalities: ModelInputModality[] | null | undefined,
+): Set<string> {
+  // Treat an empty array the same as null — "capabilities unknown" — matching
+  // getAcceptedFileTypes / supportsFileUploads rather than "reads nothing".
+  const source =
+    modalities && modalities.length > 0
+      ? modalities
+      : DEFAULT_READABLE_MODALITIES;
+  const mimeTypes = new Set<string>();
+  for (const modality of source) {
+    const types = MODALITY_TO_MIME_TYPES[modality];
+    if (types) {
+      for (const type of types) {
+        mimeTypes.add(type);
+      }
+    }
+  }
+  return mimeTypes;
+}
+
+const DEFAULT_READABLE_MODALITIES: ModelInputModality[] = [
+  "text",
+  "image",
+  "pdf",
+];
+
+/**
  * Checks if a model supports any file uploads based on its input modalities.
  *
  * @param modalities - Array of input modalities from model capabilities

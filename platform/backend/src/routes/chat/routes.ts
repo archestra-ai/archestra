@@ -719,6 +719,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
+                // Loaded once and reused for both message assembly (to know
+                // which attachment types this model can read) and the context
+                // window breakdown below. A failed lookup is non-fatal.
+                const modelRow = await ModelModel.findByProviderAndModelId(
+                  provider,
+                  selectedModel,
+                ).catch((error) => {
+                  logger.warn(
+                    { error, conversationId },
+                    "[chat] failed to load model row for the turn",
+                  );
+                  return null;
+                });
+
                 const modelMessages = await buildModelMessages({
                   messages: normalizedMessagesForLLM,
                   conversationId,
@@ -727,6 +741,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   agentId: conversation.agentId,
                   provider,
                   selectedModel,
+                  inputModalities: modelRow?.inputModalities ?? null,
                   agentLlmApiKeyId: agent.llmApiKeyId,
                   systemPrompt,
                   abortSignal: chatAbortController.signal,
@@ -745,10 +760,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 let latestBreakdown: ContextWindowBreakdown | null = null;
                 let breakdownPricePerToken: number | null = null;
                 try {
-                  const modelRow = await ModelModel.findByProviderAndModelId(
-                    provider,
-                    selectedModel,
-                  );
                   breakdownPricePerToken = resolveInputPricePerToken(modelRow);
                   const breakdown = buildContextWindowBreakdown({
                     provider,

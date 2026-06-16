@@ -1,3 +1,5 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=Every flagged constraint targets a table created in this same migration (files, projects, project_shares, project_share_team — all empty), or the conversations.project_id FK on the all-NULL column just added above. Validation scans no existing rows and takes no blocking lock, so the add-validating-constraint / add-unique-constraint rules do not apply here.
 CREATE TYPE "public"."project_share_visibility" AS ENUM('organization', 'team');--> statement-breakpoint
 CREATE TABLE "files" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

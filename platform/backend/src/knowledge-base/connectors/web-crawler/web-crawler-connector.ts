@@ -187,6 +187,7 @@ export class WebCrawlerConnector extends BaseConnector {
     const excludePathPatterns = compileExcludePathPatterns(
       params.config.excludePathPatterns,
     );
+    const startHostname = new URL(startUrl).hostname;
     let previousRequestCompletedAt = 0;
 
     return new CheerioCrawler(
@@ -211,6 +212,30 @@ export class WebCrawlerConnector extends BaseConnector {
             gotOptions.headers = {
               ...gotOptions.headers,
               "User-Agent": params.config.userAgent ?? DEFAULT_USER_AGENT,
+            };
+
+            // got follows redirects internally, bypassing the per-request SSRF
+            // check above. Reject cross-host redirects without dialing the
+            // target (so an unreachable external host can't hang the crawl) and
+            // re-run the SSRF check on same-host redirects.
+            gotOptions.hooks = {
+              ...gotOptions.hooks,
+              beforeRedirect: [
+                ...(gotOptions.hooks?.beforeRedirect ?? []),
+                async (redirectOptions) => {
+                  if (!redirectOptions.url) return;
+                  const target = new URL(redirectOptions.url);
+                  if (target.hostname !== startHostname) {
+                    throw new Error(
+                      `Refusing to follow cross-host redirect to ${target.href}`,
+                    );
+                  }
+                  await assertPublicCrawlUrl({
+                    url: target.href,
+                    allowPrivateNetwork: this.allowPrivateNetwork,
+                  });
+                },
+              ],
             };
           },
         ],

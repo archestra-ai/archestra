@@ -1,0 +1,14 @@
+[[stages]]
+text = """Determine the exact current number of stargazers (stars) of Archestra's main open-source repository on GitHub. Submit your answer with result = {"stars": <integer>}."""
+
+[result_schema]
+type = "object"
+required = ["stars"]
+additionalProperties = false
+
+  [result_schema.properties.stars]
+  type = "integer"
+  minimum = 1
+
+[verifier]
+deps = []

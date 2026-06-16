@@ -32,7 +32,7 @@ testpaths = ["tests"]
 dev = [
     "ty==0.0.44",
     "ruff==0.15.16",
-    "pytest==8.4.1",
+    "pytest==9.0.3",
 ]
 
 [tool.ty.environment]

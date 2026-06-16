@@ -23,9 +23,19 @@ catalog:
 overrides:
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
-  protobufjs: '>=8.0.2'
+  protobufjs: '>=8.6.0'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.2
+  vite: 7.3.5
+  shell-quote: '>=1.8.4'
+  ws@>=8: '>=8.21.0'
+  # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
+  # catch; force that edge to the CVE-2026-48779 fix too.
+  botframework-streaming>ws: '>=8.21.0'
+  # form-data 3.0.5 / 4.0.6 (fix CVE-2026-12143, HIGH) were published 2026-06-12,
+  # inside the 7-day window — excluded from minimumReleaseAge below and pinned
+  # exact so a `>=` floor can't pull an unvetted release.
+  form-data@>=4: 4.0.6
+  form-data@<4: 3.0.5
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
   dompurify: 3.4.0
@@ -40,7 +50,8 @@ overrides:
   jws: 4.0.1
   qs: 6.15.2
   d3-path: 3.1.0
-  hono: 4.12.23
+  # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
+  hono: 4.12.25
   kysely: 0.28.17
   lodash: '>=4.18.0'
   lodash-es: 4.18.1
@@ -105,6 +116,10 @@ minimumReleaseAgeExclude:
   # regardless. @esbuild/* are the per-platform native binaries esbuild pulls in.
   - esbuild
   - "@esbuild/*"
+  # TEMPORARY: form-data 3.0.5 / 4.0.6 (fix CVE-2026-12143, HIGH) were published
+  # 2026-06-12 and clear the 7-day window on 2026-06-19. Remove on/after that date
+  # — the lockfile stays pinned at the fixed versions regardless.
+  - form-data
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

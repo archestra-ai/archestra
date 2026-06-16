@@ -513,7 +513,7 @@ def _infra_failed(env: EnvConfig, task: Task, lane: Lane, root_run_dir: Path, ex
         handle.write("\n")
     return RunResult(
         env_id=env.id, task_id=task.id, provider=lane.provider, model=lane.model,
-        outcome=Outcome.AGENT_ERROR, finish_reason=None, tool_call_count=0, total_tokens=None,
+        outcome=Outcome.AGENT_ERROR, finish_reason=None, tool_call_count=0, turn_count=0, total_tokens=None,
         agent_error=error, stage_count=len(task.stages), format_attempts=0, artifact_dir=str(subdir),
     )
 
@@ -552,6 +552,7 @@ def _run_one(
         "outcome": None,
         "finish_reason": None,
         "tool_call_count": 0,
+        "turn_count": 0,
         "total_tokens": None,
         "format_attempts": 0,
         "agent_error": None,
@@ -618,6 +619,7 @@ def _grade_cell(
 
     metadata["finish_reason"] = run.finish_reason
     metadata["tool_call_count"] = len(run.tool_calls)
+    metadata["turn_count"] = run.turn_count
     metadata["total_tokens"] = run.total_tokens
 
     # classify by submission first: a well-formed answer captured before a later stage's stream
@@ -1096,6 +1098,7 @@ def _finish(
         outcome=outcome,
         finish_reason=run.finish_reason if run else None,
         tool_call_count=len(run.tool_calls) if run else 0,
+        turn_count=run.turn_count if run else 0,
         total_tokens=run.total_tokens if run else None,
         agent_error=agent_error,
         stage_count=len(task.stages),

@@ -63,16 +63,20 @@ def ensure_provider_and_models(
     deadline = time.monotonic() + timeout_s
     forced = False
     while True:
-        resolved = _resolve(client.list_models(), models)
+        rows = client.list_models()
+        resolved = _resolve(rows, models)
         missing = [name for name in models if name not in resolved]
         if not missing:
             return resolved
+        available = sorted(
+            n for r in rows if r.get("provider") == provider and isinstance(n := r.get("modelId"), str)
+        )
         if not forced:
-            logger.info("forcing model sync; still missing %s", missing)
+            logger.info("forcing model sync; still missing %s; available: %s", missing, available)
             client.sync_models()
             forced = True
         if time.monotonic() >= deadline:
-            raise SystemExit(f"models never synced after {timeout_s}s: {missing}")
+            raise SystemExit(f"models never synced after {timeout_s}s: {missing}; available: {available}")
         time.sleep(interval_s)
 
 

@@ -63,6 +63,7 @@ class ChatRunResult:
     text: str  # accumulated final assistant text
     tool_calls: list[str] = field(default_factory=list)  # tool names the model invoked, in order
     tool_invocations: list[dict[str, JsonValue]] = field(default_factory=list)  # {name, input} per call
+    turn_count: int = 0  # model steps (one LLM call each), counted from stream step boundaries
     finish_reason: str | None = None
     total_tokens: int | None = None
     stream_error: str | None = None  # an error event surfaced mid-stream (run did not finish clean)
@@ -287,6 +288,8 @@ def _apply_chat_event(result: ChatRunResult, event: dict[str, JsonValue]) -> Non
     """fold one stream event into the accumulating result. tolerant of the AI-SDK text-delta
     field name (`delta` in v5; some paths emit `text`)."""
     match event.get("type"):
+        case "start-step":
+            result.turn_count += 1
         case "text-delta":
             delta = event.get("delta")
             if not isinstance(delta, str):

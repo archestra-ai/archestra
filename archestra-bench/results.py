@@ -33,6 +33,7 @@ class RunResult:
     outcome: Outcome
     finish_reason: str | None
     tool_call_count: int
+    turn_count: int
     total_tokens: int | None
     agent_error: str | None
     stage_count: int
@@ -74,6 +75,8 @@ class Aggregate:
     total: int
     passed: int
     outcomes: dict[str, int]
+    total_turns: int
+    total_tokens: int
     per_env: list[GroupAggregate]
     per_task: list[GroupAggregate]
 
@@ -87,6 +90,8 @@ class Aggregate:
             "passed": self.passed,
             "pass_rate": self.pass_rate,
             "outcomes": self.outcomes,
+            "total_turns": self.total_turns,
+            "total_tokens": self.total_tokens,
             "per_env": [_group_json("env_id", g) for g in self.per_env],
             "per_task": [_group_json("task_id", g) for g in self.per_task],
         }
@@ -108,6 +113,8 @@ def aggregate(results: list[RunResult]) -> Aggregate:
         total=len(results),
         passed=sum(r.verifier_passed for r in results),
         outcomes=_outcome_counts(results),
+        total_turns=sum(r.turn_count for r in results),
+        total_tokens=sum(r.total_tokens or 0 for r in results),
         per_env=_group_by(results, lambda r: r.env_id),
         per_task=_group_by(results, lambda r: r.task_id),
     )
@@ -150,6 +157,7 @@ def render_markdown(rows: list[RunResult]) -> str:
         lines += ["", "## Aggregate", ""]
         lines.append(f"- overall: {agg.passed}/{agg.total} passed ({agg.pass_rate:.0%})")
         lines.append(f"- outcomes: {_outcome_summary(agg.outcomes)}")
+        lines.append(f"- turns: {agg.total_turns}, tokens: {agg.total_tokens}")
         lines += ["", "### By environment", ""]
         lines += [_group_line(g) for g in agg.per_env]
         lines += ["", "### By task", ""]

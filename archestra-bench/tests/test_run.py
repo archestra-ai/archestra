@@ -203,7 +203,7 @@ def test_build_run_plan_fans_lanes_over_envs_and_carries_flag() -> None:
 def _result(provider: str, model: str) -> RunResult:
     return RunResult(
         env_id="e", task_id="t", provider=provider, model=model, outcome=Outcome.PASSED,
-        finish_reason=None, tool_call_count=0, total_tokens=None, agent_error=None,
+        finish_reason=None, tool_call_count=0, turn_count=0, total_tokens=None, agent_error=None,
         stage_count=1, format_attempts=0, artifact_dir=None,
     )
 
@@ -277,7 +277,7 @@ def test_lane_unit_preserves_partial_results_and_fills_only_missing(tmp_path: Pa
     tasks = (_task("t1"), _task("t2"))
     done = RunResult(
         env_id="e", task_id="t1", provider="gemini", model="g", outcome=Outcome.PASSED,
-        finish_reason="stop", tool_call_count=0, total_tokens=None, agent_error=None,
+        finish_reason="stop", tool_call_count=0, turn_count=0, total_tokens=None, agent_error=None,
         stage_count=0, format_attempts=0, artifact_dir=None,
     )
 

@@ -935,13 +935,13 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
-    // Service-account (client_credentials) tokens minted for an MCP OAuth client
+    // Application (client_credentials) tokens minted for an MCP OAuth client
     // carry no acting user. Authorize them against the client's allowed gateways
     // instead of a user's team membership.
     if (
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      return validateMcpOauthClientServiceAccountToken({
+      return validateMcpOauthClientToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
@@ -1012,18 +1012,19 @@ async function validateOAuthTokenByHash(params: {
 /**
  * Authorize a client_credentials access token minted for an MCP OAuth client.
  *
- * These are service-account tokens: there is no acting user, so authorization
- * is the client's explicit `allowedGatewayIds` list rather than team
- * membership. The per-gateway check here is the real authorization gate — a
- * successful result grants access to exactly the requested gateway and nothing
- * broader (teamId/isOrganizationToken stay null/false, so no downstream code
- * re-broadens access).
+ * These are application tokens (machine-to-machine): there is no acting user,
+ * so authorization is the client's explicit `allowedGatewayIds` list rather
+ * than team membership. The per-gateway check here is the real authorization
+ * gate — a successful result grants access to exactly the requested gateway and
+ * nothing broader (teamId/isOrganizationToken stay null/false, so no downstream
+ * code re-broadens access).
  *
- * Note: service accounts are a shared-credential pattern with no acting user,
- * so gateway tools that resolve per-user/dynamic upstream credentials at call
- * time are not supported — assign shared/org-scoped credentials to those tools.
+ * Note: an MCP OAuth client is a shared application credential with no acting
+ * user, so gateway tools that resolve per-user/dynamic upstream credentials at
+ * call time are not supported — assign shared/org-scoped credentials to those
+ * tools.
  */
-async function validateMcpOauthClientServiceAccountToken(params: {
+async function validateMcpOauthClientToken(params: {
   accessToken: {
     id: string;
     clientId: string | null;

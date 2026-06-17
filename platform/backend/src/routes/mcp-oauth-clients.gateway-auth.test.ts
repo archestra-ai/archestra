@@ -10,7 +10,7 @@ import { describe, expect, test } from "@/test";
 import { validateMCPGatewayToken } from "./mcp-gateway.utils";
 
 /**
- * End-to-end authorization tests for MCP OAuth client (service-account) tokens
+ * End-to-end authorization tests for MCP OAuth client (application) tokens
  * at the gateway boundary. These exercise the security gate added to
  * validateOAuthTokenByHash: a client_credentials token is accepted only for the
  * gateways its client is explicitly scoped to, in the same organization.
@@ -58,7 +58,7 @@ describe("MCP OAuth client gateway authorization", () => {
     expect(result?.organizationId).toBe(org.id);
     expect(result?.teamId).toBeNull();
     expect(result?.isOrganizationToken).toBe(false);
-    // Service accounts have no acting user.
+    // Application (machine-to-machine) tokens have no acting user.
     expect(result?.isUserToken).toBeUndefined();
     expect(result?.userId).toBeUndefined();
   });

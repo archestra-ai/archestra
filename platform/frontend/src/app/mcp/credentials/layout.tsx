@@ -15,7 +15,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/mcp/credentials/oauth-clients": {
     title: "OAuth Clients",
     description:
-      "Register backend services and bots that authenticate to MCP gateways with OAuth client credentials",
+      "Register applications that authenticate to MCP gateways with OAuth client credentials",
   },
 };
 

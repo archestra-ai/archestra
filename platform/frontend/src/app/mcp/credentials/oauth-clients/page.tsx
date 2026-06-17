@@ -159,7 +159,7 @@ export default function OAuthClientsPage() {
         columns={columns}
         data={oauthClients}
         isLoading={isPending}
-        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call MCP gateways."
+        emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways."
         hasActiveFilters={Boolean(search)}
         filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
         onClearFilters={() =>
@@ -306,7 +306,7 @@ function CreateOAuthClientDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register a backend service or bot that can call MCP gateways with OAuth client credentials."
+      description="Register an application (a backend service, automation job, or bot) that can call MCP gateways with OAuth client credentials."
     >
       <DialogForm
         onSubmit={async (event) => {

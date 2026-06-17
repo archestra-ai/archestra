@@ -54,9 +54,9 @@ Archestra returns the lifetime of user OAuth access tokens through the standard 
 
 Admins can change this in **Settings > Organization > Auth**. The setting is organization-wide and applies to newly issued user OAuth access tokens, including MCP OAuth 2.1 and custom application authorization-code flows.
 
-### OAuth Client Credentials (Service Accounts)
+### OAuth Client Credentials (Applications)
 
-When the caller is a backend service, automation job, or another team's bot rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an app, not a person.
+When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
 Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
 
@@ -68,7 +68,7 @@ The client exchanges its credentials for a short-lived (1-hour) bearer token at 
 
 It then sends that token to the gateway like any other OAuth access token (`Authorization: Bearer <token>`). The token is rejected by any gateway not on the client's list, and by gateways in another organization.
 
-Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — for gateways consumed by service accounts, assign tools to a shared or service-account connection rather than **Resolve at call time**.
+Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — for gateways consumed by applications, assign tools to a shared connection rather than **Resolve at call time**.
 
 ### Bearer Token
 

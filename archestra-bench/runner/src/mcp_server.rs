@@ -128,6 +128,15 @@ impl BenchmarkMcp {
             .with_draft(Draft::Draft202012)
             .build(schema)
             .map_err(|e| McpServerError::Schema(format!("{e}")))?;
+        // The published submit-tool schema forbids the empty object (`minProperties: 1`) so that
+        // schema-literal models cannot satisfy it with `{}`. Keep grading in sync: reject a task whose
+        // result_schema would itself accept `{}`, otherwise the two layers diverge (a submission the
+        // model is blocked from sending could pass grading).
+        if validator.is_valid(&JsonValue::Object(serde_json::Map::new())) {
+            return Err(McpServerError::Schema(
+                "result_schema must not accept an empty object; the submit tool requires a non-empty result".to_string(),
+            ));
+        }
         *self.ctx.lock().await = Some(TaskContext {
             task_key: task_key.into(),
             validator,
@@ -141,7 +150,7 @@ impl BenchmarkMcp {
         Ok(())
     }
 
-    pub fn tool_input_schema(schema: &JsonValue) -> serde_json::Map<String, JsonValue> {
+    fn tool_input_schema(schema: &JsonValue) -> serde_json::Map<String, JsonValue> {
         let mut properties = serde_json::Map::new();
         properties.insert("result".to_string(), schema.clone());
         let mut map = serde_json::Map::new();
@@ -230,26 +239,21 @@ impl ServerHandler for BenchmarkMcpHandler {
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>>
     + rmcp::service::MaybeSendFuture
     + '_ {
-        let mut schema = serde_json::Map::new();
-        schema.insert("type".to_string(), JsonValue::String("object".to_string()));
-        let mut result_prop = serde_json::Map::new();
-        result_prop.insert("type".to_string(), JsonValue::String("object".to_string()));
-        schema.insert(
-            "properties".to_string(),
-            JsonValue::Object({
-                let mut m = serde_json::Map::new();
-                m.insert("result".to_string(), JsonValue::Object(result_prop));
-                m
-            }),
-        );
-        schema.insert(
-            "required".to_string(),
-            JsonValue::Array(vec![JsonValue::String("result".to_string())]),
-        );
+        // `result` is a free-form object whose required fields differ per task and are described in
+        // the task prose. The schema is snapshotted to the backend DB at MCP install time (before any
+        // task is active), so it must be task-agnostic. `minProperties: 1` forbids the empty object:
+        // schema-literal models (e.g. kimi-for-coding) fill tool arguments from the JSON schema rather
+        // than the prose, and a bare `{"type":"object"}` makes them submit `{}`; requiring a non-empty
+        // object forces them to emit the answer fields.
+        let result_schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": true,
+            "minProperties": 1
+        });
         let tool = rmcp::model::Tool::new(
             TOOL_NAME,
-            "Submit your final answer for grading. Pass it as the `result` argument: a single JSON object matching the format described in your task instructions. Do not write a file -- call this tool. If the format is wrong you will get a description of the problem; fix it and call this tool again.",
-            schema,
+            "Submit your final answer. Pass it as the `result` argument: a single JSON object matching the format described in your task instructions. Do not write a file -- call this tool. If the format is wrong you will get a description of the problem; fix it and call this tool again.",
+            BenchmarkMcp::tool_input_schema(&result_schema),
         );
         std::future::ready(Ok(ListToolsResult::with_all_items(vec![tool])))
     }
@@ -266,7 +270,7 @@ impl ServerHandler for BenchmarkMcpHandler {
             let mut guard = ctx.lock().await;
             let Some(task_ctx) = guard.as_mut() else {
                 return Ok(text_result(
-                    "No benchmark task is active; this submission was ignored.",
+                    "No task is active; this submission was ignored.",
                 ));
             };
             if !task_ctx.accepting {
@@ -492,6 +496,55 @@ mod tests {
             }
             other => panic!("expected Accepted, got {other:?}"),
         }
+        mcp.stop().await;
+    }
+
+    #[test]
+    fn test_tool_input_schema_forbids_empty_result() {
+        // The published `result` argument must reject the empty object so schema-literal models cannot
+        // satisfy it with `{}`; the required fields themselves come from the task prose.
+        let schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": true,
+            "minProperties": 1
+        });
+        let input = BenchmarkMcp::tool_input_schema(&schema);
+        assert_eq!(input["properties"]["result"]["minProperties"], 1);
+
+        let validator = Validator::options()
+            .with_draft(Draft::Draft202012)
+            .build(&schema)
+            .unwrap();
+        assert!(validator.validate(&serde_json::json!({})).is_err());
+        assert!(
+            validator
+                .validate(&serde_json::json!({"median_salary": 84712}))
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_begin_task_rejects_empty_admitting_schema() {
+        // A schema that would accept `{}` must be rejected up front, keeping grading in sync with the
+        // published `minProperties: 1` tool schema.
+        let mcp = BenchmarkMcp::start("benchmark-empty-test").await.unwrap();
+        let err = mcp
+            .begin_task("cell-1", &serde_json::json!({"type": "object"}), 3)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, McpServerError::Schema(_)));
+        // A schema requiring a field is accepted.
+        mcp.begin_task(
+            "cell-1",
+            &serde_json::json!({
+                "type": "object",
+                "required": ["answer"],
+                "properties": {"answer": {"type": "string"}}
+            }),
+            3,
+        )
+        .await
+        .unwrap();
         mcp.stop().await;
     }
 }

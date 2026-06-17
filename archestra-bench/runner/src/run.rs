@@ -27,7 +27,9 @@ use crate::seeding::{
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
-const BENCH_MCP_NAME: &str = "benchmark";
+// Model-visible MCP server name (tools surface as `<name>-<lane>__submit_result`). Kept neutral so
+// the agent is not cued that it is being evaluated, which can shift model behavior.
+const BENCH_MCP_NAME: &str = "task";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;

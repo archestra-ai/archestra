@@ -1,5 +1,5 @@
 ---
-name: archestra-dev-deps
+name: archestra-dev-override-sweep
 description: Use when asked to sweep, clean up, or revisit pnpm overrides and minimumReleaseAge exclusions in platform/pnpm-workspace.yaml — unwinding a matured temporary CVE pin once its fix has cleared the 7-day window, or removing an override the dependency graph has made redundant. This skill only sweeps existing pins; it does not author new CVE fixes.
 ---
 

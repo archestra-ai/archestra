@@ -358,7 +358,10 @@ mod tests {
             .find("Root-cause notes")
             .expect("failure-cluster section present");
         assert!(loop_idx < fixture_idx, "loop section must lead fixtures");
-        assert!(fixture_idx < cluster_idx, "fixtures before root-cause notes");
+        assert!(
+            fixture_idx < cluster_idx,
+            "fixtures before root-cause notes"
+        );
         // Every rubric field label must be spelled out so each finding is forced through it.
         for field in [
             "Surface & tier",

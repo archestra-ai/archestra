@@ -1,96 +1,12 @@
-//! Typed model of a rollout's `run.json` plus the deterministic metrics block fed to the reducer.
+//! Loading a rollout's `run.json` plus the deterministic metrics block fed to the reducer. The
+//! `RunMeta`/`RolloutId` shapes live in `archestra-bench-core` (shared with the harness writer).
 
 use std::collections::BTreeMap;
-use std::fmt;
 use std::path::Path;
 
 use eyre::{Context, Result};
-use serde::Deserialize;
-
-/// Identifies a benchmark rollout. Taken from `run.json`'s authoritative fields rather than the
-/// `task__lane` directory name, which is `__`-ambiguous. Ordering drives deterministic reduce input.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RolloutId {
-    pub env: String,
-    pub task: String,
-    pub lane: String,
-}
-
-impl fmt::Display for RolloutId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}__{}", self.env, self.task, self.lane)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct RunMeta {
-    pub env_id: String,
-    pub task_id: String,
-    pub lane: String,
-    pub provider: String,
-    pub model: String,
-    pub outcome: String,
-    #[serde(default)]
-    pub finish_reason: Option<String>,
-    #[serde(default)]
-    pub tool_call_count: u64,
-    #[serde(default)]
-    pub turn_count: u64,
-    #[serde(default)]
-    pub total_tokens: Option<u64>,
-    #[serde(default)]
-    pub agent_error: Option<String>,
-    #[serde(default)]
-    pub stage_count: u64,
-    #[serde(default)]
-    pub format_attempts: u64,
-    #[serde(default)]
-    pub verifier_exit_code: Option<i64>,
-    #[serde(default)]
-    pub verifier_timed_out: Option<bool>,
-}
-
-impl RunMeta {
-    pub fn rollout_id(&self) -> RolloutId {
-        RolloutId {
-            env: self.env_id.clone(),
-            task: self.task_id.clone(),
-            lane: self.lane.clone(),
-        }
-    }
-
-    pub fn is_pass(&self) -> bool {
-        self.outcome == "passed"
-    }
-
-    /// One-line outcome summary embedded in the per-trajectory map prompt.
-    pub fn summarize_outcome(&self) -> String {
-        let mut parts = vec![
-            format!("outcome={}", self.outcome),
-            format!("provider/model={}/{}", self.provider, self.model),
-            format!("turns={}", self.turn_count),
-            format!("tool_calls={}", self.tool_call_count),
-            format!("stages={}", self.stage_count),
-            format!("format_attempts={}", self.format_attempts),
-        ];
-        if let Some(reason) = &self.finish_reason {
-            parts.push(format!("finish={reason}"));
-        }
-        if let Some(tokens) = self.total_tokens {
-            parts.push(format!("tokens={tokens}"));
-        }
-        if let Some(code) = self.verifier_exit_code {
-            parts.push(format!("verifier_exit={code}"));
-        }
-        if self.verifier_timed_out == Some(true) {
-            parts.push("verifier_timed_out=true".to_string());
-        }
-        if let Some(err) = &self.agent_error {
-            parts.push(format!("agent_error={err}"));
-        }
-        parts.join(" ")
-    }
-}
+// Re-exported so existing `runmeta::{RunMeta, RolloutId}` imports keep resolving.
+pub use archestra_bench_core::{RolloutId, RunMeta};
 
 pub fn load_run_meta(rollout_dir: &Path) -> Result<RunMeta> {
     let path = rollout_dir.join("run.json");

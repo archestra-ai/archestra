@@ -96,13 +96,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "toml",
 ]
 
 [[package]]
 name = "archestra_bench"
 version = "0.1.0"
 dependencies = [
+ "archestra-bench-core",
  "axum",
  "base64",
  "bytes",
@@ -3375,6 +3375,7 @@ dependencies = [
 name = "trajectory-analyzer"
 version = "0.1.0"
 dependencies = [
+ "archestra-bench-core",
  "chrono",
  "clap",
  "eyre",

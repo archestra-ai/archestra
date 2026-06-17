@@ -24,7 +24,11 @@ pub struct Lane {
 impl Lane {
     /// Resolve this lane's endpoint into the provider the LLM client is built from.
     pub fn provider(&self) -> Result<LLMProvider> {
-        to_provider(self.provider, self.base_url.clone(), self.api_key_env.clone())
+        to_provider(
+            self.provider,
+            self.base_url.clone(),
+            self.api_key_env.clone(),
+        )
     }
 }
 
@@ -97,7 +101,10 @@ mod tests {
 
         let kimi = lanes.get("kimi").unwrap();
         assert_eq!(kimi.provider, ProviderKind::Anthropic);
-        assert_eq!(kimi.base_url.as_deref(), Some("https://api.kimi.com/coding/"));
+        assert_eq!(
+            kimi.base_url.as_deref(),
+            Some("https://api.kimi.com/coding/")
+        );
         assert_eq!(kimi.api_key_env.as_deref(), Some("KIMI_API_KEY"));
     }
 

@@ -13,6 +13,7 @@ name = "archestra_bench"
 path = "src/main.rs"
 
 [dependencies]
+archestra-bench-core = { path = "../core" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "signal", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }

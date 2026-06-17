@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use archestra_bench_core::slug;
 use chrono::Utc;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -1848,19 +1849,10 @@ fn cell_token(cell_key: &str, model_name: &str) -> String {
     format!("{slug}-{digest}")
 }
 
-fn slug(value: &str) -> String {
-    let re = regex::Regex::new(r"[^A-Za-z0-9._-]+").expect("valid regex");
-    let s = re
-        .replace_all(value, "_")
-        .trim_matches(|c| c == '.' || c == '_' || c == '-')
-        .to_string();
-    if s.is_empty() { "run".to_string() } else { s }
-}
-
 fn run_subdir(env_id: &str, task_id: &str, lane: &Lane) -> String {
-    // Layout is `<env>/<task>__<lane>` — the contract the Python harness writes (run.py:_run_subdir)
-    // and the trajectory analyzer reads. Do not add intermediate directory levels.
-    format!("{}/{}__{}", slug(env_id), slug(task_id), lane.slug())
+    // The `<env>/<task>__<lane>` layout is owned by the shared contract crate so the harness writer
+    // and the analyzer reader cannot drift (this is what broke before).
+    archestra_bench_core::cell_dir(env_id, task_id, &lane.name)
 }
 
 fn cell_id(task: &Task, lane: &Lane) -> String {
@@ -2123,6 +2115,40 @@ mod tests {
         let s = run_subdir("basic", "median-salary", &lane);
         // <env>/<task>__<lane> — the analyzer's expected layout, no intermediate task level.
         assert_eq!(s, "basic/median-salary__openai-gpt-4");
+    }
+
+    #[test]
+    fn test_run_json_and_trajectory_satisfy_core_contract() {
+        // The harness writes run.json/trajectory.jsonl; the analyzer reads them via archestra-bench-core.
+        // Pin that the field names + outcome strings the runner commits to deserialize into the shared
+        // contract types, so a writer change that breaks the reader fails here.
+        let run_json = serde_json::json!({
+            "env_id": "basic",
+            "task_id": "median-salary",
+            "lane": "kimi",
+            "provider": "openrouter",
+            "model": "m",
+            "outcome": Outcome::Passed.value(),
+            "tool_call_count": 3,
+            "verifier_exit_code": 0,
+        });
+        let meta: archestra_bench_core::RunMeta = serde_json::from_value(run_json).unwrap();
+        assert!(meta.is_pass());
+        assert_eq!(meta.rollout_id().to_string(), "basic/median-salary__kimi");
+        assert_eq!(
+            meta.rollout_id().to_string(),
+            run_subdir("basic", "median-salary", &dummy_lane("kimi"))
+        );
+
+        let line = serde_json::json!({
+            "sequence": 1, "timestamp": "t", "kind": "tool_call",
+            "tool_call_id": "x", "tool_name": "run_command", "input": {"cmd": "ls"},
+        });
+        let event: archestra_bench_core::Event = serde_json::from_value(line).unwrap();
+        assert!(matches!(
+            event,
+            archestra_bench_core::Event::ToolCall { .. }
+        ));
     }
 
     #[tokio::test]

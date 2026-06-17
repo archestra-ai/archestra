@@ -1,36 +1,7 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Outcome {
-    Passed,
-    Failed,
-    FormatFailed,
-    NoSubmission,
-    AgentError,
-}
-
-impl Outcome {
-    pub fn value(&self) -> &'static str {
-        match self {
-            Outcome::Passed => "passed",
-            Outcome::Failed => "failed",
-            Outcome::FormatFailed => "format_failed",
-            Outcome::NoSubmission => "no_submission",
-            Outcome::AgentError => "agent_error",
-        }
-    }
-
-    pub fn from_value(value: &str) -> Option<Self> {
-        match value {
-            "passed" => Some(Outcome::Passed),
-            "failed" => Some(Outcome::Failed),
-            "format_failed" => Some(Outcome::FormatFailed),
-            "no_submission" => Some(Outcome::NoSubmission),
-            "agent_error" => Some(Outcome::AgentError),
-            _ => None,
-        }
-    }
-}
+// The outcome taxonomy is the shared run.json contract (analyzer reads the same strings).
+pub use archestra_bench_core::Outcome;
 
 #[derive(Debug, Clone)]
 pub struct RunResult {

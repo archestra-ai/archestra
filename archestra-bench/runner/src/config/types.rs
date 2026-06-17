@@ -11,7 +11,7 @@ pub struct Lane {
 
 impl Lane {
     pub fn slug(&self) -> String {
-        slug(&self.name)
+        archestra_bench_core::slug(&self.name)
     }
 
     pub fn key_env(&self) -> String {
@@ -88,19 +88,4 @@ impl Task {
     pub fn expected_dir(&self) -> PathBuf {
         self.dir.join("expected")
     }
-}
-
-pub fn slug(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    let s = out
-        .trim_matches(|c| c == '.' || c == '_' || c == '-')
-        .to_string();
-    if s.is_empty() { "run".to_string() } else { s }
 }

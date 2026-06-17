@@ -45,13 +45,19 @@ Smallest blast radius, trivially revertible, easy to bisect.
 1. Pick one override to test. Remove its line from `overrides:` (and any comment that
    documents only that line).
 2. Re-resolve: `corepack pnpm install --lockfile-only --ignore-scripts`.
-3. Judge from `git diff platform/pnpm-lock.yaml`. A *redundant* override's removal touches
-   **only** the `overrides:` metadata block and the `specifier:` reflection lines — nothing
-   else. If the diff adds or removes *anything* in the resolved tree — a `version:`, a
-   `name@version:` package key (e.g. `+ picomatch@2.3.2:`), or a `snapshots:` entry — the
-   override changed resolution and is load-bearing: revert it. Read the whole diff; don't
-   grep for `version:` alone, since a resolution shift often appears only as a new/removed
-   package key. If nothing outside the override metadata moved, it was redundant: keep it.
+3. Judge from `git diff platform/pnpm-lock.yaml`. **Redundant ⇒ the diff is empty, or at
+   most drops the override's own line from the top `overrides:` block / flips a `specifier:`
+   reflection.** What proves the override was load-bearing is any edit under the resolution
+   sections — `importers` (dependency refs), `packages` (a `name@version:` key, e.g.
+   `+ picomatch@2.3.2:`), or `snapshots` (dependency edges); revert if any of those moved.
+   Read the whole diff — don't grep for `version:` alone, since a shift usually shows up as a
+   new/removed package key, not a `version:` line.
+
+   pnpm (v11) often leaves the now-orphaned override line in the lockfile's `overrides:`
+   block, so an empty lockfile diff is the *normal* redundant result, not a sign nothing ran.
+   That stale line is inert metadata — not a re-applied override — and the `--frozen-lockfile`
+   gate below confirms it. Don't force a full reinstall or `pnpm dedupe` to purge it; that
+   adds unrelated graph churn. (A separate normalization PR can tidy it if it ever matters.)
 4. Verify (below).
 
 Watch for false positives: a nested override (e.g. `mammoth>@xmldom/xmldom`) can look

@@ -16,8 +16,8 @@ Other overrides quietly go stale as the dependency graph catches up. Keeping tha
 override list lean is this skill's job — it has two sweep modes below.
 
 **Out of scope:** authoring new CVE fixes (adding overrides for freshly-flagged
-advisories) — that's the CVE-fix workflow / `i-fix-cve`. This skill only cleans up
-overrides that already exist.
+advisories) — that's the CVE-fix workflow. This skill only cleans up overrides that
+already exist.
 
 Run all commands from `platform/`. Helper scripts referenced below live in this skill's
 `scripts/` directory; `<skill-dir>` is the base directory printed when the skill loads.

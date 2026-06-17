@@ -4,14 +4,11 @@ use std::process::Command;
 use archestra_bench::config::{load_envs, load_lanes};
 
 fn bench_dir() -> PathBuf {
+    // CARGO_MANIFEST_DIR is archestra-bench/runner; the benchmark root is its parent.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("archestra-bench")
+        .to_path_buf()
 }
 
 fn copy_bench_to_temp(tmp: &Path) -> PathBuf {

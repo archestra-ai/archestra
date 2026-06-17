@@ -56,8 +56,8 @@ struct Args {
 }
 
 fn default_bench_dir() -> &'static str {
-    // CARGO_MANIFEST_DIR is platform/archestra-rs/archestra-bench; the benchmark root is three levels up.
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../../archestra-bench")
+    // CARGO_MANIFEST_DIR is archestra-bench/runner; the benchmark root is its parent.
+    concat!(env!("CARGO_MANIFEST_DIR"), "/..")
 }
 
 #[tokio::main]

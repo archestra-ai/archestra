@@ -133,11 +133,13 @@ fn default_bench_dir() -> &'static str {
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    // The benchmark relies on `info` for operational logs but rmcp's server spans are noise; the
-    // analyzer drives its own progress UI and wants a quiet default. `RUST_LOG` overrides either.
+    // The benchmark relies on `info` for operational logs, but two dependency targets are pure noise:
+    // rmcp's server spans, and the analyzer's per-tool-call agent logs (`full` runs the reduce phase
+    // under this same filter, and its spinner already shows turn/tool/subagent counts). `analyze` alone
+    // wants a quiet default. `RUST_LOG` overrides either.
     let default_filter = match &cli.cmd {
         Cmd::Analyze(_) => "warn",
-        _ => "info,rmcp=warn",
+        _ => "info,rmcp=warn,nitpicker_agent=warn",
     };
     init_tracing(default_filter);
 

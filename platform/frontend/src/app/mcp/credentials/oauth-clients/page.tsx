@@ -11,14 +11,6 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import {
-  formatProviderKeySummary,
-  type ProviderApiKeyMap,
-  providerApiKeyArrayToMap,
-  providerApiKeyMapToArray,
-} from "@/components/provider-key-mappings-field";
-import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
@@ -33,55 +25,48 @@ import { Label } from "@/components/ui/label";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
-  useCreateLlmOauthClient,
-  useDeleteLlmOauthClient,
-  useLlmOauthClients,
-  useRotateLlmOauthClientSecret,
-  useUpdateLlmOauthClient,
-} from "@/lib/llm-oauth-clients.query";
-import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+  useCreateMcpOauthClient,
+  useDeleteMcpOauthClient,
+  useMcpOauthClients,
+  useRotateMcpOauthClientSecret,
+  useUpdateMcpOauthClient,
+} from "@/lib/mcp-oauth-clients.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
-type LlmOauthClient =
-  archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
+type McpOauthClient =
+  archestraApiTypes.GetMcpOauthClientsResponses["200"][number];
 
 export default function OAuthClientsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
-  const providerApiKeyIdFilter = searchParams.get("providerApiKeyId") || "all";
 
-  const { data: oauthClients = [], isPending } = useLlmOauthClients({
+  const { data: oauthClients = [], isPending } = useMcpOauthClients({
     search: search || undefined,
-    providerApiKeyId:
-      providerApiKeyIdFilter === "all" ? undefined : providerApiKeyIdFilter,
   });
-  const { data: llmProxies = [] } = useProfiles({
-    filters: { agentTypes: ["llm_proxy"] },
+  const { data: gateways = [] } = useProfiles({
+    filters: { agentTypes: ["mcp_gateway"] },
   });
-  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
-  const createMutation = useCreateLlmOauthClient();
-  const updateMutation = useUpdateLlmOauthClient();
-  const rotateMutation = useRotateLlmOauthClientSecret();
-  const deleteMutation = useDeleteLlmOauthClient();
+  const createMutation = useCreateMcpOauthClient();
+  const updateMutation = useUpdateMcpOauthClient();
+  const rotateMutation = useRotateMcpOauthClientSecret();
+  const deleteMutation = useDeleteMcpOauthClient();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{
     clientId: string;
     clientSecret: string;
   } | null>(null);
-  const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
-    useState(false);
   const [deletingOAuthClient, setDeletingOAuthClient] =
-    useState<LlmOauthClient | null>(null);
+    useState<McpOauthClient | null>(null);
   const [editingOAuthClient, setEditingOAuthClient] =
-    useState<LlmOauthClient | null>(null);
+    useState<McpOauthClient | null>(null);
   const [rotatedCredentials, setRotatedCredentials] = useState<{
     clientId: string;
     clientSecret: string;
   } | null>(null);
   const [rotatingOAuthClient, setRotatingOAuthClient] =
-    useState<LlmOauthClient | null>(null);
+    useState<McpOauthClient | null>(null);
 
   const setCredentialsAction = useSetCredentialsAction();
   useEffect(() => {
@@ -94,7 +79,7 @@ export default function OAuthClientsPage() {
     return () => setCredentialsAction(null);
   }, [setCredentialsAction]);
 
-  const columns: ColumnDef<LlmOauthClient>[] = useMemo(
+  const columns: ColumnDef<McpOauthClient>[] = useMemo(
     () => [
       {
         accessorKey: "name",
@@ -113,20 +98,11 @@ export default function OAuthClientsPage() {
         ),
       },
       {
-        id: "proxies",
-        header: "LLM Proxies",
+        id: "gateways",
+        header: "Gateways",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {row.original.allowedLlmProxyIds.length}
-          </span>
-        ),
-      },
-      {
-        id: "providers",
-        header: "Providers",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {formatProviderKeySummary(row.original.providerApiKeys)}
+            {row.original.allowedGatewayIds.length}
           </span>
         ),
       },
@@ -177,46 +153,18 @@ export default function OAuthClientsPage() {
           searchFields={["name"]}
           paramName="search"
         />
-        <LlmProviderApiKeyDropdown
-          availableKeys={providerApiKeys}
-          selectedApiKeyId={
-            providerApiKeyIdFilter === "all" ? null : providerApiKeyIdFilter
-          }
-          open={providerApiKeyFilterOpen}
-          onOpenChange={setProviderApiKeyFilterOpen}
-          onSelectKey={(value) => {
-            updateQueryParams({
-              providerApiKeyId: value,
-              page: "1",
-            });
-            setProviderApiKeyFilterOpen(false);
-          }}
-          triggerVariant="select"
-          triggerClassName="w-full sm:w-[280px] h-9 text-sm"
-          popoverClassName="w-[var(--radix-popover-trigger-width)]"
-          allOptionLabel="All provider API keys"
-          allOptionSelected={providerApiKeyIdFilter === "all"}
-          onSelectAllOption={() => {
-            updateQueryParams({
-              providerApiKeyId: null,
-              page: "1",
-            });
-            setProviderApiKeyFilterOpen(false);
-          }}
-        />
       </div>
 
       <DataTable
         columns={columns}
         data={oauthClients}
         isLoading={isPending}
-        emptyMessage="No OAuth clients registered. Create one for backend services or bots that call LLM proxies."
-        hasActiveFilters={Boolean(search || providerApiKeyIdFilter !== "all")}
+        emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways."
+        hasActiveFilters={Boolean(search)}
         filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
         onClearFilters={() =>
           updateQueryParams({
             search: null,
-            providerApiKeyId: null,
             page: "1",
           })
         }
@@ -225,8 +173,7 @@ export default function OAuthClientsPage() {
       <CreateOAuthClientDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
-        llmProxies={llmProxies}
-        providerApiKeys={providerApiKeys}
+        gateways={gateways}
         onSubmit={async (values) => {
           const result = await createMutation.mutateAsync(values);
           if (result) {
@@ -245,8 +192,7 @@ export default function OAuthClientsPage() {
         onOpenChange={(open) => {
           if (!open) setEditingOAuthClient(null);
         }}
-        llmProxies={llmProxies}
-        providerApiKeys={providerApiKeys}
+        gateways={gateways}
         onSubmit={async (id, values) => {
           const result = await updateMutation.mutateAsync({
             id,
@@ -331,58 +277,46 @@ export default function OAuthClientsPage() {
 function CreateOAuthClientDialog({
   open,
   onOpenChange,
-  llmProxies,
-  providerApiKeys,
+  gateways,
   onSubmit,
   isSubmitting,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  llmProxies: AgentSelectorAgent[];
-  providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
+  gateways: AgentSelectorAgent[];
   onSubmit: (
-    values: archestraApiTypes.CreateLlmOauthClientData["body"],
+    values: archestraApiTypes.CreateMcpOauthClientData["body"],
   ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
       setName("");
-      setSelectedProxyIds([]);
-      setProviderApiKeyIds({});
+      setSelectedGatewayIds([]);
     }
   }, [open]);
 
-  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
-  const canSubmit =
-    name.trim().length > 0 &&
-    selectedProxyIds.length > 0 &&
-    mappedProviderApiKeys.length > 0;
+  const canSubmit = name.trim().length > 0 && selectedGatewayIds.length > 0;
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register a backend service or bot that can call LLM proxies with OAuth client credentials."
+      description="Register an application (a backend service, automation job, or bot) that can call MCP gateways with OAuth client credentials."
     >
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
           await onSubmit({
             name: name.trim(),
-            allowedLlmProxyIds: selectedProxyIds,
-            providerApiKeys: mappedProviderApiKeys,
+            allowedGatewayIds: selectedGatewayIds,
           });
           setName("");
-          setSelectedProxyIds([]);
-          setProviderApiKeyIds({});
+          setSelectedGatewayIds([]);
         }}
       >
         <DialogBody className="space-y-4">
@@ -397,24 +331,18 @@ function CreateOAuthClientDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Allowed LLM proxies</Label>
+            <Label>Allowed gateways</Label>
             <AgentSelector
               mode="multiple"
               flat
-              agents={llmProxies}
-              value={selectedProxyIds}
-              onValueChange={setSelectedProxyIds}
-              placeholder="Select LLM proxies"
-              searchPlaceholder="Search LLM proxies"
-              emptyMessage="No LLM proxies found"
+              agents={gateways}
+              value={selectedGatewayIds}
+              onValueChange={setSelectedGatewayIds}
+              placeholder="Select gateways"
+              searchPlaceholder="Search gateways"
+              emptyMessage="No gateways found"
             />
           </div>
-
-          <ProviderKeyAccessFields
-            providerApiKeyIds={providerApiKeyIds}
-            onProviderApiKeyIdsChange={setProviderApiKeyIds}
-            providerApiKeys={providerApiKeys}
-          />
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -436,47 +364,37 @@ function CreateOAuthClientDialog({
 function EditOAuthClientDialog({
   oauthClient,
   onOpenChange,
-  llmProxies,
-  providerApiKeys,
+  gateways,
   onSubmit,
   isSubmitting,
 }: {
-  oauthClient: LlmOauthClient | null;
+  oauthClient: McpOauthClient | null;
   onOpenChange: (open: boolean) => void;
-  llmProxies: AgentSelectorAgent[];
-  providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
+  gateways: AgentSelectorAgent[];
   onSubmit: (
     id: string,
-    values: archestraApiTypes.UpdateLlmOauthClientData["body"],
+    values: archestraApiTypes.UpdateMcpOauthClientData["body"],
   ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
-  const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
-    {},
-  );
+  const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
-    setSelectedProxyIds(oauthClient.allowedLlmProxyIds);
-    setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
+    setSelectedGatewayIds(oauthClient.allowedGatewayIds);
   }, [oauthClient]);
 
-  const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
   const canSubmit =
-    !!oauthClient &&
-    name.trim().length > 0 &&
-    selectedProxyIds.length > 0 &&
-    mappedProviderApiKeys.length > 0;
+    !!oauthClient && name.trim().length > 0 && selectedGatewayIds.length > 0;
 
   return (
     <FormDialog
       open={!!oauthClient}
       onOpenChange={onOpenChange}
       title="Edit OAuth Client"
-      description="Update the LLM proxies and provider keys this OAuth client can use."
+      description="Update the gateways this OAuth client can access."
     >
       <DialogForm
         onSubmit={async (event) => {
@@ -484,8 +402,7 @@ function EditOAuthClientDialog({
           if (!oauthClient) return;
           await onSubmit(oauthClient.id, {
             name: name.trim(),
-            allowedLlmProxyIds: selectedProxyIds,
-            providerApiKeys: mappedProviderApiKeys,
+            allowedGatewayIds: selectedGatewayIds,
           });
         }}
       >
@@ -501,24 +418,18 @@ function EditOAuthClientDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Allowed LLM proxies</Label>
+            <Label>Allowed gateways</Label>
             <AgentSelector
               mode="multiple"
               flat
-              agents={llmProxies}
-              value={selectedProxyIds}
-              onValueChange={setSelectedProxyIds}
-              placeholder="Select LLM proxies"
-              searchPlaceholder="Search LLM proxies"
-              emptyMessage="No LLM proxies found"
+              agents={gateways}
+              value={selectedGatewayIds}
+              onValueChange={setSelectedGatewayIds}
+              placeholder="Select gateways"
+              searchPlaceholder="Search gateways"
+              emptyMessage="No gateways found"
             />
           </div>
-
-          <ProviderKeyAccessFields
-            providerApiKeyIds={providerApiKeyIds}
-            onProviderApiKeyIdsChange={setProviderApiKeyIds}
-            providerApiKeys={providerApiKeys}
-          />
         </DialogBody>
         <DialogStickyFooter>
           <Button

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-16
+lastUpdated: 2026-06-17
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -51,6 +51,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
@@ -94,6 +95,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | LLM OAuth Clients | `read` |
 | LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete` |
+| MCP OAuth Clients | `read` |
 | Tools & Policies | `read` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
@@ -216,6 +218,11 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpGateway:delete` | Delete MCP gateways |
 | `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
 | `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
+| `mcpOauthClient:read` | View MCP OAuth client registrations |
+| `mcpOauthClient:create` | Create MCP OAuth client registrations |
+| `mcpOauthClient:update` | Modify MCP OAuth client registrations |
+| `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
+| `mcpOauthClient:admin` | Manage all MCP OAuth client registrations |
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |

@@ -44,6 +44,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
+  mcpOauthClient: ["read", "create", "update", "delete", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
@@ -109,6 +110,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  mcpOauthClient: ["read", "create", "update", "delete"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
@@ -178,6 +180,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete"],
+  mcpOauthClient: ["read"],
   toolPolicy: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
@@ -288,6 +291,11 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpGateway:update": "Modify MCP gateway configuration",
   "mcpGateway:delete": "Delete MCP gateways",
   "mcpGateway:team-admin": "Manage team assignments for MCP gateways",
+  "mcpOauthClient:read": "View MCP OAuth client registrations",
+  "mcpOauthClient:create": "Create MCP OAuth client registrations",
+  "mcpOauthClient:update": "Modify MCP OAuth client registrations",
+  "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
+  "mcpOauthClient:admin": "Manage all MCP OAuth client registrations",
   "mcpGateway:admin":
     "Full administrative control over all MCP gateways, bypassing team restrictions",
   "toolPolicy:read":
@@ -949,6 +957,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLlmOauthClient]: {
     llmOauthClient: ["delete"],
   },
+  [RouteId.GetMcpOauthClients]: {
+    mcpOauthClient: ["read"],
+  },
+  [RouteId.CreateMcpOauthClient]: {
+    mcpOauthClient: ["create"],
+  },
+  [RouteId.UpdateMcpOauthClient]: {
+    mcpOauthClient: ["update"],
+  },
+  [RouteId.RotateMcpOauthClientSecret]: {
+    mcpOauthClient: ["update"],
+  },
+  [RouteId.DeleteMcpOauthClient]: {
+    mcpOauthClient: ["delete"],
+  },
   [RouteId.GetModelsWithApiKeys]: {
     llmModel: ["read"],
   },
@@ -1421,6 +1444,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
+  "/mcp/credentials/oauth-clients": { mcpOauthClient: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {

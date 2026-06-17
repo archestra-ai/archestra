@@ -4,8 +4,15 @@
  */
 export const LLM_PROXY_OAUTH_SCOPE = "llm:proxy";
 
+/**
+ * Scope requested by MCP OAuth clients (machine-to-machine / service-account
+ * access to MCP gateways via the `client_credentials` grant). Matches the scope
+ * advertised in the protected-resource-metadata document.
+ */
+export const MCP_GATEWAY_OAUTH_SCOPE = "mcp";
+
 export const OAUTH_SCOPES = [
-  "mcp",
+  MCP_GATEWAY_OAUTH_SCOPE,
   LLM_PROXY_OAUTH_SCOPE,
   "openid",
   "profile",
@@ -53,6 +60,21 @@ export const OAUTH_PAGES = {
  * and when detecting OAuth auth method from tokenId.
  */
 export const OAUTH_TOKEN_ID_PREFIX = "oauth-";
+
+/**
+ * clientId prefix for MCP OAuth clients. Used to route the `client_credentials`
+ * grant at the token endpoint to the MCP issuer (vs. the LLM proxy issuer).
+ */
+export const MCP_OAUTH_CLIENT_ID_PREFIX = "mcp_oauth_";
+
+/**
+ * referenceId prefix that binds a client_credentials access token to the MCP
+ * OAuth client that minted it. The MCP gateway validator keys its
+ * service-account authorization branch on this prefix. Distinct from
+ * `mcp-resource:` (per-profile enterprise-managed binding) so the existing
+ * audience check passes through to the service-account branch.
+ */
+export const MCP_OAUTH_CLIENT_REFERENCE_PREFIX = "mcp-oauth-client:";
 
 /**
  * Path for deep-linking to MCP catalog install dialogs.

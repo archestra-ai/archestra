@@ -73,13 +73,11 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  defu: '>=6.1.5'
   postcss: '>=8.5.10'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
   brace-expansion: '>=5.0.6'
   smol-toml: '>=1.6.1'
-  yaml: '>=2.8.3'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
   '@grpc/grpc-js': '>=1.14.4'
@@ -10621,7 +10619,7 @@ packages:
       sugarss: ^5.0.0
       terser: ^5.16.0
       tsx: ^4.8.1
-      yaml: '>=2.8.3'
+      yaml: ^2.4.2
     peerDependenciesMeta:
       '@types/node':
         optional: true

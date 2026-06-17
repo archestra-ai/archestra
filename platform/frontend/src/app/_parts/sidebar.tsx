@@ -262,6 +262,12 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/mcp/gateways"),
           },
           {
+            title: "Credentials",
+            url: "/mcp/credentials/oauth-clients",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/mcp/credentials"),
+          },
+          {
             title: "Guardrails",
             url: "/mcp/tool-guardrails",
             testId: E2eTestId.SidebarNavGuardrails,

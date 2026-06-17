@@ -30,7 +30,7 @@ const VALID_BREAKDOWN = {
   ],
 } as const;
 
-describe.skip("ContextWindowBreakdownSchema", () => {
+describe("ContextWindowBreakdownSchema", () => {
   test("parses a valid breakdown", () => {
     expect(
       ContextWindowBreakdownSchema.safeParse(VALID_BREAKDOWN).success,
@@ -127,7 +127,7 @@ describe.skip("ContextWindowBreakdownSchema", () => {
   });
 });
 
-describe.skip("CONTEXT_WINDOW_BREAKDOWN_EVENT", () => {
+describe("CONTEXT_WINDOW_BREAKDOWN_EVENT", () => {
   test("is the canonical event name string", () => {
     expect(CONTEXT_WINDOW_BREAKDOWN_EVENT).toBe(
       "data-context-window-breakdown",
@@ -135,7 +135,7 @@ describe.skip("CONTEXT_WINDOW_BREAKDOWN_EVENT", () => {
   });
 });
 
-describe.skip("CONTEXT_WINDOW_CATEGORIES", () => {
+describe("CONTEXT_WINDOW_CATEGORIES", () => {
   test("is in canonical stack order", () => {
     expect(CONTEXT_WINDOW_CATEGORIES).toEqual([
       "system_prompt",
@@ -147,7 +147,7 @@ describe.skip("CONTEXT_WINDOW_CATEGORIES", () => {
   });
 });
 
-describe.skip("chat file upload helpers", () => {
+describe("chat file upload helpers", () => {
   test("treats text modality as supporting txt, md, csv, and json uploads", () => {
     expect(getAcceptedFileTypes(["text"])).toBe(
       [
@@ -235,7 +235,7 @@ describe.skip("chat file upload helpers", () => {
   });
 });
 
-describe.skip("hasPersistableAssistantContent", () => {
+describe("hasPersistableAssistantContent", () => {
   test("keeps assistant turns carrying renderable content", () => {
     expect(
       hasPersistableAssistantContent({
@@ -272,7 +272,7 @@ describe.skip("hasPersistableAssistantContent", () => {
   });
 });
 
-describe.skip("hasRenderableAssistantContent", () => {
+describe("hasRenderableAssistantContent", () => {
   test("returns true when a non-empty text part is present", () => {
     expect(
       hasRenderableAssistantContent({ parts: [{ type: "text", text: "hi" }] }),

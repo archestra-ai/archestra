@@ -81,3 +81,42 @@ describe("AgentSelector (single, flat)", () => {
     expect(onValueChange).toHaveBeenCalledWith("p2");
   });
 });
+
+describe("AgentSelector (multiple, flat)", () => {
+  it("flat mode lists and toggles llm_proxy items that the grouped view would drop", async () => {
+    const onValueChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value={[]}
+        onValueChange={onValueChange}
+        placeholder="Select proxies"
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("Shared Proxy"));
+
+    expect(onValueChange).toHaveBeenCalledWith(["p2"]);
+  });
+
+  it("renders selected agents as removable badges", () => {
+    render(
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value={["p2"]}
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Shared Proxy")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove Shared Proxy" }),
+    ).toBeInTheDocument();
+  });
+});

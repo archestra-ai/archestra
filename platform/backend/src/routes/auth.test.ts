@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
-import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
+import {
+  IDENTITY_PROVIDER_ID,
+  LLM_PROXY_OAUTH_SCOPE,
+  MCP_GATEWAY_OAUTH_SCOPE,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
+import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -240,6 +245,113 @@ describe("auth routes", () => {
     expect(response.json()).toEqual({
       error: "invalid_scope",
       error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+    });
+  });
+
+  test("issues an MCP OAuth client credentials access token", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: MCP_GATEWAY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: MCP_GATEWAY_OAUTH_SCOPE,
+    });
+    expect(response.json().access_token).toMatch(/^mcp_at_/);
+
+    const tokenHash = createHash("sha256")
+      .update(response.json().access_token)
+      .digest("base64url");
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.clientId).toBe(oauthClient.clientId);
+    expect(storedToken?.userId).toBeNull();
+    expect(storedToken?.scopes).toEqual([MCP_GATEWAY_OAUTH_SCOPE]);
+    expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
+  });
+
+  test("rejects MCP OAuth client credentials with an invalid secret", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: "wrong-secret",
+        scope: MCP_GATEWAY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_client" });
+  });
+
+  test("rejects MCP OAuth client credentials without the mcp scope", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "invalid_scope",
+      error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
     });
   });
 

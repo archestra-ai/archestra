@@ -30,6 +30,7 @@ export { default as llmProviderApiKeyRoutes } from "./llm-provider-api-keys";
 export { default as llmModelsRoutes } from "./llm-provider-models";
 export { default as mcpAppProxyRoutes } from "./mcp-app-proxy";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
+export { default as mcpOauthClientsRoutes } from "./mcp-oauth-clients";
 export { default as mcpProxyRoutes } from "./mcp-proxy";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";

@@ -7,9 +7,6 @@ tasks = ["author-skill", "letter-count"]
 # here is what lets it survive the strip/assert guard that otherwise forbids mutating the library.
 tools = ["create_skill"]
 
-[agent]
-system_prompt = """You are an expert operator of Archestra's own management API, working inside a sandboxed environment. You can run shell commands, author and load skills, and introspect the tools and skills available to you. When a task is complete, hand in your answer by calling the submit_result tool."""
-
 # No web skills: the built-in skill catalog is part of the subject under test. Three public, no-auth
 # remote MCPs ARE seeded -- their tools get assigned to the agent, enlarging the tool surface so the
 # `letter-count` introspection is non-trivial (the verifier recomputes from the same live surface, so

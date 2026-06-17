@@ -7,9 +7,6 @@ tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "gi
 # once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
 share_backend = true
 
-[agent]
-system_prompt = """You are an expert software engineer working inside a sandboxed environment. You can run shell commands, install packages, read staged files, and use any installed skills. When a task is complete, hand in your answer by calling the submit_result tool."""
-
 # All skills from the two public skill libraries, pinned. A broad, realistic skill surface; the agent
 # picks whatever helps (e.g. the document skills for the xlsx task). `cap` unset = import all.
 [[skills]]

@@ -38,6 +38,12 @@ const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
 // discovers its assigned tools dynamically rather than seeing the full list up front.
 const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
+// Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
+// the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
+// solves the task still closes the loop by finding and calling its submit tool instead of replying in
+// prose.
+const SUBMIT_INSTRUCTION: &str =
+    "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -814,7 +820,7 @@ async fn ensure_agent(
             name: name.to_string(),
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
-            system_prompt: Some(system_prompt.to_string()),
+            system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
             tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
         })
         .await?;
@@ -1393,7 +1399,10 @@ async fn drive_stage(
             data: std::fs::read(task.inputs_dir().join(&f.src)).unwrap_or_default(),
         })
         .collect();
-    let text = expand_runtime(&stage.text, runtime);
+    let text = format!(
+        "{}\n\n{SUBMIT_INSTRUCTION}",
+        expand_runtime(&stage.text, runtime)
+    );
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;

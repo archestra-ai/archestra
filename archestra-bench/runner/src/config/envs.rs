@@ -5,8 +5,10 @@ use super::tasks::TaskConfigError;
 use super::toml_util::{self, TomlTable};
 use super::types::{EnvConfig, Mcp, SkillRef};
 
-const DEFAULT_SYSTEM_PROMPT: &str =
-    "You are an expert software engineer completing a benchmark task.";
+// Empty by default: lanes mimic a regular Archestra user who sets no custom system prompt, so the
+// agent runs on Archestra's stock chat instructions. Submission guidance is appended to the user
+// message instead (see SUBMIT_INSTRUCTION in run.rs).
+const DEFAULT_SYSTEM_PROMPT: &str = "";
 
 #[derive(Debug, thiserror::Error)]
 #[error("env config error: {0}")]

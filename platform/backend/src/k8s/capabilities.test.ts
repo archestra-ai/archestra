@@ -118,6 +118,7 @@ describe("Kubernetes capability inspection", () => {
       awsApplicationNetworkPolicy: false,
       provider: "kubernetes",
       supportsFqdn: false,
+      supportsHttpMethods: false,
     });
   });
 

@@ -1,11 +1,37 @@
 import type * as k8s from "@kubernetes/client-node";
+import { PatchStrategy } from "@kubernetes/client-node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/k8s/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/k8s/shared")>()),
   isK8sConfigured: vi.fn(),
   getK8sNamespace: vi.fn(),
+  loadKubeConfig: vi.fn(),
+  createK8sClients: vi.fn(),
 }));
+
+vi.mock("@/k8s/capabilities", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/k8s/capabilities")>()),
+  getK8sCapabilities: vi.fn(),
+}));
+
+vi.mock("@/k8s/cluster-dns", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/k8s/cluster-dns")>()),
+  clusterDnsResolver: { getClusterDnsIps: vi.fn() },
+}));
+
+// reconcileEnvironment short-circuits unless the sandbox feature is on; flip the
+// flag, leaving the rest of config real so the StatefulSet builder tests stand.
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/config")>();
+  return {
+    ...actual,
+    default: {
+      ...actual.default,
+      skillsSandbox: { ...actual.default.skillsSandbox, enabled: true },
+    },
+  };
+});
 
 // Mock the leaf module (not the @/models barrel) so the override propagates
 // through the index's `export { default as OrganizationModel }` re-export to the
@@ -15,13 +41,24 @@ vi.mock("@/models/organization", () => ({
   default: { getById: vi.fn() },
 }));
 
-import { getK8sNamespace, isK8sConfigured } from "@/k8s/shared";
+import { getK8sCapabilities } from "@/k8s/capabilities";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import {
+  createK8sClients,
+  getK8sNamespace,
+  isK8sConfigured,
+  loadKubeConfig,
+} from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
 import type { Environment } from "@/types";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
 const mockIsK8sConfigured = vi.mocked(isK8sConfigured);
 const mockGetK8sNamespace = vi.mocked(getK8sNamespace);
+const mockLoadKubeConfig = vi.mocked(loadKubeConfig);
+const mockCreateK8sClients = vi.mocked(createK8sClients);
+const mockGetK8sCapabilities = vi.mocked(getK8sCapabilities);
+const mockGetClusterDnsIps = vi.mocked(clusterDnsResolver.getClusterDnsIps);
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -187,5 +224,149 @@ describe("resolveEngineEffectivePolicy", () => {
     );
 
     expect(result).toEqual({ source: "environment", policy: ownPolicy });
+  });
+});
+
+describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetworkPolicy)", () => {
+  const ANP_COORDS = {
+    group: "networking.k8s.aws",
+    version: "v1alpha1",
+    plural: "applicationnetworkpolicies",
+  };
+  // AWS provider + restricted egress with ≥1 domain routes
+  // buildDaggerEgressPolicies to an ApplicationNetworkPolicy custom object.
+  const awsCapabilities = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: true,
+    provider: "aws-application-network-policy",
+    supportsFqdn: true,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const restrictedPolicy = {
+    egressMode: "restricted",
+    domainPreset: "none",
+    allowedDomains: ["registry.npmjs.org"],
+    allowedCidrs: [],
+  };
+
+  function makeFakeClients() {
+    return {
+      namespace: "test-ns",
+      coreApi: {
+        createNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+        replaceNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+      },
+      appsApi: {
+        createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+      },
+      networkingApi: {
+        deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+      },
+      customObjectsApi: {
+        deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+        createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+        patchNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+        replaceNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      },
+    };
+  }
+
+  let clients: ReturnType<typeof makeFakeClients>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clients = makeFakeClients();
+    mockIsK8sConfigured.mockReturnValue(true);
+    mockGetK8sNamespace.mockReturnValue("test-ns");
+    vi.mocked(OrganizationModel.getById).mockResolvedValue(null as never);
+    mockGetK8sCapabilities.mockResolvedValue({
+      networkPolicy: awsCapabilities,
+    } as never);
+    mockGetClusterDnsIps.mockResolvedValue(["10.0.0.10"]);
+    mockLoadKubeConfig.mockReturnValue({ kubeConfig: {} } as never);
+    mockCreateK8sClients.mockReturnValue(clients as never);
+  });
+
+  function reconcile() {
+    return daggerEnvironmentRuntimeManager.reconcileEnvironment(
+      makeEnv({
+        namespace: "test-ns",
+        networkPolicy: restrictedPolicy as never,
+      }),
+    );
+  }
+
+  it("creates the policy and does not patch or replace when it doesn't exist yet", async () => {
+    await reconcile();
+
+    expect(
+      clients.customObjectsApi.createNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      clients.customObjectsApi.createNamespacedCustomObject,
+    ).toHaveBeenCalledWith(expect.objectContaining(ANP_COORDS));
+    expect(
+      clients.customObjectsApi.patchNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+    expect(
+      clients.customObjectsApi.replaceNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("merge-patches (not PUT-replaces) when the policy already exists (409)", async () => {
+    clients.customObjectsApi.createNamespacedCustomObject.mockRejectedValueOnce(
+      {
+        statusCode: 409,
+      },
+    );
+
+    await reconcile();
+
+    const createBody = clients.customObjectsApi.createNamespacedCustomObject
+      .mock.calls[0][0].body as { metadata: { name: string } };
+    const patchCalls =
+      clients.customObjectsApi.patchNamespacedCustomObject.mock.calls;
+    expect(patchCalls).toHaveLength(1);
+    const [patchArgs, headerOptions] = patchCalls[0];
+    expect(patchArgs).toEqual({
+      ...ANP_COORDS,
+      namespace: "test-ns",
+      name: createBody.metadata.name,
+      body: createBody,
+    });
+    // setHeaderOptions wraps the Content-Type in a `pre` middleware closure, so
+    // the options object can't be compared by value; run the middleware against
+    // a fake request to assert it sets the JSON merge-patch content type.
+    const fakeRequest = { setHeaderParam: vi.fn() };
+    (
+      headerOptions as { middleware: { pre: (r: unknown) => unknown }[] }
+    ).middleware[0].pre(fakeRequest);
+    expect(fakeRequest.setHeaderParam).toHaveBeenCalledWith(
+      "Content-Type",
+      PatchStrategy.MergePatch,
+    );
+    expect(
+      clients.customObjectsApi.replaceNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("propagates a non-conflict create error without patching or replacing", async () => {
+    clients.customObjectsApi.createNamespacedCustomObject.mockRejectedValueOnce(
+      {
+        statusCode: 500,
+      },
+    );
+
+    await expect(reconcile()).rejects.toMatchObject({ statusCode: 500 });
+
+    expect(
+      clients.customObjectsApi.patchNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+    expect(
+      clients.customObjectsApi.replaceNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
   });
 });

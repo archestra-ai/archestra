@@ -208,7 +208,6 @@ pub async fn register_remote_mcp(
             scope: scope.to_string(),
             description: None,
             server_url: Some(server_url.to_string()),
-            local_config: None,
         })
         .await?;
     let catalog_id = require_str(&catalog, "id", "POST /api/internal_mcp_catalog")?;

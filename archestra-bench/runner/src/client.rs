@@ -87,39 +87,6 @@ pub struct AgentCreate {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct SkillFile {
-    pub path: String,
-    pub content: String,
-    pub encoding: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SkillCreate {
-    pub content: String,
-    pub scope: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub files: Vec<SkillFile>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct McpEnvVar {
-    pub key: String,
-    #[serde(rename = "type")]
-    pub var_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct LocalConfig {
-    pub command: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub arguments: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub environment: Vec<McpEnvVar>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct CatalogCreate {
     pub name: String,
     #[serde(rename = "serverType")]
@@ -129,8 +96,6 @@ pub struct CatalogCreate {
     pub description: Option<String>,
     #[serde(rename = "serverUrl", skip_serializing_if = "Option::is_none")]
     pub server_url: Option<String>,
-    #[serde(rename = "localConfig", skip_serializing_if = "Option::is_none")]
-    pub local_config: Option<LocalConfig>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -495,22 +460,6 @@ impl EvalClient {
         items(
             self.request(Method::GET, "/api/skills", slice, None)
                 .await?,
-        )
-    }
-
-    pub async fn create_skill(
-        &self,
-        payload: &SkillCreate,
-    ) -> Result<HashMap<String, JsonValue>, ClientError> {
-        require_dict(
-            self.request(
-                Method::POST,
-                "/api/skills",
-                None,
-                Some(&serde_json::to_value(payload).unwrap()),
-            )
-            .await?,
-            "POST /api/skills",
         )
     }
 
@@ -1236,7 +1185,6 @@ mod tests {
             scope: "org".into(),
             description: None,
             server_url: Some("http://127.0.0.1:1/mcp".into()),
-            local_config: None,
         })
         .unwrap();
         assert_eq!(v["serverType"], "remote");

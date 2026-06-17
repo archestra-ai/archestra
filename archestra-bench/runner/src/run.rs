@@ -328,9 +328,11 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     );
     let progress = mp.add(ProgressBar::new(total_rollouts as u64));
     progress.set_style(
-        ProgressStyle::with_template("  run     {bar:30.cyan/blue} {pos}/{len} {msg}")
-            .expect("static progress template")
-            .progress_chars("━━─"),
+        ProgressStyle::with_template(
+            "  run     {bar:30.cyan/blue} {pos}/{len} [{elapsed_precise}<{eta_precise}] {msg}",
+        )
+        .expect("static progress template")
+        .progress_chars("━━─"),
     );
 
     // Lane-grouped scheduling: one serial worker per distinct lane, draining that lane's work across

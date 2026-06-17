@@ -209,9 +209,11 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     let bar = mp.add(ProgressBar::new(total as u64));
     bar.set_style(
-        ProgressStyle::with_template("  map     {bar:30.cyan/blue} {pos}/{len} rollouts")
-            .expect("static progress template")
-            .progress_chars("━━─"),
+        ProgressStyle::with_template(
+            "  map     {bar:30.cyan/blue} {pos}/{len} rollouts [{elapsed_precise}<{eta_precise}]",
+        )
+        .expect("static progress template")
+        .progress_chars("━━─"),
     );
     let mapped: Vec<(RolloutId, Result<(RunMeta, String)>)> = stream::iter(rollouts)
         .map(|rollout| {
@@ -316,7 +318,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     let spinner = mp.add(ProgressBar::new_spinner());
     spinner.set_style(
-        ProgressStyle::with_template("  {spinner:.green} reduce  {msg}")
+        ProgressStyle::with_template("  {spinner:.green} reduce  [{elapsed_precise}] {msg}")
             .expect("static spinner template")
             .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
     );

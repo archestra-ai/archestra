@@ -49,6 +49,7 @@ export * from "./llm-provider";
 export * from "./llm-provider-api-key";
 export * from "./llm-providers";
 export * from "./mcp-catalog";
+export * from "./mcp-oauth-client";
 export * from "./mcp-server";
 export * from "./mcp-server-installation-request";
 export * from "./mcp-tool-call";

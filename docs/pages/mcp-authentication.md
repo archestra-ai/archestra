@@ -27,9 +27,9 @@ Use this page to choose the gateway authentication method for your client, then 
 
 ## Gateway Authentication
 
-The MCP Gateway supports four client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+The MCP Gateway supports five client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
 
-- **OAuth 2.1** and **ID-JAG** both end with an Archestra-issued OAuth access token being sent to the gateway
+- **OAuth 2.1**, **OAuth client credentials**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
 - **Bearer token** sends a static platform-managed token directly to the gateway.
 
@@ -53,6 +53,12 @@ Endpoint discovery is automatic. The gateway exposes standard well-known endpoin
 Archestra returns the lifetime of user OAuth access tokens through the standard `expires_in` field. The default lifetime is 1 year, which reduces unnecessary reconnects for MCP-native clients like desktop apps.
 
 Admins can change this in **Settings > Organization > Auth**. The setting is organization-wide and applies to newly issued user OAuth access tokens, including MCP OAuth 2.1 and custom application authorization-code flows.
+
+### OAuth Client Credentials (Service Accounts)
+
+When the caller is a backend service or another team's bot rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. The client exchanges its `client_id` and `client_secret` for a short-lived bearer token scoped to an explicit list of gateways, then sends that token to the gateway like any other OAuth access token. There is no acting user, so per-user dynamic credential resolution does not apply — assign shared or service-account credentials to the tools these gateways expose.
+
+See [MCP OAuth Clients](/docs/platform-mcp-oauth-clients) for how to create and scope these clients.
 
 ### Bearer Token
 

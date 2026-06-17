@@ -29,6 +29,7 @@ export const resources = [
   "app",
   "sandbox",
   "mcpGateway",
+  "mcpOauthClient",
   "llmProxy",
   "toolPolicy",
   "log",
@@ -91,6 +92,7 @@ export const resourceLabels: Record<Resource, string> = {
   app: "Apps",
   sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
+  mcpOauthClient: "MCP OAuth Clients",
   llmProxy: "LLM Proxies",
   toolPolicy: "Tools & Policies",
   log: "Logs",
@@ -140,6 +142,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   sandbox:
     "Code execution sandboxes — run commands, upload/download files, run activated skills",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
+  mcpOauthClient:
+    "OAuth clients (service accounts) authorized to call MCP gateways",
   llmProxy: "LLM proxy endpoints with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
   log: "LLM proxy and MCP tool call logs",
@@ -212,6 +216,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   ],
   MCP: [
     "mcpGateway",
+    "mcpOauthClient",
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",

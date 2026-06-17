@@ -357,6 +357,13 @@ export const RouteId = {
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
 
+  // MCP OAuth Client Routes
+  GetMcpOauthClients: "getMcpOauthClients",
+  CreateMcpOauthClient: "createMcpOauthClient",
+  UpdateMcpOauthClient: "updateMcpOauthClient",
+  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
+  DeleteMcpOauthClient: "deleteMcpOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",

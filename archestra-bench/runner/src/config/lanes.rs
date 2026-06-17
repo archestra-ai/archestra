@@ -74,6 +74,15 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneCo
                     "unknown lane(s) {unknown:?}; choose from {available:?}"
                 )));
             }
+            // Reject a repeated name: the lane-grouped scheduler runs exactly one serial worker per
+            // distinct lane, so a duplicate selection would otherwise break the one-cell-per-model
+            // invariant (or be silently dropped). One model = one lane = one handle.
+            let mut requested: std::collections::HashSet<&str> = std::collections::HashSet::new();
+            if let Some(dup) = names.iter().find(|n| !requested.insert(n.as_str())) {
+                return Err(LaneConfigError(format!(
+                    "duplicate lane {dup:?} in --lanes selection"
+                )));
+            }
             // return the requested lanes in the order the caller asked for (matches Python)
             let by_name: std::collections::HashMap<&str, &Lane> =
                 catalog.iter().map(|l| (l.name.as_str(), l)).collect();
@@ -153,6 +162,13 @@ model = "b"
             .find(|l| l.provider == "openrouter")
             .map(|l| l.name.as_str());
         assert_eq!(first_openrouter, Some("or-a"));
+    }
+
+    #[test]
+    fn duplicate_lane_in_selection_rejected() {
+        let dir = write_lanes(LANES);
+        let err = load_lanes(&dir.path().join("lanes.toml"), Some("or-a,or-a")).unwrap_err();
+        assert!(err.to_string().contains("duplicate lane"));
     }
 
     #[test]

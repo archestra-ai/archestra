@@ -171,6 +171,25 @@ fn build_run_plan(selected: Vec<(EnvConfig, Vec<Task>)>, lanes: Vec<Lane>) -> Ve
         .collect()
 }
 
+/// Scheduling skeleton for the lane-grouped executor: per distinct lane, the plan-ordered list of
+/// `(env index, env shares a backend)` it must run. Lanes are global (every `EnvPlan` carries the same
+/// list), taken from the first env; an env contributes a stop only for the lanes it actually carries.
+fn lane_stop_plan(plan: &[EnvPlan]) -> Vec<(Lane, Vec<(usize, bool)>)> {
+    let lanes = plan.first().map(|p| p.lanes.clone()).unwrap_or_default();
+    lanes
+        .into_iter()
+        .map(|lane| {
+            let stops = plan
+                .iter()
+                .enumerate()
+                .filter(|(_, ep)| ep.lanes.iter().any(|l| l.name == lane.name))
+                .map(|(i, ep)| (i, ep.share_backend()))
+                .collect();
+            (lane, stops)
+        })
+        .collect()
+}
+
 fn select_envs(
     envs: &HashMap<String, EnvConfig>,
     env_filter: Option<&str>,
@@ -252,6 +271,30 @@ fn split_names(value: Option<&str>) -> Option<Vec<String>> {
     if parts.is_empty() { None } else { Some(parts) }
 }
 
+/// A shared-backend env's per-lane agent + MCP, prepared up front so a lane worker can run that env's
+/// tasks against the already-booted shared backend.
+struct SharedLaneSetup {
+    client: EvalClient,
+    agent_id: String,
+    submit_tool: String,
+    mcp: BenchmarkMcp,
+    resolved: ResolvedModel,
+}
+
+/// One unit of work for a lane: that lane's tasks against a single env. A lane drains its stops serially.
+enum EnvStop {
+    Shared {
+        env: EnvConfig,
+        tasks: Vec<Task>,
+        // Boxed: SharedLaneSetup is far larger than the Isolated variant (clippy::large_enum_variant).
+        setup: Box<SharedLaneSetup>,
+    },
+    Isolated {
+        env: EnvConfig,
+        tasks: Vec<Task>,
+    },
+}
+
 async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Vec<RunResult> {
     let total_cells: usize = plan.iter().map(|p| p.tasks.len() * p.lanes.len()).sum();
     let progress = ProgressBar::new(total_cells as u64);
@@ -265,47 +308,155 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     );
     progress.set_message("tasks");
 
-    let mut all_results = Vec::new();
-    for env_plan in plan {
+    // Lane-grouped scheduling: one serial worker per distinct lane, draining that lane's work across
+    // every env in plan order. A given model therefore never runs two cells at once (rate-limit safety),
+    // and there is no env barrier. `lane_stop_plan` is the ordering authority.
+    let skeleton = lane_stop_plan(&plan);
+
+    // Setup phase (serial, up front): boot + seed every shared-env backend and keep it alive for the
+    // whole run. Isolated lanes boot their own backend lazily inside the worker. A shared env that fails
+    // setup is reported as a whole-env infra failure and contributes no stops.
+    let mut shared_setups: Vec<Option<HashMap<String, SharedLaneSetup>>> =
+        plan.iter().map(|_| None).collect();
+    let mut shared_instances: Vec<Instance> = Vec::new();
+    let mut infra: Vec<RunResult> = Vec::new();
+    for (i, env_plan) in plan.iter().enumerate() {
         if env_plan.share_backend() {
-            let results = run_shared_env(&env_plan, &ctx, &progress, max_workers).await;
-            all_results.extend(results);
-        } else {
-            let results = run_isolated_env(&env_plan, &ctx, &progress, max_workers).await;
-            all_results.extend(results);
+            match setup_shared_env(env_plan, &ctx).await {
+                Ok((instance, setups)) => {
+                    shared_instances.push(instance);
+                    shared_setups[i] = Some(setups);
+                }
+                Err(e) => infra.extend(infra_results(env_plan, &ctx, &progress, &e)),
+            }
         }
     }
+
+    // Build each lane's owned stop list from the skeleton + live setups (serial — no contention).
+    let mut lane_work: Vec<(Lane, Vec<EnvStop>)> = Vec::new();
+    for (lane, stops) in skeleton {
+        let mut owned = Vec::new();
+        for (env_idx, shared) in stops {
+            let env_plan = &plan[env_idx];
+            if shared {
+                if let Some(setup) = shared_setups[env_idx]
+                    .as_mut()
+                    .and_then(|m| m.remove(&lane.name))
+                {
+                    owned.push(EnvStop::Shared {
+                        env: env_plan.env.clone(),
+                        tasks: env_plan.tasks.clone(),
+                        setup: Box::new(setup),
+                    });
+                }
+            } else {
+                owned.push(EnvStop::Isolated {
+                    env: env_plan.env.clone(),
+                    tasks: env_plan.tasks.clone(),
+                });
+            }
+        }
+        lane_work.push((lane, owned));
+    }
+
+    // Fan out over lanes; each lane owns its stop list and drains it serially.
+    let lane_futures = lane_work.into_iter().map(|(lane, stops)| {
+        let ctx = ctx.clone();
+        let progress = progress.clone();
+        async move {
+            let mut out = Vec::new();
+            for stop in stops {
+                match stop {
+                    EnvStop::Shared { env, tasks, setup } => {
+                        let setup = *setup;
+                        let client = setup.client.sibling().await;
+                        out.extend(
+                            run_lane(
+                                client,
+                                env,
+                                tasks,
+                                lane.clone(),
+                                setup.mcp,
+                                setup.submit_tool,
+                                setup.agent_id,
+                                ctx.root_run_dir.clone(),
+                                setup.resolved,
+                                progress.clone(),
+                            )
+                            .await,
+                        );
+                    }
+                    EnvStop::Isolated { env, tasks } => {
+                        out.extend(
+                            run_isolated_lane(
+                                env,
+                                tasks,
+                                lane.clone(),
+                                ctx.clone(),
+                                progress.clone(),
+                            )
+                            .await,
+                        );
+                    }
+                }
+            }
+            out
+        }
+    });
+
+    let lane_results: Vec<Vec<RunResult>> = futures::stream::iter(lane_futures)
+        .buffer_unordered(max_workers)
+        .collect()
+        .await;
+
+    for instance in &shared_instances {
+        let _ = instance.shutdown().await;
+    }
+
     progress.finish_with_message("done");
-    all_results
+    infra
+        .into_iter()
+        .chain(lane_results.into_iter().flatten())
+        .collect()
 }
 
-async fn run_shared_env(
+/// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
+/// partially-prepared env doesn't leak listener tasks for the rest of the run.
+async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
+    for (_, _, _, mcp) in setups {
+        mcp.stop().await;
+    }
+}
+
+/// Boot + seed one shared backend for the env (serial, up front), creating a per-lane agent + benchmark
+/// MCP. Returns the live `Instance` (the caller keeps it alive for the whole run and tears it down at the
+/// end) plus the per-lane setup map. On any setup error the instance is torn down and the whole env is
+/// reported as an infra failure by the caller. `resolve_lanes` and `warm_user_token` stay here, before
+/// any lane future runs: model-resolution failure is whole-env-infra-fail, and the warm call pre-creates
+/// the shared gateway token once so concurrent lanes don't race the insert.
+async fn setup_shared_env(
     env_plan: &EnvPlan,
     ctx: &RunCtx,
-    progress: &ProgressBar,
-    max_workers: usize,
-) -> Vec<RunResult> {
+) -> Result<(Instance, HashMap<String, SharedLaneSetup>), String> {
     let env = &env_plan.env;
     let log_path = ctx
         .root_run_dir
         .join(format!("{}.backend.log", slug(&env.id)));
     let mut instance = Instance::new(repo_root(), format!("{}-{}", ctx.run_id, env.id), log_path);
-    if let Err(e) = instance.start().await {
-        return infra_results(env_plan, ctx, progress, &e.to_string());
-    }
+    instance.start().await.map_err(|e| e.to_string())?;
 
     let client = instance.client.clone();
     let resolved = match resolve_lanes(&client, &env_plan.lanes, ctx).await {
         Ok(r) => r,
         Err(e) => {
             let _ = instance.shutdown().await;
-            return infra_results(env_plan, ctx, progress, &e.to_string());
+            return Err(e.to_string());
         }
     };
 
     if let Err(e) = client.enable_skill_defaults().await {
         let _ = instance.shutdown().await;
-        return infra_results(env_plan, ctx, progress, &e.to_string());
+        return Err(e.to_string());
     }
 
     for sref in &env.skills {
@@ -320,24 +471,27 @@ async fn run_shared_env(
         .await
         {
             let _ = instance.shutdown().await;
-            return infra_results(env_plan, ctx, progress, &e.to_string());
+            return Err(e.to_string());
         }
     }
 
-    let mut setups = Vec::new();
+    let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
     for lane in &env_plan.lanes {
         let mcp = match BenchmarkMcp::start(format!("{}-{}", BENCH_MCP_NAME, lane.slug())).await {
             Ok(m) => m,
             Err(e) => {
+                stop_mcps(&setups).await;
                 let _ = instance.shutdown().await;
-                return infra_results(env_plan, ctx, progress, &e.to_string());
+                return Err(e.to_string());
             }
         };
         match setup_lane_agent(&client, env, lane, &mcp).await {
             Ok((agent_id, submit_tool)) => setups.push((lane.clone(), agent_id, submit_tool, mcp)),
             Err(e) => {
+                mcp.stop().await;
+                stop_mcps(&setups).await;
                 let _ = instance.shutdown().await;
-                return infra_results(env_plan, ctx, progress, &e.to_string());
+                return Err(e.to_string());
             }
         }
     }
@@ -345,8 +499,9 @@ async fn run_shared_env(
     if !env.mcps.is_empty() {
         let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _)| id.clone()).collect();
         if let Err(e) = seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await {
+            stop_mcps(&setups).await;
             let _ = instance.shutdown().await;
-            return infra_results(env_plan, ctx, progress, &e.to_string());
+            return Err(e.to_string());
         }
     }
 
@@ -354,69 +509,24 @@ async fn run_shared_env(
         warn!("warm_user_token failed; lanes may race gateway-token insert (non-fatal): {e}");
     }
 
-    let env = env.clone();
-    let ctx = ctx.clone();
-    let progress = progress.clone();
-    let tasks = env_plan.tasks.clone();
-    let mut lane_futures = Vec::new();
-    for (lane, agent_id, submit_tool, mcp) in setups {
-        let client = client.clone();
-        let resolved_model = resolved[&lane.name].clone();
-        let env = env.clone();
-        let ctx = ctx.clone();
-        let progress = progress.clone();
-        let tasks = tasks.clone();
-        lane_futures.push(async move {
-            let client = client.sibling().await;
-            run_lane(
-                client,
-                env,
-                tasks,
-                lane,
-                mcp,
-                submit_tool,
-                agent_id,
-                ctx.root_run_dir.clone(),
-                resolved_model,
-                progress,
+    let lane_setups = setups
+        .into_iter()
+        .map(|(lane, agent_id, submit_tool, mcp)| {
+            let resolved = resolved[&lane.name].clone();
+            (
+                lane.name.clone(),
+                SharedLaneSetup {
+                    client: client.clone(),
+                    agent_id,
+                    submit_tool,
+                    mcp,
+                    resolved,
+                },
             )
-            .await
-        });
-    }
+        })
+        .collect();
 
-    let results: Vec<Vec<RunResult>> = futures::stream::iter(lane_futures)
-        .buffer_unordered(max_workers)
-        .collect()
-        .await;
-
-    let _ = instance.shutdown().await;
-    results.into_iter().flatten().collect()
-}
-
-async fn run_isolated_env(
-    env_plan: &EnvPlan,
-    ctx: &RunCtx,
-    progress: &ProgressBar,
-    max_workers: usize,
-) -> Vec<RunResult> {
-    let env = env_plan.env.clone();
-    let tasks = env_plan.tasks.clone();
-    let ctx = ctx.clone();
-    let progress = progress.clone();
-
-    let lane_futures = env_plan.lanes.clone().into_iter().map(move |lane| {
-        let env = env.clone();
-        let tasks = tasks.clone();
-        let ctx = ctx.clone();
-        let progress = progress.clone();
-        async move { run_isolated_lane(env, tasks, lane, ctx, progress).await }
-    });
-
-    let results: Vec<Vec<RunResult>> = futures::stream::iter(lane_futures)
-        .buffer_unordered(max_workers)
-        .collect()
-        .await;
-    results.into_iter().flatten().collect()
+    Ok((instance, lane_setups))
 }
 
 async fn run_isolated_lane(
@@ -479,6 +589,7 @@ async fn run_isolated_lane(
     let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp).await {
         Ok(s) => s,
         Err(e) => {
+            mcp.stop().await;
             let _ = instance.shutdown().await;
             return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
         }
@@ -493,6 +604,7 @@ async fn run_isolated_lane(
         )
         .await
     {
+        mcp.stop().await;
         let _ = instance.shutdown().await;
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
     }
@@ -2107,6 +2219,30 @@ mod tests {
         assert_eq!(plan.len(), 2);
         assert_eq!(plan[0].lanes.len(), 2);
         assert_eq!(plan[1].lanes.len(), 2);
+    }
+
+    #[test]
+    fn test_lane_stop_plan_groups_by_lane_in_plan_order() {
+        let mut shared = dummy_env("basic", vec![dummy_task("t1")]);
+        shared.share_backend = true;
+        let isolated = dummy_env("api", vec![dummy_task("t2")]); // share_backend defaults false
+        let plan = build_run_plan(
+            vec![
+                (shared, vec![dummy_task("t1")]),
+                (isolated, vec![dummy_task("t2")]),
+            ],
+            vec![dummy_lane("l1"), dummy_lane("l2")],
+        );
+
+        let schedule = lane_stop_plan(&plan);
+
+        // One entry per distinct lane, in lane (file) order.
+        let lane_names: Vec<&str> = schedule.iter().map(|(l, _)| l.name.as_str()).collect();
+        assert_eq!(lane_names, vec!["l1", "l2"]);
+        // Each lane visits both envs in plan order: env 0 shared, env 1 isolated.
+        for (_, stops) in &schedule {
+            assert_eq!(stops, &vec![(0usize, true), (1usize, false)]);
+        }
     }
 
     #[test]

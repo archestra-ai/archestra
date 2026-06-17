@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.2.66](https://github.com/archestra-ai/archestra/compare/platform-v1.2.65...platform-v1.2.66) (2026-06-17)
+
+
+### Features
+
+* **chat,bench:** reference sandbox-only uploads instead of hard-erroring the LLM call ([#5623](https://github.com/archestra-ai/archestra/issues/5623)) ([2f64ed8](https://github.com/archestra-ai/archestra/commit/2f64ed8483f4f0a6ed557d5c2db5c92527f74249))
+* **connection:** Windows PowerShell scripts, OpenAI-router auth, member virtual keys ([#5610](https://github.com/archestra-ai/archestra/issues/5610)) ([a1c20a4](https://github.com/archestra-ai/archestra/commit/a1c20a49b251a80618ebf3450c7b19ba5e053b2c))
+* **environments:** make the environment editor reload-stable via URL params ([#5630](https://github.com/archestra-ai/archestra/issues/5630)) ([d6477fc](https://github.com/archestra-ai/archestra/commit/d6477fc21ffe83d28e1d13bc8b1bb38b316abb8d))
+* **k8s:** report NetworkPolicy enforcement honestly in the environment editor ([#5617](https://github.com/archestra-ai/archestra/issues/5617)) ([64dbbd1](https://github.com/archestra-ai/archestra/commit/64dbbd14fdc971732cb0831d5fb00c0ceb987b64))
+* **mcp:** OAuth client credentials (applications) for MCP gateways ([#5632](https://github.com/archestra-ai/archestra/issues/5632)) ([784354d](https://github.com/archestra-ai/archestra/commit/784354d86d14a7a256e2fc4422d510ba3a58bca6))
+
+
+### Bug Fixes
+
+* **archestra-mcp-server:** guide LLMs through tool-schema mismatches and surface output truncation ([#5635](https://github.com/archestra-ai/archestra/issues/5635)) ([4aff7c0](https://github.com/archestra-ai/archestra/commit/4aff7c0b1e62d4215156669872770c56c8ff876a))
+* **dagger:** merge-patch custom egress policies instead of PUT-replace ([#5634](https://github.com/archestra-ai/archestra/issues/5634)) ([783f6b3](https://github.com/archestra-ai/archestra/commit/783f6b3237120c9f5705fe0289e4453d4dad0b26))
+* **frontend:** correct network policy docs anchor to #network-egress-policies ([#5633](https://github.com/archestra-ai/archestra/issues/5633)) ([6efd421](https://github.com/archestra-ai/archestra/commit/6efd42121316ce7ccec515e37940d2e8ca1429e7))
+
+
+### Code Refactoring
+
+* **environments:** order network egress fields by mechanism ([#5631](https://github.com/archestra-ai/archestra/issues/5631)) ([e728611](https://github.com/archestra-ai/archestra/commit/e728611569011500eec6a74341e9b341f9e57982))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.23 to 4.12.25 in /platform/mcp_server_docker_image ([#5614](https://github.com/archestra-ai/archestra/issues/5614)) ([195bc1a](https://github.com/archestra-ai/archestra/commit/195bc1a0e0fec3288a47fe9f899203e128228c9c))
+* **deps:** drop redundant defu override ([#5638](https://github.com/archestra-ai/archestra/issues/5638)) ([7315f24](https://github.com/archestra-ai/archestra/commit/7315f24392847db4cf8176499640894c1ca3f913))
+* **deps:** drop redundant yaml override ([#5639](https://github.com/archestra-ai/archestra/issues/5639)) ([37d017f](https://github.com/archestra-ai/archestra/commit/37d017f180362834665836c631a61dcc360ab33a))
+* **skills:** add archestra-dev-override-sweep skill ([#5628](https://github.com/archestra-ai/archestra/issues/5628)) ([dc139f7](https://github.com/archestra-ai/archestra/commit/dc139f794b5cdc5781645d0726094bc1b341e971))
+
 ## [1.2.65](https://github.com/archestra-ai/archestra/compare/platform-v1.2.64...platform-v1.2.65) (2026-06-17)
 
 

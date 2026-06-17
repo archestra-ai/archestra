@@ -65,7 +65,7 @@ pub struct RunCtx {
     pub api_keys: HashMap<String, String>,
 }
 
-/// What a completed [`run`] produced: the per-cell results plus the run directory they were written
+/// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
 /// to, so a caller like the `full` CLI can hand the dir straight to the analyzer.
 pub struct RunOutcome {
     pub results: Vec<RunResult>,
@@ -313,14 +313,14 @@ enum EnvStop {
 }
 
 async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Vec<RunResult> {
-    let total_cells: usize = plan.iter().map(|p| p.tasks.len() * p.lanes.len()).sum();
+    let total_rollouts: usize = plan.iter().map(|p| p.tasks.len() * p.lanes.len()).sum();
     let distinct_lanes = plan.first().map(|p| p.lanes.len()).unwrap_or(0);
     let mp = MultiProgress::new();
     note(
         &mp,
-        format!("● {total_cells} cells · {distinct_lanes} lanes · {max_workers} workers"),
+        format!("● {total_rollouts} rollouts · {distinct_lanes} lanes · {max_workers} workers"),
     );
-    let progress = mp.add(ProgressBar::new(total_cells as u64));
+    let progress = mp.add(ProgressBar::new(total_rollouts as u64));
     progress.set_style(
         ProgressStyle::with_template("  run     {bar:30.cyan/blue} {pos}/{len} {msg}")
             .expect("static progress template")
@@ -328,7 +328,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     );
 
     // Lane-grouped scheduling: one serial worker per distinct lane, draining that lane's work across
-    // every env in plan order. A given model therefore never runs two cells at once (rate-limit safety),
+    // every env in plan order. A given model therefore never runs two rollouts at once (rate-limit safety),
     // and there is no env barrier. `lane_stop_plan` is the ordering authority.
     let skeleton = lane_stop_plan(&plan);
 
@@ -1021,8 +1021,8 @@ async fn run_lane(
 ) -> Vec<RunResult> {
     let mut results = Vec::new();
     for task in tasks {
-        let cell = cell_id(&task, &lane);
-        progress.set_message(format!("{} {}", cell, task.id));
+        let rollout = rollout_label(&task, &lane);
+        progress.set_message(format!("{} {}", rollout, task.id));
         let result = run_one(
             client.clone(),
             mcp.clone(),
@@ -1053,7 +1053,7 @@ async fn run_one(
     task: &Task,
     resolved: &ResolvedModel,
 ) -> RunResult {
-    let cell_key = format!("{env_id}/{}/{}", task.id, lane.slug());
+    let rollout_key = format!("{env_id}/{}/{}", task.id, lane.slug());
     let artifacts =
         match RunArtifacts::new(root_run_dir.join(run_subdir(env_id, &task.id, lane))).await {
             Ok(a) => a,
@@ -1103,7 +1103,7 @@ async fn run_one(
     });
     artifacts.write_run(&metadata).await;
 
-    match grade_cell(
+    match grade_rollout(
         client,
         bench_mcp,
         submit_tool,
@@ -1114,7 +1114,7 @@ async fn run_one(
         resolved,
         &artifacts,
         &mut metadata,
-        &cell_key,
+        &rollout_key,
     )
     .await
     {
@@ -1126,7 +1126,7 @@ async fn run_one(
     }
 }
 
-async fn grade_cell(
+async fn grade_rollout(
     client: EvalClient,
     bench_mcp: BenchmarkMcp,
     _submit_tool: &str,
@@ -1137,17 +1137,17 @@ async fn grade_cell(
     resolved: &ResolvedModel,
     artifacts: &RunArtifacts,
     metadata: &mut serde_json::Value,
-    cell_key: &str,
+    rollout_key: &str,
 ) -> Result<RunResult, RunError> {
     bench_mcp
-        .begin_task(cell_key, &task.result_schema, task.max_format_attempts)
+        .begin_task(rollout_key, &task.result_schema, task.max_format_attempts)
         .await
         .map_err(|e| RunError::Mcp(e.to_string()))?;
 
     let conversation = client
         .create_conversation(
             agent_id,
-            Some(cell_key),
+            Some(rollout_key),
             Some(&resolved.model_id),
             Some(&resolved.api_key_id),
         )
@@ -1167,7 +1167,7 @@ async fn grade_cell(
     artifacts.write_run(metadata).await;
 
     let runtime: HashMap<String, String> = HashMap::from([
-        ("cell".to_string(), cell_token(cell_key, &lane.model)),
+        ("cell".to_string(), rollout_token(rollout_key, &lane.model)),
         ("agent_id".to_string(), agent_id.to_string()),
     ]);
     let mut run = ChatRunResult::default();
@@ -1175,7 +1175,7 @@ async fn grade_cell(
     let final_stage = task.stages.len().saturating_sub(1);
     for (index, stage) in task.stages.iter().enumerate() {
         if index == final_stage {
-            bench_mcp.allow_submission(cell_key).await;
+            bench_mcp.allow_submission(rollout_key).await;
         }
         stage_error = drive_stage(
             &client,
@@ -1205,7 +1205,7 @@ async fn grade_cell(
     metadata["total_tokens"] =
         serde_json::to_value(run.total_tokens).unwrap_or(serde_json::Value::Null);
 
-    let submission = bench_mcp.take_submission(cell_key).await;
+    let submission = bench_mcp.take_submission(rollout_key).await;
     match submission {
         Submission::FormatFailed(failed) => {
             metadata["format_errors"] = serde_json::Value::Array(
@@ -1664,8 +1664,8 @@ struct RunArtifacts {
 
 impl RunArtifacts {
     async fn new(path: PathBuf) -> Result<Self, RunError> {
-        // Create the parent env dir(s) if needed, but the leaf cell dir must be created fresh:
-        // an existing cell dir is a rerun collision (matches Python's mkdir(parents=True, exist_ok=False)).
+        // Create the parent env dir(s) if needed, but the leaf rollout dir must be created fresh:
+        // an existing rollout dir is a rerun collision (no clobbering a prior run's artifacts).
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(RunError::Io)?;
         }
@@ -1974,7 +1974,7 @@ fn expand_runtime(text: &str, mapping: &HashMap<String, String>) -> String {
     .to_string()
 }
 
-fn cell_token(cell_key: &str, model_name: &str) -> String {
+fn rollout_token(rollout_key: &str, model_name: &str) -> String {
     let slug: String = model_name
         .to_lowercase()
         .chars()
@@ -1987,17 +1987,17 @@ fn cell_token(cell_key: &str, model_name: &str) -> String {
     } else {
         slug
     };
-    let digest = format!("{:x}", Sha256::digest(cell_key.as_bytes()))[..8].to_string();
+    let digest = format!("{:x}", Sha256::digest(rollout_key.as_bytes()))[..8].to_string();
     format!("{slug}-{digest}")
 }
 
 fn run_subdir(env_id: &str, task_id: &str, lane: &Lane) -> String {
     // The `<env>/<task>__<lane>` layout is owned by the shared contract crate so the harness writer
     // and the analyzer reader cannot drift (this is what broke before).
-    archestra_bench_core::cell_dir(env_id, task_id, &lane.name)
+    archestra_bench_core::rollout_dir(env_id, task_id, &lane.name)
 }
 
-fn cell_id(task: &Task, lane: &Lane) -> String {
+fn rollout_label(task: &Task, lane: &Lane) -> String {
     format!("{}/{}", lane.slug(), task.id)
 }
 
@@ -2129,8 +2129,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cell_token() {
-        let token = cell_token("basic/t1/openai/gpt-4", "gpt-4-turbo");
+    fn test_rollout_token() {
+        let token = rollout_token("basic/t1/openai/gpt-4", "gpt-4-turbo");
         assert!(token.starts_with("gpt-4-turbo-"));
     }
 
@@ -2388,14 +2388,14 @@ mod tests {
     async fn test_run_artifacts_creates_parents_and_rejects_existing_leaf() {
         let tmp = tempfile::tempdir().unwrap();
         let lane = dummy_lane("openai-gpt-4");
-        let cell = tmp.path().join(run_subdir("basic", "median-salary", &lane));
+        let rollout = tmp.path().join(run_subdir("basic", "median-salary", &lane));
         // parent (env dir) does not exist yet — new() must create it.
-        RunArtifacts::new(cell.clone()).await.unwrap();
-        assert!(cell.is_dir());
-        assert!(cell.parent().unwrap().is_dir());
+        RunArtifacts::new(rollout.clone()).await.unwrap();
+        assert!(rollout.is_dir());
+        assert!(rollout.parent().unwrap().is_dir());
         // a second attempt at the same leaf is a rerun collision.
-        match RunArtifacts::new(cell.clone()).await {
-            Err(RunError::ArtifactExists(p)) => assert_eq!(p, cell),
+        match RunArtifacts::new(rollout.clone()).await {
+            Err(RunError::ArtifactExists(p)) => assert_eq!(p, rollout),
             Err(e) => panic!("expected ArtifactExists, got error {e:?}"),
             Ok(_) => panic!("expected ArtifactExists, but creation succeeded"),
         }

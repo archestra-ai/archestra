@@ -476,8 +476,8 @@ mod tests {
             "additionalProperties": false
         });
         let mcp = BenchmarkMcp::start("benchmark-take-test").await.unwrap();
-        mcp.begin_task("cell-1", &schema, 3).await.unwrap();
-        mcp.allow_submission("cell-1").await;
+        mcp.begin_task("rollout-1", &schema, 3).await.unwrap();
+        mcp.allow_submission("rollout-1").await;
         {
             // simulate an accepted submission by driving the validator path directly
             let mut guard = mcp.ctx.lock().await;
@@ -486,11 +486,11 @@ mod tests {
         }
         // a take with the wrong key must NOT consume the captured submission
         assert!(matches!(
-            mcp.take_submission("other-cell").await,
+            mcp.take_submission("other-rollout").await,
             Submission::None
         ));
         // the correct key still returns it
-        match mcp.take_submission("cell-1").await {
+        match mcp.take_submission("rollout-1").await {
             Submission::Accepted(a) => {
                 assert_eq!(a.payload_bytes, br#"{"answer":"ok"}"#.to_vec());
             }
@@ -529,13 +529,13 @@ mod tests {
         // published `minProperties: 1` tool schema.
         let mcp = BenchmarkMcp::start("benchmark-empty-test").await.unwrap();
         let err = mcp
-            .begin_task("cell-1", &serde_json::json!({"type": "object"}), 3)
+            .begin_task("rollout-1", &serde_json::json!({"type": "object"}), 3)
             .await
             .unwrap_err();
         assert!(matches!(err, McpServerError::Schema(_)));
         // A schema requiring a field is accepted.
         mcp.begin_task(
-            "cell-1",
+            "rollout-1",
             &serde_json::json!({
                 "type": "object",
                 "required": ["answer"],

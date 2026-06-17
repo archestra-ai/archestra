@@ -65,7 +65,7 @@ struct CommonBenchArgs {
     lanes: Option<String>,
     #[arg(long, help = "Override path to lanes.toml")]
     lanes_file: Option<PathBuf>,
-    #[arg(short = 'j', long, help = "Maximum parallel cells")]
+    #[arg(short = 'j', long, help = "Maximum parallel rollouts")]
     max_workers: Option<usize>,
 }
 

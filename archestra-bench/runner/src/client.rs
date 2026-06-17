@@ -973,8 +973,8 @@ fn process_sse_line(line: &str) -> Option<ChatStreamRecord> {
             });
         }
         // Parse to a value first, then require an object — a valid-but-non-object payload (e.g.
-        // `data: 42`) is ignored, not a parse error, matching the Python client's isinstance(dict)
-        // check. Only genuinely malformed JSON is a ParseError (which can fail the cell).
+        // `data: 42`) is ignored, not a parse error. Only genuinely malformed JSON is a ParseError
+        // (which can fail the rollout).
         return Some(match serde_json::from_str::<JsonValue>(payload) {
             Ok(JsonValue::Object(map)) => ChatStreamRecord {
                 kind: ChatRecordKind::Event,
@@ -1243,8 +1243,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sse_non_object_payload_is_ignored_not_error() {
-        // A valid-but-non-object data line must be ignored (not a ParseError that fails the cell),
-        // matching the Python client; only malformed JSON is a parse error.
+        // A valid-but-non-object data line must be ignored (not a ParseError that fails the rollout);
+        // only malformed JSON is a parse error.
         use futures::StreamExt;
         let chunks = vec![
             b"data: 42\n".to_vec(),

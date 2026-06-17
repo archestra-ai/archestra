@@ -168,7 +168,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
                 )));
             }
             // One model = one lane = one handle: a repeated name in the selection would otherwise be
-            // silently dropped or break the runner's one-cell-per-model scheduling invariant.
+            // silently dropped or break the runner's one-rollout-per-model scheduling invariant.
             let mut requested: HashSet<&str> = HashSet::new();
             if let Some(dup) = names.iter().find(|n| !requested.insert(n.as_str())) {
                 return Err(LaneError(format!(

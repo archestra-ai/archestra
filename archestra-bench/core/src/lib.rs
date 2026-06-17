@@ -2,7 +2,7 @@
 //!
 //! Both sides read/write the same on-disk artifacts (`run.json`, `trajectory.jsonl`) under the same
 //! `experiments/<run>/<env>/<task>__<lane>` layout. Defining those shapes once here keeps the two
-//! from silently drifting — the cell-directory layout already drifted once and broke the analyzer.
+//! from silently drifting — the rollout-directory layout already drifted once and broke the analyzer.
 
 use std::fmt;
 
@@ -12,7 +12,7 @@ use serde_json::Value;
 mod lanes;
 pub use lanes::{Lane, LaneError, Provider, find_lane, is_slug, load_lanes};
 
-/// Per-cell artifact file names.
+/// Per-rollout artifact file names.
 pub const RUN_JSON: &str = "run.json";
 pub const TRAJECTORY_JSONL: &str = "trajectory.jsonl";
 pub const CONFIG_JSON: &str = "config.json";
@@ -36,9 +36,9 @@ pub fn slug(value: &str) -> String {
     if s.is_empty() { "run".to_string() } else { s }
 }
 
-/// The per-cell artifact directory, relative to the run root: `<env>/<task>__<lane>`. This is the
+/// The per-rollout artifact directory, relative to the run root: `<env>/<task>__<lane>`. This is the
 /// single source of truth for the layout the harness writes and the analyzer reads.
-pub fn cell_dir(env_id: &str, task_id: &str, lane: &str) -> String {
+pub fn rollout_dir(env_id: &str, task_id: &str, lane: &str) -> String {
     format!("{}/{}__{}", slug(env_id), slug(task_id), slug(lane))
 }
 
@@ -217,9 +217,9 @@ mod tests {
     }
 
     #[test]
-    fn cell_dir_is_env_task_lane() {
+    fn rollout_dir_is_env_task_lane() {
         assert_eq!(
-            cell_dir("basic", "median-salary", "kimi"),
+            rollout_dir("basic", "median-salary", "kimi"),
             "basic/median-salary__kimi"
         );
     }

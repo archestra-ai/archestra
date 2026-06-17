@@ -1,9 +1,19 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
+import config from "@/config";
+import { projectService } from "@/services/project";
+import {
+  FileBytesMissingError,
+  getFileBytesStorage,
+} from "@/skills-sandbox/file-storage";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
-import { ApiError } from "@/types";
+import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
+import {
+  ApiError,
+  constructResponseSchema,
+  SandboxFileListItemSchema,
+} from "@/types";
 
 /**
  * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
@@ -39,24 +49,20 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { artifactId }, organizationId, user }, reply) => {
-      const artifact = await SkillSandboxFileModel.findArtifactById(artifactId);
+      // "wrong owner" and "missing" collapse into the same 404 inside the
+      // service so cross-org probes can't tell them apart. Access: the file's
+      // author, or anyone with access to the project owning the file.
+      const artifact = await skillSandboxArtifactService.getArtifactForUser({
+        artifactId,
+        organizationId,
+        userId: user.id,
+      });
       if (!artifact) {
-        throw new ApiError(404, "Artifact not found");
-      }
-      // collapse "wrong sandbox owner" and "missing" into the same 404 so
-      // cross-org probes can't distinguish "exists but inaccessible" from
-      // "does not exist".
-      const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
-      if (
-        !sandbox ||
-        sandbox.organizationId !== organizationId ||
-        sandbox.userId !== user.id
-      ) {
         throw new ApiError(404, "Artifact not found");
       }
 
       const inlineSafe = isInlineSafeImageMime(artifact.mimeType);
-      const filename = safeFilenameFromPath(artifact.path);
+      const filename = safeFilenameFromPath(artifact.filename);
       const disposition = inlineSafe
         ? `inline; filename="${filename}"`
         : `attachment; filename="${filename}"`;
@@ -64,8 +70,19 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? artifact.mimeType
         : "application/octet-stream";
 
-      // findArtifactById normalizes bytea to Buffer at the model boundary
-      const data = artifact.data;
+      // byte normalization (pg Buffer vs PGlite Uint8Array) lives in the
+      // storage adapter, which also resolves rows whose bytes live outside
+      // the data column (storage_provider = 'filesystem').
+      let data: Buffer;
+      try {
+        data = await getFileBytesStorage().get(artifact);
+      } catch (error) {
+        if (error instanceof FileBytesMissingError) {
+          // the row exists but its bytes are gone
+          throw new ApiError(404, "Artifact data is no longer available");
+        }
+        throw error;
+      }
 
       reply
         .header("Content-Type", contentType)
@@ -77,6 +94,86 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(data);
     },
   );
+
+  if (config.projects.enabled) {
+    fastify.delete(
+      "/api/skill-sandbox/artifacts/:artifactId",
+      {
+        schema: {
+          operationId: RouteId.DeleteSkillSandboxArtifact,
+          description:
+            "Delete a persistent file. Allowed for the file's author, or " +
+            "anyone with access to the project owning the file.",
+          tags: ["Skills"],
+          params: z.object({ artifactId: z.string().uuid() }),
+          response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+        },
+      },
+      async ({ params: { artifactId }, organizationId, user }) => {
+        const deleted = await skillSandboxArtifactService.deleteArtifactForUser(
+          {
+            artifactId,
+            organizationId,
+            userId: user.id,
+          },
+        );
+        if (!deleted) {
+          throw new ApiError(404, "Artifact not found");
+        }
+        return { ok: true as const };
+      },
+    );
+
+    fastify.get(
+      "/api/skill-sandbox/conversations/:conversationId/artifacts",
+      {
+        schema: {
+          operationId: RouteId.GetSkillSandboxConversationArtifacts,
+          description:
+            "List the artifact files produced in a conversation's sandbox.",
+          tags: ["Skills"],
+          params: z.object({ conversationId: z.string().uuid() }),
+          response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+        },
+      },
+      async ({ params: { conversationId }, organizationId, user }) =>
+        skillSandboxArtifactService.listForConversation({
+          organizationId,
+          userId: user.id,
+          conversationId,
+        }),
+    );
+
+    fastify.get(
+      "/api/skill-sandbox/files",
+      {
+        schema: {
+          operationId: RouteId.GetSkillSandboxFiles,
+          description:
+            "List the calling user's persistent files (My Files): their own " +
+            "artifact files across all conversations, plus the files of " +
+            "projects shared with them.",
+          tags: ["Skills"],
+          response: constructResponseSchema(
+            z.object({ files: z.array(SandboxFileListItemSchema) }),
+          ),
+        },
+      },
+      async ({ organizationId, user }) => {
+        const [own, shared] = await Promise.all([
+          skillSandboxArtifactService.listAllForUser({
+            organizationId,
+            userId: user.id,
+          }),
+          projectService.listSharedProjectFiles({
+            organizationId,
+            userId: user.id,
+          }),
+        ]);
+        return { files: [...own, ...shared] };
+      },
+    );
+  }
 };
 
 export default skillSandboxArtifactRoutes;

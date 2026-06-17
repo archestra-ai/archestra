@@ -1,8 +1,10 @@
 import { DEFAULT_APP_NAME, type SupportedProvider } from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
+  ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
+import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 
 /**
  * Pure renderers for the /connection one-command setup scripts. Everything in
@@ -68,6 +70,8 @@ export interface SetupScriptSkillsSection {
 
 export interface SetupScriptContext {
   clientId: ConnectionSetupClientId;
+  /** Target OS: "macos"/"linux" render bash, "windows" renders PowerShell. */
+  platform: ConnectionSetupPlatform;
   /** White-label product name for user-facing messaging. */
   appName: string;
   mcp: SetupScriptMcpSection | null;
@@ -75,13 +79,22 @@ export interface SetupScriptContext {
   skills: SetupScriptSkillsSection | null;
 }
 
-/** The one-liner shown in the UI. `origin` is the API origin (no /v1). */
+/**
+ * The one-liner shown in the UI. `origin` is the API origin (no /v1). Windows
+ * gets a PowerShell `irm | iex` invocation; macOS/Linux get `curl | bash`.
+ */
 export function buildSetupCommand(params: {
   origin: string;
   rawToken: string;
+  platform: ConnectionSetupPlatform;
 }): string {
+  const url = `${params.origin}/api/connection-setups/script/${params.rawToken}`;
+  if (params.platform === "windows") {
+    // single quotes: nothing in the URL may expand in PowerShell.
+    return `irm ${psq(url)} | iex`;
+  }
   // single quotes: nothing in the URL may expand in the user's shell.
-  return `curl -fsSL ${sh(`${params.origin}/api/connection-setups/script/${params.rawToken}`)} | bash`;
+  return `curl -fsSL ${sh(url)} | bash`;
 }
 
 /** Strips the /v1 suffix the connection base URLs carry. */
@@ -90,13 +103,19 @@ export function proxyBaseUrlToOrigin(baseUrl: string): string {
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
-  // appName is white-label, admin-controlled text that lands in bash comments
-  // and unquoted echo strings. Collapse control characters (newlines, NUL, …)
-  // to spaces so it can never break out of a comment line and execute.
+  // appName is white-label, admin-controlled text that lands in script comments
+  // and bare echo strings. Collapse control characters (newlines, NUL, …) to
+  // spaces so it can never break out of a comment line and execute.
   const ctx: SetupScriptContext = {
     ...rawCtx,
     appName: sanitizeAppName(rawCtx.appName),
   };
+
+  // Windows targets a separate PowerShell renderer; macOS/Linux share bash.
+  if (ctx.platform === "windows") {
+    return renderWindowsSetupScript(ctx);
+  }
+
   const sections: string[] = [header(ctx)];
 
   switch (ctx.clientId) {
@@ -140,11 +159,34 @@ function sh(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/** Single-quote a value for PowerShell; safe for arbitrary content. */
+function psq(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 /** Collapse control characters so appName is safe in comments and bare echoes. */
 function sanitizeAppName(appName: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
   return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || "Archestra";
 }
+
+/**
+ * Color setup + logging helpers shared by every script. Colors are emitted
+ * only when stdout is a TTY and NO_COLOR is unset, so piping the output to a
+ * file or a non-interactive shell keeps it clean ANSI-free text. `say` marks
+ * section headers, `ok` a success, `warn`/`err` advisory and failure lines
+ * (err goes to stderr so `curl -f | bash` surfaces it).
+ */
+const SCRIPT_HELPERS = `if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
+  ARCH_C_RESET=$'\\033[0m'; ARCH_C_HEAD=$'\\033[1;36m'; ARCH_C_OK=$'\\033[1;32m'
+  ARCH_C_WARN=$'\\033[1;33m'; ARCH_C_ERR=$'\\033[1;31m'
+else
+  ARCH_C_RESET=''; ARCH_C_HEAD=''; ARCH_C_OK=''; ARCH_C_WARN=''; ARCH_C_ERR=''
+fi
+say()  { printf '\\n%s==> %s%s\\n' "$ARCH_C_HEAD" "$1" "$ARCH_C_RESET"; }
+ok()   { printf '%s==>%s %s\\n' "$ARCH_C_OK" "$ARCH_C_RESET" "$1"; }
+warn() { printf '%swarning:%s %s\\n' "$ARCH_C_WARN" "$ARCH_C_RESET" "$1"; }
+err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }`;
 
 function header(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -152,7 +194,7 @@ function header(ctx: SetupScriptContext): string {
   const requireBinary = binary
     ? `
 if ! command -v ${binary} >/dev/null 2>&1; then
-  echo "error: the '${binary}' CLI was not found on PATH. Install ${label} first, then re-run this command." >&2
+  err "the '${binary}' CLI was not found on PATH. Install ${label} first, then re-run this command."
   exit 1
 fi`
     : "";
@@ -163,9 +205,10 @@ fi`
 # credentials — do not share or commit it.
 set -euo pipefail
 
+${SCRIPT_HELPERS}
+
 ${banner(ctx)}
 
-say() { printf '\\n==> %s\\n' "$1"; }
 say ${sh(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
 }
 
@@ -189,15 +232,20 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
+  // A monospace rendition of the Archestra mark: a white tilted rounded bar
+  // and dot on the terminal's dark field, echoing the real logo-icon.svg.
+  // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
   const logo =
     ctx.appName === DEFAULT_APP_NAME
-      ? `   .----------------.
-   |       __       |
-   |      / /       |
-   |     / /        |     ${ctx.appName}
-   |    / /  __     |     Secure access to your AI tools
-   |   /_/  |__|    |
-   '----------------'`
+      ? `   ╭──────────────────╮
+   │                  │
+   │        ▟██▙      │
+   │        ████      │     ${ctx.appName}
+   │       ████       │     Secure access to your AI tools
+   │       ████ ▟▙    │
+   │      ▜██▛  ▜▛    │
+   │                  │
+   ╰──────────────────╯`
       : `   ${ctx.appName}
    Secure access to your AI tools`;
 
@@ -218,7 +266,7 @@ ARCHESTRA_BANNER`;
 }
 
 function footer(ctx: SetupScriptContext): string {
-  const lines = [`say "Done."`];
+  const lines = [`ok "Done."`];
 
   const nextSteps = nextStepsFor(ctx);
   if (nextSteps.length > 0) {
@@ -347,7 +395,9 @@ function mergeJsonFileSnippet(params: {
 
   return `if command -v python3 >/dev/null 2>&1; then
   mkdir -p "$(dirname ${sh(params.file)})"
-  if [ -f ${sh(params.file)} ]; then
+  # Back up once: a re-run must not overwrite the pristine pre-Archestra copy
+  # with our already-modified file. The merge below is itself idempotent.
+  if [ -f ${sh(params.file)} ] && [ ! -f ${sh(`${params.file}.archestra-backup`)} ]; then
     cp ${sh(params.file)} ${sh(`${params.file}.archestra-backup`)}
   fi
 ${indent(envAssignments, "  ")}
@@ -355,7 +405,7 @@ ${indent(envAssignments, "  ")}
 ${params.python}
 ARCHESTRA_PY
 else
-  echo ${sh(params.fallbackMessage)}
+  warn ${sh(params.fallbackMessage)}
   cat <<'ARCHESTRA_MANUAL'
 ${params.fallbackSnippet}
 ARCHESTRA_MANUAL
@@ -393,7 +443,7 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
+  warn "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
 fi`);
   }
 
@@ -502,8 +552,9 @@ requires_openai_auth = true
 mkdir -p "$HOME/.codex"
 CONFIG="$HOME/.codex/config.toml"
 if [ -f "$CONFIG" ]; then
-  cp "$CONFIG" "$CONFIG.archestra-backup"
-  # drop any previous archestra-managed block for this provider
+  # Back up once so re-runs preserve the pristine pre-Archestra config.
+  [ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"
+  # drop any previous archestra-managed block for this provider (idempotent)
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
@@ -528,7 +579,7 @@ echo "Codex keeps using your own OpenAI API key login."`
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run /plugins inside Codex to inspect."
+  warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
 fi`);
   }
 
@@ -573,7 +624,7 @@ ARCHESTRA_COPILOT`);
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
+  warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }
 
@@ -665,7 +716,7 @@ ARCHESTRA_GHCP_PY
     ghcp_device="$(printf '%s' ${sh(deviceRequestBody)} | curl -fsS --connect-timeout 10 --max-time 30 \\
       -X POST -H 'accept: application/json' -H 'content-type: application/json' \\
       --data @- ${sh(deviceCodeUrl)})" || {
-      echo "error: could not reach GitHub to start the device flow." >&2
+      err "could not reach GitHub to start the device flow."
       exit 1
     }
     ghcp_field() { printf '%s' "$ghcp_device" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$1',''))"; }
@@ -677,7 +728,7 @@ ARCHESTRA_GHCP_PY
     [ -n "$ghcp_interval" ] || ghcp_interval=5
     [ -n "$ghcp_expires_in" ] || ghcp_expires_in=900
     if [ -z "$ghcp_device_code" ]; then
-      echo "error: GitHub did not return a device code." >&2
+      err "GitHub did not return a device code."
       exit 1
     fi
     ghcp_deadline=$(( $(date +%s) + ghcp_expires_in ))
@@ -688,7 +739,7 @@ ARCHESTRA_GHCP_PY
     echo 'Waiting for you to authorize in the browser...'
     while [ -z "$ARCHESTRA_GHCP_TOKEN" ]; do
       if [ "$(date +%s)" -ge "$ghcp_deadline" ]; then
-        echo "error: timed out waiting for GitHub authorization — re-run this command to try again." >&2
+        err "timed out waiting for GitHub authorization — re-run this command to try again."
         exit 1
       fi
       sleep "$ghcp_interval"
@@ -706,12 +757,12 @@ ARCHESTRA_GHCP_PY
         # keep polling on pending and on transient/parse hiccups
         authorization_pending|"") ;;
         slow_down) ghcp_interval=$((ghcp_interval + 5)) ;;
-        *) echo "error: GitHub sign-in failed: $ghcp_error" >&2; exit 1 ;;
+        *) err "GitHub sign-in failed: $ghcp_error"; exit 1 ;;
       esac
     done
-    echo "GitHub account linked."
+    ok "GitHub account linked."
     if ! ghcp_validate "$ARCHESTRA_GHCP_TOKEN"; then
-      echo "error: this GitHub account does not appear to have an active Copilot subscription." >&2
+      err "this GitHub account does not appear to have an active Copilot subscription."
       exit 1
     fi
   fi

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.65](https://github.com/archestra-ai/archestra/compare/platform-v1.2.64...platform-v1.2.65) (2026-06-17)
+
+
+### Features
+
+* Projects + My Files (persistent file system) on the skill sandbox ([#5599](https://github.com/archestra-ai/archestra/issues/5599)) ([97d1d19](https://github.com/archestra-ai/archestra/commit/97d1d193bf220e24b712ea7f514319f96ace2e75))
+
+
+### Bug Fixes
+
+* **sandbox:** regenerate sandbox_base lockfile to unblock staging deploy ([#5622](https://github.com/archestra-ai/archestra/issues/5622)) ([4ce54dd](https://github.com/archestra-ai/archestra/commit/4ce54ddc626fee1e9fe94bdc0906ba3ae3b7427f))
+* **sandbox:** regenerate stale sandbox-base lockfile (project-name drift) ([#5619](https://github.com/archestra-ai/archestra/issues/5619)) ([7b6047d](https://github.com/archestra-ai/archestra/commit/7b6047dc3c5e42e299f00dcb9ec7bbb9129cf04c))
+* **web-crawler:** reject cross-host and out-of-scope redirects ([#5605](https://github.com/archestra-ai/archestra/issues/5605)) ([8256748](https://github.com/archestra-ai/archestra/commit/82567483ef16446ee2387517d555b4023c17a3cd))
+
 ## [1.2.64](https://github.com/archestra-ai/archestra/compare/platform-v1.2.63...platform-v1.2.64) (2026-06-16)
 
 

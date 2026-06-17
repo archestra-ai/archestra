@@ -164,6 +164,7 @@ export function useCreateConversation() {
       modelId,
       chatApiKeyId,
       title,
+      projectId,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
@@ -171,6 +172,7 @@ export function useCreateConversation() {
           modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
           title,
+          projectId: projectId ?? undefined,
         },
       });
       if (error) {

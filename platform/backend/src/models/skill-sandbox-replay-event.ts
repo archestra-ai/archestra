@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertSkillSandboxCommand,
+  SandboxFileOrigin,
   SkillSandboxCommand,
   SkillSandboxFile,
   SkillSandboxSkillMount,
@@ -12,6 +14,8 @@ import { normalizeByteaField } from "@/utils/normalize-bytea";
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
   sandboxId: string;
+  /** Sandbox owner — names the per-user storage folder. Not a column. */
+  userId: string;
   path: string;
   mimeType: string;
   originalName: string | null;
@@ -23,6 +27,8 @@ interface UploadInput {
    * stage is a no-op that returns `null` instead of a duplicate replay event.
    */
   sourceAttachmentId?: string | null;
+  /** How the upload entered the sandbox; 'my_file' = copied from the user's PFS. */
+  origin?: SandboxFileOrigin | null;
 }
 
 /** Identity of the skill version a mount pins. */
@@ -94,17 +100,23 @@ class SkillSandboxReplayEventModel {
   static async appendUpload(
     upload: UploadInput,
   ): Promise<SkillSandboxFile | null> {
-    return await db.transaction(async (tx) => {
-      const [row] = await tx
+    // id is generated app-side (not by the column default) so the replay-event
+    // row can reference it within the same transaction.
+    const fileId = randomUUID();
+    const row = await db.transaction(async (tx) => {
+      const [inserted] = await tx
         .insert(schema.skillSandboxFilesTable)
         .values({
+          id: fileId,
           kind: "upload",
           sandboxId: upload.sandboxId,
           path: upload.path,
           mimeType: upload.mimeType,
           originalName: upload.originalName,
           sourceAttachmentId: upload.sourceAttachmentId ?? null,
+          origin: upload.origin ?? null,
           sizeBytes: upload.sizeBytes,
+          // uploads are always Postgres bytes; the column is NOT NULL again.
           data: upload.data,
         })
         .onConflictDoNothing({
@@ -116,16 +128,17 @@ class SkillSandboxReplayEventModel {
         })
         .returning();
       // already staged: ON CONFLICT made the insert a no-op.
-      if (!row) return null;
+      if (!inserted) return null;
       const sequence = await allocateSequence(tx, upload.sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: upload.sandboxId,
         sequence,
         kind: "upload",
-        fileId: row.id,
+        fileId: inserted.id,
       });
-      return normalizeByteaField(row, "data");
+      return normalizeByteaField(inserted, "data");
     });
+    return row;
   }
 
   /**

@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import {
   BUILT_IN_AGENT_IDS,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  getModelReadableMimeTypes,
   type SupportedProvider,
 } from "@archestra/shared";
 import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
@@ -676,10 +677,17 @@ async function tryCreateInContextCompaction(params: {
     // Rehydrate attachment refs back to inline bytes before the LLM call —
     // otherwise the compaction model sees ref URLs it can't fetch and
     // summarizes without the file content. Materialize is conversation-scoped
-    // so cross-conv refs (if any) are silently dropped.
+    // so cross-conv refs (if any) are silently dropped. Non-ingestible files
+    // are referenced as sandbox paths rather than inlined as documents the
+    // compaction model would reject.
+    const compactionModelRow = await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.selectedModel,
+    ).catch(() => null);
     const materializedCompactable = await materializeAttachments(
       params.compactableMessages,
       params.conversationId,
+      getModelReadableMimeTypes(compactionModelRow?.inputModalities ?? null),
     );
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,

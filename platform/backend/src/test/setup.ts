@@ -31,6 +31,10 @@ process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING = "true";
 // PGlite-backed tests do not provide a session-stable pg.Client connection for
 // LISTEN/NOTIFY, so use the polling compatibility notifier by default in tests.
 process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
+// Projects + My Files ship dark behind a flag; force it on by default so the
+// branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
+// flip config.projects.enabled to false locally.
+process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

@@ -53,6 +53,11 @@ vi.mock("@/components/github-copilot-sign-in", () => ({
   ),
 }));
 
+vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
+  CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="add-provider-key-dialog" /> : null,
+}));
+
 function findClient(id: string) {
   const client = CONNECT_CLIENTS.find((c) => c.id === id);
   if (!client) throw new Error(`Missing fixture client: ${id}`);
@@ -70,10 +75,10 @@ function renderPanel(
   return render(
     <ConnectCommandPanel
       client={claudeClient}
-      mcpGateways={[{ id: "g1", name: "My Gateway" }]}
+      mcpGateways={[{ id: "g1", name: "My Gateway", agentType: "mcp_gateway" }]}
       mcpGatewayId="g1"
       onMcpGatewaySelect={vi.fn()}
-      llmProxies={[{ id: "p1", name: "My Proxy" }]}
+      llmProxies={[{ id: "p1", name: "My Proxy", agentType: "llm_proxy" }]}
       llmProxyId="p1"
       onLlmProxySelect={vi.fn()}
       urlProvider={null}
@@ -110,6 +115,7 @@ describe("ConnectCommandPanel", () => {
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenCalledWith({
         clientId: "claude-code",
+        platform: "macos", // jsdom has no Windows UA → bash default
         baseUrl: "http://localhost:9000/v1",
         mcpGatewayId: "g1",
         llmProxyId: "p1",
@@ -145,6 +151,15 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
   });
 
+  it("shows the auto-detected platform in the review step", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+    // jsdom reports no Windows UA, so detection falls back to the bash option.
+    expect(screen.getByText(/Run on/)).toBeInTheDocument();
+    expect(screen.getByText("macOS / Linux")).toBeInTheDocument();
+    expect(screen.getByTestId("connect-change-platform")).toBeInTheDocument();
+  });
+
   it("regenerates without skills after opting out in Options", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -170,6 +185,22 @@ describe("ConnectCommandPanel", () => {
 
     await userEvent.setup().click(bedrockTab);
     expect(onProviderSelect).toHaveBeenCalledWith("bedrock");
+  });
+
+  it("opens an inline add-provider-key dialog when no provider can mint a virtual key", async () => {
+    // No configured provider key, but the user may create one
+    // (hasPermissionsMock defaults to true for llmProviderApiKey:create).
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+    await user.click(
+      screen.getByRole("button", { name: /add a provider key/i }),
+    );
+
+    expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 
   it("skips skills entirely for non-admin users", async () => {

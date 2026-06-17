@@ -1,0 +1,17 @@
+[package]
+name = "archestra-bench-cli"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "archestra-bench"
+path = "src/main.rs"
+
+[dependencies]
+archestra_bench = { path = "../runner" }
+trajectory-analyzer = { path = "../analyzer" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }

@@ -1,6 +1,8 @@
-import type {
-  ContextWindowEstimate,
-  SupportedProvider,
+import {
+  type ContextWindowEstimate,
+  getModelReadableMimeTypes,
+  type ModelInputModality,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -34,13 +36,20 @@ export async function buildModelMessages(params: {
   agentId?: string | null;
   provider: SupportedProvider;
   selectedModel: string;
+  inputModalities?: ModelInputModality[] | null;
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
 }): Promise<ModelMessage[]> {
-  const { provider, selectedModel, conversationId, emit, ...compaction } =
-    params;
+  const {
+    provider,
+    selectedModel,
+    inputModalities,
+    conversationId,
+    emit,
+    ...compaction
+  } = params;
 
   let compactionStarted = false;
   const compactionResult = await compactMessagesForChat({
@@ -89,6 +98,7 @@ export async function buildModelMessages(params: {
       messages: compactionResult.messages,
       provider,
       conversationId,
+      ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
     }),
   });
 }
@@ -104,6 +114,7 @@ async function buildModelMessagesForProvider(params: {
   messages: ChatMessage[];
   provider: SupportedProvider;
   conversationId: string;
+  ingestibleMimeTypes?: Set<string>;
 }) {
   // Re-inline attachment refs as base64 data URLs for the LLM call (with
   // Anthropic cache_control marker). Refs are filtered to attachments owned
@@ -114,6 +125,7 @@ async function buildModelMessagesForProvider(params: {
   const materialized = await materializeAttachments(
     params.messages,
     params.conversationId,
+    params.ingestibleMimeTypes,
   );
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,

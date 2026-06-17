@@ -1009,13 +1009,20 @@ describe("context window breakdown state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chatOptions = undefined;
+    // The real useChat returns a referentially-stable messages array between
+    // renders when nothing changed. Returning a fresh [] from each mock call
+    // instead makes stableMessages a new identity every render, which re-fires
+    // the session-sync effect → notifySessionUpdate → re-render in an infinite
+    // loop that hangs render(<ChatProvider>) and never exits the worker. Hoist
+    // one stable empty array so the mock honors that contract.
+    const messages: UIMessage[] = [];
     mocks.useChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: [],
+        messages,
         regenerate: mocks.regenerate,
         resumeStream: mocks.resumeStream,
         sendMessage: mocks.sendMessage,

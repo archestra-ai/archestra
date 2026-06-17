@@ -1,6 +1,6 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval"]
 
 # These tasks are read-only against backend state (they run sandbox code + download artifacts, never
 # mutating the skill/tool catalog), and the skill surface is large + web-pinned -- so seed one backend

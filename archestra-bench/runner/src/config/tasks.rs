@@ -205,9 +205,9 @@ fn load_state_rest(tbl: &TomlTable, ctx: &str) -> Result<Vec<String>, TaskConfig
 }
 
 fn validate_state_path(path: &str, ctx: &str) -> Result<(), TaskConfigError> {
-    // Mirror Python tasks.py:_state_path: validate the *path* component (query strings and the
-    // {{cell}}/{{agent_id}} placeholders are substituted later and allowed), and decode percent-escapes
-    // before the `..` check so `/api/%2e%2e/x` is rejected just like `/api/../x`.
+    // Validate the *path* component (query strings and the {{cell}}/{{agent_id}} placeholders are
+    // substituted later and allowed), and decode percent-escapes before the `..` check so
+    // `/api/%2e%2e/x` is rejected just like `/api/../x`.
     let path_part = path.split('?').next().unwrap_or(path);
     if path_part.contains("://") || path_part.starts_with("//") {
         return Err(TaskConfigError(format!(

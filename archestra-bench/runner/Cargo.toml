@@ -8,15 +8,10 @@ publish = false
 name = "archestra_bench"
 path = "src/lib.rs"
 
-[[bin]]
-name = "archestra_bench"
-path = "src/main.rs"
-
 [dependencies]
 archestra-bench-core = { path = "../core" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "signal", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "sync"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -27,8 +22,7 @@ jsonschema = "0.29"
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"
 nix = { version = "0.30", features = ["process", "signal"] }
-clap = { version = "4", features = ["derive"] }
-indicatif = "0.17"
+indicatif = "0.18"
 tempfile = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 regex = "1"

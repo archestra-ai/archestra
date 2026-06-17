@@ -7,7 +7,6 @@
 //! Tier 2, the benchmark fixtures (task prompts, schemas, verifiers, env/skill config, runner).
 
 mod analyze;
-mod lanes;
 mod runmeta;
 mod trajectory;
 
@@ -15,15 +14,37 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use clap::Parser;
+use archestra_bench_core::{find_lane, load_lanes};
 use eyre::{Context, Result, bail};
 use futures::stream::{self, StreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nitpicker_agent::prelude::AgentProgress;
 
-use lanes::Lanes;
+use analyze::to_provider;
 use runmeta::{RolloutId, RunMeta, load_run_meta, metrics_block};
 use trajectory::{format_to_markdown, load_trajectory};
+
+/// Reduce-agent turn cap. Set high enough never to bind in practice — a repo crawl finishes well
+/// under it — so it is a runaway backstop, not a knob.
+const REDUCE_MAX_TURNS: usize = 200;
+
+/// Inputs for one analyzer run, built by the unified CLI from its `analyze`/`full` flags.
+pub struct AnalyzeConfig {
+    /// Run directory containing `<env>/<task>__<lane>/trajectory.jsonl` (an `experiments/<id>` dir).
+    pub run_dir: PathBuf,
+    /// Lane name (from the lanes registry) driving the per-trajectory map phase.
+    pub map: String,
+    /// Lane name driving the repo-grounded reduce phase.
+    pub reduce: String,
+    /// Lane registry `map`/`reduce` resolve against; defaults to `lanes.toml` beside the bench crate.
+    pub lanes_file: Option<PathBuf>,
+    /// Output report path; defaults to `<run-dir>/trajectory_analysis_<ts>.md`.
+    pub out: Option<PathBuf>,
+    /// Repo the reduce agent crawls; defaults to the autodetected git root above `run_dir`.
+    pub explore_root: Option<PathBuf>,
+    /// Max concurrent map-phase LLM calls.
+    pub concurrency: usize,
+}
 
 /// Print a persistent status line that survives a non-TTY target. `MultiProgress::println` is a
 /// no-op when the draw target is hidden (piped/CI/`NO_COLOR`), which would drop the summary and
@@ -35,42 +56,6 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
     } else {
         let _ = mp.println(msg);
     }
-}
-
-#[derive(Parser, Debug)]
-#[command(about = "Analyze archestra-bench trajectories into a recommendations report")]
-struct Args {
-    /// Run directory containing `<env>/<task>__<lane>/trajectory.jsonl` (an `experiments/<id>` dir).
-    #[arg(long)]
-    run_dir: PathBuf,
-
-    /// Repository the reduce agent crawls to ground recommendations; point it at the repo root so
-    /// the agent can cross-check issues against both the harness and the product source.
-    #[arg(long, default_value = ".")]
-    explore_root: PathBuf,
-
-    /// Lane name (from `--lanes-file`) driving the per-trajectory map phase.
-    #[arg(long)]
-    map: String,
-    /// Lane name (from `--lanes-file`) driving the repo-grounded reduce phase.
-    #[arg(long)]
-    reduce: String,
-    /// Lane registry `--map`/`--reduce` resolve against. Defaults to `lanes.toml` beside the
-    /// benchmark crate, resolved from the build manifest dir so it is found regardless of cwd.
-    #[arg(long)]
-    lanes_file: Option<PathBuf>,
-
-    /// Output report path (default: `<run-dir>/trajectory_analysis_<ts>.md`).
-    #[arg(long)]
-    out: Option<PathBuf>,
-
-    /// Reduce agent turn cap.
-    #[arg(long, default_value_t = 50)]
-    max_turns: usize,
-
-    /// Max concurrent map-phase LLM calls.
-    #[arg(long, default_value_t = 6)]
-    concurrency: usize,
 }
 
 /// One discovered benchmark rollout with its trajectory already rendered to the markdown fed to map.
@@ -86,9 +71,7 @@ struct Rollout {
 /// `*.backend.log`. The reduce agent's read tools sandbox to `explore_root`, so logs are only
 /// reachable when `run_dir` sits under it. Returns `None` when `run_dir` is outside `explore_root`,
 /// cannot be canonicalized, or *is* `explore_root` (an empty relative path) — in every such case the
-/// reduce prompt simply omits the backend-log pointer. The empty case never arises in practice:
-/// `discover_rollouts` requires `run_dir` to hold nested `*/*__*/trajectory.jsonl` rollouts, so it
-/// is always a subdirectory, never the explore root itself.
+/// reduce prompt simply omits the backend-log pointer.
 fn run_dir_rel(run_dir: &Path, explore_root: &Path) -> Option<String> {
     let abs = run_dir.canonicalize().ok()?;
     let rel = abs.strip_prefix(explore_root).ok()?;
@@ -97,13 +80,30 @@ fn run_dir_rel(run_dir: &Path, explore_root: &Path) -> Option<String> {
 }
 
 /// Default lanes registry: `archestra-bench/lanes.toml`, resolved from the crate manifest dir so it
-/// is found regardless of the caller's working directory — mirroring the Python runner, which
-/// resolves the same file relative to its own source rather than cwd.
+/// is found regardless of the caller's working directory.
 fn default_lanes_file() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("crate manifest dir always has a parent")
         .join("lanes.toml")
+}
+
+/// Autodetect the repo root the reduce agent should crawl: the nearest ancestor of `run_dir` holding
+/// a `.git` entry. A benchmark `run_dir` lives under `experiments/` in the repo, so an ancestor always
+/// has `.git` — this frees the caller from passing `--explore-root` and from running at the repo root.
+fn detect_repo_root(run_dir: &Path) -> Result<PathBuf> {
+    let start = run_dir
+        .canonicalize()
+        .wrap_err_with(|| format!("run dir does not exist: {}", run_dir.display()))?;
+    for dir in start.ancestors() {
+        if dir.join(".git").exists() {
+            return Ok(dir.to_path_buf());
+        }
+    }
+    bail!(
+        "could not autodetect a repo root (no `.git` above {}); pass an explicit explore root",
+        run_dir.display()
+    )
 }
 
 fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
@@ -162,41 +162,34 @@ fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
     Ok(rollouts)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
-        )
-        .init();
-
-    let args = Args::parse();
-    if args.concurrency == 0 {
-        bail!("--concurrency must be >= 1");
+/// Run the map-reduce analysis described by `cfg`. The caller (the unified CLI) owns tracing init.
+pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
+    if cfg.concurrency == 0 {
+        bail!("concurrency must be >= 1");
     }
     // The reduce agent's read tools sandbox by `path.canonicalize().starts_with(work_dir)`, which
-    // only holds for an absolute work_dir — a relative `--explore-root` would deny every read.
-    let explore_root = args.explore_root.canonicalize().wrap_err_with(|| {
-        format!(
-            "--explore-root does not exist: {}",
-            args.explore_root.display()
-        )
-    })?;
-    let run_dir_rel = run_dir_rel(&args.run_dir, &explore_root);
+    // only holds for an absolute work_dir — a relative explore root would deny every read.
+    let explore_root = match &cfg.explore_root {
+        Some(p) => p
+            .canonicalize()
+            .wrap_err_with(|| format!("explore root does not exist: {}", p.display()))?,
+        None => detect_repo_root(&cfg.run_dir)?,
+    };
+    let run_dir_rel = run_dir_rel(&cfg.run_dir, &explore_root);
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
 
-    let lanes_file = args.lanes_file.clone().unwrap_or_else(default_lanes_file);
-    let lanes = Lanes::load(&lanes_file)?;
-    let map_lane = lanes.get(&args.map)?;
-    let reduce_lane = lanes.get(&args.reduce)?;
+    let lanes_file = cfg.lanes_file.clone().unwrap_or_else(default_lanes_file);
+    let lanes = load_lanes(&lanes_file, None).map_err(|e| eyre::eyre!("{e}"))?;
+    let map_lane = find_lane(&lanes, &cfg.map).map_err(|e| eyre::eyre!("{e}"))?;
+    let reduce_lane = find_lane(&lanes, &cfg.reduce).map_err(|e| eyre::eyre!("{e}"))?;
 
     let mp = MultiProgress::new();
 
-    let rollouts = discover_rollouts(&args.run_dir)?;
+    let rollouts = discover_rollouts(&cfg.run_dir)?;
     let total = rollouts.len();
     note(
         &mp,
-        format!("● {total} rollouts in {}", args.run_dir.display()),
+        format!("● {total} rollouts in {}", cfg.run_dir.display()),
     );
 
     // Persist the rendered trajectory we feed the map phase next to its source jsonl, so the map
@@ -207,7 +200,12 @@ async fn main() -> Result<()> {
             .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
     }
 
-    let map_client = nitpicker_agent::client_from_env(map_lane.provider()?)?;
+    let map_client = nitpicker_agent::client_from_env(to_provider(
+        map_lane.provider,
+        map_lane.base_url.clone(),
+        map_lane.api_key_env.clone(),
+    )?)?;
+    let map_model = map_lane.model.clone();
 
     let bar = mp.add(ProgressBar::new(total as u64));
     bar.set_style(
@@ -218,7 +216,7 @@ async fn main() -> Result<()> {
     let mapped: Vec<(RolloutId, Result<(RunMeta, String)>)> = stream::iter(rollouts)
         .map(|rollout| {
             let client = map_client.clone();
-            let model = map_lane.model.clone();
+            let model = map_model.clone();
             let bar = bar.clone();
             async move {
                 let summary = rollout.meta.summarize_outcome();
@@ -230,7 +228,7 @@ async fn main() -> Result<()> {
                 (rollout.id, result)
             }
         })
-        .buffer_unordered(args.concurrency)
+        .buffer_unordered(cfg.concurrency)
         .collect()
         .await;
     bar.finish_and_clear();
@@ -300,11 +298,16 @@ async fn main() -> Result<()> {
         );
     }
 
-    let reduce_client = nitpicker_agent::client_from_env(reduce_lane.provider()?)?;
+    let reduce_client = nitpicker_agent::client_from_env(to_provider(
+        reduce_lane.provider,
+        reduce_lane.base_url.clone(),
+        reduce_lane.api_key_env.clone(),
+    )?)?;
+    let reduce_model = reduce_lane.model.clone();
 
     // Persist the paid-for map output before reduce runs: a reduce/provider failure must not throw
     // away every per-rollout summary. The reducer reads its own copy from a temp dir under explore_root.
-    let analyses_path = args
+    let analyses_path = cfg
         .run_dir
         .join(format!("trajectory_analyses_{timestamp}.md"));
     std::fs::write(&analyses_path, &analyses_doc)
@@ -339,19 +342,19 @@ async fn main() -> Result<()> {
     // line behind on the path operators most need to read.
     let result = analyze::reduce(
         reduce_client,
-        &reduce_lane.model,
+        &reduce_model,
         &analyses_doc,
         &explore_root,
         run_dir_rel.as_deref(),
-        args.max_turns,
+        REDUCE_MAX_TURNS,
         Some(progress),
     )
     .await;
     spinner.finish_and_clear();
     let report = result.wrap_err("reduce phase failed")?;
 
-    let out_path = args.out.unwrap_or_else(|| {
-        args.run_dir
+    let out_path = cfg.out.unwrap_or_else(|| {
+        cfg.run_dir
             .join(format!("trajectory_analysis_{timestamp}.md"))
     });
     std::fs::write(&out_path, &report.text)
@@ -433,6 +436,24 @@ mod tests {
     fn empty_run_dir_is_an_error() {
         let run = tempfile::tempdir().unwrap();
         assert!(discover_rollouts(run.path()).is_err());
+    }
+
+    #[test]
+    fn detect_repo_root_finds_nearest_git_ancestor() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".git")).unwrap();
+        let nested = root.path().join("archestra-bench/experiments/run-1");
+        std::fs::create_dir_all(&nested).unwrap();
+        let found = detect_repo_root(&nested).unwrap();
+        assert_eq!(found, root.path().canonicalize().unwrap());
+    }
+
+    #[test]
+    fn detect_repo_root_errors_without_git() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("experiments/run-1");
+        std::fs::create_dir_all(&nested).unwrap();
+        assert!(detect_repo_root(&nested).is_err());
     }
 
     #[test]

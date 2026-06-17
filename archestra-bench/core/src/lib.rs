@@ -9,6 +9,9 @@ use std::fmt;
 use serde::Deserialize;
 use serde_json::Value;
 
+mod lanes;
+pub use lanes::{Lane, LaneError, Provider, find_lane, is_slug, load_lanes};
+
 /// Per-cell artifact file names.
 pub const RUN_JSON: &str = "run.json";
 pub const TRAJECTORY_JSONL: &str = "trajectory.jsonl";

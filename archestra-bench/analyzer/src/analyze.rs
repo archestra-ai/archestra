@@ -4,12 +4,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use clap::ValueEnum;
+use archestra_bench_core::Provider;
 use eyre::{Context, Result, bail, eyre};
 use nitpicker_agent::llm::Completion;
 use nitpicker_agent::prelude::*;
 use rig_core::completion::Message;
-use serde::Deserialize;
 
 use crate::runmeta::RolloutId;
 
@@ -17,39 +16,29 @@ const MAP_MAX_TOKENS: u64 = 4096;
 /// Hard cap on each per-rollout analysis so a runaway summary cannot blow the reducer's context.
 const MAP_ANALYSIS_CAP_CHARS: usize = 6000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize)]
-#[clap(rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum ProviderKind {
-    Anthropic,
-    Gemini,
-    Openai,
-    Openrouter,
-}
-
-/// Map CLI flags onto nitpicker's `LLMProvider`. `base_url` is unsupported for OpenRouter, so
+/// Map a lane's provider onto nitpicker's `LLMProvider`. `base_url` is unsupported for OpenRouter, so
 /// passing it there is a hard error rather than a silently ignored flag.
 pub fn to_provider(
-    kind: ProviderKind,
+    provider: Provider,
     base_url: Option<String>,
     api_key_env: Option<String>,
 ) -> Result<LLMProvider> {
-    let provider = match kind {
-        ProviderKind::Anthropic => LLMProvider::Anthropic {
+    let provider = match provider {
+        Provider::Anthropic => LLMProvider::Anthropic {
             base_url,
             api_key_env,
         },
-        ProviderKind::Gemini => LLMProvider::Gemini {
+        Provider::Gemini => LLMProvider::Gemini {
             base_url,
             api_key_env,
         },
-        ProviderKind::Openai => LLMProvider::OpenAi {
+        Provider::Openai => LLMProvider::OpenAi {
             base_url,
             api_key_env,
         },
-        ProviderKind::Openrouter => {
+        Provider::Openrouter => {
             if base_url.is_some() {
-                bail!("--*-base-url is not supported for the openrouter provider");
+                bail!("base_url is not supported for the openrouter provider");
             }
             LLMProvider::OpenRouter {
                 api_key_env: api_key_env.unwrap_or_else(|| "OPENROUTER_API_KEY".to_string()),
@@ -119,9 +108,10 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
        the Archestra product under `platform/`. The agent's system prompt is a first-class part of \
        this surface — assess whether it is well-optimized, not just the tools.\n\
      - Tier 2 (SECONDARY) — the benchmark fixtures under `archestra-bench/`: task prompts, JSON \
-       result schemas, verifiers, env/skill config, the runner (`run.py`), and the bench-owned \
-       `submit_result` terminal tool (`benchmark_mcp.py`) — including the requirement to answer \
-       through it. Enforcing or reshaping `submit_result` is Tier 2, even though the loop's generic \
+       result schemas, verifiers, env/skill config, the Rust runner (`runner/src/`), and the \
+       bench-owned `submit_result` terminal tool (`runner/src/mcp_server.rs`) — including the \
+       requirement to answer through it. Enforcing or reshaping `submit_result` is Tier 2, even \
+       though the loop's generic \
        completion handling is Tier 1; do not file a submit_result change as a Tier-1 fix.\n\n\
      Lead with Tier-1 fixes. For every agent struggle, ask first what Tier-1 loop/tool change would \
      have helped; do NOT recommend lowering task difficulty so the agent passes — that is an \
@@ -395,7 +385,7 @@ mod tests {
     #[test]
     fn openrouter_rejects_base_url() {
         // LLMProvider isn't Debug, so match rather than unwrap_err.
-        match to_provider(ProviderKind::Openrouter, Some("https://x".into()), None) {
+        match to_provider(Provider::Openrouter, Some("https://x".into()), None) {
             Err(e) => assert!(e.to_string().contains("openrouter")),
             Ok(_) => panic!("expected error for openrouter + base_url"),
         }

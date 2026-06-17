@@ -175,7 +175,7 @@ impl BenchmarkMcp {
     pub async fn take_submission(&self, task_key: &str) -> Submission {
         let mut guard = self.ctx.lock().await;
         // Only consume the context when the requested key matches; a stray/wrong-key take must not
-        // drop the active task's captured submission (matches benchmark_mcp.py).
+        // drop the active task's captured submission.
         match guard.as_ref() {
             Some(ctx) if ctx.task_key == task_key => {}
             Some(ctx) => {
@@ -399,8 +399,8 @@ fn explain(error: &jsonschema::ValidationError) -> String {
 }
 
 fn json_type_name(value: &JsonValue) -> &'static str {
-    // Mirror Python benchmark_mcp.py:_json_type_name — every JSON number (int or float) is "number",
-    // so the agent-facing self-correction hint reads identically across harnesses.
+    // Every JSON number (int or float) collapses to "number" so the agent-facing self-correction hint
+    // names types the way JSON Schema does, not the way serde distinguishes them.
     match value {
         JsonValue::Bool(_) => "boolean",
         JsonValue::Number(_) => "number",

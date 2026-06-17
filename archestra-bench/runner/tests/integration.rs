@@ -61,7 +61,7 @@ fn test_load_real_lanes() {
     assert!(!lanes.is_empty());
     for lane in &lanes {
         assert!(!lane.name.is_empty());
-        assert!(!lane.provider.is_empty());
+        assert!(!lane.provider.as_str().is_empty());
         assert!(!lane.model.is_empty());
     }
 }

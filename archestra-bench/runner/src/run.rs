@@ -5,7 +5,7 @@ use std::sync::Arc;
 use archestra_bench_core::slug;
 use chrono::Utc;
 use futures::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -16,8 +16,8 @@ use crate::client::{
     AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
     apply_chat_event,
 };
-use crate::config::types::{EnvConfig, Lane, Task};
-use crate::config::{load_envs, load_lanes};
+use crate::config::types::{EnvConfig, Task};
+use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
 use crate::mcp_server::{BenchmarkMcp, Submission};
 use crate::results::{Outcome, RunResult, render_markdown};
@@ -65,6 +65,13 @@ pub struct RunCtx {
     pub api_keys: HashMap<String, String>,
 }
 
+/// What a completed [`run`] produced: the per-cell results plus the run directory they were written
+/// to, so a caller like the `full` CLI can hand the dir straight to the analyzer.
+pub struct RunOutcome {
+    pub results: Vec<RunResult>,
+    pub run_dir: PathBuf,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error("config error: {0}")]
@@ -96,7 +103,7 @@ pub async fn run(
     out: Option<&Path>,
     run_dir: Option<&Path>,
     max_workers: Option<usize>,
-) -> Result<Vec<RunResult>, RunError> {
+) -> Result<RunOutcome, RunError> {
     let envs = load_envs(&bench_dir.join("envs")).map_err(|e| RunError::Config(e.to_string()))?;
     let default_lanes_path = bench_dir.join("lanes.toml");
     let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
@@ -105,11 +112,16 @@ pub async fn run(
     let workers = resolve_workers(max_workers, lane_list.len());
     let api_keys = lane_api_keys(&lane_list)?;
 
-    let run_id = run_id();
-    let root_run_dir = run_dir
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| default_run_dir(bench_dir, &run_id));
-    fs::create_dir_all(&root_run_dir).await?;
+    // An explicit `--run-dir` is reused (create_dir_all); an auto dir must be brand-new — the base name
+    // is seconds-granular, so two runs started in the same second would otherwise share a root and
+    // overwrite each other's config.json/aggregate.json.
+    let (root_run_dir, run_id) = match run_dir {
+        Some(p) => {
+            fs::create_dir_all(p).await?;
+            (p.to_path_buf(), run_id())
+        }
+        None => create_fresh_run_dir(bench_dir).await?,
+    };
 
     let selected = select_envs(&envs, env_filter, task_filter)?;
     let plan = build_run_plan(selected, lane_list);
@@ -136,7 +148,10 @@ pub async fn run(
     )
     .await?;
 
-    Ok(results)
+    Ok(RunOutcome {
+        results,
+        run_dir: ctx.root_run_dir,
+    })
 }
 
 fn resolve_workers(requested: Option<usize>, lane_count: usize) -> usize {
@@ -299,16 +314,18 @@ enum EnvStop {
 
 async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Vec<RunResult> {
     let total_cells: usize = plan.iter().map(|p| p.tasks.len() * p.lanes.len()).sum();
-    let progress = ProgressBar::new(total_cells as u64);
-    progress.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({msg})",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
+    let distinct_lanes = plan.first().map(|p| p.lanes.len()).unwrap_or(0);
+    let mp = MultiProgress::new();
+    note(
+        &mp,
+        format!("● {total_cells} cells · {distinct_lanes} lanes · {max_workers} workers"),
     );
-    progress.set_message("tasks");
+    let progress = mp.add(ProgressBar::new(total_cells as u64));
+    progress.set_style(
+        ProgressStyle::with_template("  run     {bar:30.cyan/blue} {pos}/{len} {msg}")
+            .expect("static progress template")
+            .progress_chars("━━─"),
+    );
 
     // Lane-grouped scheduling: one serial worker per distinct lane, draining that lane's work across
     // every env in plan order. A given model therefore never runs two cells at once (rate-limit safety),
@@ -415,11 +432,22 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
         let _ = instance.shutdown().await;
     }
 
-    progress.finish_with_message("done");
+    progress.finish_and_clear();
     infra
         .into_iter()
         .chain(lane_results.into_iter().flatten())
         .collect()
+}
+
+/// Persistent status line that survives a non-TTY target (piped/CI/`NO_COLOR`), where
+/// `MultiProgress::println` is a no-op — fall back to stderr there so operators still see it.
+fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
+    let msg = msg.as_ref();
+    if mp.is_hidden() {
+        eprintln!("{msg}");
+    } else {
+        let _ = mp.println(msg);
+    }
 }
 
 /// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
@@ -691,7 +719,7 @@ fn infra_results_for_lane(
             env_id: env.id.clone(),
             task_id: task.id.clone(),
             lane: lane.name.clone(),
-            provider: lane.provider.clone(),
+            provider: lane.provider.as_str().to_string(),
             model: lane.model.clone(),
             outcome: Outcome::AgentError,
             finish_reason: None,
@@ -716,10 +744,10 @@ async fn resolve_lanes(
     let mut seen_providers = HashSet::new();
     for lane in lanes {
         let is_primary = !seen_providers.contains(&lane.provider);
-        seen_providers.insert(lane.provider.clone());
+        seen_providers.insert(lane.provider);
         let models = ensure_provider_and_models(
             client,
-            &lane.provider,
+            lane.provider.as_str(),
             &ctx.api_keys[&lane.name],
             std::slice::from_ref(&lane.model),
             lane.base_url.as_deref(),
@@ -1034,7 +1062,7 @@ async fn run_one(
                     env_id: env_id.to_string(),
                     task_id: task.id.clone(),
                     lane: lane.name.clone(),
-                    provider: lane.provider.clone(),
+                    provider: lane.provider.as_str().to_string(),
                     model: lane.model.clone(),
                     outcome: Outcome::AgentError,
                     finish_reason: None,
@@ -1590,7 +1618,7 @@ async fn finish(
         env_id: env_id.to_string(),
         task_id: task.id.clone(),
         lane: lane.name.clone(),
-        provider: lane.provider.clone(),
+        provider: lane.provider.as_str().to_string(),
         model: lane.model.clone(),
         outcome,
         finish_reason: run.and_then(|r| r.finish_reason.clone()),
@@ -1981,6 +2009,30 @@ fn default_run_dir(bench_dir: &Path, run_id: &str) -> PathBuf {
     bench_dir.join("experiments").join(run_id)
 }
 
+/// Allocate a brand-new auto run directory under `experiments/`, guaranteeing it did not pre-exist.
+/// `run_id()` is seconds-granular, so exclusive create + a numeric suffix is what keeps two runs
+/// started in the same second from colliding. Returns the dir and the run id (its basename).
+async fn create_fresh_run_dir(bench_dir: &Path) -> Result<(PathBuf, String), RunError> {
+    let base_id = run_id();
+    fs::create_dir_all(bench_dir.join("experiments")).await?;
+    for attempt in 0..1000 {
+        let id = if attempt == 0 {
+            base_id.clone()
+        } else {
+            format!("{base_id}-{attempt}")
+        };
+        let dir = default_run_dir(bench_dir, &id);
+        match fs::create_dir(&dir).await {
+            Ok(()) => return Ok((dir, id)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(RunError::Io(e)),
+        }
+    }
+    Err(RunError::Config(format!(
+        "could not allocate a fresh run dir under experiments/ for {base_id} after 1000 attempts"
+    )))
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -2132,7 +2184,7 @@ mod tests {
             result_schema: serde_json::Value::Null,
             verifier: crate::config::types::Verifier {
                 deps: vec![],
-                test_file: "verify.py".to_string(),
+                test_file: "verifier.py".to_string(),
                 env: vec![],
             },
             artifact_key: None,
@@ -2158,7 +2210,7 @@ mod tests {
     fn dummy_lane(name: &str) -> Lane {
         Lane {
             name: name.to_string(),
-            provider: "openai".to_string(),
+            provider: archestra_bench_core::Provider::Openai,
             model: "gpt-4".to_string(),
             base_url: None,
             api_key_env: None,
@@ -2316,6 +2368,20 @@ mod tests {
             .collect();
         // two envs, but each lane listed exactly once and in declaration order.
         assert_eq!(names, ["l1", "l2"]);
+    }
+
+    #[tokio::test]
+    async fn create_fresh_run_dir_suffixes_on_same_second_collision() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Two allocations within the same test share a seconds-granular run id, so the second must
+        // land in a distinct, suffixed dir rather than reuse the first (which `full` relies on to
+        // never overwrite a sibling run's config.json/aggregate.json).
+        let (d1, id1) = create_fresh_run_dir(tmp.path()).await.unwrap();
+        let (d2, id2) = create_fresh_run_dir(tmp.path()).await.unwrap();
+        assert!(d1.is_dir() && d2.is_dir());
+        assert_ne!(d1, d2);
+        assert_ne!(id1, id2);
+        assert!(id2.ends_with("-1"), "second dir should be suffixed: {id2}");
     }
 
     #[tokio::test]

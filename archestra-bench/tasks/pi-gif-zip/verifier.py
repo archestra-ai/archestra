@@ -1,6 +1,6 @@
 """Verify the agent's exported artifact is a valid zip containing a valid GIF.
 
-Reads BENCH_OUTPUT (the downloaded artifact bytes; see verify.py). No color check by design --
+Reads BENCH_OUTPUT (the downloaded artifact bytes). No color check by design --
 we only assert the deliverable shape: a zip that holds at least one decodable GIF image.
 """
 

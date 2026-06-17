@@ -165,13 +165,13 @@ impl BenchmarkMcp {
 
     pub async fn take_submission(&self, task_key: &str) -> Submission {
         let mut guard = self.ctx.lock().await;
-        let ctx = match guard.take() {
-            Some(c) => c,
-            None => return Submission::None,
-        };
-        if ctx.task_key != task_key {
-            return Submission::None;
+        // Only consume the context when the requested key matches; a stray/wrong-key take must not
+        // drop the active task's captured submission (matches benchmark_mcp.py).
+        match guard.as_ref() {
+            Some(ctx) if ctx.task_key == task_key => {}
+            _ => return Submission::None,
         }
+        let ctx = guard.take().expect("ctx present and key matched above");
         if let Some(bytes) = ctx.accepted {
             return Submission::Accepted(SubmissionAccepted {
                 payload_bytes: bytes,
@@ -387,9 +387,10 @@ fn explain(error: &jsonschema::ValidationError) -> String {
 }
 
 fn json_type_name(value: &JsonValue) -> &'static str {
+    // Mirror Python benchmark_mcp.py:_json_type_name — every JSON number (int or float) is "number",
+    // so the agent-facing self-correction hint reads identically across harnesses.
     match value {
         JsonValue::Bool(_) => "boolean",
-        JsonValue::Number(n) if n.is_i64() || n.is_u64() => "integer",
         JsonValue::Number(_) => "number",
         JsonValue::String(_) => "string",
         JsonValue::Array(_) => "array",
@@ -450,6 +451,39 @@ mod tests {
         let errors = schema_errors(&validator, &serde_json::json!({"answer": 42}));
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("expected a JSON string"));
-        assert!(errors[0].contains("received a integer"));
+        // every JSON number is reported as "number" (matches the Python harness), not "integer".
+        assert!(errors[0].contains("received a number"), "{}", errors[0]);
+    }
+
+    #[tokio::test]
+    async fn test_take_submission_wrong_key_preserves_context() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": false
+        });
+        let mcp = BenchmarkMcp::start("benchmark-take-test").await.unwrap();
+        mcp.begin_task("cell-1", &schema, 3).await.unwrap();
+        mcp.allow_submission("cell-1").await;
+        {
+            // simulate an accepted submission by driving the validator path directly
+            let mut guard = mcp.ctx.lock().await;
+            let ctx = guard.as_mut().unwrap();
+            ctx.accepted = Some(canonical_bytes(&serde_json::json!({"answer": "ok"})));
+        }
+        // a take with the wrong key must NOT consume the captured submission
+        assert!(matches!(
+            mcp.take_submission("other-cell").await,
+            Submission::None
+        ));
+        // the correct key still returns it
+        match mcp.take_submission("cell-1").await {
+            Submission::Accepted(a) => {
+                assert_eq!(a.payload_bytes, br#"{"answer":"ok"}"#.to_vec());
+            }
+            other => panic!("expected Accepted, got {other:?}"),
+        }
+        mcp.stop().await;
     }
 }

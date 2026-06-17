@@ -992,7 +992,9 @@ impl EvalClient {
 
 struct ChatRecordStream {
     stream: std::pin::Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
-    buf: String,
+    // Raw bytes, not a String: assemble complete lines before UTF-8 decoding so a multibyte char
+    // split across two network chunks is never corrupted (matches Python's line-then-decode order).
+    buf: Vec<u8>,
     finished: bool,
 }
 
@@ -1000,60 +1002,78 @@ impl ChatRecordStream {
     fn new(resp: Response) -> Self {
         Self {
             stream: Box::pin(resp.bytes_stream()),
-            buf: String::new(),
+            buf: Vec::new(),
             finished: false,
         }
     }
 
     fn drain_buffer(&mut self) -> Option<ChatStreamRecord> {
-        while let Some(pos) = self.buf.find('\n') {
-            let line = self.buf[..pos].to_string();
-            self.buf = self.buf[pos + 1..].to_string();
-            let line = line.trim_end_matches('\r');
-            if let Some(payload) = sse_data_payload(line) {
-                if payload == "[DONE]" {
-                    return Some(ChatStreamRecord {
-                        kind: ChatRecordKind::Ignored,
-                        event: None,
-                        raw: Some(line.to_string()),
-                        reason: Some("done".to_string()),
-                    });
-                }
-                if payload.is_empty() {
-                    return Some(ChatStreamRecord {
-                        kind: ChatRecordKind::Ignored,
-                        event: None,
-                        raw: Some(line.to_string()),
-                        reason: Some("empty data payload".to_string()),
-                    });
-                }
-                return Some(
-                    match serde_json::from_str::<HashMap<String, JsonValue>>(payload) {
-                        Ok(event) => ChatStreamRecord {
-                            kind: ChatRecordKind::Event,
-                            event: Some(event),
-                            raw: Some(line.to_string()),
-                            reason: None,
-                        },
-                        Err(e) => ChatStreamRecord {
-                            kind: ChatRecordKind::ParseError,
-                            event: None,
-                            raw: Some(line.to_string()),
-                            reason: Some(e.to_string()),
-                        },
-                    },
-                );
-            } else if !line.is_empty() {
-                return Some(ChatStreamRecord {
-                    kind: ChatRecordKind::Ignored,
-                    event: None,
-                    raw: Some(line.to_string()),
-                    reason: Some("non-data line".to_string()),
-                });
+        while let Some(pos) = self.buf.iter().position(|&b| b == b'\n') {
+            let line_bytes: Vec<u8> = self.buf.drain(..=pos).collect();
+            let text = String::from_utf8_lossy(&line_bytes[..line_bytes.len() - 1]);
+            if let Some(record) = process_sse_line(text.trim_end_matches('\r')) {
+                return Some(record);
             }
         }
         None
     }
+
+    // Flush any trailing line that arrived without a final newline (an unterminated last SSE line
+    // must still be parsed, like httpx's line iteration does on the Python side).
+    fn flush_final_line(&mut self) -> Option<ChatStreamRecord> {
+        if self.buf.is_empty() {
+            return None;
+        }
+        let line_bytes = std::mem::take(&mut self.buf);
+        let text = String::from_utf8_lossy(&line_bytes);
+        process_sse_line(text.trim_end_matches('\r'))
+    }
+}
+
+fn process_sse_line(line: &str) -> Option<ChatStreamRecord> {
+    if let Some(payload) = sse_data_payload(line) {
+        if payload == "[DONE]" {
+            return Some(ChatStreamRecord {
+                kind: ChatRecordKind::Ignored,
+                event: None,
+                raw: Some(line.to_string()),
+                reason: Some("done".to_string()),
+            });
+        }
+        if payload.is_empty() {
+            return Some(ChatStreamRecord {
+                kind: ChatRecordKind::Ignored,
+                event: None,
+                raw: Some(line.to_string()),
+                reason: Some("empty data payload".to_string()),
+            });
+        }
+        return Some(
+            match serde_json::from_str::<HashMap<String, JsonValue>>(payload) {
+                Ok(event) => ChatStreamRecord {
+                    kind: ChatRecordKind::Event,
+                    event: Some(event),
+                    raw: Some(line.to_string()),
+                    reason: None,
+                },
+                Err(e) => ChatStreamRecord {
+                    kind: ChatRecordKind::ParseError,
+                    event: None,
+                    raw: Some(line.to_string()),
+                    reason: Some(e.to_string()),
+                },
+            },
+        );
+    }
+    if !line.is_empty() {
+        return Some(ChatStreamRecord {
+            kind: ChatRecordKind::Ignored,
+            event: None,
+            raw: Some(line.to_string()),
+            reason: Some("non-data line".to_string()),
+        });
+    }
+    None
 }
 
 impl Stream for ChatRecordStream {
@@ -1072,8 +1092,7 @@ impl Stream for ChatRecordStream {
         loop {
             match self.stream.as_mut().poll_next(cx) {
                 std::task::Poll::Ready(Some(Ok(bytes))) => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    self.buf.push_str(&text);
+                    self.buf.extend_from_slice(&bytes);
                     if let Some(record) = self.drain_buffer() {
                         return std::task::Poll::Ready(Some(record));
                     }
@@ -1089,6 +1108,9 @@ impl Stream for ChatRecordStream {
                 }
                 std::task::Poll::Ready(None) => {
                     self.finished = true;
+                    if let Some(record) = self.flush_final_line() {
+                        return std::task::Poll::Ready(Some(record));
+                    }
                     return std::task::Poll::Ready(None);
                 }
                 std::task::Poll::Pending => return std::task::Poll::Pending,
@@ -1221,6 +1243,50 @@ mod tests {
         assert_eq!(sse_data_payload("data: hello"), Some("hello"));
         assert_eq!(sse_data_payload("data:  [DONE]"), Some("[DONE]"));
         assert_eq!(sse_data_payload("event: message"), None);
+    }
+
+    fn stream_from_chunks(chunks: Vec<Vec<u8>>) -> ChatRecordStream {
+        let items: Vec<Result<Bytes, reqwest::Error>> =
+            chunks.into_iter().map(|c| Ok(Bytes::from(c))).collect();
+        ChatRecordStream {
+            stream: Box::pin(futures::stream::iter(items)),
+            buf: Vec::new(),
+            finished: false,
+        }
+    }
+
+    async fn collect_events(stream: ChatRecordStream) -> Vec<HashMap<String, JsonValue>> {
+        use futures::StreamExt;
+        stream
+            .filter_map(|r| async move { r.event })
+            .collect()
+            .await
+    }
+
+    #[tokio::test]
+    async fn test_sse_multibyte_split_across_chunks() {
+        // `data: {"k":"é"}\n` with the two bytes of "é" (0xC3 0xA9) landing in different chunks.
+        let full = b"data: {\"k\":\"\xc3\xa9\"}\n";
+        let split = 13; // between the two bytes of "é" (0xc3 at 12, 0xa9 at 13)
+        let chunks = vec![full[..split].to_vec(), full[split..].to_vec()];
+        let events = collect_events(stream_from_chunks(chunks)).await;
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].get("k"),
+            Some(&JsonValue::String("é".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_unterminated_final_line_is_flushed() {
+        // final SSE line arrives with no trailing newline — it must still be parsed at EOF.
+        let chunks = vec![b"data: {\"k\":\"v\"}".to_vec()];
+        let events = collect_events(stream_from_chunks(chunks)).await;
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].get("k"),
+            Some(&JsonValue::String("v".to_string()))
+        );
     }
 
     #[test]

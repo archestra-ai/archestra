@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
@@ -12,6 +13,112 @@ use tokio::time::{Duration, sleep};
 use tracing::{error, info};
 
 use crate::client::EvalClient;
+
+/// A self-contained teardown for one backend instance: the process-group child and the database
+/// handle, decoupled from the `Instance` so cleanup can run even after the orchestration future is
+/// dropped on signal cancellation. Cloning shares the same `Arc` state as the live `Instance`, and
+/// running it twice is a no-op (the child is taken; the db_created flag is cleared).
+#[derive(Clone)]
+struct Teardown {
+    proc: Arc<Mutex<Option<Child>>>,
+    db_created: Arc<Mutex<bool>>,
+    db_name: String,
+    maint_db_url: String,
+}
+
+impl Teardown {
+    async fn run(&self) {
+        kill_backend(&self.proc).await;
+        drop_database(&self.db_created, &self.db_name, &self.maint_db_url).await;
+    }
+}
+
+fn registry() -> &'static std::sync::Mutex<HashMap<u64, Teardown>> {
+    static REGISTRY: OnceLock<std::sync::Mutex<HashMap<u64, Teardown>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn register(teardown: Teardown) -> u64 {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    registry()
+        .lock()
+        .expect("teardown registry")
+        .insert(id, teardown);
+    id
+}
+
+fn deregister(id: u64) {
+    registry().lock().expect("teardown registry").remove(&id);
+}
+
+/// Tear down every still-live backend instance (process group + database). Invoked on SIGINT/SIGTERM,
+/// where the run future was dropped mid-flight so `Instance::shutdown` never ran. Awaits each teardown
+/// so process groups are killed and databases dropped before the process exits — no leaks on cancel.
+pub async fn shutdown_all() {
+    let live: Vec<Teardown> = {
+        let mut reg = registry().lock().expect("teardown registry");
+        reg.drain().map(|(_, t)| t).collect()
+    };
+    if live.is_empty() {
+        return;
+    }
+    info!(
+        "interrupted: tearing down {} live backend instance(s)",
+        live.len()
+    );
+    for teardown in live {
+        teardown.run().await;
+    }
+}
+
+async fn kill_backend(proc: &Arc<Mutex<Option<Child>>>) {
+    let mut guard = proc.lock().await;
+    if let Some(mut child) = guard.take()
+        && let Some(pid) = child.id()
+    {
+        info!("stopping backend pid {pid}");
+        let pgid = Pid::from_raw(pid as i32);
+        let _ = signal::killpg(pgid, Signal::SIGTERM);
+        match tokio::time::timeout(Duration::from_secs(15), child.wait()).await {
+            Ok(Ok(_)) => {}
+            _ => {
+                let _ = signal::killpg(pgid, Signal::SIGKILL);
+            }
+        }
+    }
+}
+
+async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_url: &str) {
+    if !*db_created.lock().await {
+        return;
+    }
+    info!("dropping benchmark database {db_name}");
+    match tokio_postgres::connect(&libpq_url(maint_db_url), tokio_postgres::NoTls).await {
+        Ok((client, connection)) => {
+            let client: tokio_postgres::Client = client;
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    error!("postgres connection error during drop: {e}");
+                }
+            });
+            let _ = client
+                .execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
+                    &[&db_name],
+                )
+                .await;
+            let quoted = format!("\"{}\"", db_name.replace('"', "\"\""));
+            let _ = client
+                .batch_execute(&format!("DROP DATABASE IF EXISTS {}", quoted))
+                .await;
+            *db_created.lock().await = false;
+        }
+        Err(e) => {
+            error!("failed to drop benchmark database {db_name}: {e}");
+        }
+    }
+}
 
 const DAGGER_RUNNER_HOST: &str = "tcp://127.0.0.1:1234";
 const DEV_AUTH_SECRET: &str = "better-auth-secret-12345678901234567890";
@@ -49,6 +156,7 @@ pub struct Instance {
     db_url: String,
     api_port: u16,
     metrics_port: u16,
+    teardown_id: Option<u64>,
 }
 
 impl Instance {
@@ -70,6 +178,7 @@ impl Instance {
             db_url: String::new(),
             api_port: 0,
             metrics_port: 0,
+            teardown_id: None,
         }
     }
 
@@ -94,6 +203,15 @@ impl Instance {
         self.api_port = free_port().await?;
         self.metrics_port = free_port().await?;
 
+        // Register teardown BEFORE the first side effect (database creation): an interruption during a
+        // partial boot must still kill the process group and drop the database.
+        self.teardown_id = Some(register(Teardown {
+            proc: self.proc.clone(),
+            db_created: self.db_created.clone(),
+            db_name: self.db_name.clone(),
+            maint_db_url: self.maint_db_url.clone(),
+        }));
+
         if let Err(e) = self.create_database().await {
             let _ = self.shutdown().await;
             return Err(e);
@@ -114,8 +232,11 @@ impl Instance {
     }
 
     pub async fn shutdown(&self) -> Result<(), LifecycleError> {
-        self.kill_backend().await;
-        self.drop_database().await;
+        kill_backend(&self.proc).await;
+        drop_database(&self.db_created, &self.db_name, &self.maint_db_url).await;
+        if let Some(id) = self.teardown_id {
+            deregister(id);
+        }
         Ok(())
     }
 
@@ -136,11 +257,13 @@ impl Instance {
             }
         });
         let quoted = format!("\"{}\"", self.db_name.replace('"', "\"\""));
+        // Mark created before issuing CREATE so an interruption mid-statement still triggers teardown's
+        // DROP DATABASE IF EXISTS (harmless if the create never landed) rather than leaking the db.
+        *self.db_created.lock().await = true;
         client
             .batch_execute(&format!("CREATE DATABASE {}", quoted))
             .await
             .map_err(|e| LifecycleError::Postgres(format!("CREATE DATABASE failed: {e}")))?;
-        *self.db_created.lock().await = true;
         Ok(())
     }
 
@@ -258,54 +381,6 @@ impl Instance {
             .await
             .map_err(|e| LifecycleError::Config(format!("mint_api_key failed: {e}")))?;
         Ok(())
-    }
-
-    async fn kill_backend(&self) {
-        let mut guard = self.proc.lock().await;
-        if let Some(mut child) = guard.take()
-            && let Some(pid) = child.id()
-        {
-            info!("stopping backend pid {pid}");
-            let pgid = Pid::from_raw(pid as i32);
-            let _ = signal::killpg(pgid, Signal::SIGTERM);
-            match tokio::time::timeout(Duration::from_secs(15), child.wait()).await {
-                Ok(Ok(_)) => {}
-                _ => {
-                    let _ = signal::killpg(pgid, Signal::SIGKILL);
-                }
-            }
-        }
-    }
-
-    async fn drop_database(&self) {
-        if !*self.db_created.lock().await {
-            return;
-        }
-        info!("dropping benchmark database {}", self.db_name);
-        match tokio_postgres::connect(&libpq_url(&self.maint_db_url), tokio_postgres::NoTls).await {
-            Ok((client, connection)) => {
-                let _client: tokio_postgres::Client = client;
-                tokio::spawn(async move {
-                    if let Err(e) = connection.await {
-                        error!("postgres connection error during drop: {e}");
-                    }
-                });
-                let _ = _client
-                    .execute(
-                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
-                        &[&self.db_name.as_str()],
-                    )
-                    .await;
-                let quoted = format!("\"{}\"", self.db_name.replace('"', "\"\""));
-                let _ = _client
-                    .batch_execute(&format!("DROP DATABASE IF EXISTS {}", quoted))
-                    .await;
-                *self.db_created.lock().await = false;
-            }
-            Err(e) => {
-                error!("failed to drop benchmark database {}: {e}", self.db_name);
-            }
-        }
     }
 
     fn backend_env(&self) -> HashMap<String, String> {
@@ -486,6 +561,37 @@ mod tests {
         assert_eq!(
             redacted_db_location("postgres://user:secret@host:5432/db"),
             "host:5432/db"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_all_kills_registered_process_group() {
+        // Spawn a real child in its own process group, register a teardown for it (no DB — db_created
+        // stays false so drop_database is a no-op), then verify shutdown_all reaps the process group.
+        let mut cmd = Command::new("sleep");
+        cmd.arg("60").process_group(0);
+        let child = cmd.spawn().expect("spawn sleep");
+        let pid = child.id().expect("child pid") as i32;
+
+        let proc = Arc::new(Mutex::new(Some(child)));
+        let id = register(Teardown {
+            proc: proc.clone(),
+            db_created: Arc::new(Mutex::new(false)),
+            db_name: String::new(),
+            maint_db_url: String::new(),
+        });
+
+        // process is alive before teardown
+        assert!(signal::kill(Pid::from_raw(pid), None).is_ok());
+
+        shutdown_all().await;
+
+        // registry drained, child taken, and the process is gone (ESRCH)
+        assert!(registry().lock().unwrap().get(&id).is_none());
+        assert!(proc.lock().await.is_none());
+        assert!(
+            signal::kill(Pid::from_raw(pid), None).is_err(),
+            "process group should be dead after shutdown_all"
         );
     }
 

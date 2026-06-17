@@ -57,9 +57,11 @@ pub async fn run_verifier(
 }
 
 async fn resolve_python(deps: &[String], workdir: &Path) -> Result<String, VerifyError> {
-    if deps.is_empty() {
-        return Ok("python3".to_string());
-    }
+    // Always verify in an ephemeral uv env that installs pytest (plus any task deps). Unlike the
+    // Python harness — which can fall back to its own pytest-bearing interpreter for no-dep tasks —
+    // the Rust harness has no ambient interpreter guaranteed to have pytest, so a bare `python3`
+    // would silently fail every `deps = []` task on hosts without pytest. uv is a hard requirement of
+    // the eval host; a missing uv is a loud host error (UvMissing), never a task verdict.
     build_uv_env(deps, &workdir.join(".venv")).await
 }
 
@@ -258,7 +260,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_dep_verifier_passes() {
-        if !python3_has_pytest() {
+        if !uv_available() {
             return;
         }
         let tmp = tempfile::tempdir().unwrap();
@@ -267,15 +269,16 @@ mod tests {
             .await
             .unwrap();
 
+        // deps = [] still gets pytest via uv (no ambient pytest assumed).
         let task = make_task(tmp.path(), "verifier.py", vec![]);
-        let outcome = run_verifier(&task, b"{}", None, None, 60.0).await.unwrap();
-        assert!(outcome.passed);
+        let outcome = run_verifier(&task, b"{}", None, None, 120.0).await.unwrap();
+        assert!(outcome.passed, "stderr: {}", outcome.stderr);
         assert!(!outcome.timed_out);
     }
 
     #[tokio::test]
     async fn test_no_dep_verifier_fails() {
-        if !python3_has_pytest() {
+        if !uv_available() {
             return;
         }
         let tmp = tempfile::tempdir().unwrap();
@@ -285,13 +288,13 @@ mod tests {
             .unwrap();
 
         let task = make_task(tmp.path(), "verifier.py", vec![]);
-        let outcome = run_verifier(&task, b"{}", None, None, 60.0).await.unwrap();
+        let outcome = run_verifier(&task, b"{}", None, None, 120.0).await.unwrap();
         assert!(!outcome.passed);
     }
 
-    fn python3_has_pytest() -> bool {
-        std::process::Command::new("python3")
-            .args(["-m", "pytest", "--version"])
+    fn uv_available() -> bool {
+        std::process::Command::new("uv")
+            .arg("--version")
             .output()
             .ok()
             .map(|out| out.status.success())

@@ -71,8 +71,12 @@ fn test_load_real_lanes() {
 
 #[test]
 fn test_load_real_lanes_filtered() {
-    let lanes =
-        load_lanes(&bench_dir().join("lanes.toml"), Some("gemini-flash")).expect("filter ok");
+    // Derive the filter target from the actual catalog rather than hard-coding a lane name (the local
+    // lanes.toml is edited per experiment). Loading unfiltered must preserve declaration order, so the
+    // first catalog lane is well-defined.
+    let all = load_lanes(&bench_dir().join("lanes.toml"), None).expect("load all");
+    let first = all.first().expect("at least one lane").name.clone();
+    let lanes = load_lanes(&bench_dir().join("lanes.toml"), Some(&first)).expect("filter ok");
     assert_eq!(lanes.len(), 1);
-    assert_eq!(lanes[0].name, "gemini-flash");
+    assert_eq!(lanes[0].name, first);
 }

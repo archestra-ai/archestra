@@ -205,17 +205,24 @@ fn load_state_rest(tbl: &TomlTable, ctx: &str) -> Result<Vec<String>, TaskConfig
 }
 
 fn validate_state_path(path: &str, ctx: &str) -> Result<(), TaskConfigError> {
-    if path.contains("://") || path.starts_with("//") {
+    // Mirror Python tasks.py:_state_path: validate the *path* component (query strings and the
+    // {{cell}}/{{agent_id}} placeholders are substituted later and allowed), and decode percent-escapes
+    // before the `..` check so `/api/%2e%2e/x` is rejected just like `/api/../x`.
+    let path_part = path.split('?').next().unwrap_or(path);
+    if path_part.contains("://") || path_part.starts_with("//") {
         return Err(TaskConfigError(format!(
             "{ctx}: rest path {path:?} must be a relative /api/ path, not an absolute URL"
         )));
     }
-    if !path.starts_with("/api/") {
+    if !path_part.starts_with("/api/") {
         return Err(TaskConfigError(format!(
             "{ctx}: rest path {path:?} must start with /api/"
         )));
     }
-    if path.split('/').any(|seg| seg == "..") {
+    let decoded = percent_encoding::percent_decode_str(path_part)
+        .decode_utf8_lossy()
+        .into_owned();
+    if decoded.split('/').any(|seg| seg == "..") {
         return Err(TaskConfigError(format!(
             "{ctx}: rest path {path:?} must not contain a '..' segment"
         )));
@@ -243,5 +250,30 @@ fn toml_value_to_json_value(value: &toml::Value) -> serde_json::Value {
             serde_json::Value::Array(arr.iter().map(toml_value_to_json_value).collect())
         }
         toml::Value::Table(t) => toml_table_to_json_value(t),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_path_accepts_api_path_with_query_and_placeholders() {
+        validate_state_path("/api/skills?search=prime-counter-{{cell}}&limit=100", "ctx").unwrap();
+        validate_state_path("/api/agents/{{agent_id}}/tools", "ctx").unwrap();
+    }
+
+    #[test]
+    fn state_path_rejects_plain_and_encoded_traversal() {
+        assert!(validate_state_path("/api/../x", "ctx").is_err());
+        assert!(validate_state_path("/api/%2e%2e/x", "ctx").is_err());
+        assert!(validate_state_path("/api/%2E%2E/x", "ctx").is_err());
+    }
+
+    #[test]
+    fn state_path_rejects_non_api_and_absolute_url() {
+        assert!(validate_state_path("/other", "ctx").is_err());
+        assert!(validate_state_path("http://host/api/x", "ctx").is_err());
+        assert!(validate_state_path("//host/api/x", "ctx").is_err());
     }
 }

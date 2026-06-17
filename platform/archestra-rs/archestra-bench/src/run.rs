@@ -1521,6 +1521,11 @@ struct RunArtifacts {
 
 impl RunArtifacts {
     async fn new(path: PathBuf) -> Result<Self, RunError> {
+        // Create the parent env dir(s) if needed, but the leaf cell dir must be created fresh:
+        // an existing cell dir is a rerun collision (matches Python's mkdir(parents=True, exist_ok=False)).
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await.map_err(RunError::Io)?;
+        }
         match fs::create_dir(&path).await {
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -1853,13 +1858,9 @@ fn slug(value: &str) -> String {
 }
 
 fn run_subdir(env_id: &str, task_id: &str, lane: &Lane) -> String {
-    format!(
-        "{}/{}/{}__{}",
-        slug(env_id),
-        slug(task_id),
-        slug(task_id),
-        lane.slug()
-    )
+    // Layout is `<env>/<task>__<lane>` — the contract the Python harness writes (run.py:_run_subdir)
+    // and the trajectory analyzer reads. Do not add intermediate directory levels.
+    format!("{}/{}__{}", slug(env_id), slug(task_id), lane.slug())
 }
 
 fn cell_id(task: &Task, lane: &Lane) -> String {
@@ -1905,9 +1906,14 @@ async fn write_run_config(
             })
         })
         .collect();
+    // Every EnvPlan carries the same selected lane set (build_run_plan fans lanes over envs), so list
+    // each lane once — de-dup by name preserving declaration order (matches Python, which writes the
+    // selected lane list a single time).
+    let mut seen_lanes: std::collections::HashSet<&str> = std::collections::HashSet::new();
     let lanes: Vec<serde_json::Value> = plan
         .iter()
         .flat_map(|p| &p.lanes)
+        .filter(|l| seen_lanes.insert(l.name.as_str()))
         .map(|l| {
             serde_json::json!({
                 "name": l.name,
@@ -2113,8 +2119,55 @@ mod tests {
 
     #[test]
     fn test_run_subdir() {
-        let lane = dummy_lane("openai--gpt-4");
+        let lane = dummy_lane("openai-gpt-4");
         let s = run_subdir("basic", "median-salary", &lane);
-        assert!(s.starts_with("basic/median-salary/median-salary__"));
+        // <env>/<task>__<lane> — the analyzer's expected layout, no intermediate task level.
+        assert_eq!(s, "basic/median-salary__openai-gpt-4");
+    }
+
+    #[tokio::test]
+    async fn test_config_json_lists_each_lane_once_across_envs() {
+        let envs = vec![
+            (
+                dummy_env("a", vec![dummy_task("t1")]),
+                vec![dummy_task("t1")],
+            ),
+            (
+                dummy_env("b", vec![dummy_task("t2")]),
+                vec![dummy_task("t2")],
+            ),
+        ];
+        let lanes = vec![dummy_lane("l1"), dummy_lane("l2")];
+        let plan = build_run_plan(envs, lanes);
+        let tmp = tempfile::tempdir().unwrap();
+        write_run_config(tmp.path(), "rid", &plan, 2).await.unwrap();
+        let config: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(tmp.path().join("config.json")).unwrap())
+                .unwrap();
+        let names: Vec<&str> = config["lanes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l["name"].as_str().unwrap())
+            .collect();
+        // two envs, but each lane listed exactly once and in declaration order.
+        assert_eq!(names, ["l1", "l2"]);
+    }
+
+    #[tokio::test]
+    async fn test_run_artifacts_creates_parents_and_rejects_existing_leaf() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lane = dummy_lane("openai-gpt-4");
+        let cell = tmp.path().join(run_subdir("basic", "median-salary", &lane));
+        // parent (env dir) does not exist yet — new() must create it.
+        RunArtifacts::new(cell.clone()).await.unwrap();
+        assert!(cell.is_dir());
+        assert!(cell.parent().unwrap().is_dir());
+        // a second attempt at the same leaf is a rerun collision.
+        match RunArtifacts::new(cell.clone()).await {
+            Err(RunError::ArtifactExists(p)) => assert_eq!(p, cell),
+            Err(e) => panic!("expected ArtifactExists, got error {e:?}"),
+            Ok(_) => panic!("expected ArtifactExists, but creation succeeded"),
+        }
     }
 }

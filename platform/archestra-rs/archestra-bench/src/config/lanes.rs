@@ -27,7 +27,10 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneCo
         return Err(LaneConfigError(format!("{ctx}: no [[lane]] defined")));
     }
 
-    let mut catalog: std::collections::HashMap<String, Lane> = std::collections::HashMap::new();
+    // Preserve TOML declaration order: the unfiltered selection and the "first lane per provider is
+    // primary" rule both depend on it (matches Python's insertion-ordered dict in run.py:_load_lanes).
+    let mut catalog: Vec<Lane> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for row in rows {
         let name = toml_util::req_str(&row, "name", &format!("{ctx}: lane"))?;
         if !toml_util::is_slug(&name) {
@@ -35,7 +38,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneCo
                 "{ctx}: lane name {name:?} must be a slug ([a-z0-9][a-z0-9-]*)"
             )));
         }
-        if catalog.contains_key(&name) {
+        if !seen.insert(name.clone()) {
             return Err(LaneConfigError(format!(
                 "{ctx}: duplicate lane name {name:?}"
             )));
@@ -47,37 +50,36 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneCo
                 "{row_ctx}: unsupported provider {provider:?}; expected one of {ALLOWED_PROVIDERS:?}"
             )));
         }
-        catalog.insert(
-            name.clone(),
-            Lane {
-                name,
-                provider,
-                model: toml_util::req_str(&row, "model", &row_ctx)?,
-                base_url: toml_util::opt_str(&row, "base_url", &row_ctx)?,
-                api_key_env: toml_util::opt_str(&row, "api_key_env", &row_ctx)?,
-            },
-        );
+        catalog.push(Lane {
+            name,
+            provider,
+            model: toml_util::req_str(&row, "model", &row_ctx)?,
+            base_url: toml_util::opt_str(&row, "base_url", &row_ctx)?,
+            api_key_env: toml_util::opt_str(&row, "api_key_env", &row_ctx)?,
+        });
     }
 
-    let names = split_names(select);
-    match names {
-        None => Ok(catalog.into_values().collect()),
+    match split_names(select) {
+        None => Ok(catalog),
         Some(names) => {
-            let mut unknown = Vec::new();
-            for name in &names {
-                if !catalog.contains_key(name) {
-                    unknown.push(name.clone());
-                }
-            }
+            let unknown: Vec<String> = names
+                .iter()
+                .filter(|n| !seen.contains(*n))
+                .cloned()
+                .collect();
             if !unknown.is_empty() {
-                let available: Vec<_> = catalog.keys().cloned().collect();
+                let mut available: Vec<String> = catalog.iter().map(|l| l.name.clone()).collect();
+                available.sort();
                 return Err(LaneConfigError(format!(
                     "unknown lane(s) {unknown:?}; choose from {available:?}"
                 )));
             }
+            // return the requested lanes in the order the caller asked for (matches Python)
+            let by_name: std::collections::HashMap<&str, &Lane> =
+                catalog.iter().map(|l| (l.name.as_str(), l)).collect();
             Ok(names
                 .into_iter()
-                .filter_map(|n| catalog.remove(&n))
+                .map(|n| by_name[n.as_str()].clone())
                 .collect())
         }
     }
@@ -91,4 +93,84 @@ fn split_names(value: Option<&str>) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .collect();
     if parts.is_empty() { None } else { Some(parts) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LANES: &str = r#"
+[[lane]]
+name = "gemini"
+provider = "gemini"
+model = "g1"
+
+[[lane]]
+name = "or-a"
+provider = "openrouter"
+model = "a"
+
+[[lane]]
+name = "anthropic"
+provider = "anthropic"
+model = "claude"
+
+[[lane]]
+name = "or-b"
+provider = "openrouter"
+model = "b"
+"#;
+
+    fn write_lanes(body: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("lanes.toml"), body).unwrap();
+        dir
+    }
+
+    #[test]
+    fn unfiltered_preserves_toml_order() {
+        let dir = write_lanes(LANES);
+        let lanes = load_lanes(&dir.path().join("lanes.toml"), None).unwrap();
+        let names: Vec<_> = lanes.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["gemini", "or-a", "anthropic", "or-b"]);
+    }
+
+    #[test]
+    fn filtered_keeps_requested_order() {
+        let dir = write_lanes(LANES);
+        let lanes = load_lanes(&dir.path().join("lanes.toml"), Some("or-b,gemini")).unwrap();
+        let names: Vec<_> = lanes.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["or-b", "gemini"]);
+    }
+
+    #[test]
+    fn first_lane_per_provider_is_first_in_file_order() {
+        // mirrors run.py:_resolve_lanes — the first openrouter lane in declaration order is "or-a".
+        let dir = write_lanes(LANES);
+        let lanes = load_lanes(&dir.path().join("lanes.toml"), None).unwrap();
+        let first_openrouter = lanes
+            .iter()
+            .find(|l| l.provider == "openrouter")
+            .map(|l| l.name.as_str());
+        assert_eq!(first_openrouter, Some("or-a"));
+    }
+
+    #[test]
+    fn duplicate_lane_name_rejected() {
+        let dir = write_lanes(
+            r#"
+[[lane]]
+name = "dup"
+provider = "gemini"
+model = "g1"
+
+[[lane]]
+name = "dup"
+provider = "openai"
+model = "o1"
+"#,
+        );
+        let err = load_lanes(&dir.path().join("lanes.toml"), None).unwrap_err();
+        assert!(err.to_string().contains("duplicate lane name"));
+    }
 }

@@ -75,12 +75,12 @@ async fn main() -> ExitCode {
     let result = tokio::select! {
         biased;
         _ = tokio::signal::ctrl_c() => {
-            info!("received SIGINT, exiting");
-            return ExitCode::FAILURE;
+            info!("received SIGINT, tearing down live instances...");
+            None
         }
         _ = sigterm() => {
-            info!("received SIGTERM, exiting");
-            return ExitCode::FAILURE;
+            info!("received SIGTERM, tearing down live instances...");
+            None
         }
         result = run(
             &args.bench_dir,
@@ -91,7 +91,14 @@ async fn main() -> ExitCode {
             args.out.as_deref(),
             run_dir,
             args.max_workers,
-        ) => result,
+        ) => Some(result),
+    };
+
+    // On signal the run future above is dropped mid-flight, so its Instances never ran their own
+    // shutdown — tear down anything still registered (process groups + benchmark DBs) before exiting.
+    let Some(result) = result else {
+        archestra_bench::lifecycle::shutdown_all().await;
+        return ExitCode::FAILURE;
     };
 
     match result {

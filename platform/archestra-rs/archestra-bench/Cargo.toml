@@ -21,6 +21,7 @@ serde_json = "1"
 toml = "0.8"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "webpki-roots", "json", "stream", "cookies"] }
 url = "2"
+percent-encoding = "2"
 jsonschema = "0.29"
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"

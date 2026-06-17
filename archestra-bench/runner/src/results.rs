@@ -48,12 +48,18 @@ pub fn build_report(results: Vec<RunResult>) -> Result<Vec<RunResult>, String> {
     Ok(sorted)
 }
 
+/// Aggregate stats for one slice of rollouts (the whole run, or one env/task/lane group).
 #[derive(Debug, Clone)]
 pub struct GroupAggregate {
     pub key: String,
     pub total: usize,
     pub passed: usize,
     pub outcomes: HashMap<String, usize>,
+    pub total_turns: usize,
+    pub total_tokens: i64,
+    /// Rollouts that reported a token count — the denominator for `avg_tokens` (infra/error rollouts
+    /// have none, and folding them in as 0 would understate the average).
+    pub tokens_n: usize,
 }
 
 impl GroupAggregate {
@@ -64,37 +70,44 @@ impl GroupAggregate {
             self.passed as f64 / self.total as f64
         }
     }
+
+    pub fn avg_turns(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            self.total_turns as f64 / self.total as f64
+        }
+    }
+
+    pub fn avg_tokens(&self) -> Option<f64> {
+        if self.tokens_n == 0 {
+            None
+        } else {
+            Some(self.total_tokens as f64 / self.tokens_n as f64)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Aggregate {
-    pub total: usize,
-    pub passed: usize,
-    pub outcomes: HashMap<String, usize>,
-    pub total_turns: usize,
-    pub total_tokens: i64,
+    pub overall: GroupAggregate,
     pub per_env: Vec<GroupAggregate>,
     pub per_task: Vec<GroupAggregate>,
     pub per_lane: Vec<GroupAggregate>,
 }
 
 impl Aggregate {
-    pub fn pass_rate(&self) -> f64 {
-        if self.total == 0 {
-            0.0
-        } else {
-            self.passed as f64 / self.total as f64
-        }
-    }
-
     pub fn to_json(&self) -> serde_json::Value {
+        let o = &self.overall;
         serde_json::json!({
-            "total": self.total,
-            "passed": self.passed,
-            "pass_rate": self.pass_rate(),
-            "outcomes": self.outcomes,
-            "total_turns": self.total_turns,
-            "total_tokens": self.total_tokens,
+            "total": o.total,
+            "passed": o.passed,
+            "pass_rate": o.pass_rate(),
+            "avg_turns": o.avg_turns(),
+            "avg_tokens": o.avg_tokens(),
+            "total_turns": o.total_turns,
+            "total_tokens": o.total_tokens,
+            "outcomes": o.outcomes,
             "per_env": self.per_env.iter().map(|g| group_json("env_id", g)).collect::<Vec<_>>(),
             "per_task": self.per_task.iter().map(|g| group_json("task_id", g)).collect::<Vec<_>>(),
             "per_lane": self.per_lane.iter().map(|g| group_json("lane", g)).collect::<Vec<_>>(),
@@ -102,37 +115,44 @@ impl Aggregate {
     }
 }
 
-fn group_json(key_name: &str, group: &GroupAggregate) -> serde_json::Value {
+fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
     serde_json::json!({
-        key_name: group.key,
-        "total": group.total,
-        "passed": group.passed,
-        "pass_rate": group.pass_rate(),
-        "outcomes": group.outcomes,
+        key_name: g.key,
+        "total": g.total,
+        "passed": g.passed,
+        "pass_rate": g.pass_rate(),
+        "avg_turns": g.avg_turns(),
+        "avg_tokens": g.avg_tokens(),
+        "total_turns": g.total_turns,
+        "total_tokens": g.total_tokens,
+        "outcomes": g.outcomes,
     })
 }
 
 pub fn aggregate(results: &[RunResult]) -> Aggregate {
+    let all: Vec<&RunResult> = results.iter().collect();
     Aggregate {
-        total: results.len(),
-        passed: results.iter().filter(|r| r.verifier_passed()).count(),
-        outcomes: outcome_counts(results),
-        total_turns: results.iter().map(|r| r.turn_count).sum(),
-        total_tokens: results.iter().map(|r| r.total_tokens.unwrap_or(0)).sum(),
+        overall: group_aggregate("overall".to_string(), &all),
         per_env: group_by(results, |r| &r.env_id),
         per_task: group_by(results, |r| &r.task_id),
         per_lane: group_by(results, |r| &r.lane),
     }
 }
 
-fn outcome_counts(results: &[RunResult]) -> HashMap<String, usize> {
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for result in results {
-        *counts
-            .entry(result.outcome.value().to_string())
-            .or_default() += 1;
+fn group_aggregate(key: String, rows: &[&RunResult]) -> GroupAggregate {
+    let mut outcomes: HashMap<String, usize> = HashMap::new();
+    for r in rows {
+        *outcomes.entry(r.outcome.value().to_string()).or_default() += 1;
     }
-    counts
+    GroupAggregate {
+        key,
+        total: rows.len(),
+        passed: rows.iter().filter(|r| r.verifier_passed()).count(),
+        outcomes,
+        total_turns: rows.iter().map(|r| r.turn_count).sum(),
+        total_tokens: rows.iter().filter_map(|r| r.total_tokens).sum(),
+        tokens_n: rows.iter().filter(|r| r.total_tokens.is_some()).count(),
+    }
 }
 
 fn group_by<F>(results: &[RunResult], key_fn: F) -> Vec<GroupAggregate>
@@ -151,131 +171,73 @@ where
     keys.into_iter()
         .map(|key| {
             let rows = grouped.remove(&key).unwrap();
-            GroupAggregate {
-                key,
-                total: rows.len(),
-                passed: rows.iter().filter(|r| r.verifier_passed()).count(),
-                outcomes: outcome_counts(&rows.into_iter().cloned().collect::<Vec<_>>()),
-            }
+            group_aggregate(key, &rows)
         })
         .collect()
 }
 
+/// The default benchmark report: aggregates only. Per-rollout detail lives in each rollout's `run.json`
+/// under the run dir, so the report stays a quick-scan summary rather than a wide raw table.
 pub fn render_markdown(rows: &[RunResult]) -> String {
     let mut lines = vec!["# Archestra benchmark results".to_string(), String::new()];
-
-    lines.push("## Pass matrix".to_string());
-    lines.push(String::new());
-    lines.push(
-        "| env | task | lane | provider/model | outcome | finish | tools | tokens | stages | fmt | agent error | artifacts |"
-            .to_string(),
-    );
-    lines.push(
-        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |".to_string(),
-    );
-
-    for row in rows {
-        lines.push(format!(
-            "| {} | {} | {} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} |",
-            row.env_id,
-            row.task_id,
-            row.lane,
-            row.provider,
-            row.model,
-            row.outcome.value(),
-            cell(row.finish_reason.as_deref()),
-            row.tool_call_count,
-            cell(row.total_tokens.map(|n| n.to_string()).as_deref()),
-            row.stage_count,
-            row.format_attempts,
-            cell(row.agent_error.as_deref()),
-            cell(row.artifact_dir.as_deref()),
-        ));
+    if rows.is_empty() {
+        lines.push("_no rollouts_".to_string());
+        return lines.join("\n") + "\n";
     }
 
-    if !rows.is_empty() {
-        let agg = aggregate(rows);
-        lines.push(String::new());
-        lines.push("## Aggregate".to_string());
-        lines.push(String::new());
-        lines.push(format!(
-            "- overall: {}/{} passed ({:.0}%)",
-            agg.passed,
-            agg.total,
-            agg.pass_rate() * 100.0
-        ));
-        lines.push(format!("- outcomes: {}", outcome_summary(&agg.outcomes)));
-        lines.push(format!(
-            "- turns: {}, tokens: {}",
-            agg.total_turns, agg.total_tokens
-        ));
+    let agg = aggregate(rows);
+    lines.push(format!("**overall**: {}", stats(&agg.overall)));
 
+    for (title, groups) in [
+        ("By environment", &agg.per_env),
+        ("By task", &agg.per_task),
+        ("By lane", &agg.per_lane),
+    ] {
         lines.push(String::new());
-        lines.push("### By environment".to_string());
-        for g in &agg.per_env {
-            lines.push(group_line(g));
-        }
-
-        lines.push(String::new());
-        lines.push("### By task".to_string());
-        for g in &agg.per_task {
-            lines.push(group_line(g));
-        }
-
-        lines.push(String::new());
-        lines.push("### By lane".to_string());
-        for g in &agg.per_lane {
-            lines.push(group_line(g));
+        lines.push(format!("## {title}"));
+        for g in groups {
+            lines.push(format!("- `{}`: {}", g.key, stats(g)));
         }
     }
 
     lines.join("\n") + "\n"
 }
 
-fn group_line(group: &GroupAggregate) -> String {
+/// One line of stats for a group: success rate, then avg turns/tokens, then the non-passed outcome
+/// breakdown (the failure reasons) when there are any.
+fn stats(g: &GroupAggregate) -> String {
+    let tokens = g
+        .avg_tokens()
+        .map(|t| format!("{t:.0}"))
+        .unwrap_or_else(|| "n/a".to_string());
+    let failures = failure_summary(&g.outcomes);
+    let tail = if failures.is_empty() {
+        String::new()
+    } else {
+        format!(" — {failures}")
+    };
     format!(
-        "- `{}`: {}/{} passed ({:.0}%) - {}",
-        group.key,
-        group.passed,
-        group.total,
-        group.pass_rate() * 100.0,
-        outcome_summary(&group.outcomes)
+        "{}/{} passed ({:.0}%) · avg turns {:.1} · avg tokens {}{}",
+        g.passed,
+        g.total,
+        g.pass_rate() * 100.0,
+        g.avg_turns(),
+        tokens,
+        tail
     )
 }
 
-fn outcome_summary(outcomes: &HashMap<String, usize>) -> String {
-    if outcomes.is_empty() {
-        return "-".to_string();
-    }
-    let mut pairs: Vec<_> = outcomes.iter().collect();
+fn failure_summary(outcomes: &HashMap<String, usize>) -> String {
+    let mut pairs: Vec<_> = outcomes
+        .iter()
+        .filter(|(name, _)| name.as_str() != Outcome::Passed.value())
+        .collect();
     pairs.sort_by(|a, b| a.0.cmp(b.0));
     pairs
         .into_iter()
-        .map(|(name, count)| format!("{}={}", name, count))
+        .map(|(name, count)| format!("{name}={count}"))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-const MAX_CELL_WIDTH: usize = 160;
-
-fn cell(value: Option<&str>) -> String {
-    match value {
-        None => "-".to_string(),
-        Some(text) => {
-            let text = text.replace('\n', " ");
-            let text = if text.len() > MAX_CELL_WIDTH {
-                format!("{}…", &text[..MAX_CELL_WIDTH - 1])
-            } else {
-                text
-            };
-            let text = text.replace('|', "\\|");
-            if text.is_empty() {
-                "-".to_string()
-            } else {
-                text
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -309,19 +271,40 @@ mod tests {
             result("api", "t1", "l2", Outcome::Passed),
         ];
         let agg = aggregate(&rows);
-        assert_eq!(agg.total, 3);
-        assert_eq!(agg.passed, 2);
-        assert_eq!(agg.outcomes.get("passed"), Some(&2));
-        assert_eq!(agg.outcomes.get("failed"), Some(&1));
+        assert_eq!(agg.overall.total, 3);
+        assert_eq!(agg.overall.passed, 2);
+        assert_eq!(agg.overall.outcomes.get("passed"), Some(&2));
+        assert_eq!(agg.overall.outcomes.get("failed"), Some(&1));
     }
 
     #[test]
-    fn test_render_markdown_contains_matrix() {
-        let rows = vec![result("basic", "t1", "l1", Outcome::Passed)];
-        let md = render_markdown(&rows);
-        assert!(md.contains("## Pass matrix"));
-        assert!(md.contains("basic"));
-        assert!(md.contains("passed"));
+    fn test_aggregate_averages_turns_and_tokens() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.turn_count = 4;
+        a.total_tokens = Some(1000);
+        let mut b = result("basic", "t2", "l1", Outcome::Failed);
+        b.turn_count = 2;
+        b.total_tokens = None; // an infra/error rollout reports no tokens
+        let agg = aggregate(&[a, b]);
+        assert_eq!(agg.overall.avg_turns(), 3.0); // (4 + 2) / 2 rollouts
+        // tokens averaged only over rollouts that reported them (1), not all (2).
+        assert_eq!(agg.overall.avg_tokens(), Some(1000.0));
+    }
+
+    #[test]
+    fn test_render_markdown_is_aggregate_only() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.total_tokens = Some(1500);
+        let md = render_markdown(&[a, result("basic", "t2", "l1", Outcome::Failed)]);
+        assert!(
+            !md.contains("Pass matrix"),
+            "default report drops the raw table"
+        );
+        assert!(md.contains("**overall**: 1/2 passed (50%)"));
+        assert!(md.contains("avg turns"));
+        assert!(md.contains("avg tokens"));
+        assert!(md.contains("failed=1"), "failure reasons are reported");
+        assert!(md.contains("## By task"));
     }
 
     #[test]

@@ -52,6 +52,7 @@ import {
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
@@ -602,20 +603,9 @@ export function AgentDialog({
   const { data: environmentsData } = useEnvironments(
     open && agentType === "agent" && !!agentEnvironmentsEnabled,
   );
+  // Used to resolve the selected environment's name for the tools editor; the
+  // EnvironmentSelector owns its own list + permission filtering.
   const environments = environmentsData?.environments ?? [];
-  // Assigning a restricted environment needs environment:deploy-to-restricted
-  // (environment:admin implies it); the backend enforces it, so hide the
-  // restricted environments the caller can't deploy to rather than letting them
-  // pick one and fail on save — same gate the MCP-catalog form uses.
-  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
-  const { data: hasDeployToRestricted } = useHasPermissions({
-    environment: ["deploy-to-restricted"],
-  });
-  const canDeployRestricted =
-    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
-  const accessibleEnvironments = environments.filter(
-    (env) => !env.restricted || canDeployRestricted,
-  );
   // Scope the agent's MCP list to its environment only when the feature is on
   // for an internal agent (same gate as the environment selector).
   const environmentScopingEnabled =
@@ -1330,32 +1320,16 @@ export function AgentDialog({
 
               {/* Sandbox Environment (Agent only): binds the agent's code
                   sandbox to a per-environment Dagger engine + egress policy.
-                  Feature-flagged off by default. */}
-              {isInternalAgent &&
-                agentEnvironmentsEnabled &&
-                accessibleEnvironments.length > 0 && (
-                  <div className="rounded-lg border bg-card p-4 space-y-2">
-                    <Label>Environment</Label>
-                    <Select
-                      value={environmentId ?? "none"}
-                      onValueChange={(value) =>
-                        setEnvironmentId(value === "none" ? null : value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Default" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Default</SelectItem>
-                        {accessibleEnvironments.map((env) => (
-                          <SelectItem key={env.id} value={env.id}>
-                            {env.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                  Feature-flagged off by default; hidden when only the default
+                  environment is available. */}
+              {isInternalAgent && agentEnvironmentsEnabled && (
+                <EnvironmentSelector
+                  value={environmentId ?? null}
+                  onChange={setEnvironmentId}
+                  hideWhenOnlyDefault
+                  className="rounded-lg border bg-card p-4"
+                />
+              )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (

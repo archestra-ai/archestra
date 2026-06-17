@@ -245,6 +245,20 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(text.indexOf("Output was truncated")).toBeLessThan(
         text.indexOf("stdout:"),
       );
+      // the old trailing marker is gone — no duplicate warning at the end.
+      expect(text).not.toContain("(output was truncated)");
+    });
+
+    test("omits the truncation warning when output is complete", async () => {
+      const ctx = await makeConversationCtx();
+      stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+      expect(textOf(result)).not.toContain("truncated");
     });
 
     test("guides to timeoutSeconds when the model passes timeout", async () => {

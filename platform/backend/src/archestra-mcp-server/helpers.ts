@@ -624,7 +624,10 @@ function enumerateUnknownKeys(
  * Closest accepted key for a rejected one, or null when nothing is close.
  * Substring containment is checked first so a truncated/extended name like
  * `timeout` → `timeoutSeconds` matches (their edit distance is large); a small
- * edit distance then catches ordinary typos.
+ * edit distance then catches ordinary typos. Edit-distance matching is gated on
+ * a minimum length: on very short keys (`cwd`, `env`) a one-character distance
+ * is mostly coincidence (`cmd` is as near `cwd` as `command`), so we skip it and
+ * let the always-shown valid-keys list guide instead of a misleading guess.
  */
 function suggestClosestKey(badKey: string, validKeys: string[]): string | null {
   const lower = badKey.toLowerCase();
@@ -634,7 +637,7 @@ function suggestClosestKey(badKey: string, validKeys: string[]): string | null {
     let score: number | null = null;
     if (candidate.includes(lower) || lower.includes(candidate)) {
       score = Math.abs(candidate.length - lower.length);
-    } else {
+    } else if (Math.min(lower.length, candidate.length) >= 4) {
       const distance = levenshtein(lower, candidate);
       if (distance <= 2) score = 10 + distance;
     }

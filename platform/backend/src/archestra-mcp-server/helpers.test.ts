@@ -226,6 +226,16 @@ describe("formatZodErrorWithSchema", () => {
     expect(message).toContain('valid keys are "command"');
   });
 
+  test("omits a coincidental edit-distance match on short keys", () => {
+    // `cmd` is one edit from `cwd` but four from `command`; suggesting `cwd`
+    // would mislead, so on short keys we list the valid keys without guessing.
+    const schema = z.strictObject({ command: z.string(), cwd: z.string() });
+    const error = parseError(schema, { cmd: "ls" });
+    const message = formatZodErrorWithSchema(error, schema);
+    expect(message).not.toContain("did you mean");
+    expect(message).toContain('valid keys are "command", "cwd"');
+  });
+
   test("omits a suggestion when no key is close", () => {
     const schema = z.strictObject({ command: z.string() });
     const error = parseError(schema, { command: "ls", xyzzy: 1 });

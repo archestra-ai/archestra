@@ -68,6 +68,15 @@ type AgentSelectorProps =
       disabled?: boolean;
       disabledLabel?: string;
       className?: string;
+      /**
+       * Render every agent in one ungrouped list regardless of `agentType`,
+       * instead of the default "Agents"/"MCP Gateways" group headings. Use this
+       * for single-purpose multi-pickers (e.g. an MCP-gateway or LLM-proxy
+       * allow-list) whose items are all one conceptual kind but may carry mixed
+       * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`). Without it,
+       * `llm_proxy` agents are not rendered.
+       */
+      flat?: boolean;
       allOption?: {
         label: string;
       };
@@ -210,12 +219,14 @@ function MultiAgentSelector({
   disabled,
   disabledLabel,
   className,
+  flat,
   allOption,
 }: Extract<AgentSelectorProps, { mode: "multiple" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selectedAgents = agents.filter((agent) => value.includes(agent.id));
   const groupedAgents = useGroupedAgents(agents, search);
+  const visibleAgents = useVisibleAgents(agents, search);
   const allAgentIds = agents.map((agent) => agent.id);
   const allSelected =
     !!allOption &&
@@ -315,22 +326,56 @@ function MultiAgentSelector({
             onWheelCapture={(event) => event.stopPropagation()}
           >
             <CommandEmpty>{emptyMessage}</CommandEmpty>
-            <AgentSelectorGroups
-              allOption={
-                allOption &&
-                allAgentIds.length > 0 &&
-                matchesSearch(allOption.label, search)
-                  ? {
-                      label: allOption.label,
-                      selected: allSelected,
-                      onSelect: handleSelectAll,
-                    }
-                  : undefined
-              }
-              groupedAgents={groupedAgents}
-              selectedIds={allSelected ? [] : value}
-              onSelect={handleSelect}
-            />
+            {flat ? (
+              <>
+                {allOption &&
+                  allAgentIds.length > 0 &&
+                  matchesSearch(allOption.label, search) && (
+                    <CommandGroup>
+                      <CommandItem
+                        value={allOption.label}
+                        onSelect={handleSelectAll}
+                        className="justify-between"
+                      >
+                        <span>{allOption.label}</span>
+                        <Check
+                          className={cn(
+                            "h-4 w-4",
+                            allSelected ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                      </CommandItem>
+                    </CommandGroup>
+                  )}
+                <CommandGroup>
+                  {visibleAgents.map((agent) => (
+                    <AgentSelectorItem
+                      key={agent.id}
+                      agent={agent}
+                      selected={allSelected ? false : value.includes(agent.id)}
+                      onSelect={handleSelect}
+                    />
+                  ))}
+                </CommandGroup>
+              </>
+            ) : (
+              <AgentSelectorGroups
+                allOption={
+                  allOption &&
+                  allAgentIds.length > 0 &&
+                  matchesSearch(allOption.label, search)
+                    ? {
+                        label: allOption.label,
+                        selected: allSelected,
+                        onSelect: handleSelectAll,
+                      }
+                    : undefined
+                }
+                groupedAgents={groupedAgents}
+                selectedIds={allSelected ? [] : value}
+                onSelect={handleSelect}
+              />
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

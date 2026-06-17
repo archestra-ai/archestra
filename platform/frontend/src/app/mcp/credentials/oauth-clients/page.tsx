@@ -4,6 +4,10 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  AgentSelector,
+  type AgentSelectorAgent,
+} from "@/components/agent-selector";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
@@ -18,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -280,7 +283,7 @@ function CreateOAuthClientDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  gateways: archestraApiTypes.GetAllAgentsResponses["200"];
+  gateways: AgentSelectorAgent[];
   onSubmit: (
     values: archestraApiTypes.CreateMcpOauthClientData["body"],
   ) => Promise<void>;
@@ -329,14 +332,14 @@ function CreateOAuthClientDialog({
 
           <div className="space-y-2">
             <Label>Allowed gateways</Label>
-            <MultiSelectCombobox
-              options={gateways.map((gateway) => ({
-                value: gateway.id,
-                label: gateway.name,
-              }))}
+            <AgentSelector
+              mode="multiple"
+              flat
+              agents={gateways}
               value={selectedGatewayIds}
-              onChange={setSelectedGatewayIds}
+              onValueChange={setSelectedGatewayIds}
               placeholder="Select gateways"
+              searchPlaceholder="Search gateways"
               emptyMessage="No gateways found"
             />
           </div>
@@ -367,7 +370,7 @@ function EditOAuthClientDialog({
 }: {
   oauthClient: McpOauthClient | null;
   onOpenChange: (open: boolean) => void;
-  gateways: archestraApiTypes.GetAllAgentsResponses["200"];
+  gateways: AgentSelectorAgent[];
   onSubmit: (
     id: string,
     values: archestraApiTypes.UpdateMcpOauthClientData["body"],
@@ -416,14 +419,14 @@ function EditOAuthClientDialog({
 
           <div className="space-y-2">
             <Label>Allowed gateways</Label>
-            <MultiSelectCombobox
-              options={gateways.map((gateway) => ({
-                value: gateway.id,
-                label: gateway.name,
-              }))}
+            <AgentSelector
+              mode="multiple"
+              flat
+              agents={gateways}
               value={selectedGatewayIds}
-              onChange={setSelectedGatewayIds}
+              onValueChange={setSelectedGatewayIds}
               placeholder="Select gateways"
+              searchPlaceholder="Search gateways"
               emptyMessage="No gateways found"
             />
           </div>

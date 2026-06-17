@@ -27,6 +27,11 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => availableKeysMock(),
 }));
 
+vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
+  CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="add-provider-key-dialog" /> : null,
+}));
+
 // The component reads the selected provider from the URL and writes selections
 // back; a static search param + no-op updater is enough for these assertions.
 vi.mock("next/navigation", () => ({
@@ -62,7 +67,7 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("offers the model router toggle and switches the URL to /openai/", async () => {
+  it("offers the model router toggle and switches the URL to /model-router/", async () => {
     const user = userEvent.setup();
     renderInstructions();
 
@@ -73,9 +78,9 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
 
     await user.click(screen.getByLabelText(/OpenAI-Compatible Model Router/i));
 
-    // Router on: the unified openai endpoint replaces the per-provider URL.
+    // Router on: the unified model-router endpoint replaces the per-provider URL.
     expect(
-      screen.getByText("http://localhost:9000/v1/openai/profile-123"),
+      screen.getByText("http://localhost:9000/v1/model-router/profile-123"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("http://localhost:9000/v1/anthropic/profile-123"),
@@ -117,5 +122,17 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     expect(
       screen.getByText(/needs a configured Anthropic provider key first/i),
     ).toBeInTheDocument();
+  });
+
+  it("opens an inline add-provider-key dialog from the no-key helper text", async () => {
+    // permission to create a provider key (hasPermissionsMock defaults to true)
+    // and no key configured for the selected provider.
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderInstructions();
+
+    await user.click(screen.getByRole("button", { name: /add one/i }));
+
+    expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 });

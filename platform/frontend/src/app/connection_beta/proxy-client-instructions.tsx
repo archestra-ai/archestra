@@ -9,6 +9,7 @@ import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -287,6 +288,10 @@ function GenericProxyInstructions({
   const { data: canCreateVirtualKey } = useHasPermissions({
     llmVirtualKey: ["create"],
   });
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const provisionKey = useCreateConnectionVirtualKey();
   const provisionAsync = provisionKey.mutateAsync;
   const [virtualKey, setVirtualKey] = useState<{
@@ -344,7 +349,11 @@ function GenericProxyInstructions({
     provisionAsync,
   ]);
 
-  const routerUrl = `${baseUrl}/openai/${profileId}`;
+  // The OpenAI-compatible router lives at /v1/model-router (it resolves
+  // provider-qualified model IDs like `openai:gpt-5.4` and fans out to every
+  // provider). /v1/openai is just the OpenAI passthrough proxy, so it must NOT
+  // be used here — it would only ever reach OpenAI.
+  const routerUrl = `${baseUrl}/model-router/${profileId}`;
   const providerUrl = `${baseUrl}/${selectedProvider}/${profileId}`;
   const effectiveUrl = useRouter ? routerUrl : providerUrl;
   const effectiveOriginalUrl = useRouter
@@ -395,11 +404,35 @@ function GenericProxyInstructions({
             </TabsList>
           </Tabs>
           <p className="text-xs text-muted-foreground">
-            {authMethod === "provider-key"
-              ? canCreateVirtualKey && !providerHasKey
-                ? `Passthrough — you keep using your own ${providerLabel} key. A virtual key needs a configured ${providerLabel} provider key first (add one under LLM provider keys).`
-                : "Passthrough — you keep using your own provider API key; only the base URL changes."
-              : "A personal virtual key mapped to your provider key is created automatically and shown below."}
+            {authMethod === "provider-key" ? (
+              canCreateVirtualKey && !providerHasKey ? (
+                <>
+                  Passthrough — you keep using your own {providerLabel} key. A
+                  virtual key needs a configured {providerLabel} provider key
+                  first
+                  {canCreateProviderKey ? (
+                    <>
+                      {" "}
+                      (
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                        onClick={() => setShowAddProviderKey(true)}
+                      >
+                        add one
+                      </button>
+                      ).
+                    </>
+                  ) : (
+                    " (ask an admin to add one)."
+                  )}
+                </>
+              ) : (
+                "Passthrough — you keep using your own provider API key; only the base URL changes."
+              )
+            ) : (
+              "A personal virtual key mapped to your provider key is created automatically and shown below."
+            )}
           </p>
           {authMethod === "virtual-key" &&
             (virtualKey ? (
@@ -437,6 +470,16 @@ function GenericProxyInstructions({
           url={effectiveUrl}
         />
       )}
+
+      <CreateLlmProviderApiKeyDialog
+        open={showAddProviderKey}
+        onOpenChange={setShowAddProviderKey}
+        title={`Add a ${providerLabel} provider key`}
+        description={`Add a provider API key so a virtual key can be minted from it. This unlocks the virtual-key option for ${providerLabel}.`}
+        defaultValues={{ provider: selectedProvider }}
+        allowedProviders={[selectedProvider]}
+        onSuccess={() => setShowAddProviderKey(false)}
+      />
     </div>
   );
 }

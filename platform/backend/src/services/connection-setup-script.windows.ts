@@ -122,15 +122,21 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
+  // Pure-ASCII rendition of the Archestra mark — a filled tilted bar and dot
+  // echoing logo-icon.svg. The built-in Windows PowerShell 5.1 console can
+  // render block/quadrant Unicode glyphs as mojibake (legacy codepage), so this
+  // mirrors the macOS/Linux block-mark's composition with portable ASCII only.
   const logo =
     ctx.appName === DEFAULT_APP_NAME
-      ? `   .----------------.
-   |       __       |
-   |      / /       |
-   |     / /        |     ${ctx.appName}
-   |    / /  __     |     Secure access to your AI tools
-   |   /_/  |__|    |
-   '----------------'`
+      ? `   .------------------.
+   |                  |
+   |        ,##.      |
+   |        ####      |     ${ctx.appName}
+   |       ####       |     Secure access to your AI tools
+   |       #### ,.    |
+   |       \`##' \`'    |
+   |                  |
+   '------------------'`
       : `   ${ctx.appName}
    Secure access to your AI tools`;
 

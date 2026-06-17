@@ -9,6 +9,11 @@ import { Check, CircleDashed, Copy, Loader2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  AgentSelector,
+  type AgentSelectorAgent,
+} from "@/components/agent-selector";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,7 +47,6 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { SearchableSelect } from "./searchable-select";
 import {
   fetchAllSkillIds,
   useTotalSkillCount,
@@ -82,19 +86,14 @@ function useConnectSkills(): { eligible: boolean; totalSkills: number } {
   };
 }
 
-interface AgentOption {
-  id: string;
-  name: string;
-}
-
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentOption[] | null;
+  mcpGateways: AgentSelectorAgent[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** null when the user can't read LLM proxies. */
-  llmProxies: AgentOption[] | null;
+  llmProxies: AgentSelectorAgent[] | null;
   llmProxyId: string | null;
   onLlmProxySelect: (id: string) => void;
   /** When null/undefined: all providers allowed. Otherwise: only these. */
@@ -210,6 +209,14 @@ export function ConnectCommandPanel({
   // Creating the personal key invalidates the available-keys query, so once the
   // user connects, `configuredProviders` updates and the command auto-generates.
   const createPerUserKey = useCreateLlmProviderApiKey();
+  // Virtual keys are minted from a provider key. When none of the client's
+  // providers has one, offer to add it inline (gated on the create permission);
+  // the create mutation invalidates the available-keys query, so this section
+  // re-resolves the moment the key lands.
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
     null,
   );
@@ -291,11 +298,15 @@ export function ConnectCommandPanel({
     <div className="grid gap-3">
       {mcpGateways && mcpGateways.length > 1 && gateway && (
         <EditorField label="Gateway">
-          <SearchableSelect
-            options={mcpGateways.map((g) => ({ value: g.id, label: g.name }))}
+          <AgentSelector
+            mode="single"
+            flat
+            className="w-full"
+            agents={mcpGateways}
             value={gateway.id}
             onValueChange={onMcpGatewaySelect}
             placeholder="Select gateway"
+            searchPlaceholder="Search gateways…"
           />
         </EditorField>
       )}
@@ -339,15 +350,35 @@ export function ConnectCommandPanel({
     </EditorField>
   );
 
+  // A virtual key is minted from a key for one of the providers THIS client
+  // routes through the proxy (e.g. Claude Code → Anthropic/Bedrock), not from
+  // any provider key you happen to have. Naming them keeps "no key" from
+  // reading as "you have no keys at all".
+  const supportedNames = supportedProviders.map((p) => providerDisplayNames[p]);
+  const noVirtualKeyReason =
+    supportedNames.length === 0
+      ? "None of this client's providers has a key to mint a virtual key from."
+      : supportedNames.length === 1
+        ? `${client.label} routes ${supportedNames[0]}, which has no key to mint a virtual key from.`
+        : `${client.label} routes ${formatList(supportedNames)}, none of which has a key to mint a virtual key from.`;
+  const providerKeyDialogDescription =
+    supportedNames.length === 0
+      ? "Add a provider API key so a virtual key can be minted from it."
+      : `Add a provider API key so a virtual key can be minted from it. ${client.label} routes ${formatList(supportedNames)}, so a key for one of those unlocks the virtual-key option for this client.`;
+
   const proxyEditor = proxy ? (
     <div className="grid gap-3">
       {llmProxies && llmProxies.length > 1 && (
         <EditorField label="Proxy">
-          <SearchableSelect
-            options={llmProxies.map((p) => ({ value: p.id, label: p.name }))}
+          <AgentSelector
+            mode="single"
+            flat
+            className="w-full"
+            agents={llmProxies}
             value={proxy.id}
             onValueChange={onLlmProxySelect}
             placeholder="Select proxy"
+            searchPlaceholder="Search proxies…"
           />
         </EditorField>
       )}
@@ -375,11 +406,27 @@ export function ConnectCommandPanel({
                 </TabsList>
               </Tabs>
               <p className="text-xs text-muted-foreground">
-                {proxyAuth === "provider-key"
-                  ? "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
-                  : providers.length === 0
-                    ? "No provider has a key to mint a virtual key from. Add a provider key, or use your provider key."
-                    : "A virtual key is created for you and wired into the command."}
+                {proxyAuth === "provider-key" ? (
+                  "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                ) : providers.length === 0 ? (
+                  canCreateProviderKey ? (
+                    <>
+                      {noVirtualKeyReason}{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                        onClick={() => setShowAddProviderKey(true)}
+                      >
+                        Add a provider key
+                      </button>{" "}
+                      or switch to your provider key.
+                    </>
+                  ) : (
+                    `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add a provider key.`
+                  )
+                ) : (
+                  "A virtual key is created for you and wired into the command."
+                )}
               </p>
             </>
           )}
@@ -402,9 +449,6 @@ export function ConnectCommandPanel({
     </label>
   );
 
-  // Why no provider can be offered for a virtual key: name the providers the
-  // client actually supports so the user knows what would need a key.
-  const supportedNames = supportedProviders.map((p) => providerDisplayNames[p]);
   const noVirtualKeyMessage =
     supportedNames.length === 1
       ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
@@ -600,6 +644,20 @@ export function ConnectCommandPanel({
           </div>
         </div>
       </WizardStep>
+
+      <CreateLlmProviderApiKeyDialog
+        open={showAddProviderKey}
+        onOpenChange={setShowAddProviderKey}
+        title="Add a provider key"
+        description={providerKeyDialogDescription}
+        defaultValues={
+          supportedProviders[0]
+            ? { provider: supportedProviders[0] }
+            : undefined
+        }
+        allowedProviders={supportedProviders}
+        onSuccess={() => setShowAddProviderKey(false)}
+      />
     </>
   );
 }
@@ -784,6 +842,13 @@ function RecommendationChip({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
+}
+
+/** Join names as a readable list: "A", "A and B", "A, B, and C". */
+function formatList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 /** label + control row inside an inline editor. */

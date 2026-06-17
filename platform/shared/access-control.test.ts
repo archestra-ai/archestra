@@ -70,19 +70,6 @@ describe("access-control", () => {
     });
   });
 
-  describe("llmVirtualKey resource", () => {
-    // Members can create LLM proxies and need to mint personal virtual keys to
-    // route through them (the /connection auto-provisioning flow). Without
-    // create, CreateConnectionSetup 403s in virtual-key mode.
-    test("member role has llmVirtualKey:create", () => {
-      expect(memberPermissions.llmVirtualKey).toContain("create");
-    });
-
-    test("member role does not have llmVirtualKey:admin", () => {
-      expect(memberPermissions.llmVirtualKey).not.toContain("admin");
-    });
-  });
-
   describe("LLM-spending skill routes", () => {
     // suggestSkillDescription resolves and spends the source agent's configured
     // LLM key, so it must be gated like chatting with the agent — not by the

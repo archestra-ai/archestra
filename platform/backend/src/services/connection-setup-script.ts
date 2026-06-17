@@ -232,15 +232,20 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
+  // A monospace rendition of the Archestra mark: a white tilted rounded bar
+  // and dot on the terminal's dark field, echoing the real logo-icon.svg.
+  // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
   const logo =
     ctx.appName === DEFAULT_APP_NAME
-      ? `   .----------------.
-   |       __       |
-   |      / /       |
-   |     / /        |     ${ctx.appName}
-   |    / /  __     |     Secure access to your AI tools
-   |   /_/  |__|    |
-   '----------------'`
+      ? `   ╭──────────────────╮
+   │                  │
+   │        ▟██▙      │
+   │        ████      │     ${ctx.appName}
+   │       ████       │     Secure access to your AI tools
+   │       ████ ▟▙    │
+   │      ▜██▛  ▜▛    │
+   │                  │
+   ╰──────────────────╯`
       : `   ${ctx.appName}
    Secure access to your AI tools`;
 

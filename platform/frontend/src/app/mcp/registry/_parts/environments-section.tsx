@@ -90,8 +90,8 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     useState<EnvironmentWithAssignedCount | null>(null);
 
   // Which editor is open is derived from the URL (`?edit=<id|default>` /
-  // `?create`) so the form survives a reload and is shareable, matching the
-  // catalog editor's deep-link pattern. Only admins (canEdit) open one.
+  // `?create`) so the form survives a reload and is shareable. Only admins
+  // (canEdit) open one.
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

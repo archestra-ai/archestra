@@ -69,6 +69,13 @@ const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 /// downstream.
 const SANDBOX_BASE_MARKER: &str = "/etc/archestra-sandbox-base";
 
+/// Dagger CLI env vars on the connect path, named to avoid typos in this
+/// tenant-isolation-sensitive routing. `DAGGER_RUNNER_HOST_ENV` is set on the
+/// spawned `dagger session` child only (never the parent) to pin a
+/// per-environment engine; `DAGGER_CLI_BIN_ENV` overrides the CLI binary path.
+const DAGGER_RUNNER_HOST_ENV: &str = "_EXPERIMENTAL_DAGGER_RUNNER_HOST";
+const DAGGER_CLI_BIN_ENV: &str = "_EXPERIMENTAL_DAGGER_CLI_BIN";
+
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
 /// the dagger SDK message emitted when the engine accepted `/query` but timed
 /// out waiting for this client's session attachables. see [`classify_engine_fault`].
@@ -297,9 +304,13 @@ fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) 
     cmd.args(session_args(workdir))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        // Reap the child if the connect future is dropped — the readiness-timeout
+        // path aborts `connect_task` before `proc.shutdown()` can run, so without
+        // this a hung `dagger session` would outlive its connect attempt.
+        .kill_on_drop(true);
     if let Some(host) = runner_host {
-        cmd.env("_EXPERIMENTAL_DAGGER_RUNNER_HOST", host);
+        cmd.env(DAGGER_RUNNER_HOST_ENV, host);
     }
     cmd
 }
@@ -324,7 +335,8 @@ async fn spawn_and_read_connect_params(
         .ok_or_else(|| eyre::eyre!("could not acquire stderr from the dagger session"))?;
     let session: DaggerSessionProc = child.into();
 
-    let (sender, mut receiver) = mpsc::channel::<ConnectParams>(1);
+    let (sender, receiver) = oneshot::channel::<ConnectParams>();
+    let mut sender = Some(sender);
     let mut stdout_shutdown = session.subscribe_shutdown();
     tokio::spawn(async move {
         let mut lines = BufReader::new(stdout).lines();
@@ -332,9 +344,11 @@ async fn spawn_and_read_connect_params(
             tokio::select! {
                 line = lines.next_line() => match line {
                     Ok(Some(line)) => match serde_json::from_str::<ConnectParams>(&line) {
-                        Ok(conn) => {
-                            let _ = sender.send(conn).await;
-                        }
+                        // first parseable line wins; the sender is consumed so we
+                        // keep draining stdout but never send twice.
+                        Ok(conn) => if let Some(tx) = sender.take() {
+                            let _ = tx.send(conn);
+                        },
                         Err(_) => tracing::debug!(line, "dagger session stdout"),
                     },
                     Ok(None) | Err(_) => break,
@@ -359,9 +373,8 @@ async fn spawn_and_read_connect_params(
     });
 
     let conn = receiver
-        .recv()
         .await
-        .ok_or_else(|| eyre::eyre!("the dagger session exited before reporting connect params"))?;
+        .map_err(|_| eyre::eyre!("the dagger session exited before reporting connect params"))?;
     Ok((conn, session))
 }
 
@@ -380,7 +393,7 @@ where
     F: FnOnce(DaggerConn) -> Fut,
     Fut: std::future::Future<Output = eyre::Result<()>>,
 {
-    let cli = match env::var("_EXPERIMENTAL_DAGGER_CLI_BIN") {
+    let cli = match env::var(DAGGER_CLI_BIN_ENV) {
         Ok(path) => PathBuf::from(path),
         Err(_) => Downloader::new(DAGGER_ENGINE_VERSION.into())
             .get_cli()
@@ -404,8 +417,10 @@ where
     };
 
     let outcome = f(client).await;
-    // `DaggerSessionProc` has no `Drop`, so shut down on both success and error
-    // to avoid leaking the reader tasks and a zombie `dagger session` child.
+    // `DaggerSessionProc` has no `Drop`, so shut down explicitly on success and
+    // error to release the engine session and reader tasks. The readiness-timeout
+    // abort path never reaches this line; `kill_on_drop(true)` on the child reaps
+    // it there instead.
     let _ = proc.shutdown().await;
     outcome.map_err(ConnectError::DaggerContext)
 }
@@ -975,13 +990,10 @@ mod tests {
         let runner_override = env_cmd
             .as_std()
             .get_envs()
-            .find(|(key, _)| *key == OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"));
+            .find(|(key, _)| *key == OsStr::new(DAGGER_RUNNER_HOST_ENV));
         assert_eq!(
             runner_override,
-            Some((
-                OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"),
-                Some(OsStr::new(host))
-            ))
+            Some((OsStr::new(DAGGER_RUNNER_HOST_ENV), Some(OsStr::new(host))))
         );
 
         // the default target sets no override, so the child inherits the parent's
@@ -991,8 +1003,115 @@ mod tests {
             default_cmd
                 .as_std()
                 .get_envs()
-                .all(|(key, _)| key != OsStr::new("_EXPERIMENTAL_DAGGER_RUNNER_HOST"))
+                .all(|(key, _)| key != OsStr::new(DAGGER_RUNNER_HOST_ENV))
         );
+    }
+
+    /// Write a throwaway executable shell script that stands in for the
+    /// `dagger session` CLI; it ignores the appended `session_args`. Linux-only,
+    /// matching the sandbox runtime's target.
+    #[cfg(target_os = "linux")]
+    fn write_fake_session(body: &str) -> PathBuf {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "dagger-fake-session-{}-{unique}.sh",
+            std::process::id(),
+        ));
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(body.as_bytes()).unwrap();
+        file.set_permissions(std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        path
+    }
+
+    /// True when `pid` is gone from the proc table or is a reaped/zombie corpse.
+    #[cfg(target_os = "linux")]
+    fn process_finished(pid: u32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return true; // proc entry gone → reaped
+        };
+        // `stat` is "pid (comm) state ..."; comm can contain spaces and parens,
+        // so the state char is the first token after the final ')'.
+        match stat.rsplit_once(')') {
+            Some((_, rest)) => matches!(rest.trim_start().chars().next(), Some('Z' | 'X') | None),
+            None => true,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn spawn_and_read_connect_params_returns_the_parsed_handshake() {
+        // a fake session that prints the handshake line then stays alive, so the
+        // child is still running when the params are read.
+        let script = write_fake_session(
+            "#!/bin/sh\necho '{\"port\":12345,\"session_token\":\"tok\"}'\nsleep 30\n",
+        );
+        let cmd = build_session_command(&script, Path::new("/"), None);
+
+        let (conn, proc) = spawn_and_read_connect_params(cmd).await.unwrap();
+        assert_eq!(conn.port, 12345);
+        assert_eq!(conn.session_token, "tok");
+
+        let _ = proc.shutdown().await;
+        std::fs::remove_file(&script).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn spawn_and_read_connect_params_errors_when_child_exits_without_params() {
+        // a fake session that exits before emitting any ConnectParams; the oneshot
+        // sender drops, so the receiver resolves to the "exited" error.
+        let script = write_fake_session("#!/bin/sh\nexit 0\n");
+        let cmd = build_session_command(&script, Path::new("/"), None);
+
+        // `DaggerSessionProc` isn't `Debug`, so match instead of `unwrap_err`.
+        let Err(err) = spawn_and_read_connect_params(cmd).await else {
+            panic!("expected an error when the child exits without reporting params");
+        };
+        assert!(
+            err.to_string()
+                .contains("exited before reporting connect params"),
+            "unexpected error: {err}"
+        );
+        std::fs::remove_file(&script).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn build_session_command_reaps_the_child_on_drop() {
+        // dropping the spawned child must SIGKILL it (kill_on_drop), so an aborted
+        // connect attempt can't leak a long-running `dagger session`.
+        let script = write_fake_session("#!/bin/sh\nsleep 120\n");
+        let mut cmd = build_session_command(&script, Path::new("/"), None);
+
+        let child = cmd.spawn().unwrap();
+        let pid = child.id().expect("a spawned child has a pid");
+        assert!(
+            !process_finished(pid),
+            "child should be running after spawn"
+        );
+
+        drop(child);
+
+        // kill_on_drop sends SIGKILL on drop; poll until the kernel reaps it.
+        let mut reaped = false;
+        for _ in 0..100 {
+            if process_finished(pid) {
+                reaped = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            reaped,
+            "child {pid} outlived its dropped handle (kill_on_drop missing?)"
+        );
+        std::fs::remove_file(&script).ok();
     }
 
     #[test]

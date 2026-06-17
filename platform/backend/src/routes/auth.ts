@@ -985,6 +985,10 @@ async function issueMcpOauthClientAccessToken(params: {
     };
   }
 
+  // Same storage invariant as the LLM issuer: a high-entropy token returned
+  // once to the caller, persisted only as a lookup hash, with a finite
+  // client-credentials lifetime. Keep this in sync with
+  // issueLlmOauthClientAccessToken if either is refactored.
   const accessToken = `mcp_at_${randomBytes(32).toString("base64url")}`;
   const expiresIn = MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
   await OAuthAccessTokenModel.createClientCredentialsToken({

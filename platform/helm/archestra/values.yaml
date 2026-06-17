@@ -169,15 +169,26 @@ archestra:
 
   # code execution runtime configuration.
   # enables the sandbox tools (archestra__run_command / upload_file /
-  # download_file) and points the backend at a Dagger runtime pod. The
-  # execution image remains a backend default; override
-  # ARCHESTRA_DAGGER_RUNTIME_IMAGE through archestra.env only when required.
+  # download_file) and points the backend at a Dagger runtime pod.
   codeRuntime:
     # enable or disable code execution runtime support.
     enabled: false
 
     # runtime limits (timeouts, concurrency, output caps) are env-driven via
     # ARCHESTRA_SKILLS_SANDBOX_* / ARCHESTRA_DAGGER_RUNTIME_* in archestra.env.
+
+    # Pre-baked sandbox base image: skips apt/uv setup at runtime so a
+    # network-restricted engine (e.g. egress-filtered EKS) never needs to
+    # reach ghcr.io, debian mirrors, or PyPI during warm-base initialisation.
+    # Requires the image to contain /etc/archestra-sandbox-base (written by
+    # sandbox_base/Dockerfile). Set enabled to false to build the warm base
+    # at runtime from a stock image instead.
+    prebuiltBase:
+      enabled: true
+      # Image published by the Archestra release pipeline. Keep the tag in
+      # sync with the platform version; override ARCHESTRA_DAGGER_RUNTIME_IMAGE
+      # in archestra.env to point at a self-hosted copy.
+      image: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/sandbox-base:1.2.65" # x-release-please-version
 
     dagger:
       # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.

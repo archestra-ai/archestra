@@ -520,6 +520,67 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: kube-pod://dagger-engine-3?namespace=code-runtime&container=custom-engine&context=prod-cluster
 
+  - it: should set prebuilt base env vars when code runtime is enabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DAGGER_RUNTIME_IMAGE
+            value: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/sandbox-base:1.2.65"
+
+  - it: should not set prebuilt base env vars when prebuiltBase is disabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.prebuiltBase.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DAGGER_RUNTIME_IMAGE
+
+  - it: should support custom prebuilt base image
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.codeRuntime.prebuiltBase.image: "my-registry.example.com/sandbox-base:custom"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DAGGER_RUNTIME_IMAGE
+            value: "my-registry.example.com/sandbox-base:custom"
+
+  - it: should not override ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT when set in archestra.env
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: true
+      archestra.env:
+        ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT: "false"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT
+            value: "false"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT
+            value: "true"
+
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:

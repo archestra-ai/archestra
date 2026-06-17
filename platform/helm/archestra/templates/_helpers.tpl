@@ -155,6 +155,16 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
   value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
 {{- end }}
+{{- if .Values.archestra.codeRuntime.prebuiltBase.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT") }}
+- name: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT
+  value: "true"
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_DAGGER_RUNTIME_IMAGE") }}
+- name: ARCHESTRA_DAGGER_RUNTIME_IMAGE
+  value: {{ .Values.archestra.codeRuntime.prebuiltBase.image | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR

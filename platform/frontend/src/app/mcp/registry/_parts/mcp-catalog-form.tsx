@@ -21,6 +21,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -102,6 +103,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { parseMcpServerConfig } from "./mcp-config-paste-parser";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -280,6 +282,46 @@ export function McpCatalogForm({
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
   const isTenancyLocked = Boolean(initialValues);
+
+  const [showConfigPaste, setShowConfigPaste] = useState(false);
+  const [configPasteText, setConfigPasteText] = useState("");
+
+  const FORMAT_LABELS: Record<string, string> = {
+    vscode: "VS Code",
+    claude_desktop: "Claude Desktop / Smithery",
+    mcp_registry: "MCP Registry",
+    archestra: "Archestra",
+  };
+
+  const handleApplyPastedConfig = () => {
+    const result = parseMcpServerConfig(configPasteText);
+    if (!result) {
+      toast.error(
+        "Could not recognize this config. Paste a valid MCP server JSON (VS Code, Claude Desktop, Smithery, or MCP Registry format).",
+      );
+      return;
+    }
+
+    // Merge parsed fields over current values so untouched fields are kept,
+    // mirroring the catalog pre-fill reset (form.reset on formValues).
+    form.reset({ ...form.getValues(), ...result.values });
+
+    const promptedCount = result.detectedUserInputs.length;
+    const formatLabel = FORMAT_LABELS[result.format] ?? result.format;
+    const parts = [`Imported ${formatLabel} config.`];
+    if (result.serverCount > 1) {
+      parts.push(
+        `Only the first of ${result.serverCount} servers was imported.`,
+      );
+    }
+    if (promptedCount > 0) {
+      parts.push(`${promptedCount} field(s) need a value before install.`);
+    }
+    toast.success(parts.join(" "));
+
+    setConfigPasteText("");
+    setShowConfigPaste(false);
+  };
   const selectedIdentityProviderId = form.watch(
     "enterpriseManagedConfig.identityProviderId",
   );
@@ -904,6 +946,66 @@ export function McpCatalogForm({
           >
             {notice}
             {catalogButton}
+
+            {mode === "create" && (
+              <div className="rounded-md border border-dashed p-3">
+                {showConfigPaste ? (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-2 text-sm font-medium">
+                        <Code className="size-4" />
+                        Paste server config
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Paste a JSON MCP server config (VS Code, Claude Desktop,
+                        Smithery, or MCP Registry) and we&apos;ll fill in the
+                        fields below. Placeholder secrets become prompted
+                        fields.
+                      </p>
+                    </div>
+                    <Textarea
+                      value={configPasteText}
+                      onChange={(e) => setConfigPasteText(e.target.value)}
+                      placeholder={
+                        '{\n  "mcpServers": {\n    "server-name": {\n      "command": "npx",\n      "args": ["-y", "some-mcp"],\n      "env": { "API_TOKEN": "<your-token>" }\n    }\n  }\n}'
+                      }
+                      className="font-mono min-h-32 text-xs"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleApplyPastedConfig}
+                        disabled={configPasteText.trim() === ""}
+                      >
+                        Apply config
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setConfigPasteText("");
+                          setShowConfigPaste(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowConfigPaste(true)}
+                  >
+                    <Code className="size-4" />
+                    Paste server config (JSON)
+                  </Button>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div className="flex items-stretch gap-3">

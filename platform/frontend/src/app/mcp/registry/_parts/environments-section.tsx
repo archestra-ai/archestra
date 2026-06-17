@@ -691,9 +691,9 @@ function NetworkPolicyFields({
           <AlertTitle>Network policy enforcement unavailable</AlertTitle>
           <AlertDescription className="block leading-6">
             No Kubernetes NetworkPolicy enforcer (Calico, Cilium, or a supported
-            FQDN provider) was detected, or Kubernetes access isn't configured.
-            Egress rules set here would be accepted but not enforced — install a
-            network policy provider before relying on them.{" "}
+            FQDN provider) was detected, or Kubernetes access isn't configured,
+            so egress can't be enforced on this cluster. These controls are
+            disabled until a supported network policy provider is available.{" "}
             <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
               View docs
             </ExternalDocsLink>

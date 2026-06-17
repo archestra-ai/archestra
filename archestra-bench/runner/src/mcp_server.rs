@@ -169,7 +169,15 @@ impl BenchmarkMcp {
         // drop the active task's captured submission (matches benchmark_mcp.py).
         match guard.as_ref() {
             Some(ctx) if ctx.task_key == task_key => {}
-            _ => return Submission::None,
+            Some(ctx) => {
+                tracing::warn!(
+                    requested = task_key,
+                    active = ctx.task_key,
+                    "take_submission for a non-active task; ignoring"
+                );
+                return Submission::None;
+            }
+            None => return Submission::None,
         }
         let ctx = guard.take().expect("ctx present and key matched above");
         if let Some(bytes) = ctx.accepted {

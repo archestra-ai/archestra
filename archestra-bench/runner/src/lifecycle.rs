@@ -257,8 +257,13 @@ impl Instance {
             }
         });
         let quoted = format!("\"{}\"", self.db_name.replace('"', "\"\""));
-        // Mark created before issuing CREATE so an interruption mid-statement still triggers teardown's
-        // DROP DATABASE IF EXISTS (harmless if the create never landed) rather than leaking the db.
+        // Mark created BEFORE issuing CREATE, deliberately. Teardown's drop is `DROP DATABASE IF EXISTS`
+        // (idempotent), so attempting it is always safe; marking first guarantees teardown attempts the
+        // drop even if a signal cancels this future mid-CREATE. The alternative (mark after success)
+        // leaks the db if a signal lands in the gap between CREATE completing and the flag being set.
+        // Residual, inherent to async cancellation: if a cancelled CREATE still executes server-side
+        // *after* teardown's drop ran, one uniquely-named db (archestra_bench_<run-id>) can be orphaned
+        // — never data corruption, and bounded to a single signal-timing window per run.
         *self.db_created.lock().await = true;
         client
             .batch_execute(&format!("CREATE DATABASE {}", quoted))

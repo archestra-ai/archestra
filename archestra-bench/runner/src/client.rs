@@ -1048,22 +1048,29 @@ fn process_sse_line(line: &str) -> Option<ChatStreamRecord> {
                 reason: Some("empty data payload".to_string()),
             });
         }
-        return Some(
-            match serde_json::from_str::<HashMap<String, JsonValue>>(payload) {
-                Ok(event) => ChatStreamRecord {
-                    kind: ChatRecordKind::Event,
-                    event: Some(event),
-                    raw: Some(line.to_string()),
-                    reason: None,
-                },
-                Err(e) => ChatStreamRecord {
-                    kind: ChatRecordKind::ParseError,
-                    event: None,
-                    raw: Some(line.to_string()),
-                    reason: Some(e.to_string()),
-                },
+        // Parse to a value first, then require an object — a valid-but-non-object payload (e.g.
+        // `data: 42`) is ignored, not a parse error, matching the Python client's isinstance(dict)
+        // check. Only genuinely malformed JSON is a ParseError (which can fail the cell).
+        return Some(match serde_json::from_str::<JsonValue>(payload) {
+            Ok(JsonValue::Object(map)) => ChatStreamRecord {
+                kind: ChatRecordKind::Event,
+                event: Some(map.into_iter().collect()),
+                raw: Some(line.to_string()),
+                reason: None,
             },
-        );
+            Ok(_) => ChatStreamRecord {
+                kind: ChatRecordKind::Ignored,
+                event: None,
+                raw: Some(line.to_string()),
+                reason: Some("non-object data payload".to_string()),
+            },
+            Err(e) => ChatStreamRecord {
+                kind: ChatRecordKind::ParseError,
+                event: None,
+                raw: Some(line.to_string()),
+                reason: Some(e.to_string()),
+            },
+        });
     }
     if !line.is_empty() {
         return Some(ChatStreamRecord {
@@ -1274,6 +1281,28 @@ mod tests {
         assert_eq!(
             events[0].get("k"),
             Some(&JsonValue::String("é".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_non_object_payload_is_ignored_not_error() {
+        // A valid-but-non-object data line must be ignored (not a ParseError that fails the cell),
+        // matching the Python client; only malformed JSON is a parse error.
+        use futures::StreamExt;
+        let chunks = vec![
+            b"data: 42\n".to_vec(),
+            b"data: not json\n".to_vec(),
+            b"data: {\"k\":\"v\"}\n".to_vec(),
+        ];
+        let records: Vec<_> = stream_from_chunks(chunks).collect().await;
+        let kinds: Vec<_> = records.iter().map(|r| r.kind.clone()).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ChatRecordKind::Ignored,    // 42 — valid JSON, not an object
+                ChatRecordKind::ParseError, // not json — malformed
+                ChatRecordKind::Event,      // object
+            ]
         );
     }
 

@@ -10,7 +10,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SkillSandboxFileKind } from "@/types/skill-sandbox";
+import type {
+  SandboxFileOrigin,
+  SkillSandboxFileKind,
+} from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -20,20 +23,17 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
 });
 
 /**
- * Every file byte that lives in a sandbox, in one role-tagged table (S3-like:
- * a key/value blob plus metadata). `kind` distinguishes the two roles:
+ * Sandbox INPUT files (`kind = 'upload'`): bytes written via `upload_file`
+ * that become part of the sandbox replay recipe. Each upload is referenced
+ * from exactly one ordered `skill_sandbox_replay_events` row (composite FK on
+ * `kind`), so a file uploaded between two commands materializes at that point
+ * and is never visible to a command that ran before it.
  *
- *   - `upload` — an INPUT written via `upload_file`. Its bytes become part of
- *     the sandbox replay recipe: each upload is referenced from exactly one
- *     ordered `skill_sandbox_replay_events` row (composite FK on `kind`), so a
- *     file uploaded between two commands materializes at that point and is never
- *     visible to a command that ran before it.
- *   - `artifact` — an OUTPUT copied out of a materialized container via
- *     `download_file`. Sandboxes are ephemeral, so artifacts are how generated
- *     files survive a Dagger cache flush.
- *
- * `data bytea` is the only column that changes when moving to an external object
- * store: swap it for an `object_key text` and a storage adapter in the model.
+ * Uploads are always Postgres bytes (`data`); they must be re-readable on every
+ * container rebuild. Persistent OUTPUT files ("My Files", formerly
+ * `kind = 'artifact'`) moved to the `files` table — see `database/schemas/file.ts`.
+ * The `kind` column is retained (still `'upload'` for every row) because the
+ * replay-event composite FK pins to it.
  */
 const skillSandboxFilesTable = pgTable(
   "skill_sandbox_files",
@@ -63,7 +63,14 @@ const skillSandboxFilesTable = pgTable(
      */
     sourceAttachmentId: uuid("source_attachment_id"),
     sizeBytes: integer("size_bytes").notNull(),
+    /** Upload bytes; always present (uploads are Postgres-only). */
     data: bytea("data").notNull(),
+    /**
+     * How an upload entered the sandbox: 'my_file' = copied from the user's
+     * persistent My Files storage (these surface in the conversation Files
+     * panel). Null for ordinary uploads.
+     */
+    origin: text("origin").$type<SandboxFileOrigin>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

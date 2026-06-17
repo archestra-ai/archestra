@@ -57,6 +57,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -121,6 +122,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -187,6 +189,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -364,6 +367,10 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
+  "project:read": "View projects and the chats inside them",
+  "project:create": "Create projects",
+  "project:update": "Edit project descriptions and sharing",
+  "project:delete": "Delete projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -1278,6 +1285,22 @@ export const requiredEndpointPermissionsMap: Partial<
   // matches the `download_file` tool (sandbox:execute) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
+  [RouteId.CreateProject]: { project: ["create"] },
+  [RouteId.GetProjects]: { project: ["read"] },
+  [RouteId.GetProject]: { project: ["read"] },
+  [RouteId.UpdateProject]: { project: ["update"] },
+  [RouteId.SetProjectShare]: { project: ["update"] },
+  [RouteId.DeleteProject]: { project: ["delete"] },
+  [RouteId.GetProjectConversations]: { project: ["read"] },
+  // The file list is part of the PFS surface, so it requires the same
+  // `sandbox:execute` as the byte endpoint that serves these files
+  // (GetSkillSandboxArtifact) — otherwise a role could list files marked
+  // `downloadable` and then 403 on every fetch. Project membership is still
+  // enforced in the handler (projectService.listFiles -> requireReadable).
+  [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1351,6 +1374,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
+
+  // My Files
+  "/my-files": { sandbox: ["execute"] },
+
+  // Projects
+  "/projects": { project: ["read"] },
+  "/projects/[id]": { project: ["read"] },
 
   // Agents
   "/agents": { agent: ["read"] },

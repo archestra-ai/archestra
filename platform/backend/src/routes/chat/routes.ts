@@ -69,6 +69,8 @@ import {
   MessageModel,
   ModelModel,
   OrganizationModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TeamModel,
@@ -1397,7 +1399,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversationFiles,
         description:
-          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+          "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(ConversationFilesResponseSchema),
@@ -1417,6 +1419,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
+          conversationOwnerUserId: conversation.userId,
+          requestingUserId: user.id,
         }),
       );
     },
@@ -1644,20 +1648,42 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          projectId: true,
         })
           .required({ agentId: true })
           .partial({
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            projectId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
+      {
+        body: { agentId, title, modelId, chatApiKeyId, projectId },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
+      // A chat born in a project belongs to it; the caller must be able to
+      // read the project. "No access" reads as 404, like the project routes.
+      if (projectId) {
+        const project = await ProjectModel.findById(projectId);
+        if (
+          !project ||
+          !(await ProjectShareModel.userCanAccessProject({
+            project,
+            userId: user.id,
+            organizationId,
+          }))
+        ) {
+          throw new ApiError(404, "Project not found");
+        }
+      }
+
       // Check if user is an agent admin
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -1710,6 +1736,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          projectId: projectId ?? null,
         }),
       );
     },

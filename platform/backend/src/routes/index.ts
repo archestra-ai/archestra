@@ -40,6 +40,7 @@ export { default as oauthServerRoutes } from "./oauth-server";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
+export { default as projectRoutes } from "./project/project.routes";
 export { default as anthropicProxyRoutes } from "./proxy/routes/anthropic";
 export { default as azureProxyRoutes } from "./proxy/routes/azure";
 export { default as bedrockProxyRoutes } from "./proxy/routes/bedrock";

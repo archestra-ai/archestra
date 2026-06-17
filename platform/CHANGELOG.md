@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.2.64](https://github.com/archestra-ai/archestra/compare/platform-v1.2.63...platform-v1.2.64) (2026-06-16)
+
+
+### Features
+
+* **agents:** scope agent MCP servers to the selected environment ([#5603](https://github.com/archestra-ai/archestra/issues/5603)) ([4163ff4](https://github.com/archestra-ai/archestra/commit/4163ff48ab655c542f44979444f425bdbd7e6aa0))
+* **archestra-bench:** env-configured agentic benchmark harness ([#5447](https://github.com/archestra-ai/archestra/issues/5447)) ([cb735c2](https://github.com/archestra-ai/archestra/commit/cb735c2df75b0968340daf3729f220ebab22909f))
+* context window usage breakdown in chat ([#5260](https://github.com/archestra-ai/archestra/issues/5260)) ([74347c4](https://github.com/archestra-ai/archestra/commit/74347c4c84a61f2a24b6c5922d5577a33be1fe1b))
+* **frontend:** add Chats/Studio sidebar toggle ([#5601](https://github.com/archestra-ai/archestra/issues/5601)) ([f9b5bcc](https://github.com/archestra-ai/archestra/commit/f9b5bcce447a7fd6eaa70d1630cc694c013fd83c))
+* **sandbox:** bake-able sandbox base image with a prebuilt runtime branch ([#5524](https://github.com/archestra-ai/archestra/issues/5524)) ([2c19156](https://github.com/archestra-ai/archestra/commit/2c19156c06db4e65af41e84f11a2bb3054b603d1))
+
+
+### Bug Fixes
+
+* **skills:** soften compatibility badge to neutral styling ([#5600](https://github.com/archestra-ai/archestra/issues/5600)) ([c9ef6d5](https://github.com/archestra-ai/archestra/commit/c9ef6d53a1b8df4205660e5f53fd2b66896ee4ab))
+
+
+### Dependencies
+
+* clear all merge-queue HIGH CVEs (ws, form-data, hono, vite, protobufjs, shell-quote) ([#5608](https://github.com/archestra-ai/archestra/issues/5608)) ([dd0ca54](https://github.com/archestra-ai/archestra/commit/dd0ca543b23a185c934608cfad5a37dae3c9a1db))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.23 to 4.12.25 in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#5611](https://github.com/archestra-ai/archestra/issues/5611)) ([1016b91](https://github.com/archestra-ai/archestra/commit/1016b91dca06e983fa2ed8a6ef6f700c702ee3d5))
+
 ## [1.2.63](https://github.com/archestra-ai/archestra/compare/platform-v1.2.62...platform-v1.2.63) (2026-06-15)
 
 

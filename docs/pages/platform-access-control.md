@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-16
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -60,6 +60,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
@@ -100,6 +101,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Site Notifications | `read` |
@@ -239,6 +241,10 @@ The following table lists all available permissions that can be assigned to cust
 | `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `project:read` | View projects and the chats inside them |
+| `project:create` | Create projects |
+| `project:update` | Edit project descriptions and sharing |
+| `project:delete` | Delete projects |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |

@@ -2024,6 +2024,20 @@
       "when": 1781515672027,
       "tag": "0288_agent_environment_id",
       "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1781611325761,
+      "tag": "0289_skill_sandbox_projects_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1781621276808,
+      "tag": "0290_backfill_artifact_files",
+      "breakpoints": true
     }
   ]
 }

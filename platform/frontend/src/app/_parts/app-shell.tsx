@@ -39,12 +39,14 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
-  // The chat page is a viewport-locked, two-pane layout (conversation + right
-  // sidebar) that scrolls each pane independently. It needs its children slot
-  // bounded to the viewport (min-h-0) so its internal overflow containers take
-  // over. Other pages rely on natural body scroll, so we only bound the chain
-  // for chat to avoid clipping their content.
+  // Chat and project detail pages are viewport-locked, two-pane layouts
+  // (content + right Files sidebar) that scroll each pane independently. They
+  // need their children slot bounded to the viewport (min-h-0) so their
+  // internal overflow containers take over. Other pages rely on natural body
+  // scroll, so we only bound the chain for these to avoid clipping content.
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
+  const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
+  const isViewportLocked = isChat || isProjectDetail;
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
   const { data: canReadSiteNotification } = useHasPermissions(
@@ -116,7 +118,12 @@ export function AppShell({ children }: AppShellProps) {
             />
           </header>
           <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <div className={cn("flex-1 flex flex-col", isChat && "min-h-0")}>
+            <div
+              className={cn(
+                "flex-1 flex flex-col",
+                isViewportLocked && "min-h-0",
+              )}
+            >
               {children}
             </div>
             <Version />

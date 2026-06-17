@@ -207,6 +207,7 @@ function makeConversation(
     hooksDebugEnabled: false,
     todoList: null,
     artifact: null,
+    projectId: null,
     pinnedAt: null,
     lastMessageAt: "2026-03-19T00:00:00.000Z",
     createdAt: "2026-03-19T00:00:00.000Z",

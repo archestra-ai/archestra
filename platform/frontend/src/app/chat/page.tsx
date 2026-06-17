@@ -150,6 +150,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
+import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -1682,6 +1683,7 @@ export function ChatPageContent({
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
         title,
+        projectId: searchParams.get("project"),
       });
       if (!input) {
         return false;
@@ -1696,7 +1698,13 @@ export function ChatPageContent({
       });
       return true;
     },
-    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      createConversationMutation,
+      searchParams,
+    ],
   );
 
   const handleCreateConversationWithUrl = useCallback(
@@ -1870,6 +1878,21 @@ export function ChatPageContent({
       [submitInitialMessage],
     );
 
+  // A chat started from a project page keeps the Files panel open when the
+  // project already has results — continuity with the project page, which
+  // shows the same folder on its right side. Tracked through a ref (the files
+  // query races conversation creation) and persisted per conversation, since
+  // creation navigates to /chat/<id>, which remounts this component.
+  const { data: startedFromProjectFiles } = useProjectFiles(
+    searchParams.get("project") ?? undefined,
+  );
+  const projectHasFilesRef = useRef(false);
+  useEffect(() => {
+    if ((startedFromProjectFiles?.length ?? 0) > 0) {
+      projectHasFilesRef.current = true;
+    }
+  }, [startedFromProjectFiles]);
+
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
     // Skip if already triggered or no user_prompt in URL
@@ -1895,6 +1918,14 @@ export function ChatPageContent({
     pendingPromptRef.current = initialUserPrompt;
 
     createInitialConversation((newConversation) => {
+      // the init effect on the /chat/<id> mount reads this preference and
+      // opens the Files panel (the default tab) for the fresh project chat.
+      if (projectHasFilesRef.current) {
+        localStorage.setItem(
+          conversationStorageKeys(newConversation.id).artifactOpen,
+          "true",
+        );
+      }
       selectConversation(newConversation.id);
     });
   }, [

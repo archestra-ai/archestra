@@ -1,5 +1,5 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
-import type { SandboxId } from "@/types";
+import type { SandboxFileOrigin, SandboxId } from "@/types";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -71,6 +71,8 @@ export interface ExportArtifactParams {
   /** Path inside the container, either absolute or relative to `defaultCwd`. */
   path: string;
   mimeType?: string;
+  /** Owning project for the exported file; null = the author's own file. */
+  projectId?: string | null;
   /**
    * The agent's environment isolation target. Artifact extraction replays the
    * recorded commands, so it must target the same engine the sandbox ran on.
@@ -108,6 +110,8 @@ export interface UploadFileParams {
    * appends a new row (existing tool-upload behavior).
    */
   dedupeId?: string;
+  /** How the upload entered the sandbox; 'my_file' = copied from the user's PFS. */
+  origin?: SandboxFileOrigin | null;
 }
 
 export interface UploadRef {

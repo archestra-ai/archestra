@@ -33,12 +33,29 @@ export type ConnectionSetupProxyAuth = z.infer<
   typeof ConnectionSetupProxyAuthSchema
 >;
 
+/**
+ * Target OS for the generated setup script. macOS and Linux share the bash
+ * renderer (`curl | bash`); Windows gets a PowerShell renderer (`irm | iex`).
+ * Persisted on the setup row so the one-time script GET renders the variant the
+ * user saw when they copied the command.
+ */
+export const ConnectionSetupPlatformSchema = z.enum([
+  "macos",
+  "linux",
+  "windows",
+]);
+
+export type ConnectionSetupPlatform = z.infer<
+  typeof ConnectionSetupPlatformSchema
+>;
+
 export const SelectConnectionSetupSchema = createSelectSchema(
   schema.connectionSetupsTable,
 ).extend({
   clientId: ConnectionSetupClientIdSchema,
   provider: SupportedProvidersSchema.nullable(),
   proxyAuth: ConnectionSetupProxyAuthSchema,
+  platform: ConnectionSetupPlatformSchema,
 });
 
 export const InsertConnectionSetupSchema = createInsertSchema(
@@ -54,6 +71,7 @@ export const InsertConnectionSetupSchema = createInsertSchema(
     clientId: ConnectionSetupClientIdSchema,
     provider: SupportedProvidersSchema.nullable().optional(),
     proxyAuth: ConnectionSetupProxyAuthSchema.optional(),
+    platform: ConnectionSetupPlatformSchema.optional(),
   });
 
 export type ConnectionSetup = z.infer<typeof SelectConnectionSetupSchema>;

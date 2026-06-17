@@ -158,8 +158,9 @@ describe("buildDaggerEgressPolicies (reuses MCP machinery for the dagger engine)
     });
     const kinds = policies.map((p) => p.kind).sort();
     expect(kinds).toEqual(["FQDNNetworkPolicy", "NetworkPolicy"]);
-    const fqdn = policies.find((p) => p.kind === "FQDNNetworkPolicy")!
-      .object as unknown as PolicyManifest;
+    const fqdnPolicy = policies.find((p) => p.kind === "FQDNNetworkPolicy");
+    expect(fqdnPolicy).toBeDefined();
+    const fqdn = fqdnPolicy?.object as unknown as PolicyManifest;
     expect(fqdn.apiVersion).toBe("networking.gke.io/v1alpha1");
     expect(JSON.stringify(fqdn)).toContain("registry.npmjs.org");
   });

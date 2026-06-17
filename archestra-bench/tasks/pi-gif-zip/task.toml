@@ -1,0 +1,19 @@
+artifact_key = "artifact"
+
+[[stages]]
+text = """Estimate the value of π using a Monte-Carlo method in the sandbox: sample random points in the unit square, count how many fall inside the quarter circle, and use the ratio to estimate π. Render an **animated GIF** that visualizes the sampling (e.g. points accumulating and the running π estimate). Install whatever packages you need (numpy, matplotlib, pillow, …) following the run_command tool's guidance. Save the GIF in the sandbox and tell me the path."""
+
+[[stages]]
+text = """Now invert the colors of that GIF (every frame), put the inverted GIF into a single .zip archive, and export the .zip with the download_file tool so it can be retrieved. Then call submit_result with the exported zip's filename, e.g. result = {"artifact": "pi.zip"}."""
+
+[result_schema]
+type = "object"
+required = ["artifact"]
+additionalProperties = false
+
+  [result_schema.properties.artifact]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = ["pillow==11.3.0"]

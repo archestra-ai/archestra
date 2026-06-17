@@ -117,6 +117,9 @@ export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
+// persistent file system (My Files): files agents produced, across conversations
+export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
+export const TOOL_SAVE_RESULT_SHORT_NAME = "save_result";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
 export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
 export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
@@ -204,6 +207,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_SAVE_RESULT_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
@@ -371,6 +376,10 @@ export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPLOAD_FILE_SHORT_NAME}` as const;
+export const TOOL_SEARCH_FILES_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_FILES_SHORT_NAME}` as const;
+export const TOOL_SAVE_RESULT_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_RESULT_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -426,6 +435,8 @@ const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_SAVE_RESULT_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(

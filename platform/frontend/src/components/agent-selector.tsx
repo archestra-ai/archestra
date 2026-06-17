@@ -44,6 +44,14 @@ type AgentSelectorProps =
       disabled?: boolean;
       className?: string;
       hint?: string;
+      /**
+       * Render every agent in one ungrouped list regardless of `agentType`,
+       * instead of the default "Agents"/"MCP Gateways" group headings. Use this
+       * for single-purpose pickers (e.g. an LLM-proxy or MCP-gateway dropdown)
+       * whose items are all one conceptual kind but may carry mixed
+       * `agentType`s (`profile`/`llm_proxy`/`mcp_gateway`).
+       */
+      flat?: boolean;
       personalDefaultOption?: {
         value: string;
         label: string;
@@ -83,6 +91,7 @@ function SingleAgentSelector({
   disabled,
   className,
   hint,
+  flat,
   personalDefaultOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
@@ -90,6 +99,13 @@ function SingleAgentSelector({
   const selectedAgent = agents.find((agent) => agent.id === value);
   const isPersonalDefaultSelected = personalDefaultOption?.value === value;
   const groupedAgents = useGroupedAgents(agents, search);
+  const visibleAgents = useVisibleAgents(agents, search);
+
+  const handleSelect = (agentId: string) => {
+    onValueChange(agentId);
+    setOpen(false);
+    setSearch("");
+  };
 
   return (
     <Popover
@@ -108,7 +124,9 @@ function SingleAgentSelector({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            "h-9 justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+            // h-auto + min-h-9 so a two-line row (name + owner email) isn't
+            // vertically smushed, while single-line values keep the 9-height.
+            "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
             !value && "text-muted-foreground",
             className,
           )}
@@ -144,11 +162,7 @@ function SingleAgentSelector({
                 <CommandGroup>
                   <CommandItem
                     value={personalDefaultOption.value}
-                    onSelect={() => {
-                      onValueChange(personalDefaultOption.value);
-                      setOpen(false);
-                      setSearch("");
-                    }}
+                    onSelect={() => handleSelect(personalDefaultOption.value)}
                     className="justify-between"
                   >
                     <span>{personalDefaultOption.label}</span>
@@ -161,15 +175,24 @@ function SingleAgentSelector({
                   </CommandItem>
                 </CommandGroup>
               )}
-            <AgentSelectorGroups
-              groupedAgents={groupedAgents}
-              selectedIds={[value]}
-              onSelect={(agentId) => {
-                onValueChange(agentId);
-                setOpen(false);
-                setSearch("");
-              }}
-            />
+            {flat ? (
+              <CommandGroup>
+                {visibleAgents.map((agent) => (
+                  <AgentSelectorItem
+                    key={agent.id}
+                    agent={agent}
+                    selected={agent.id === value}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </CommandGroup>
+            ) : (
+              <AgentSelectorGroups
+                groupedAgents={groupedAgents}
+                selectedIds={[value]}
+                onSelect={handleSelect}
+              />
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -422,16 +445,18 @@ function AgentSelectorRow({ agent }: { agent: AgentSelectorAgent }) {
   );
 }
 
+function useVisibleAgents(agents: AgentSelectorAgent[], search: string) {
+  return useMemo(
+    () =>
+      agents.filter((agent) => matchesSearch(agentSearchText(agent), search)),
+    [agents, search],
+  );
+}
+
 function useGroupedAgents(agents: AgentSelectorAgent[], search: string) {
   return useMemo(() => {
     const visibleAgents = agents.filter((agent) =>
-      matchesSearch(
-        [agent.name, agent.authorEmail, agent.authorName]
-          .concat((agent.teams ?? []).map((team) => team.name))
-          .filter(Boolean)
-          .join(" "),
-        search,
-      ),
+      matchesSearch(agentSearchText(agent), search),
     );
 
     return {
@@ -441,6 +466,13 @@ function useGroupedAgents(agents: AgentSelectorAgent[], search: string) {
       ),
     };
   }, [agents, search]);
+}
+
+function agentSearchText(agent: AgentSelectorAgent) {
+  return [agent.name, agent.authorEmail, agent.authorName]
+    .concat((agent.teams ?? []).map((team) => team.name))
+    .filter(Boolean)
+    .join(" ");
 }
 
 function getOwnerLabel(agent: AgentSelectorAgent) {

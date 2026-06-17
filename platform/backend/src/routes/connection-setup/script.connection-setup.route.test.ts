@@ -151,6 +151,50 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(second.statusCode).toBe(410);
   });
 
+  test("windows platform yields an irm|iex command and a PowerShell script", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      platform: "windows",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("irm '");
+    expect(command).toContain("| iex");
+    expect(command).not.toContain("curl");
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    const script = response.body;
+    expect(script).toContain("$ErrorActionPreference = 'Stop'");
+    expect(script).not.toContain("set -euo pipefail");
+    expect(script).toContain("claude mcp add --transport http 'prod_gateway'");
+  });
+
+  test("default platform (omitted) renders bash", async ({ makeAgent }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("curl -fsSL");
+    const response = await fetchScript(rawToken);
+    expect(response.body).toContain("set -euo pipefail");
+  });
+
   test("provider-key (passthrough) script rewires the base URL without any virtual key", async ({
     makeAgent,
   }) => {

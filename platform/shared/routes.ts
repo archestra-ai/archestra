@@ -552,6 +552,17 @@ export const RouteId = {
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  GetSkillSandboxFiles: "getSkillSandboxFiles",
+  CreateProject: "createProject",
+  GetProjects: "getProjects",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  SetProjectShare: "setProjectShare",
+  DeleteProject: "deleteProject",
+  GetProjectConversations: "getProjectConversations",
+  GetProjectFiles: "getProjectFiles",
+  DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

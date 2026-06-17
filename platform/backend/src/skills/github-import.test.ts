@@ -25,6 +25,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * Stub GitHub, then override specific raw-file responses by path: `delayMs`
+ * makes a file resolve later than its tree position (surfacing any assembly
+ * that tracks completion order instead of input order), `status` forces a
+ * non-200 so the fetch is treated as a skip.
+ */
+function stubGithubWithRawBehavior(
+  repos: Parameters<typeof stubGithub>[0],
+  perPath: Record<string, { delayMs?: number; status?: number }>,
+): void {
+  const inner = stubGithub(repos) as unknown as (
+    input: string | URL | Request,
+  ) => Promise<Response>;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const urlStr =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const url = new URL(urlStr);
+      if (url.hostname === "raw.githubusercontent.com") {
+        const rawPath = decodeURIComponent(
+          url.pathname.split(`/${COMMIT_SHA}/`)[1] ?? "",
+        );
+        const behavior = perPath[rawPath];
+        if (behavior?.delayMs) {
+          await new Promise((resolve) => setTimeout(resolve, behavior.delayMs));
+        }
+        if (behavior?.status) {
+          return new Response("override", { status: behavior.status });
+        }
+      }
+      return inner(input);
+    }),
+  );
+}
+
 describe("discoverSkills", () => {
   it("finds every directory holding a SKILL.md, with parsed metadata and file counts", async () => {
     stubGithub([
@@ -85,6 +125,34 @@ describe("discoverSkills", () => {
     });
 
     expect(result.skills.map((skill) => skill.name)).toEqual(["inside-skill"]);
+  });
+
+  it("keeps skills in tree order when manifest fetches resolve out of order", async () => {
+    stubGithubWithRawBehavior(
+      [
+        {
+          owner: "disc-order",
+          repo: "skills",
+          files: {
+            "skills/a/SKILL.md": manifest("a-skill"),
+            "skills/b/SKILL.md": manifest("b-skill"),
+            "skills/c/SKILL.md": manifest("c-skill"),
+          },
+        },
+      ],
+      {
+        "skills/a/SKILL.md": { delayMs: 40 },
+        "skills/b/SKILL.md": { delayMs: 20 },
+      },
+    );
+
+    const result = await discoverSkills({ repoUrl: "disc-order/skills" });
+
+    expect(result.skills.map((skill) => skill.name)).toEqual([
+      "a-skill",
+      "b-skill",
+      "c-skill",
+    ]);
   });
 
   it("accepts a /tree/<ref>/<subpath> URL and resolves that ref", async () => {
@@ -381,6 +449,81 @@ describe("importSkills", () => {
     expect(imported.skippedFiles[0]).toBe(
       `references/file-${String(MAX_FILES_PER_SKILL).padStart(4, "0")}.md`,
     );
+  });
+
+  it("keeps resource files in tree order when fetches resolve out of order", async () => {
+    stubGithubWithRawBehavior(
+      [
+        {
+          owner: "imp-order",
+          repo: "skills",
+          files: {
+            "s/SKILL.md": manifest("ordered-skill"),
+            "s/a.txt": "a",
+            "s/b.txt": "b",
+            "s/c.txt": "c",
+            "s/d.txt": "d",
+            "s/e.txt": "e",
+          },
+        },
+      ],
+      {
+        "s/a.txt": { delayMs: 50 },
+        "s/b.txt": { delayMs: 40 },
+        "s/c.txt": { delayMs: 30 },
+        "s/d.txt": { delayMs: 20 },
+      },
+    );
+
+    const [imported] = await importSkills({
+      repoUrl: "imp-order/skills",
+      skillPaths: ["s"],
+    });
+
+    expect(imported.files.map((file) => file.path)).toEqual([
+      "a.txt",
+      "b.txt",
+      "c.txt",
+      "d.txt",
+      "e.txt",
+    ]);
+  });
+
+  it("partitions files per skill when a fetch is skipped mid-batch", async () => {
+    // s1/b.txt 404s while the two skills' files are fetched as one concurrent
+    // batch; the cursor must not drift, so s2 keeps both its files and only
+    // s1 records the skip.
+    stubGithubWithRawBehavior(
+      [
+        {
+          owner: "imp-multi",
+          repo: "skills",
+          files: {
+            "s1/SKILL.md": manifest("s1-skill"),
+            "s1/a.txt": "a1",
+            "s1/b.txt": "b1",
+            "s2/SKILL.md": manifest("s2-skill"),
+            "s2/c.txt": "c2",
+            "s2/d.txt": "d2",
+          },
+        },
+      ],
+      { "s1/b.txt": { status: 404 } },
+    );
+
+    const imported = await importSkills({
+      repoUrl: "imp-multi/skills",
+      skillPaths: ["s1", "s2"],
+    });
+
+    expect(imported.map((skill) => skill.skillPath)).toEqual(["s1", "s2"]);
+    expect(imported[0].files.map((file) => file.path)).toEqual(["a.txt"]);
+    expect(imported[0].skippedFiles).toEqual(["b.txt"]);
+    expect(imported[1].files.map((file) => file.path)).toEqual([
+      "c.txt",
+      "d.txt",
+    ]);
+    expect(imported[1].skippedFiles).toEqual([]);
   });
 });
 

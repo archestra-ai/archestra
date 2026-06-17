@@ -44,6 +44,8 @@ export const SelectConversationSchema = createSelectSchema(
     })
     .nullable(),
   share: ConversationShareSummarySchema,
+  /** Project name when the chat belongs to one; populated by list queries only. */
+  projectName: z.string().nullable().optional(),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),

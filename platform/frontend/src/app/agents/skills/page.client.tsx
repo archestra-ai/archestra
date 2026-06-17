@@ -3,9 +3,9 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   BookOpen,
   Braces,
+  Info,
   Pencil,
   Plus,
   RotateCcw,
@@ -174,11 +174,8 @@ function SkillsList() {
             {skill.compatibility && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="gap-1 text-amber-600 dark:text-amber-500"
-                  >
-                    <AlertTriangle className="h-3 w-3" />
+                  <Badge variant="outline" className="gap-1">
+                    <Info className="h-3 w-3" />
                     compatibility
                   </Badge>
                 </TooltipTrigger>

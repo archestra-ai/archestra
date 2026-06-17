@@ -32,6 +32,7 @@ export { default as ConversationCompactionModel } from "./conversation-compactio
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
+export { default as FileModel } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
@@ -63,6 +64,11 @@ export { default as OAuthClientModel } from "./oauth-client";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export {
+  default as ProjectModel,
+  ProjectNameExistsError,
+} from "./project";
+export { default as ProjectShareModel } from "./project-share";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */

@@ -21,6 +21,14 @@ else:
 # Load .env file FIRST, before any env var syncing
 dotenv('./.env')
 
+# The dotenv extension does not interpolate, so a value like
+# `ARCHESTRA_CHAT_OPENROUTER_API_KEY=$OPENROUTER_API_KEY` is exported verbatim. Expand such
+# references for the chat provider keys against the shell env so the indirection actually resolves.
+for _ref_key in ['ARCHESTRA_CHAT_OPENROUTER_API_KEY', 'ARCHESTRA_CHAT_ANTHROPIC_API_KEY', 'ARCHESTRA_CHAT_GEMINI_API_KEY']:
+  _ref_val = os.getenv(_ref_key, '')
+  if _ref_val.startswith('$'):
+    os.putenv(_ref_key, os.getenv(_ref_val[1:].strip('{}'), ''))
+
 # Set default ARCHESTRA_AUTH_SECRET for local development if not configured in .env
 # "better-auth-secret-12345678901234567890" is the default set by better-auth when no secret is provided
 # https://github.com/better-auth/better-auth/blob/7a57b61f8ce512e80da3587af8d53b80a153ca45/packages/better-auth/src/utils/constants.ts

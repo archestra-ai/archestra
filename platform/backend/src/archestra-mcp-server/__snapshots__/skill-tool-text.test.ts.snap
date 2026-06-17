@@ -61,7 +61,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use load_skill with a path.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -228,6 +228,66 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__save_result 1`] = `
+{
+  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file is saved to the project.",
+    "properties": {
+      "content": {
+        "description": "UTF-8 text content of the file.",
+        "type": "string",
+      },
+      "contentBase64": {
+        "description": "Base64-encoded binary content.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "filename": {
+        "description": "Plain filename including extension (e.g. "joke.md"). No paths.",
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string",
+      },
+      "mimeType": {
+        "description": "Optional MIME type. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "filename",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__save_result",
+  "title": "Save Result",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__search_files 1`] = `
+{
+  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\`). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations. In a project chat, searches the project's files instead.",
+    "properties": {
+      "query": {
+        "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__search_files",
+  "title": "Search Files",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 {
   "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
@@ -377,6 +437,30 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "required": [
               "type",
               "text",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
+            "properties": {
+              "filename": {
+                "description": "Exact filename of a persistent file (when you have no id).",
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "description": "Id of a persistent file, as returned by search_files.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+              "type": {
+                "const": "my_file",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
             ],
             "type": "object",
           },

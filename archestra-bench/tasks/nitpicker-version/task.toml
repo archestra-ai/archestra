@@ -1,0 +1,14 @@
+[[stages]]
+text = """What was the latest version of the `nitpicker` Rust CLI as of 2026-06-01? Submit your answer with result = {"version": "<x.y.z>"}."""
+
+[result_schema]
+type = "object"
+required = ["version"]
+additionalProperties = false
+
+  [result_schema.properties.version]
+  type = "string"
+  pattern = '^\d+\.\d+\.\d+$'
+
+[verifier]
+deps = []

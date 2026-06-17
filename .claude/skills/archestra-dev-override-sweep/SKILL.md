@@ -45,16 +45,19 @@ Smallest blast radius, trivially revertible, easy to bisect.
 1. Pick one override to test. Remove its line from `overrides:` (and any comment that
    documents only that line).
 2. Re-resolve: `corepack pnpm install --lockfile-only --ignore-scripts`.
-3. Judge from `git diff platform/pnpm-lock.yaml`. A *redundant* override's removal changes
-   **only** the `overrides:` metadata block and `specifier:` reflection lines — **never a
-   `version:`**. If no resolved version moved, it was redundant: keep the removal. If any
-   `version:` changed, the override is load-bearing: revert it.
+3. Judge from `git diff platform/pnpm-lock.yaml`. A *redundant* override's removal touches
+   **only** the `overrides:` metadata block and the `specifier:` reflection lines — nothing
+   else. If the diff adds or removes *anything* in the resolved tree — a `version:`, a
+   `name@version:` package key (e.g. `+ picomatch@2.3.2:`), or a `snapshots:` entry — the
+   override changed resolution and is load-bearing: revert it. Read the whole diff; don't
+   grep for `version:` alone, since a resolution shift often appears only as a new/removed
+   package key. If nothing outside the override metadata moved, it was redundant: keep it.
 4. Verify (below).
 
 Watch for false positives: a nested override (e.g. `mammoth>@xmldom/xmldom`) can look
 redundant only because a sibling top-level floor (`@xmldom/xmldom`) is what actually holds
-it — the `version:` change on removal exposes that. Treat exact pins that hold a version
-*down* conservatively; they may be pinning out a regression.
+it — removing it adds a package key / shifts a version, which the diff exposes. Treat exact
+pins that hold a version *down* conservatively; they may be pinning out a regression.
 
 ## Verify (both modes)
 

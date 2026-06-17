@@ -805,6 +805,24 @@ function NetworkPolicyFields({
 
       <div className="space-y-2">
         <FieldLabel
+          htmlFor="network-policy-cidrs"
+          label="Allowed CIDRs"
+          description="IPv4 or IPv6 CIDR ranges that restricted workloads may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
+        />
+        <Textarea
+          id="network-policy-cidrs"
+          value={allowedCidrsText}
+          onChange={(e) => setAllowedCidrsText(e.target.value)}
+          placeholder={"203.0.113.0/24\n2001:db8::/32"}
+          className="min-h-20 font-mono text-sm"
+          disabled={
+            disabled || enforcementUnavailable || egressMode !== "restricted"
+          }
+        />
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel
           label="Domain preset"
           description={
             <>
@@ -833,24 +851,6 @@ function NetworkPolicyFields({
             <SelectItem value="package_managers">Package managers</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-
-      <div className="space-y-2">
-        <FieldLabel
-          htmlFor="network-policy-cidrs"
-          label="Allowed CIDRs"
-          description="IPv4 or IPv6 CIDR ranges that restricted workloads may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
-        />
-        <Textarea
-          id="network-policy-cidrs"
-          value={allowedCidrsText}
-          onChange={(e) => setAllowedCidrsText(e.target.value)}
-          placeholder={"203.0.113.0/24\n2001:db8::/32"}
-          className="min-h-20 font-mono text-sm"
-          disabled={
-            disabled || enforcementUnavailable || egressMode !== "restricted"
-          }
-        />
       </div>
 
       <div className="space-y-2">

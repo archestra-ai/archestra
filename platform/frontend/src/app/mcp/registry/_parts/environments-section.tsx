@@ -3,6 +3,7 @@
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Info, Pencil, Trash2 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -43,6 +44,13 @@ import {
   useDefaultEnvironment,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
+import {
+  clearEnvironmentDialogParams,
+  ENVIRONMENT_CREATE_PARAM,
+  ENVIRONMENT_DEFAULT_VALUE,
+  ENVIRONMENT_EDIT_PARAM,
+  setEnvironmentEditParam,
+} from "./environment-edit-link";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
@@ -71,26 +79,71 @@ type EnvironmentTableRow =
     }
   | (EnvironmentWithAssignedCount & { kind: "environment" });
 
-export function EnvironmentsSection({
-  canEdit,
-  createOpen,
-  onCreateOpenChange,
-}: {
-  canEdit: boolean;
-  createOpen: boolean;
-  onCreateOpenChange: (open: boolean) => void;
-}) {
+export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   const { data: environmentList, isLoading } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultAssignedCatalogCount =
     environmentList?.defaultAssignedCatalogCount ?? 0;
   const { data: capabilities } = useK8sCapabilities(canEdit);
   const defaultEnvironment = useDefaultEnvironment();
-  const [editDefaultOpen, setEditDefaultOpen] = useState(false);
-  const [editTarget, setEditTarget] =
-    useState<EnvironmentWithAssignedCount | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
+
+  // Which editor is open is derived from the URL (`?edit=<id|default>` /
+  // `?create`) so the form survives a reload and is shareable, matching the
+  // catalog editor's deep-link pattern. Only admins (canEdit) open one.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchString = searchParams.toString();
+  const editId = searchParams.get(ENVIRONMENT_EDIT_PARAM);
+  // An `edit` param wins over `create`, so a hand-crafted `?edit=…&create=1`
+  // opens a single editor rather than two stacked dialogs.
+  const createOpen =
+    canEdit && !editId && searchParams.has(ENVIRONMENT_CREATE_PARAM);
+  const editEnvironment = useMemo(
+    () =>
+      editId && editId !== ENVIRONMENT_DEFAULT_VALUE
+        ? (environments.find((environment) => environment.id === editId) ??
+          null)
+        : null,
+    [editId, environments],
+  );
+  const editDefaultOpen = canEdit && editId === ENVIRONMENT_DEFAULT_VALUE;
+  const editTargetOpen = canEdit && editEnvironment !== null;
+
+  const writeSearch = useCallback(
+    (search: string) => {
+      router.replace(search ? `${pathname}?${search}` : pathname, {
+        scroll: false,
+      });
+    },
+    [router, pathname],
+  );
+  const openEditor = useCallback(
+    (id: string) => writeSearch(setEnvironmentEditParam(searchString, id)),
+    [writeSearch, searchString],
+  );
+  const closeEditor = useCallback(
+    () => writeSearch(clearEnvironmentDialogParams(searchString)),
+    [writeSearch, searchString],
+  );
+
+  // A deep link to an `edit` id that isn't a real environment (deleted, typo)
+  // is cleared so it doesn't leave a stuck-open URL. Only act on a loaded,
+  // non-empty list: `useEnvironments` returns an empty list on a fetch error
+  // (not an error state), and clearing then would erase a valid deep link that
+  // a retry could still resolve.
+  useEffect(() => {
+    if (
+      environments.length > 0 &&
+      editId &&
+      editId !== ENVIRONMENT_DEFAULT_VALUE &&
+      !editEnvironment
+    ) {
+      closeEditor();
+    }
+  }, [environments.length, editId, editEnvironment, closeEditor]);
 
   const rows: EnvironmentTableRow[] = useMemo(
     () => [
@@ -174,13 +227,8 @@ export function EnvironmentsSection({
                   icon: <Pencil className="h-4 w-4" />,
                   label: `Edit ${item.name}`,
                   disabled: !canEdit,
-                  onClick: () => {
-                    if (item.kind === "default") {
-                      setEditDefaultOpen(true);
-                    } else {
-                      setEditTarget(item);
-                    }
-                  },
+                  // item.id is the `"default"` sentinel for the default row.
+                  onClick: () => openEditor(item.id),
                 },
                 ...(item.kind === "environment"
                   ? [
@@ -203,7 +251,7 @@ export function EnvironmentsSection({
         },
       },
     ],
-    [canEdit],
+    [canEdit, openEditor],
   );
 
   return (
@@ -219,23 +267,23 @@ export function EnvironmentsSection({
       <EnvironmentEditorDialog
         mode="create"
         open={createOpen}
-        onOpenChange={onCreateOpenChange}
+        onOpenChange={(open) => !open && closeEditor()}
         environment={null}
         capabilities={capabilities}
       />
 
       <EnvironmentEditorDialog
         mode="edit"
-        open={editTarget !== null}
-        onOpenChange={(v) => !v && setEditTarget(null)}
-        environment={editTarget}
+        open={editTargetOpen}
+        onOpenChange={(open) => !open && closeEditor()}
+        environment={editEnvironment}
         capabilities={capabilities}
       />
 
       <EnvironmentEditorDialog
         mode="default"
         open={editDefaultOpen}
-        onOpenChange={setEditDefaultOpen}
+        onOpenChange={(open) => !open && closeEditor()}
         environment={null}
         defaultEnvironment={defaultEnvironment}
         capabilities={capabilities}

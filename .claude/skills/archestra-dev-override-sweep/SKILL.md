@@ -5,10 +5,9 @@ description: Use when asked to sweep, clean up, or revisit pnpm overrides and mi
 
 # Archestra Dependency Override Sweep
 
-The merge-queue **Docker Image Scanning (Platform)** gate fails on any fixable
-CRITICAL/HIGH CVE in the built image. Dependabot can't auto-fix transitive or pinned
-deps, so those fixes live as `overrides` in `platform/pnpm-workspace.yaml`. Two kinds of
-cruft collect there, and this skill removes them:
+CVE fixes for transitive or pinned deps — the ones Dependabot can't auto-fix — live as
+`overrides` in `platform/pnpm-workspace.yaml`. Two kinds of cruft collect there, and this
+skill removes them:
 
 - **Matured temporary pins.** When a fix is newer than the repo's 7-day
   `minimumReleaseAge` (`10080` minutes) it's pinned *exact* and the package is added to
@@ -20,8 +19,8 @@ cruft collect there, and this skill removes them:
 **Out of scope:** authoring *new* CVE fixes (adding overrides for freshly-flagged
 advisories). This skill only sweeps overrides that already exist.
 
-Work from `platform/`. **One override change per PR** — one matured pin unwound (Mode A)
-*or* one redundant override removed (Mode B), never several and never one of each.
+Work from `platform/`. **Make one override change at a time** — one matured pin unwound
+(Mode A) *or* one redundant override removed (Mode B), never several and never one of each.
 Smallest blast radius, trivially revertible, easy to bisect.
 
 ## Mode A — unwind one matured temporary pin
@@ -56,8 +55,8 @@ Smallest blast radius, trivially revertible, easy to bisect.
    pnpm (v11) often leaves the now-orphaned override line in the lockfile's `overrides:`
    block, so an empty lockfile diff is the *normal* redundant result, not a sign nothing ran.
    That stale line is inert metadata — not a re-applied override — and the `--frozen-lockfile`
-   gate below confirms it. Don't force a full reinstall or `pnpm dedupe` to purge it; that
-   adds unrelated graph churn. (A separate normalization PR can tidy it if it ever matters.)
+   check below confirms it. Don't force a full reinstall or `pnpm dedupe` to purge it; that
+   adds unrelated graph churn for no resolution benefit.
 4. Verify (below).
 
 Watch for false positives: a nested override (e.g. `mammoth>@xmldom/xmldom`) can look
@@ -70,17 +69,14 @@ pins that hold a version *down* conservatively; they may be pinning out a regres
 - **No new CVE.** Before editing, note the high/critical advisory set from
   `corepack pnpm audit --json` (the entries with `severity` `high`/`critical`); after
   re-resolving, take it again and confirm nothing new appeared. A new advisory → revert.
-- **The gates CI runs:**
+- **Lockfile + types stay sound:**
   ```bash
   corepack pnpm install --frozen-lockfile --prefer-offline --ignore-scripts   # must say "up to date"
-  corepack pnpm install --fix-lockfile --lockfile-only --ignore-scripts        # immature-deps gate, must not error
+  corepack pnpm install --fix-lockfile --lockfile-only --ignore-scripts        # immature-deps check, must not error
   corepack pnpm --filter @backend --filter @frontend type-check
   ```
-- The PR's **Docker Image Scanning (Platform)** gate is authoritative — it also catches
-  base-image OS-package CVEs that `pnpm audit` can't see. Don't merge until it's green.
-
-Commit `deps: unwind matured CVE pin (<pkg>)` (Mode A) or
-`deps: drop redundant pnpm override (<pkg>)` (Mode B), and open the PR.
+- `pnpm audit` only sees npm-package advisories, not base-image OS packages — treat it as a
+  local proxy, not the last word on the image's CVEs.
 
 ## Notes
 

@@ -91,7 +91,7 @@ fresh backend per lane. Add a new environment by dropping another `envs/*.toml` 
 
 `basic` ships all skills from `anthropics/skills` + `openai/skills`, three public no-auth remote MCPs
 (DeepWiki, Microsoft Learn, Context7) as a realistic surface, `share_backend = true` (its tasks are
-read-only against backend state), and six tasks —
+read-only against backend state), and a set of sandbox tasks including —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
@@ -107,6 +107,13 @@ read-only against backend state), and six tasks —
   count grows without bound, so there is no fixed offline fixture).
 - `lena-png-size` — report the size in KiB (floored) of scikit-image's pinned `lena.png`; the verifier
   checks against recorded ground truth.
+- `ai-sre-fk-drain` — triage a zip of unsorted incident logs (a reconstructed real incident) and
+  name the root cause of a crash-looping backend: a foreign-key violation when a conversation is
+  deleted mid-drain; the verifier exact-matches a closed-set component/failure-class plus the `runId`
+  evidence buried in the logs (red herrings included), with a free-text RCA captured but not graded.
+- `ai-sre-cache-treadmill` — the same triage shape for self-healing 401s caused by a negative-auth-cache
+  TTL that refreshes on every retry; the graded evidence is the `profileId` stuck in the treadmill,
+  distinguished from a genuinely-expired-token red herring.
 
 `archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
 tool and skill catalog is the subject under test; `tools = ["create_skill"]`) with two tasks —

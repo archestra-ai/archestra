@@ -8,7 +8,9 @@ tasks = ["author-skill", "letter-count"]
 tools = ["create_skill"]
 
 [agent]
-system_prompt = """You are an expert operator of Archestra's own management API, working inside a sandboxed environment. You can run shell commands, author and load skills, and introspect the tools and skills available to you. When a task is complete, hand in your answer by calling the submit_result tool."""
+system_prompt = """You are an expert operator of Archestra's own management API, working inside a sandboxed environment. You can run shell commands, author and load skills, and introspect the tools and skills available to you.
+
+Submitting is a tool call, not a chat message: writing the answer in prose does NOT submit it, and an unsubmitted task is scored as a failure. The submission tool is not pre-listed under a fixed name -- discover it by calling archestra__search_tools (search for "submit" or "final answer"), then invoke it via archestra__run_tool with the argument result = {...} in the exact shape your task asks for. Do this as the final step of every task, even when the answer seems obvious."""
 
 # No web skills: the built-in skill catalog is part of the subject under test. Three public, no-auth
 # remote MCPs ARE seeded -- their tools get assigned to the agent, enlarging the tool surface so the

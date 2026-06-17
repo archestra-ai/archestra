@@ -37,7 +37,7 @@ Re-check it after re-resolving (each mode's verify step). The PR's **Docker Imag
 **One override change per PR — Mode A and Mode B combined.** A single PR carries exactly one
 modification: either one matured pin unwound (Mode A) **or** one redundant override removed
 (Mode B) — never several, and never one of each in the same PR. Smallest blast radius,
-trivially revertible, easy to bisect. Pick the next one, ship it, repeat.
+trivially revertible, easy to bisect.
 
 ## Mode A — unwind one matured temporary pin/exclusion
 
@@ -96,10 +96,9 @@ Over time the dependency graph catches up and many `overrides` become no-ops: th
 package already resolves to a compliant version without them. Removing one is safe
 **only** when it leaves the resolved tree byte-identical.
 
-Sweep **incrementally and net-positive**: one removal per PR. The sweeper defaults to
-`--limit 1` — it removes a single provably-redundant override, you ship that PR, and the
-next run removes the next one. There is no need (or value) in clearing the whole list at
-once; each removal is its own small, trivially-revertible change.
+The sweeper works **incrementally and net-positive**, defaulting to `--limit 1`: one run
+removes a single provably-redundant override, never a batch. Each removal is its own small,
+trivially-revertible change; there's no need to clear the whole list at once.
 
 1. Run the sweeper. It removes redundant overrides **one at a time**: for each candidate
    it deletes the entry, re-resolves, and keeps the removal only if the resolved tree is

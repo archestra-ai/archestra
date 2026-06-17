@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
 use crate::client::{
@@ -39,6 +40,10 @@ const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
+// Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
+// the stage. Set above the backend's 10-min stale-run reaper so that backstop wins in the normal
+// case and this only fires when the backend stops emitting entirely.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const REQUIRED_TOOL_SHORT_NAMES: &[&str] = &[
     "artifact_write",
@@ -1396,7 +1401,20 @@ async fn drive_stage(
     let mut stream = client
         .stream_chat_records(conversation_id, &text, &files)
         .await?;
-    while let Some(record) = stream.next().await {
+    loop {
+        let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
+            Ok(Some(record)) => record,
+            Ok(None) => break,
+            Err(_) => {
+                if stream_parse_error.is_none() {
+                    stream_parse_error = Some(format!(
+                        "chat stream idle for {}s",
+                        STREAM_IDLE_TIMEOUT.as_secs()
+                    ));
+                }
+                break;
+            }
+        };
         coalescer.feed(&record).await;
         match record.kind {
             ChatRecordKind::Event if record.event.is_some() => {

@@ -258,8 +258,12 @@ const UploadFileSchema = z
           "/home/sandbox, or relative to the sandbox's working directory.",
       ),
     source: UploadSourceSchema.describe(
-      "Where the file bytes come from: a chat attachment, inline base64, or " +
-        "inline text. Use this to place input bytes; to create a file the " +
+      "Where the file bytes come from. One of four shapes, each tagged by a " +
+        '`type`: a chat attachment (`{"type":"chat_attachment","attachmentId":...}`), ' +
+        'inline base64 (`{"type":"base64","dataBase64":...}`), inline text ' +
+        '(`{"type":"text","text":"print(1)"}`), or a file from the user\'s ' +
+        'persistent storage (`{"type":"my_file","filename":...}`, found via ' +
+        "search_files). Use this to place input bytes; to create a file the " +
         "sandbox will then run or read, write it with run_command instead.",
     ),
     target: SandboxTargetSchema,
@@ -491,7 +495,8 @@ const registry = defineArchestraTools([
     title: "Upload File",
     description:
       "Upload a file into the conversation's sandbox from a chat attachment, " +
-      "inline base64, or inline text. The bytes become part of the sandbox " +
+      "inline base64, inline text, or a file from the user's persistent " +
+      "storage (the my_file source). The bytes become part of the sandbox " +
       "recipe, so the file is present on every later run_command and " +
       `download_file call. Note: files the user attached to the chat are already auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — use this tool ` +
       "to write inline content, place a file at a specific path, or upload " +
@@ -1134,12 +1139,15 @@ function formatCommandSummary(result: {
   if (result.timedOut) {
     lines.push("The command was killed by the wall-clock timeout.");
   }
+  if (result.truncated) {
+    lines.push(
+      "Output was truncated; re-run with a narrower command " +
+        "(grep/head/tail/sed) to read the rest.",
+    );
+  }
   lines.push("", "stdout:", result.stdout || "(empty)");
   if (result.stderr) {
     lines.push("", "stderr:", result.stderr);
-  }
-  if (result.truncated) {
-    lines.push("", "(output was truncated)");
   }
   return lines.join("\n");
 }

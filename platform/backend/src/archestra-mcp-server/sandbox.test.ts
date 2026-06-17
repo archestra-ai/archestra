@@ -218,6 +218,46 @@ describe("sandbox tools (runtime enabled)", () => {
       });
     });
 
+    test("surfaces the truncation warning before stdout", async () => {
+      const ctx = await makeConversationCtx();
+      vi.spyOn(skillSandboxRuntimeService, "runCommand").mockResolvedValue({
+        commandId: "cmd-1",
+        sandboxId: "x" as any,
+        command: "cat big",
+        cwd: null,
+        stdout: "partial output\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: true,
+        stagingNotices: [],
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "cat big" },
+        ctx,
+      );
+      const text = textOf(result);
+      expect(text).toContain("Output was truncated");
+      // the model must see the warning before it starts reading the blob.
+      expect(text.indexOf("Output was truncated")).toBeLessThan(
+        text.indexOf("stdout:"),
+      );
+    });
+
+    test("guides to timeoutSeconds when the model passes timeout", async () => {
+      const ctx = await makeConversationCtx();
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", timeout: 5 } as any,
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain('did you mean "timeoutSeconds"?');
+    });
+
     test("reuses the same default sandbox across calls in a conversation", async () => {
       const ctx = await makeConversationCtx();
       stubRunCommand("x");

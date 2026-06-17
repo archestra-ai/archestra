@@ -72,6 +72,18 @@ pub fn build_map_prompt(rollout: &RolloutId, outcome_summary: &str, trajectory_m
            env/skill config, the runner, and the bench-owned `submit_result` terminal tool — including\n\
            the policy that the final answer must be submitted through it. Forcing or validating\n\
            `submit_result` is a Tier-2 concern; only the loop's generic completion behavior is Tier 1.\n\n\
+         Schema-visibility gate (decisive for `submit_result` format failures): when the struggle is\n\
+         the bench rejecting a `submit_result` value on type/format, first check whether that\n\
+         constraint was machine-readable in the tool schema the model actually saw. The published\n\
+         `submit_result` schema is a generic `{{\"type\":\"object\",\"additionalProperties\":true}}`; the\n\
+         per-field types live only in the task prose and a server-side validator (revealed only after\n\
+         a first failure). So a rejected stringified number/boolean is a Tier-2 schema-visibility\n\
+         artifact, NOT Tier-1 evidence that the product system prompt should \"teach JSON type\n\
+         literacy\". Only treat poor JSON typing as Tier 1 if the same model also mis-typed a real\n\
+         `archestra__*` tool whose visible schema DID expose the expected type. Example:\n\
+         `submit_result` with `{{\"btc_sol_ratio\": \"889.96\"}}` rejected against a hidden number schema\n\
+         -> Tier 2; passing `\"120\"` to an `archestra__*` tool whose schema says `timeoutSeconds:\n\
+         number` -> candidate Tier 1.\n\n\
          Model tiers vary across lanes: some run capable frontier models, others run weak or dummy\n\
          models (see the run summary below). Archestra aims to support all of them, so a struggle on\n\
          any model is a candidate for a loop/tool/system-prompt fix — note which model hit it, but do\n\
@@ -113,6 +125,12 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
        requirement to answer through it. Enforcing or reshaping `submit_result` is Tier 2, even \
        though the loop's generic \
        completion handling is Tier 1; do not file a submit_result change as a Tier-1 fix.\n\n\
+     Hard boundary: a `submit_result` format/type rejection is not Tier-1 evidence when the failing \
+     constraint was absent from the model-visible tool schema. The bench publishes `result` as a \
+     generic object (`additionalProperties: true`) while enforcing a stricter per-task schema \
+     server-side, so \"the model emitted a stringified number\" is a Tier-2 schema-visibility issue, \
+     never a Tier-1 system-prompt P0. You may note the broader product lesson only as a non-primary \
+     note, and only if comparable mis-typing also occurred on a typed `archestra__*` product tool.\n\n\
      Lead with Tier-1 fixes. For every agent struggle, ask first what Tier-1 loop/tool change would \
      have helped; do NOT recommend lowering task difficulty so the agent passes — that is an \
      anti-goal, and under-specification that forces exploration is usually intentional. \
@@ -173,7 +191,12 @@ pub fn build_reduce_message(analyses_rel_path: &str, run_dir_rel: Option<&str>) 
          Then crawl the repository — the Archestra product under `platform/` and the benchmark\n\
          fixtures under `archestra-bench/` — to cross-check each issue against its real definition.\n\
          Lead with Tier-1 (agent loop / tool surface) fixes; demote fixture polish; never suppress a\n\
-         genuine fixture defect. Produce a final markdown report with these sections, in this order:\n\
+         genuine fixture defect. Before promoting any `submit_result` rejection into the PRIMARY\n\
+         section, apply the schema-visibility gate: was the rejected constraint visible to the model\n\
+         through the installed tool schema? If no (the published `submit_result` schema is a generic\n\
+         object), keep it in SECONDARY even if the symptom looks like weak JSON typing or a\n\
+         system-prompt gap.\n\
+         Produce a final markdown report with these sections, in this order:\n\
          1. Archestra agentic-loop improvements (PRIMARY) — `archestra__*` tool surface, the agent\n\
             system prompt / instructions, and product agent-loop behavior. Explicitly assess the\n\
             system prompt: it is rarely optimal, so look for weak or missing instructions even\n\
@@ -318,6 +341,10 @@ mod tests {
         let t2 = p.find("Tier 2").expect("map prompt names Tier 2");
         assert!(t1 < t2, "Tier 1 must be introduced before Tier 2");
         assert!(p.contains("anti-goal"), "map prompt states the anti-goal");
+        // A `submit_result` type rejection must be steered to Tier 2 via the schema-visibility gate,
+        // not elevated into a Tier-1 "teach JSON type literacy" system-prompt finding.
+        assert!(p.contains("Schema-visibility gate"));
+        assert!(p.contains("additionalProperties"));
     }
 
     #[test]
@@ -364,6 +391,8 @@ mod tests {
         ] {
             assert!(m.contains(field), "rubric must require `{field}`");
         }
+        // The schema-visibility gate must fire before a submit_result rejection can be promoted.
+        assert!(m.contains("schema-visibility gate"));
     }
 
     #[test]

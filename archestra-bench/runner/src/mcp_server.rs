@@ -41,6 +41,9 @@ pub enum Submission {
 struct TaskContext {
     task_key: String,
     validator: Validator,
+    /// The per-task `result` schema (hidden from the published tool, which is task-agnostic). Kept so a
+    /// rejection can hand the model the exact schema once its first submission has failed.
+    result_schema: JsonValue,
     max_attempts: usize,
     accepting: bool,
     attempts: usize,
@@ -113,6 +116,12 @@ impl BenchmarkMcp {
         &self.base_url
     }
 
+    /// The name this server registered under. The model-visible submit tool is `<name>__submit_result`,
+    /// so the name is deliberately lane-agnostic — it must not leak which lane/model is running.
+    pub fn name(&self) -> &str {
+        &self.server_name
+    }
+
     pub async fn begin_task(
         &self,
         task_key: impl Into<String>,
@@ -140,6 +149,7 @@ impl BenchmarkMcp {
         *self.ctx.lock().await = Some(TaskContext {
             task_key: task_key.into(),
             validator,
+            result_schema: schema.clone(),
             max_attempts,
             accepting: false,
             attempts: 0,
@@ -252,7 +262,7 @@ impl ServerHandler for BenchmarkMcpHandler {
         });
         let tool = rmcp::model::Tool::new(
             TOOL_NAME,
-            "Submit your final answer. Pass it as the `result` argument: a single JSON object matching the format described in your task instructions. Do not write a file -- call this tool. If the format is wrong you will get a description of the problem; fix it and call this tool again.",
+            "Submit your final answer. Pass it as the `result` argument: a single JSON object matching the format described in your task instructions. Field values must use native JSON types exactly as described -- a number is 123, not \"123\"; a boolean is true, not \"true\". Do not write a file -- call this tool. If the format is wrong you will get a description of the problem (including the exact JSON Schema your result must match); fix it and call this tool again.",
             BenchmarkMcp::tool_input_schema(&result_schema),
         );
         std::future::ready(Ok(ListToolsResult::with_all_items(vec![tool])))
@@ -294,38 +304,14 @@ impl ServerHandler for BenchmarkMcpHandler {
                 Some(args) => args,
                 None => {
                     let errors = vec!["- at (root): missing `result` argument".to_string()];
-                    if task_ctx.attempts >= task_ctx.max_attempts {
-                        task_ctx.failed = true;
-                        task_ctx.errors = errors.clone();
-                        return Ok(text_result(format!(
-                            "Result rejected: the format is still invalid after {} attempts and the correction budget is exhausted. Problems:\n{}",
-                            task_ctx.attempts,
-                            errors.join("\n")
-                        )));
-                    }
-                    return Ok(text_result(format!(
-                        "Your result does not match the required format. Fix these problems and call submit_result again:\n{}",
-                        errors.join("\n")
-                    )));
+                    return Ok(reject(task_ctx, errors));
                 }
             };
 
             let result = args.get("result").cloned().unwrap_or(JsonValue::Null);
             if !result.is_object() {
                 let errors = vec!["- at (root): `result` must be a JSON object".to_string()];
-                if task_ctx.attempts >= task_ctx.max_attempts {
-                    task_ctx.failed = true;
-                    task_ctx.errors = errors.clone();
-                    return Ok(text_result(format!(
-                        "Result rejected: the format is still invalid after {} attempts and the correction budget is exhausted. Problems:\n{}",
-                        task_ctx.attempts,
-                        errors.join("\n")
-                    )));
-                }
-                return Ok(text_result(format!(
-                    "Your result does not match the required format. Fix these problems and call submit_result again:\n{}",
-                    errors.join("\n")
-                )));
+                return Ok(reject(task_ctx, errors));
             }
 
             let errors = schema_errors(&task_ctx.validator, &result);
@@ -336,21 +322,39 @@ impl ServerHandler for BenchmarkMcpHandler {
                 ));
             }
 
-            if task_ctx.attempts >= task_ctx.max_attempts {
-                task_ctx.failed = true;
-                task_ctx.errors = errors.clone();
-                return Ok(text_result(format!(
-                    "Result rejected: the format is still invalid after {} attempts and the correction budget is exhausted. Problems:\n{}",
-                    task_ctx.attempts,
-                    errors.join("\n")
-                )));
-            }
-            Ok(text_result(format!(
-                "Your result does not match the required format. Fix these problems and call submit_result again:\n{}",
-                errors.join("\n")
-            )))
+            Ok(reject(task_ctx, errors))
         }
     }
+}
+
+/// Build the response for a rejected submission, centralizing the terminal-vs-retryable decision so
+/// every rejection path is consistent. When the correction budget is exhausted the task is marked
+/// failed and the schema is withheld (a retry is impossible); otherwise the model gets a retryable
+/// rejection that reveals the per-task schema.
+fn reject(task_ctx: &mut TaskContext, errors: Vec<String>) -> CallToolResult {
+    if task_ctx.attempts >= task_ctx.max_attempts {
+        task_ctx.failed = true;
+        task_ctx.errors = errors.clone();
+        return text_result(format!(
+            "Result rejected: the format is still invalid after {} attempts and the correction budget is exhausted. Problems:\n{}",
+            task_ctx.attempts,
+            errors.join("\n")
+        ));
+    }
+    text_result(retryable_rejection(&errors, &task_ctx.result_schema))
+}
+
+/// A retryable format rejection. Once a submission has failed, the model has earned the exact
+/// per-task `result` schema (the published tool keeps it hidden, being task-agnostic) so a capable
+/// model can correct its types — this hands over the rules, it does not coerce a wrong answer.
+fn retryable_rejection(errors: &[String], result_schema: &JsonValue) -> String {
+    let schema =
+        serde_json::to_string_pretty(result_schema).unwrap_or_else(|_| result_schema.to_string());
+    format!(
+        "Your result does not match the required format. Fix these problems and call submit_result again:\n{}\n\nThe `result` argument must match this JSON Schema:\n{}",
+        errors.join("\n"),
+        schema
+    )
 }
 
 fn text_result(text: impl Into<String>) -> CallToolResult {
@@ -465,6 +469,56 @@ mod tests {
         assert!(errors[0].contains("expected a JSON string"));
         // every JSON number is reported as "number" (matches the Python harness), not "integer".
         assert!(errors[0].contains("received a number"), "{}", errors[0]);
+    }
+
+    fn ctx_for(schema: JsonValue, attempts: usize, max_attempts: usize) -> TaskContext {
+        let validator = Validator::options()
+            .with_draft(Draft::Draft202012)
+            .build(&schema)
+            .unwrap();
+        TaskContext {
+            task_key: "t".to_string(),
+            validator,
+            result_schema: schema,
+            max_attempts,
+            accepting: true,
+            attempts,
+            accepted: None,
+            failed: false,
+            errors: Vec::new(),
+        }
+    }
+
+    fn result_text(r: &CallToolResult) -> String {
+        serde_json::to_string(r).unwrap()
+    }
+
+    #[test]
+    fn test_reject_reveals_schema_only_while_retryable() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"btc_sol_ratio": {"type": "number"}},
+            "required": ["btc_sol_ratio"]
+        });
+        let errors = vec!["- at `btc_sol_ratio`: expected a JSON number".to_string()];
+
+        // Retryable (attempts < max): hand the model the real per-task schema so it can fix its types.
+        let mut retry = ctx_for(schema.clone(), 1, 3);
+        let msg = result_text(&reject(&mut retry, errors.clone()));
+        assert!(msg.contains("expected a JSON number"), "{msg}");
+        assert!(msg.contains("must match this JSON Schema"), "{msg}");
+        assert!(
+            msg.contains("btc_sol_ratio") && msg.contains("number"),
+            "{msg}"
+        );
+        assert!(!retry.failed);
+
+        // Terminal (budget exhausted): no schema (retry is impossible) and the task is marked failed.
+        let mut done = ctx_for(schema, 3, 3);
+        let msg = result_text(&reject(&mut done, errors));
+        assert!(msg.contains("correction budget is exhausted"), "{msg}");
+        assert!(!msg.contains("must match this JSON Schema"), "{msg}");
+        assert!(done.failed);
     }
 
     #[tokio::test]

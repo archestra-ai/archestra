@@ -29,7 +29,10 @@ use crate::verify::{VerifyOutcome, run_verifier};
 
 // Model-visible MCP server name (tools surface as `<name>-<lane>__submit_result`). Kept neutral so
 // the agent is not cued that it is being evaluated, which can shift model behavior.
-const BENCH_MCP_NAME: &str = "task";
+// The model sees the bench tool as `<BENCH_MCP_NAME>[-<idx>]__submit_result`, so this name must never
+// encode the lane/model identity. Shared-backend envs append an opaque lane index (registry names must
+// be unique per backend); isolated lanes own their backend and use the bare name.
+const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
@@ -506,8 +509,8 @@ async fn setup_shared_env(
     }
 
     let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
-    for lane in &env_plan.lanes {
-        let mcp = match BenchmarkMcp::start(format!("{}-{}", BENCH_MCP_NAME, lane.slug())).await {
+    for (idx, lane) in env_plan.lanes.iter().enumerate() {
+        let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{idx}")).await {
             Ok(m) => m,
             Err(e) => {
                 stop_mcps(&setups).await;
@@ -608,7 +611,7 @@ async fn run_isolated_lane(
         }
     }
 
-    let mcp = match BenchmarkMcp::start(format!("{}-{}", BENCH_MCP_NAME, lane.slug())).await {
+    let mcp = match BenchmarkMcp::start(BENCH_MCP_NAME).await {
         Ok(m) => m,
         Err(e) => {
             let _ = instance.shutdown().await;
@@ -775,14 +778,8 @@ async fn setup_lane_agent(
         &env.agent_system_prompt,
     )
     .await?;
-    let submit_tool = setup_agent_tools(
-        client,
-        &agent_id,
-        mcp.base_url(),
-        &env.tools,
-        &format!("{}-{}", BENCH_MCP_NAME, lane.slug()),
-    )
-    .await?;
+    let submit_tool =
+        setup_agent_tools(client, &agent_id, mcp.base_url(), &env.tools, mcp.name()).await?;
     Ok((agent_id, submit_tool))
 }
 

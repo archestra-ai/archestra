@@ -40,6 +40,7 @@ import {
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_COST,
+  ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
   ATTR_GENAI_COMPLETION,
   ATTR_GENAI_RESPONSE_FINISH_REASONS,
   ATTR_GENAI_RESPONSE_ID,
@@ -48,6 +49,7 @@ import {
   ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
+  ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
@@ -1147,6 +1149,18 @@ async function handleStreaming<
               state.usage.cacheWriteTokens,
             );
           }
+          if (state.usage.cacheWrite1hTokens) {
+            llmSpan.setAttribute(
+              ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
+              state.usage.cacheWrite1hTokens,
+            );
+          }
+          if (state.usage.reasoningTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
+              state.usage.reasoningTokens,
+            );
+          }
           const cost = await utils.costOptimization.calculateCost(
             actualModel,
             state.usage.inputTokens,
@@ -1315,7 +1329,7 @@ async function handleStreaming<
         providerName,
       });
 
-      withSessionContext(sessionId, () =>
+      withSessionContext(sessionId, () => {
         metrics.llm.reportLLMCost(
           providerName,
           agent,
@@ -1323,8 +1337,19 @@ async function handleStreaming<
           costs.actualCost,
           source,
           externalAgentId,
-        ),
-      );
+        );
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+          externalAgentId,
+        );
+      });
 
       try {
         await InteractionModel.create(
@@ -1462,6 +1487,18 @@ async function handleNonStreaming<
           usage.cacheWriteTokens,
         );
       }
+      if (usage.cacheWrite1hTokens) {
+        llmSpan.setAttribute(
+          ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
+          usage.cacheWrite1hTokens,
+        );
+      }
+      if (usage.reasoningTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_REASONING_OUTPUT_TOKENS,
+          usage.reasoningTokens,
+        );
+      }
       const cost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,
@@ -1552,7 +1589,7 @@ async function handleNonStreaming<
         providerName,
       });
 
-      withSessionContext(sessionId, () =>
+      withSessionContext(sessionId, () => {
         metrics.llm.reportLLMCost(
           providerName,
           agent,
@@ -1560,8 +1597,19 @@ async function handleNonStreaming<
           costs.actualCost,
           source,
           externalAgentId,
-        ),
-      );
+        );
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+          externalAgentId,
+        );
+      });
 
       await InteractionModel.create(
         buildInteractionRecord({
@@ -1617,7 +1665,7 @@ async function handleNonStreaming<
     providerName,
   });
 
-  withSessionContext(sessionId, () =>
+  withSessionContext(sessionId, () => {
     metrics.llm.reportLLMCost(
       providerName,
       agent,
@@ -1625,8 +1673,16 @@ async function handleNonStreaming<
       costs.actualCost,
       source,
       externalAgentId,
-    ),
-  );
+    );
+    metrics.llm.reportLLMCacheCost(
+      providerName,
+      agent,
+      actualModel,
+      { cacheCost: costs.cacheCost, cacheReadSavings: costs.cacheReadSavings },
+      source,
+      externalAgentId,
+    );
+  });
 
   try {
     await InteractionModel.create(

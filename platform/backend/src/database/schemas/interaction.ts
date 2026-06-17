@@ -106,6 +106,7 @@ const interactionsTable = pgTable(
     outputTokens: integer("output_tokens"),
     cacheReadTokens: integer("cache_read_tokens"),
     cacheWriteTokens: integer("cache_write_tokens"),
+    cacheWrite1hTokens: integer("cache_write_1h_tokens"),
     baselineCost: numeric("baseline_cost", { precision: 13, scale: 10 }),
     cost: numeric("cost", { precision: 13, scale: 10 }),
     cacheCost: numeric("cache_cost", { precision: 13, scale: 10 }),

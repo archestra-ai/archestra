@@ -82,6 +82,7 @@ export async function calculateInteractionCosts(params: {
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
+  cacheReadSavings: number | undefined;
 }> {
   const cacheTokens = {
     readTokens: params.usage.cacheReadTokens ?? 0,
@@ -114,6 +115,7 @@ export async function calculateInteractionCosts(params: {
     actualCost,
     cacheCost: cacheBreakdown?.cacheCost,
     cacheSavings: cacheBreakdown?.cacheSavings,
+    cacheReadSavings: cacheBreakdown?.cacheReadSavings,
   };
 }
 
@@ -178,6 +180,7 @@ export function buildInteractionRecord(params: {
     outputTokens: params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
+    cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
     baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,

@@ -40,7 +40,10 @@ const mockCalculateCacheCost =
       provider: string,
       readTokens: number,
       writeTokens: number,
-    ) => Promise<{ cacheCost: number; cacheSavings: number } | undefined>
+    ) => Promise<
+      | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
+      | undefined
+    >
   >();
 vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
   const original =
@@ -183,6 +186,7 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCacheCost.mockResolvedValue({
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
     });
 
     const result = await calculateInteractionCosts({
@@ -197,6 +201,7 @@ describe("calculateInteractionCosts", () => {
       actualCost: 0.0005,
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
     });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
     const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
@@ -246,6 +251,7 @@ describe("calculateInteractionCosts", () => {
       actualCost: undefined,
       cacheCost: undefined,
       cacheSavings: undefined,
+      cacheReadSavings: undefined,
     });
   });
 });

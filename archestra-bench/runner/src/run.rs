@@ -34,6 +34,9 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // be unique per backend); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
+// Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
+// discovers its assigned tools dynamically rather than seeing the full list up front.
+const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 
@@ -321,7 +324,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     let mp = MultiProgress::new();
     note(
         &mp,
-        format!("● {total_rollouts} rollouts · {distinct_lanes} lanes · {max_workers} workers"),
+        format!("● {total_rollouts} rollouts · {distinct_lanes} lanes · {max_workers} workers\n"),
     );
     let progress = mp.add(ProgressBar::new(total_rollouts as u64));
     progress.set_style(
@@ -805,6 +808,7 @@ async fn ensure_agent(
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
             system_prompt: Some(system_prompt.to_string()),
+            tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
         })
         .await?;
     Ok(created

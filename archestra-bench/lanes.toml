@@ -8,16 +8,6 @@
 #   base_url     optional endpoint override (e.g. an Anthropic-compatible gateway)
 #   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
 
-# [[lane]]
-# name = "gemini-flash"
-# provider = "gemini"
-# model = "gemini-3.5-flash"
-
-[[lane]]
-name = "or-free"
-provider = "openrouter"
-model = "openrouter/free"
-
 [[lane]]
 name = "or-poolside"
 provider = "openrouter"

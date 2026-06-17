@@ -84,6 +84,8 @@ pub struct AgentCreate {
     pub agent_type: String,
     #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
+    #[serde(rename = "toolExposureMode")]
+    pub tool_exposure_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

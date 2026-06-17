@@ -31,7 +31,7 @@ import {
   useRotateMcpOauthClientSecret,
   useUpdateMcpOauthClient,
 } from "@/lib/mcp-oauth-clients.query";
-import { formatRelativeTime } from "@/lib/utils/date-time";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
 type McpOauthClient =
@@ -111,7 +111,7 @@ export default function OAuthClientsPage() {
         header: "Created",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {formatRelativeTime(row.original.createdAt)}
+            {formatRelativeTimeFromNow(row.original.createdAt)}
           </span>
         ),
       },

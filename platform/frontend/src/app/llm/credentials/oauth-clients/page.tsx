@@ -40,7 +40,7 @@ import {
   useUpdateLlmOauthClient,
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { formatRelativeTime } from "@/lib/utils/date-time";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
 type LlmOauthClient =
@@ -135,7 +135,7 @@ export default function OAuthClientsPage() {
         header: "Created",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {formatRelativeTime(row.original.createdAt)}
+            {formatRelativeTimeFromNow(row.original.createdAt)}
           </span>
         ),
       },

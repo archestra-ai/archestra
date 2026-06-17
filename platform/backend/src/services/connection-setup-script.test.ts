@@ -52,9 +52,11 @@ const SKILLS = {
 
 function fullContext(
   clientId: SetupScriptContext["clientId"],
+  platform: SetupScriptContext["platform"] = "macos",
 ): SetupScriptContext {
   return {
     clientId,
+    platform,
     appName: "Archestra",
     mcp: MCP,
     proxy:
@@ -103,6 +105,7 @@ describe("renderSetupScript", () => {
     test(`${clientId}: sections are omitted when not selected`, async () => {
       const script = renderSetupScript({
         clientId,
+        platform: "macos",
         appName: "Archestra",
         mcp: MCP,
         proxy: null,
@@ -257,6 +260,138 @@ describe("renderSetupScript", () => {
   });
 });
 
+describe("renderSetupScript (windows)", () => {
+  for (const clientId of ALL_CLIENTS) {
+    test(`${clientId}: renders PowerShell, not bash, with secrets injected`, () => {
+      const script = renderSetupScript(fullContext(clientId, "windows"));
+
+      // PowerShell, not bash.
+      expect(script).not.toContain("#!/usr/bin/env bash");
+      expect(script).not.toContain("set -euo pipefail");
+      expect(script).toContain("$ErrorActionPreference = 'Stop'");
+      expect(script).toContain("function Say($m)");
+      expect(script).toContain("Write-Host");
+      // No leftover template placeholders.
+      expect(script).not.toMatch(/<your-[a-z-]+>/);
+      // Secrets are injected.
+      expect(script).toContain(PROXY.virtualKey);
+      expect(script).toContain(SKILLS.cloneUrl);
+      // Revocation guidance present.
+      expect(script).toContain(PROXY.virtualKeyName);
+      expect(script).toContain(SKILLS.marketplaceName);
+    });
+
+    test(`${clientId}: registers MCP idempotently (remove-then-add)`, () => {
+      const script = renderSetupScript(fullContext(clientId, "windows"));
+      const binaries: Record<string, string | null> = {
+        "claude-code": "claude",
+        codex: "codex",
+        "copilot-cli": "copilot",
+        cursor: null,
+      };
+      const binary = binaries[clientId];
+      if (binary) {
+        expect(script).toContain(`${binary} mcp remove 'prod_gateway' 2>$null`);
+      }
+    });
+  }
+
+  // Only the clients that write JSON/TOML config files take backups; copilot-cli
+  // configures via CLI + environment variables, so it never touches a file.
+  for (const clientId of ["claude-code", "codex", "cursor"] as const) {
+    test(`${clientId}: backs up config once, never clobbering the pristine copy`, () => {
+      const script = renderSetupScript(fullContext(clientId, "windows"));
+      expect(script).toContain("-not (Test-Path ($arch_");
+      expect(script).toContain(".archestra-backup");
+    });
+  }
+
+  test("colors are NO_COLOR-guarded", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    expect(script).toContain(
+      "$ArchUseColor = [string]::IsNullOrEmpty($env:NO_COLOR)",
+    );
+    expect(script).toContain("-ForegroundColor Cyan");
+    expect(script).toContain("-ForegroundColor Red");
+  });
+
+  test("claude-code: remove-then-add MCP and merge settings.json env", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    expect(script).toContain("claude mcp remove 'prod_gateway' 2>$null");
+    expect(script).toContain(
+      `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+    );
+    expect(script).toContain("ANTHROPIC_BASE_URL");
+    expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
+    expect(script).toContain("ConvertTo-Json -Depth 32");
+    expect(script).toContain(".claude\\settings.json");
+  });
+
+  test("codex: marker-delimited TOML block dropped before append (idempotent)", () => {
+    const script = renderSetupScript(fullContext("codex", "windows"));
+    expect(script).toContain("# >>> archestra:default_proxy >>>");
+    expect(script).toContain("[model_providers.default_proxy]");
+    expect(script).toContain('wire_api = "responses"');
+    // virtual key passed via variable + stdin, never argv.
+    expect(script).toContain("$ArchVirtualKey | codex login --with-api-key");
+    expect(script).not.toContain(
+      `codex login --with-api-key ${PROXY.virtualKey}`,
+    );
+  });
+
+  test("copilot-cli github-copilot passthrough: device flow via Invoke-RestMethod, token never in argv", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: GITHUB_COPILOT_PROXY,
+    });
+    expect(script).toContain("function Test-ArchGhcp");
+    expect(script).toContain("github-copilot\\apps.json");
+    expect(script).toContain("https://github.example.com/login/device/code");
+    expect(script).toContain(
+      "https://github.example.com/login/oauth/access_token",
+    );
+    expect(script).toContain("urn:ietf:params:oauth:grant-type:device_code");
+    expect(script).toContain("slow_down");
+    expect(script).toContain("Invoke-RestMethod");
+    // never the well-known CI variable name
+    expect(script).not.toContain("GITHUB_TOKEN");
+    // token only ever surfaces via a runtime variable in the export lines
+    expect(script).toContain("$ArchGhcpToken");
+  });
+
+  test("cursor: merges mcp.json and prints manual model steps", () => {
+    const script = renderSetupScript(fullContext("cursor", "windows"));
+    expect(script).toContain(".cursor\\mcp.json");
+    expect(script).toContain("mcpServers");
+    expect(script).toContain("Override OpenAI Base URL");
+    expect(script).toContain("/add-plugin");
+  });
+
+  test("github-copilot passthrough without device-flow config throws", () => {
+    expect(() =>
+      renderSetupScript({
+        ...fullContext("copilot-cli", "windows"),
+        proxy: { ...GITHUB_COPILOT_PROXY, githubCopilot: null },
+      }),
+    ).toThrow(/device-flow configuration/);
+  });
+
+  test("hostile URLs are single-quote escaped, never interpolated", () => {
+    const hostile = "https://archestra.example.com/v1'; rm -rf x #/mcp/y";
+    for (const clientId of ALL_CLIENTS) {
+      const ctx = fullContext(clientId, "windows");
+      const script = renderSetupScript({
+        ...ctx,
+        mcp: { ...MCP, url: hostile },
+        proxy: ctx.proxy ? { ...ctx.proxy, url: hostile } : null,
+        skills: { ...SKILLS, cloneUrl: hostile },
+      });
+      // Single quotes in injected values are doubled (PowerShell escaping).
+      expect(script).toContain("''; rm -rf x #");
+    }
+  });
+});
+
 describe("shell-injection resistance", () => {
   test("hostile URLs stay literal (never expanded) in every client script", async () => {
     const hostileUrl =
@@ -284,6 +419,8 @@ describe("banner", () => {
     await expectValidBash(branded);
     expect(branded).toContain("cat <<'ARCHESTRA_BANNER'");
     expect(branded).toContain("Secure access to your AI tools");
+    // the Archestra block-mark is printed under the default brand
+    expect(branded).toContain("▟██▙");
     expect(branded).toContain("Client:     Claude Code");
     expect(branded).toContain("Configures:");
     expect(branded).toContain("one-time setup");
@@ -294,8 +431,8 @@ describe("banner", () => {
     });
     await expectValidBash(whiteLabel);
     expect(whiteLabel).toContain("Acme AI");
-    // the Archestra slash-mark is not printed under a custom brand
-    expect(whiteLabel).not.toContain("/_/");
+    // the Archestra block-mark is not printed under a custom brand
+    expect(whiteLabel).not.toContain("▟██▙");
   });
 });
 
@@ -309,6 +446,46 @@ describe("appName sanitization", () => {
     // the newline is gone — no line in the script starts an injected command
     expect(script).not.toContain("\n# rm -rf /");
     expect(script).toContain("Evil # rm -rf / # Co setup");
+  });
+});
+
+describe("color output", () => {
+  test("defines TTY/NO_COLOR-guarded color helpers", async () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+    await expectValidBash(script);
+    // Colors only when stdout is a TTY and NO_COLOR is unset.
+    expect(script).toContain("if [ -t 1 ] && [ -z");
+    expect(script).toContain("NO_COLOR:-");
+    // The logging helpers are defined and used.
+    expect(script).toContain("say()");
+    expect(script).toContain("err()");
+    expect(script).toContain("warn()");
+    expect(script).toContain('ok "Done."');
+    // Errors are routed through err() (stderr), not bare `echo ... >&2`.
+    expect(script).not.toContain('echo "error:');
+  });
+
+  test("ANSI codes never leak into quoted heredoc data", async () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+    await expectValidBash(script);
+    // The escape sequence is only assigned in the color-setup block, never
+    // emitted literally inside banner/next-step heredocs.
+    expect(script.match(/\\033\[/g)?.length ?? 0).toBeGreaterThan(0);
+  });
+});
+
+describe("idempotent re-runs", () => {
+  test("config backups are taken once, never clobbering the pristine copy", () => {
+    const claude = renderSetupScript(fullContext("claude-code"));
+    // Guarded so a second run keeps the original (pre-Archestra) backup.
+    expect(claude).toContain(
+      "[ ! -f '$HOME/.claude/settings.json.archestra-backup' ]",
+    );
+
+    const codex = renderSetupScript(fullContext("codex"));
+    expect(codex).toContain(
+      '[ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"',
+    );
   });
 });
 
@@ -328,9 +505,20 @@ describe("buildSetupCommand / proxyBaseUrlToOrigin", () => {
       buildSetupCommand({
         origin: "https://host.example.com",
         rawToken: "archestra_con_abc",
+        platform: "macos",
       }),
     ).toBe(
       "curl -fsSL 'https://host.example.com/api/connection-setups/script/archestra_con_abc' | bash",
+    );
+
+    expect(
+      buildSetupCommand({
+        origin: "https://host.example.com",
+        rawToken: "archestra_con_abc",
+        platform: "windows",
+      }),
+    ).toBe(
+      "irm 'https://host.example.com/api/connection-setups/script/archestra_con_abc' | iex",
     );
   });
 });

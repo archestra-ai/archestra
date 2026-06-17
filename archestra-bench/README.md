@@ -61,8 +61,9 @@ A stage's `[[stages.files]]` may stage a file from `inputs/` (its `src` is confi
 load time, so a precomputed answer in `expected/` can never leak). A task whose deliverable is a
 **file** sets `artifact_key` to the result property naming the file the agent exported via
 `download_file`; the harness downloads that artifact and hands its bytes to the verifier as
-`BENCH_OUTPUT`. A verifier needing third-party packages lists them under `[verifier].deps` (installed
-into an ephemeral uv env); a no-dep verifier runs under the harness interpreter.
+`BENCH_OUTPUT`. Every verifier runs in its own ephemeral `uv` env (pytest installed automatically; a
+verifier needing third-party packages lists them under `[verifier].deps`), so the harness itself ships
+no Python — the only Python in the repo is the per-task verifiers and fixtures, each isolated per run.
 
 A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}` placeholder (path
 confined to the task dir) — useful for small tabular inputs when the target provider can't accept a
@@ -140,14 +141,24 @@ Each (env, task, provider, model) cell resolves to exactly one outcome:
 
 ## Run
 
-```bash
-export ANTHROPIC_API_KEY=<key>
+The harness is a single Rust binary, `archestra-bench`, with three subcommands: `benchmark` (run the
+eval), `analyze` (turn a finished run into a recommendations report), and `full` (do both).
 
-uv run run.py                                          # every env x every task x every lane in lanes.toml
-uv run run.py --env basic --task median-salary --lanes sonnet
-# lanes run concurrently by default (each carries its own gateway + key in lanes.toml):
-GEMINI_API_KEY=... OPENROUTER_API_KEY=... KIMI_API_KEY=... ZAI_API_KEY=... \
-  uv run run.py --env basic --lanes gemini-flash,or-free,kimi,glm     # 4 lanes -> 4 workers
+```bash
+cargo build --release            # target/release/archestra-bench
+
+# benchmark: every env x task x lane in lanes.toml
+archestra-bench benchmark
+archestra-bench benchmark --env basic --task median-salary --lanes kimi
+# lanes run concurrently; each carries its own gateway + key (from lanes.toml):
+OPENROUTER_API_KEY=... KIMI_API_KEY=... ZAI_API_KEY=... \
+  archestra-bench benchmark --env basic --lanes minimax,kimi,glm     # 3 lanes -> 3 workers
+
+# analyze a finished run into a report (map = per-trajectory summary lane, reduce = repo-grounded lane):
+archestra-bench analyze --run-dir experiments/<id> --map kimi --reduce glm
+
+# both at once: a fresh run, then its analysis
+archestra-bench full --env basic --lanes kimi --map kimi --reduce glm
 ```
 
 `--env` and `--task` each accept one name or a comma-separated list (default: all). A **lane** is a
@@ -157,10 +168,11 @@ carries a unique `name` (the selection handle), `provider` (`anthropic`/`openai`
 (default `<PROVIDER>_API_KEY`) — so two lanes can share a provider through different gateways/keys. The
 `--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
 one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
-(default: one worker per selected lane, capped at 4); tasks within a lane stay serial. `--run-dir`
-overrides the artifact directory
-(default `archestra-bench/experiments/run_<id>/`, gitignored); `--out` writes the markdown report to a
-file instead of stdout.
+(default: one worker per selected lane, capped at 4); tasks within a lane stay serial. On `benchmark`,
+`--run-dir` overrides the artifact directory (default `archestra-bench/experiments/<timestamp>/`,
+gitignored) and `--out` writes the markdown report to a file instead of stdout; `full` always starts a
+fresh run dir. `analyze`/`full` resolve `--map`/`--reduce` against the same `lanes.toml` and autodetect
+the repo to crawl from the run dir (override with `--explore-root`).
 
 Each run directory contains `config.json`, `aggregate.json`, a `<env>.backend.log` per shared env (or
 `<env>__<lane>.backend.log` per isolated lane), and an `<env>/<task>__<lane>/` subdirectory per cell
@@ -176,13 +188,15 @@ not the raw per-token SSE chunks), `run.json`,
 - A running Archestra dev stack (`tilt up` with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`) providing the
   shared Postgres (host-reachable on `localhost:5432`) and the Dagger engine (`tcp://127.0.0.1:1234`),
   with the backend built (`dist/server.mjs`).
-- A real provider key in the environment (`ANTHROPIC_API_KEY`).
-- Local `uv` for the harness and the ephemeral verifier environments.
+- A real provider key in the environment for each lane you run (e.g. `OPENROUTER_API_KEY`,
+  `KIMI_API_KEY`, `ZAI_API_KEY`; see each lane's `api_key_env` in `lanes.toml`).
+- A Rust toolchain to build `archestra-bench`, and local `uv` for the ephemeral verifier environments.
 
 ## Checks
 
 ```bash
-uv run --group dev ruff check .
-uv run --group dev ty check
-uv run --group dev pytest                 # harness behavior tests (no live backend needed)
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace                    # harness + analyzer unit/integration tests (no live backend)
+cargo deny check
 ```

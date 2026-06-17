@@ -1,0 +1,21 @@
+[[stages]]
+text = """A binary SQLite database has been attached to this chat and is available in your sandbox at /home/sandbox/attachments/orders.sqlite. Locate and open it there (e.g. with the `sqlite3` CLI or Python's `sqlite3` module inside run_command) -- it is a binary file, so you must read it in the sandbox rather than from this message. It has a table `orders(id INTEGER PRIMARY KEY, region TEXT, customer TEXT, amount INTEGER)`.
+
+Find the `customer` with the highest total `amount` summed across all of their orders. If two customers are tied on total, pick the one that sorts first alphabetically. Then call submit_result with result = {"top_customer": "<that customer name>"}."""
+
+  [[stages.files]]
+  src = "orders.sqlite"
+  dest = "/home/sandbox/attachments/orders.sqlite"
+  mime_type = "application/octet-stream"
+
+[result_schema]
+type = "object"
+required = ["top_customer"]
+additionalProperties = false
+
+  [result_schema.properties.top_customer]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = []

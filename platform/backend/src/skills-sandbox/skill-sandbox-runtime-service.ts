@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
+  FileModel,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -18,6 +19,7 @@ import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-read
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
+import { getFileBytesStorage, storageFilename } from "./file-storage";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -222,13 +224,16 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof SkillSandboxFileModel.createArtifact>>;
+      let row: Awaited<ReturnType<typeof FileModel.create>>;
       try {
-        row = await SkillSandboxFileModel.createArtifact({
+        row = await FileModel.create({
+          organizationId: sandbox.organizationId,
+          userId: sandbox.userId,
+          projectId: params.projectId ?? null,
+          conversationId: sandbox.conversationId,
           sandboxId: params.sandboxId,
-          path: resolvedPath,
+          filename: storageFilename({ originalName: null, path: resolvedPath }),
           mimeType,
-          originalName: null,
           sizeBytes: data.byteLength,
           data,
         });
@@ -241,7 +246,7 @@ class SkillSandboxRuntimeService {
       return {
         artifactId: row.id,
         sandboxId: params.sandboxId,
-        path: row.path,
+        path: resolvedPath,
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
         stagingNotices,
@@ -289,12 +294,14 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxReplayEventModel.appendUpload({
           sandboxId: params.sandboxId,
+          userId: sandbox.userId,
           path: resolvedPath,
           mimeType,
           originalName: params.originalName ?? null,
           sizeBytes: params.data.byteLength,
           data: params.data,
           sourceAttachmentId: params.dedupeId ?? null,
+          origin: params.origin ?? null,
         });
       } catch (dbError) {
         throw new SkillSandboxError(
@@ -523,13 +530,17 @@ class SkillSandboxRuntimeService {
     replayEntries: ReplayEntry[];
   }> {
     const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
-    return {
-      // uniform, ordered replay: every command (including per-skill
-      // requirements-install steps), every uploaded file, and every skill mount
-      // lives in one sequenced log. interleaving is preserved so each step
-      // materializes at exactly its sequence point. an empty log is valid — a
-      // freshly-created default sandbox is just a plain shell.
-      replayEntries: log.map((entry): ReplayEntry => {
+    const storage = getFileBytesStorage();
+    // uniform, ordered replay: every command (including per-skill
+    // requirements-install steps), every uploaded file, and every skill mount
+    // lives in one sequenced log. interleaving is preserved so each step
+    // materializes at exactly its sequence point. an empty log is valid — a
+    // freshly-created default sandbox is just a plain shell.
+    // allSettled, not all: a storage read failure (e.g. an upload file removed
+    // from the storage folder) must fail the run — but with every unreadable
+    // file reported at once and no abandoned sibling reads.
+    const settled = await Promise.allSettled(
+      log.map(async (entry): Promise<ReplayEntry> => {
         switch (entry.kind) {
           case "command":
             return {
@@ -550,7 +561,7 @@ class SkillSandboxRuntimeService {
               file: {
                 path: entry.upload.path,
                 encoding: "base64",
-                content: entry.upload.data.toString("base64"),
+                content: (await storage.get(entry.upload)).toString("base64"),
               },
             };
           case "skill_mount":
@@ -584,6 +595,28 @@ class SkillSandboxRuntimeService {
             );
         }
       }),
+    );
+    const failures = settled.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      const reasons = failures.map((failure) =>
+        failure.reason instanceof Error
+          ? failure.reason.message
+          : String(failure.reason),
+      );
+      logger.warn(
+        { sandboxId: sandbox.id, reasons },
+        "[SkillSandbox] replay inputs could not be read",
+      );
+      throw new SkillSandboxError(
+        `cannot replay sandbox: ${failures.length} replay input(s) unreadable: ${reasons.join("; ")}`,
+      );
+    }
+    return {
+      replayEntries: settled.map(
+        (result) => (result as PromiseFulfilledResult<ReplayEntry>).value,
+      ),
     };
   }
 
@@ -910,6 +943,7 @@ async function stageConversationAttachments(
     validateUploadPath(path);
     await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: sandbox.userId,
       path,
       mimeType: full.mimeType,
       originalName: full.originalName,

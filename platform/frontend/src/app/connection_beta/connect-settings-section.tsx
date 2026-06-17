@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentSelector } from "@/components/agent-selector";
 import { CodeText } from "@/components/code-text";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -225,26 +225,19 @@ export function ConnectSettingsSection() {
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."
               >
-                <SingleSelectCombobox
+                <AgentSelector
+                  mode="single"
+                  flat
                   className="w-60"
+                  agents={gatewayItems}
                   value={gatewayId ?? DEFAULT_VALUE}
-                  onChange={(value) =>
+                  onValueChange={(value) =>
                     setGatewayId(value === DEFAULT_VALUE ? null : value)
                   }
-                  options={[
-                    { value: DEFAULT_VALUE, label: "Each user personal" },
-                    ...gatewayItems.map((g) => ({
-                      value: g.id,
-                      label: g.name,
-                      icon: (
-                        <AgentIcon
-                          icon={g.icon}
-                          fallbackType="mcp_gateway"
-                          size={16}
-                        />
-                      ),
-                    })),
-                  ]}
+                  personalDefaultOption={{
+                    value: DEFAULT_VALUE,
+                    label: "Each user personal",
+                  }}
                   searchPlaceholder="Search gateways…"
                   disabled={locked}
                 />
@@ -254,28 +247,19 @@ export function ConnectSettingsSection() {
                 title="Default LLM Proxy"
                 description="Pre-selected for everyone; users can still switch."
               >
-                <SingleSelectCombobox
+                <AgentSelector
+                  mode="single"
+                  flat
                   className="w-60"
+                  agents={proxyItems.filter((p) => !p.isDefault)}
                   value={proxyId ?? DEFAULT_VALUE}
-                  onChange={(value) =>
+                  onValueChange={(value) =>
                     setProxyId(value === DEFAULT_VALUE ? null : value)
                   }
-                  options={[
-                    { value: DEFAULT_VALUE, label: "Each user personal" },
-                    ...proxyItems
-                      .filter((p) => !p.isDefault)
-                      .map((p) => ({
-                        value: p.id,
-                        label: p.name,
-                        icon: (
-                          <AgentIcon
-                            icon={p.icon}
-                            fallbackType="llm_proxy"
-                            size={16}
-                          />
-                        ),
-                      })),
-                  ]}
+                  personalDefaultOption={{
+                    value: DEFAULT_VALUE,
+                    label: "Each user personal",
+                  }}
                   searchPlaceholder="Search proxies…"
                   disabled={locked}
                 />

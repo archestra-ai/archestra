@@ -27,7 +27,7 @@ export function proxy(req: NextRequest) {
         process.env.ARCHESTRA_FRONTEND_URL || "http://localhost:3000";
 
       // Create new headers with the replaced Origin
-      const newHeaders = new Headers(req.headers);
+      const newHeaders = withForwardedOrigin(req);
       newHeaders.set("Origin", frontendOrigin);
 
       // Create the rewritten request with modified headers
@@ -45,8 +45,45 @@ export function proxy(req: NextRequest) {
     }
   }
 
+  // For requests proxied to the backend, preserve the public host/proto the
+  // client used so the backend's getPublicRequestOrigin() advertises the right
+  // OAuth protected-resource / token / jwks origin. Without this it falls back
+  // to its own origin (e.g. localhost:9000) and MCP clients connecting via the
+  // frontend origin (localhost:3000) fail with a resource mismatch.
+  if (needsForwardedOrigin(req.nextUrl.pathname)) {
+    return NextResponse.next({
+      request: { headers: withForwardedOrigin(req) },
+    });
+  }
+
   return NextResponse.next();
 }
+
+/**
+ * Clone the request headers, injecting `X-Forwarded-Host`/`X-Forwarded-Proto`
+ * from the incoming request when not already set. Values set by a real
+ * proxy/ingress in front of the frontend (e.g. an ngrok tunnel) are preserved,
+ * so this is a no-op when the public origin is terminated upstream.
+ */
+const withForwardedOrigin = (req: NextRequest) => {
+  const headers = new Headers(req.headers);
+
+  const host = req.headers.get("host");
+  if (host && !headers.has("x-forwarded-host")) {
+    headers.set("x-forwarded-host", host);
+  }
+
+  if (!headers.has("x-forwarded-proto")) {
+    headers.set("x-forwarded-proto", req.nextUrl.protocol.replace(/:$/, ""));
+  }
+
+  return headers;
+};
+
+const needsForwardedOrigin = (pathname: string) =>
+  pathname.startsWith("/v1/") ||
+  pathname.startsWith("/.well-known/") ||
+  pathname.startsWith("/api/");
 
 const shouldLogApiRequest = (req: NextRequest) => {
   const { pathname } = req.nextUrl;

@@ -127,19 +127,10 @@ pub struct CatalogCreate {
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "serverUrl", skip_serializing_if = "Option::is_none")]
     pub server_url: Option<String>,
     #[serde(rename = "localConfig", skip_serializing_if = "Option::is_none")]
     pub local_config: Option<LocalConfig>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct McpInstall {
-    #[serde(rename = "catalogId")]
-    pub catalog_id: String,
-    pub scope: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub agent_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -150,7 +141,7 @@ pub struct LlmKeyCreate {
     pub api_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "baseUrl", skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     #[serde(rename = "isPrimary", skip_serializing_if = "Option::is_none")]
     pub is_primary: Option<bool>,
@@ -561,22 +552,6 @@ impl EvalClient {
         items(
             self.request(Method::GET, "/api/mcp_server", slice, None)
                 .await?,
-        )
-    }
-
-    pub async fn install_mcp_server(
-        &self,
-        payload: &McpInstall,
-    ) -> Result<HashMap<String, JsonValue>, ClientError> {
-        require_dict(
-            self.request(
-                Method::POST,
-                "/api/mcp_server",
-                None,
-                Some(&serde_json::to_value(payload).unwrap()),
-            )
-            .await?,
-            "POST /api/mcp_server",
         )
     }
 
@@ -1250,6 +1225,40 @@ mod tests {
         assert_eq!(sse_data_payload("data: hello"), Some("hello"));
         assert_eq!(sse_data_payload("data:  [DONE]"), Some("[DONE]"));
         assert_eq!(sse_data_payload("event: message"), None);
+    }
+
+    // The backend rejects snake_case keys; every multi-word field must serialize as camelCase.
+    #[test]
+    fn test_catalog_create_serializes_camelcase_wire_keys() {
+        let v = serde_json::to_value(CatalogCreate {
+            name: "bench".into(),
+            server_type: "remote".into(),
+            scope: "org".into(),
+            description: None,
+            server_url: Some("http://127.0.0.1:1/mcp".into()),
+            local_config: None,
+        })
+        .unwrap();
+        assert_eq!(v["serverType"], "remote");
+        assert_eq!(v["serverUrl"], "http://127.0.0.1:1/mcp");
+        assert!(v.get("server_url").is_none(), "snake_case key leaked");
+    }
+
+    #[test]
+    fn test_llm_key_create_serializes_camelcase_wire_keys() {
+        let v = serde_json::to_value(LlmKeyCreate {
+            provider: "anthropic".into(),
+            scope: "org".into(),
+            api_key: "sk".into(),
+            name: Some("bench".into()),
+            base_url: Some("https://api.kimi.com/coding/".into()),
+            is_primary: Some(true),
+        })
+        .unwrap();
+        assert_eq!(v["apiKey"], "sk");
+        assert_eq!(v["baseUrl"], "https://api.kimi.com/coding/");
+        assert_eq!(v["isPrimary"], true);
+        assert!(v.get("base_url").is_none(), "snake_case key leaked");
     }
 
     fn stream_from_chunks(chunks: Vec<Vec<u8>>) -> ChatRecordStream {

@@ -22,14 +22,14 @@ struct Args {
         long,
         help = "Run only environments matching comma-separated names"
     )]
-    envs: Option<String>,
+    env: Option<String>,
 
     #[arg(
         short = 't',
         long,
         help = "Run only tasks matching comma-separated ids"
     )]
-    tasks: Option<String>,
+    task: Option<String>,
 
     #[arg(
         short = 'l',
@@ -84,8 +84,8 @@ async fn main() -> ExitCode {
         }
         result = run(
             &args.bench_dir,
-            args.envs.as_deref(),
-            args.tasks.as_deref(),
+            args.env.as_deref(),
+            args.task.as_deref(),
             args.lanes.as_deref(),
             args.lanes_file.as_deref(),
             args.out.as_deref(),

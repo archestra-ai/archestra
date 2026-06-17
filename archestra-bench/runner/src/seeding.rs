@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::info;
 
-use crate::client::{CatalogCreate, EvalClient, LlmKeyCreate, McpInstall};
+use crate::client::{CatalogCreate, EvalClient, LlmKeyCreate};
 use crate::config::types::Mcp;
 
 #[derive(Debug, Clone)]
@@ -213,11 +213,7 @@ pub async fn register_remote_mcp(
         .await?;
     let catalog_id = require_str(&catalog, "id", "POST /api/internal_mcp_catalog")?;
     let server = client
-        .install_mcp_server(&McpInstall {
-            catalog_id,
-            scope: scope.to_string(),
-            agent_ids: agent_ids.map(|ids| ids.to_vec()).unwrap_or_default(),
-        })
+        .install_mcp(name, &catalog_id, scope, agent_ids)
         .await?;
     let server_id = require_str(&server, "id", "POST /api/mcp_server")?;
     let tools = client.list_mcp_server_tools(&server_id).await?;

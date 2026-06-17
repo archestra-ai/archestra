@@ -17,7 +17,7 @@ use crate::client::{
     AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
     apply_chat_event,
 };
-use crate::config::types::{EnvConfig, Task};
+use crate::config::types::{EnvConfig, Stage, Task};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
 use crate::mcp_server::{BenchmarkMcp, Submission};
@@ -44,6 +44,10 @@ const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 // prose.
 const SUBMIT_INSTRUCTION: &str =
     "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
+// One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
+// SUBMIT_INSTRUCTION, so this only has to call out the omission.
+const SUBMIT_NUDGE: &str =
+    "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -1221,6 +1225,31 @@ async fn grade_rollout(
                 serde_json::json!({"stage": index, "finish_reason": run.finish_reason}),
             )
             .await;
+    }
+
+    // Safety net: a capable model often solves the task and reports the answer in chat, then ends its
+    // turn without ever calling the submit tool. If it stopped voluntarily with nothing submitted,
+    // prompt it once more. Bounded to a single extra turn, and only on a clean `stop`, so a model that
+    // genuinely refuses or already hit an error/limit still terminates.
+    if stage_error.is_none()
+        && run.finish_reason.as_deref() == Some("stop")
+        && !bench_mcp.has_submission(rollout_key).await
+    {
+        artifacts.append("submit_nudge", serde_json::json!({})).await;
+        let nudge = Stage {
+            text: SUBMIT_NUDGE.to_string(),
+            files: Vec::new(),
+        };
+        stage_error = drive_stage(
+            &client,
+            &conversation_id,
+            &nudge,
+            task,
+            &mut run,
+            artifacts,
+            &runtime,
+        )
+        .await?;
     }
 
     metadata["finish_reason"] =

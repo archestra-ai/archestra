@@ -1503,9 +1503,14 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
     );
   });
 
-  test("returns only the frontend host when ARCHESTRA_API_BASE_URL is unset", () => {
+  test("includes the frontend host plus local dev origins when ARCHESTRA_API_BASE_URL is unset", () => {
     const expected = new URL(config.frontendBaseUrl).host.toLowerCase();
-    expect(getMCPGatewayOauthAllowedPublicHosts()).toEqual(new Set([expected]));
+    const hosts = getMCPGatewayOauthAllowedPublicHosts();
+    expect(hosts.has(expected)).toBe(true);
+    // Local dev origins are always allow-listed in development so a configured
+    // tunnel (ARCHESTRA_FRONTEND_URL) can't break localhost MCP connections.
+    expect(hosts.has("localhost:3000")).toBe(true);
+    expect(hosts.has("127.0.0.1:3000")).toBe(true);
   });
 
   test("includes a single ARCHESTRA_API_BASE_URL host", () => {

@@ -831,7 +831,15 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_PROJECTS_ENABLED`** - Enables Projects and the persistent "My Files" file system built on the skill sandbox. When off, the `/projects` and `/my-files` pages and their sidebar links are hidden, the project APIs and My Files endpoints are not served, the `search_files` / `save_result` MCP tools and the `my_file` upload source are unavailable, and the chat Files panel shows only generated outputs and attachments.
   - Default: `false`
   - Values: `true`, `false`
 

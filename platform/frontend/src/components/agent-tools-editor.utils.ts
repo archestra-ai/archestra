@@ -61,6 +61,50 @@ export function getDefaultArchestraToolIds(
   return { toolIds, catalogIndex };
 }
 
+type EnvScopedCatalog = {
+  id: string;
+  name: string;
+  serverType?: string | null;
+  environmentId?: string | null;
+};
+
+/**
+ * A catalog belongs to an agent's environment when it's a builtin (the
+ * Archestra platform tools, available in every environment) or its environment
+ * matches. `null`/`undefined` (Default runtime) is its own bucket.
+ */
+export function isCatalogInEnvironment(
+  catalog: EnvScopedCatalog,
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    catalog.serverType === "builtin" ||
+    (catalog.environmentId ?? null) === (agentEnvironmentId ?? null)
+  );
+}
+
+/**
+ * The selected catalogs that don't belong to the agent's environment (builtins
+ * are always compatible). Drives the save-blocking conflict alert. Unknown
+ * catalog ids are skipped.
+ */
+export function computeMcpEnvConflicts(
+  catalogItems: EnvScopedCatalog[],
+  selectedCatalogIds: Iterable<string>,
+  agentEnvironmentId: string | null,
+): { catalogId: string; name: string }[] {
+  const byId = new Map(catalogItems.map((c) => [c.id, c]));
+  const conflicts: { catalogId: string; name: string }[] = [];
+  for (const catalogId of selectedCatalogIds) {
+    const catalog = byId.get(catalogId);
+    if (!catalog || isCatalogInEnvironment(catalog, agentEnvironmentId)) {
+      continue;
+    }
+    conflicts.push({ catalogId, name: catalog.name });
+  }
+  return conflicts;
+}
+
 export function sortCatalogItems<
   T extends { id: string; name: string; serverType?: string | null },
 >(

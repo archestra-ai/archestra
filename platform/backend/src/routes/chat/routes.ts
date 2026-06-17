@@ -3,6 +3,8 @@ import {
   BUILT_IN_AGENT_IDS,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  CONTEXT_WINDOW_BREAKDOWN_EVENT,
+  type ContextWindowBreakdown,
   isModelSelectionComplete,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -65,7 +67,10 @@ import {
   LlmProviderApiKeyModel,
   MemberModel,
   MessageModel,
+  ModelModel,
   OrganizationModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TeamModel,
@@ -108,6 +113,11 @@ import {
   compactMessagesForChat,
   invalidateConversationCompactions,
 } from "./context-compaction";
+import {
+  buildContextWindowBreakdown,
+  refreshBreakdownUsedTokens,
+  resolveInputPricePerToken,
+} from "./context-window-breakdown";
 import {
   buildAbortiveTurnError,
   formatUnavailableToolErrorDetails,
@@ -713,6 +723,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
+                // Loaded once and reused for both message assembly (to know
+                // which attachment types this model can read) and the context
+                // window breakdown below. A failed lookup is non-fatal.
+                const modelRow = await ModelModel.findByProviderAndModelId(
+                  provider,
+                  selectedModel,
+                ).catch((error) => {
+                  logger.warn(
+                    { error, conversationId },
+                    "[chat] failed to load model row for the turn",
+                  );
+                  return null;
+                });
+
                 const modelMessages = await buildModelMessages({
                   messages: normalizedMessagesForLLM,
                   conversationId,
@@ -721,11 +745,48 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   agentId: conversation.agentId,
                   provider,
                   selectedModel,
+                  inputModalities: modelRow?.inputModalities ?? null,
                   agentLlmApiKeyId: agent.llmApiKeyId,
                   systemPrompt,
                   abortSignal: chatAbortController.signal,
                   emit: (event) => writer.write(event),
                 });
+
+                // Per-category breakdown of the assembled request, powering
+                // the Context Window Visualizer. Computed from the assembled
+                // messages so it reflects exactly what is sent this turn.
+                //
+                // After tool-call steps we re-emit an updated breakdown using the
+                // provider's exact inputTokens so the visualizer headline stays
+                // accurate across multi-step turns. The category estimates stay
+                // proportional to the initial build; the ring and totals track
+                // the real prompt size.
+                let latestBreakdown: ContextWindowBreakdown | null = null;
+                let breakdownPricePerToken: number | null = null;
+                try {
+                  breakdownPricePerToken = resolveInputPricePerToken(modelRow);
+                  const breakdown = buildContextWindowBreakdown({
+                    provider,
+                    model: selectedModel,
+                    contextLength: modelRow?.contextLength ?? null,
+                    inputPricePerToken: breakdownPricePerToken,
+                    systemPrompt,
+                    tools: supportsToolCalling ? mcpTools : undefined,
+                    messages: modelMessages,
+                  });
+                  latestBreakdown = breakdown;
+                  writer.write({
+                    type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
+                    data: breakdown,
+                  });
+                } catch (error) {
+                  // The visualizer is non-essential; never let it break a chat turn.
+                  logger.warn(
+                    { error, conversationId },
+                    "[ContextWindow] failed to build context window breakdown",
+                  );
+                }
+
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
@@ -735,7 +796,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // Emit per-step usage so the context indicator tracks the
                   // prompt growing across tool round-trips, instead of jumping
                   // only once when the whole turn finishes.
-                  onStepFinish: ({ usage }) => {
+                  onStepFinish: ({ usage, finishReason }) => {
                     writer.write({
                       type: "data-token-usage",
                       data: {
@@ -745,6 +806,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         cacheReadTokens: usage.cachedInputTokens,
                       } satisfies TokenUsage,
                     });
+
+                    // After a tool-call step the next model call will receive a
+                    // larger prompt (tool results appended). Re-emit the breakdown
+                    // with the provider's exact input-token count so the panel
+                    // headline stays accurate between steps. Category proportions
+                    // are kept from the initial estimate — they are still the best
+                    // available approximation of where tokens went.
+                    if (
+                      finishReason === "tool-calls" &&
+                      latestBreakdown !== null &&
+                      usage.inputTokens != null &&
+                      usage.inputTokens > 0
+                    ) {
+                      try {
+                        const inputTokens = usage.inputTokens;
+                        const updatedBreakdown = refreshBreakdownUsedTokens(
+                          latestBreakdown,
+                          inputTokens,
+                          breakdownPricePerToken,
+                        );
+                        latestBreakdown = updatedBreakdown;
+                        writer.write({
+                          type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
+                          data: updatedBreakdown satisfies ContextWindowBreakdown,
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          { error, conversationId },
+                          "[ContextWindow] failed to refresh breakdown after tool step",
+                        );
+                      }
+                    }
                   },
                   onFinish: async ({ usage, finishReason }) => {
                     // abort listeners are removed in the toUIMessageStream
@@ -1353,7 +1446,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversationFiles,
         description:
-          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+          "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(ConversationFilesResponseSchema),
@@ -1373,6 +1466,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
+          conversationOwnerUserId: conversation.userId,
+          requestingUserId: user.id,
         }),
       );
     },
@@ -1600,20 +1695,42 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          projectId: true,
         })
           .required({ agentId: true })
           .partial({
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            projectId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
+      {
+        body: { agentId, title, modelId, chatApiKeyId, projectId },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
+      // A chat born in a project belongs to it; the caller must be able to
+      // read the project. "No access" reads as 404, like the project routes.
+      if (projectId) {
+        const project = await ProjectModel.findById(projectId);
+        if (
+          !project ||
+          !(await ProjectShareModel.userCanAccessProject({
+            project,
+            userId: user.id,
+            organizationId,
+          }))
+        ) {
+          throw new ApiError(404, "Project not found");
+        }
+      }
+
       // Check if user is an agent admin
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -1666,6 +1783,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          projectId: projectId ?? null,
         }),
       );
     },

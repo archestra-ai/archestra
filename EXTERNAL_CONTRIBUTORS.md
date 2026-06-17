@@ -612,3 +612,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @justchillinghere
 - @Ejoyment
 - @prem22k
+- @onurborakman
+- @nikhilsinghal005
+- @SohamBamane
+- @Akash504-ai
+- @clutchpbcfo

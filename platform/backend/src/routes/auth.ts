@@ -4,6 +4,10 @@ import {
   IDENTITY_PROVIDER_ID,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   LLM_PROXY_OAUTH_SCOPE,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
+  MCP_OAUTH_CLIENT_ID_PREFIX,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_GRANT_TYPE,
   RouteId,
 } from "@archestra/shared";
@@ -18,6 +22,7 @@ import {
   AccountModel,
   AgentModel,
   LlmOauthClientModel,
+  McpOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -409,7 +414,15 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationHeader: request.headers.authorization,
             body,
           });
-        const result = await issueLlmOauthClientAccessToken({
+        // Route to the right issuer by clientId prefix. MCP gateway clients and
+        // LLM proxy clients are both stored in the oauth_client table but issue
+        // tokens scoped to different resources.
+        const issueAccessToken = authenticatedClientId?.startsWith(
+          MCP_OAUTH_CLIENT_ID_PREFIX,
+        )
+          ? issueMcpOauthClientAccessToken
+          : issueLlmOauthClientAccessToken;
+        const result = await issueAccessToken({
           clientId: authenticatedClientId,
           clientSecret,
           scope: body.scope as string | undefined,
@@ -925,6 +938,75 @@ async function issueLlmOauthClientAccessToken(params: {
       token_type: "Bearer",
       expires_in: expiresIn,
       scope: LLM_PROXY_OAUTH_SCOPE,
+    },
+  };
+}
+
+async function issueMcpOauthClientAccessToken(params: {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  scope: string | undefined;
+}): Promise<{
+  ok: boolean;
+  statusCode: number;
+  body: Record<string, unknown>;
+}> {
+  if (!params.clientId || !params.clientSecret) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
+    MCP_GATEWAY_OAUTH_SCOPE,
+  ];
+  if (!requestedScopes.some((scope) => scope === MCP_GATEWAY_OAUTH_SCOPE)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      body: {
+        error: "invalid_scope",
+        error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
+      },
+    };
+  }
+
+  const oauthClient = await McpOauthClientModel.findClientForCredentials({
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+  });
+  if (!oauthClient) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  // Same storage invariant as the LLM issuer: a high-entropy token returned
+  // once to the caller, persisted only as a lookup hash, with a finite
+  // client-credentials lifetime. Keep this in sync with
+  // issueLlmOauthClientAccessToken if either is refactored.
+  const accessToken = `mcp_at_${randomBytes(32).toString("base64url")}`;
+  const expiresIn = MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
+  await OAuthAccessTokenModel.createClientCredentialsToken({
+    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
+    clientId: oauthClient.clientId,
+    expiresAt: new Date(Date.now() + expiresIn * 1000),
+    scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+    referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
+  });
+
+  return {
+    ok: true,
+    statusCode: 200,
+    body: {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      scope: MCP_GATEWAY_OAUTH_SCOPE,
     },
   };
 }

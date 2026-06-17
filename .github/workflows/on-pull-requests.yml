@@ -219,6 +219,11 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Backstop: every check here finishes in well under 10m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
+    # and hold the step's log pipe open, leaving a *finished* job hanging until
+    # GitHub's 6h default. Fail fast instead.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
@@ -316,9 +321,11 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
-          # Generate the full Archestra MCP tool catalog (incl. flag-gated app
-          # tools) so codegen matches the committed docs; mirrors values-ci.yaml.
+          # Generate the full Archestra MCP tool catalog and route surface
+          # (incl. flag-gated app tools and the Projects/My Files routes) so
+          # codegen matches the committed docs/spec; mirrors values-ci.yaml.
           ARCHESTRA_APPS_ENABLED: "true"
+          ARCHESTRA_PROJECTS_ENABLED: "true"
         run: |
           set -e
 

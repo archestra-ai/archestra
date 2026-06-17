@@ -357,6 +357,13 @@ export const RouteId = {
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
 
+  // MCP OAuth Client Routes
+  GetMcpOauthClients: "getMcpOauthClients",
+  CreateMcpOauthClient: "createMcpOauthClient",
+  UpdateMcpOauthClient: "updateMcpOauthClient",
+  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
+  DeleteMcpOauthClient: "deleteMcpOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -552,6 +559,17 @@ export const RouteId = {
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  GetSkillSandboxFiles: "getSkillSandboxFiles",
+  CreateProject: "createProject",
+  GetProjects: "getProjects",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  SetProjectShare: "setProjectShare",
+  DeleteProject: "deleteProject",
+  GetProjectConversations: "getProjectConversations",
+  GetProjectFiles: "getProjectFiles",
+  DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
@@ -571,6 +589,7 @@ export const RouteId = {
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
   GetConnectionSetupScript: "getConnectionSetupScript",
+  CreateConnectionVirtualKey: "createConnectionVirtualKey",
 
   // MCP App Routes
   GetApps: "getApps",

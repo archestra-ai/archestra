@@ -102,7 +102,9 @@ export const AUDIT_DECISIONS = {
   },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
-  // oauthClientsTable stores LLM OAuth clients managed via /api/llm-oauth-clients
+  // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
+  // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
+  // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
   optimizationRulesTable: { audited: true, model: OptimizationRuleModel },
   organizationsTable: { audited: true, model: OrganizationModel },
@@ -169,6 +171,18 @@ export const AUDIT_DECISIONS = {
   conversationSharesTable: {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
+  },
+  projectsTable: {
+    audited: false,
+    reason: "user's chat-project grouping; same family as conversations",
+  },
+  projectSharesTable: {
+    audited: false,
+    reason: "project share metadata; same family as conversation shares",
+  },
+  projectShareTeamsTable: {
+    audited: false,
+    reason: "join: project share × team",
   },
   conversationShareTeamsTable: {
     audited: false,
@@ -413,6 +427,11 @@ export const AUDIT_DECISIONS = {
   skillSandboxFilesTable: {
     audited: false,
     reason: "child of sandbox; uploaded input + exported artifact file bytes",
+  },
+  filesTable: {
+    audited: false,
+    reason:
+      "user's own PFS files; download_file/save_result outputs, no admin signal",
   },
   skillSandboxReplayEventsTable: {
     audited: false,

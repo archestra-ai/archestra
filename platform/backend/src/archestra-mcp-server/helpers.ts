@@ -443,14 +443,17 @@ export function formatZodError(error: ZodError): string {
 }
 
 /**
- * Like {@link formatZodError}, but uses the validating schema to enrich
- * discriminated-union failures. A missing/invalid discriminator otherwise
- * renders as the opaque "type: Invalid input", which gives a model no way to
- * recover (it cannot tell what values the discriminator accepts). With the
- * schema in hand we enumerate the allowed values, e.g.
- * `source.type: set "type" to one of: "base64", "text"`. Best-effort: every
- * introspection step is guarded, so any shape we cannot read falls back to the
- * plain message rather than throwing.
+ * Like {@link formatZodError}, but uses the validating schema to enrich two
+ * issue classes that otherwise leave a model no way to recover:
+ *  - a missing/invalid discriminated-union discriminator renders as the opaque
+ *    "type: Invalid input"; with the schema in hand we enumerate the allowed
+ *    values, e.g. `source.type: set "type" to one of: "base64", "text"`;
+ *  - an unrecognized key on a strict object renders as `Unrecognized key:
+ *    "timeout"` without naming the keys that ARE accepted; we list them and
+ *    suggest the closest match, e.g.
+ *    `unrecognized key "timeout" — did you mean "timeoutSeconds"? ...`.
+ * Best-effort: every introspection step is guarded, so any shape we cannot read
+ * falls back to the plain message rather than throwing.
  */
 export function formatZodErrorWithSchema(
   error: ZodError,
@@ -458,12 +461,14 @@ export function formatZodErrorWithSchema(
 ): string {
   return error.issues
     .map((issue) => {
-      const enumerated = enumerateDiscriminatorValues(issue, schema);
-      if (!enumerated) {
+      const enriched =
+        enumerateDiscriminatorValues(issue, schema) ??
+        enumerateUnknownKeys(issue, schema);
+      if (!enriched) {
         return formatZodIssue(issue);
       }
       const path = formatIssuePath(issue.path);
-      return path ? `${path}: ${enumerated}` : enumerated;
+      return path ? `${path}: ${enriched}` : enriched;
     })
     .join("; ");
 }
@@ -580,6 +585,80 @@ function isRenderableLiteral(
     typeof value === "number" ||
     typeof value === "boolean"
   );
+}
+
+/**
+ * For an `unrecognized_keys` issue on a strict object, list the keys the object
+ * DOES accept and suggest the closest match per rejected key, or null when the
+ * issue is unrelated or the object schema cannot be introspected (e.g. the bad
+ * key sits inside a discriminated-union variant {@link navigateSchema} declines
+ * to traverse). The issue carries every rejected key in one `keys` array.
+ */
+function enumerateUnknownKeys(
+  issue: z.core.$ZodIssue,
+  root: ZodType,
+): string | null {
+  if (issue.code !== "unrecognized_keys") return null;
+  const badKeys = (issue as { keys?: unknown }).keys;
+  if (!Array.isArray(badKeys) || badKeys.length === 0) return null;
+
+  const container = navigateSchema(root, issue.path ?? []);
+  const shape = container ? defOf(container)?.shape : undefined;
+  if (!shape) return null;
+  const validKeys = Object.keys(shape);
+  if (validKeys.length === 0) return null;
+
+  const rendered = badKeys.map((key) => {
+    const name = String(key);
+    const suggestion = suggestClosestKey(name, validKeys);
+    return suggestion
+      ? `"${name}" (did you mean "${suggestion}"?)`
+      : `"${name}"`;
+  });
+  const noun = rendered.length === 1 ? "key" : "keys";
+  const allowed = validKeys.map((key) => `"${key}"`).join(", ");
+  return `unrecognized ${noun} ${rendered.join(", ")} — valid keys are ${allowed}`;
+}
+
+/**
+ * Closest accepted key for a rejected one, or null when nothing is close.
+ * Substring containment is checked first so a truncated/extended name like
+ * `timeout` → `timeoutSeconds` matches (their edit distance is large); a small
+ * edit distance then catches ordinary typos. Edit-distance matching is gated on
+ * a minimum length: on very short keys (`cwd`, `env`) a one-character distance
+ * is mostly coincidence (`cmd` is as near `cwd` as `command`), so we skip it and
+ * let the always-shown valid-keys list guide instead of a misleading guess.
+ */
+function suggestClosestKey(badKey: string, validKeys: string[]): string | null {
+  const lower = badKey.toLowerCase();
+  let best: { key: string; score: number } | null = null;
+  for (const key of validKeys) {
+    const candidate = key.toLowerCase();
+    let score: number | null = null;
+    if (candidate.includes(lower) || lower.includes(candidate)) {
+      score = Math.abs(candidate.length - lower.length);
+    } else if (Math.min(lower.length, candidate.length) >= 4) {
+      const distance = levenshtein(lower, candidate);
+      if (distance <= 2) score = 10 + distance;
+    }
+    if (score !== null && (!best || score < best.score)) {
+      best = { key, score };
+    }
+  }
+  return best?.key ?? null;
+}
+
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[b.length];
 }
 
 function formatIssuePath(path: PropertyKey[] | undefined): string {

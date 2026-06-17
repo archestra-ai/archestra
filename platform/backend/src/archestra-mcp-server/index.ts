@@ -7,6 +7,8 @@ import {
   isAgentTool,
   isSandboxArchestraToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -119,6 +121,14 @@ const appToolFullNames = new Set<string>([
   ...Object.keys(appLlmToolEntries),
 ]);
 
+// search_files / save_result are the persistent-files (Projects) surface of
+// the sandbox tool group. Registered above for unit tests, but hidden and
+// non-dispatchable when the projects feature is dark.
+const projectGatedSandboxFullNames = new Set<string>([
+  TOOL_SEARCH_FILES_FULL_NAME,
+  TOOL_SAVE_RESULT_FULL_NAME,
+]);
+
 export function getArchestraMcpTools() {
   const tools = [
     ...identityTools,
@@ -134,7 +144,11 @@ export function getArchestraMcpTools() {
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
-    ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    ...(config.skillsSandbox.enabled
+      ? config.projects.enabled
+        ? sandboxTools
+        : sandboxTools.filter((t) => !projectGatedSandboxFullNames.has(t.name))
+      : []),
     ...(config.apps.enabled
       ? [...appTools, ...appDataTools, ...appLlmTools]
       : []),
@@ -206,6 +220,17 @@ export async function executeArchestraTool(
     !config.apps.enabled &&
     resolvedToolName &&
     appToolFullNames.has(resolvedToolName)
+  ) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+
+  if (
+    !config.projects.enabled &&
+    resolvedToolName &&
+    projectGatedSandboxFullNames.has(resolvedToolName)
   ) {
     throw {
       code: -32601,

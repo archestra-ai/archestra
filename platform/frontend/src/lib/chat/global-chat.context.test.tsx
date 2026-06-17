@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { deriveContextWindowState } from "./chat.hook";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
@@ -1002,6 +1003,303 @@ describe("ChatProvider title animation", () => {
   });
 });
 
+describe("context window breakdown state", () => {
+  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatOptions = undefined;
+    // The real useChat returns a referentially-stable messages array between
+    // renders when nothing changed. Returning a fresh [] from each mock call
+    // instead makes stableMessages a new identity every render, which re-fires
+    // the session-sync effect → notifySessionUpdate → re-render in an infinite
+    // loop that hangs render(<ChatProvider>) and never exits the worker. Hoist
+    // one stable empty array so the mock honors that contract.
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  const validBreakdown = {
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    contextLength: 200_000,
+    usedTokens: 84_200,
+    freeTokens: 115_800,
+    usedPercent: 42.1,
+    estimatedInputCostUsd: 0.04,
+    segments: [{ category: "messages", tokens: 84_200, items: [] }],
+  } as const;
+
+  it("stores a valid breakdown in session state when the event arrives", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).toMatchObject({
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        usedTokens: 84_200,
+      }),
+    );
+  });
+
+  it("silently ignores a malformed breakdown payload without throwing", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    // First set a valid breakdown so we have something to check against.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
+    );
+
+    // Now send a malformed payload — contextWindow should not change.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: { provider: 42, usedTokens: "not-a-number" },
+      });
+    });
+
+    // Give React a tick to flush any potential state update.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Still the previous valid value — malformed payload was dropped.
+    expect(latestSessionRef.current?.contextWindow).toMatchObject({
+      provider: "anthropic",
+      usedTokens: 84_200,
+    });
+  });
+
+  it("resets contextWindow to null when a new turn estimate arrives", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    // Establish a breakdown from a previous turn.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
+    );
+
+    // A new turn-start estimate arrives — breakdown should clear immediately.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-estimate",
+        data: { estimatedTokens: 10_000 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).toBeNull(),
+    );
+
+    // contextTokensUsed is seeded from the estimate.
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(10_000);
+  });
+
+  it("contextWindow is isolated per conversation and starts as null", async () => {
+    // Register two separate conversations and confirm each starts with no breakdown.
+    const sessionA: { current: ChatSessionSnapshot } = { current: undefined };
+    const sessionB: { current: ChatSessionSnapshot } = { current: undefined };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId="conv-a" />
+        <RegisterChatSession conversationId="conv-b" />
+        <CaptureChatSession
+          conversationId="conv-a"
+          onSession={(s) => {
+            sessionA.current = s;
+          }}
+        />
+        <CaptureChatSession
+          conversationId="conv-b"
+          onSession={(s) => {
+            sessionB.current = s;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(sessionA.current).toBeDefined());
+    await waitFor(() => expect(sessionB.current).toBeDefined());
+
+    expect(sessionA.current?.contextWindow).toBeNull();
+    expect(sessionB.current?.contextWindow).toBeNull();
+  });
+});
+
+describe("deriveContextWindowState", () => {
+  const baseBreakdown = {
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    contextLength: 200_000,
+    usedTokens: 84_200,
+    freeTokens: 115_800,
+    usedPercent: 42.1,
+    estimatedInputCostUsd: null,
+    segments: [],
+  };
+
+  it("returns all-null when session is null", () => {
+    expect(deriveContextWindowState(null)).toEqual({
+      tokensUsed: null,
+      maxTokens: null,
+      breakdown: null,
+    });
+  });
+
+  it("returns all-null when session is undefined", () => {
+    expect(deriveContextWindowState(undefined)).toEqual({
+      tokensUsed: null,
+      maxTokens: null,
+      breakdown: null,
+    });
+  });
+
+  it("uses contextTokensUsed as tokensUsed (estimate / usage priority)", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: 50_000,
+      tokenUsage: { inputTokens: 99, outputTokens: 10, totalTokens: 109 },
+      contextWindow: null,
+    });
+    expect(result.tokensUsed).toBe(50_000);
+  });
+
+  it("falls back to tokenUsage.totalTokens when contextTokensUsed is null", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: null,
+      tokenUsage: {
+        inputTokens: undefined,
+        outputTokens: 10,
+        totalTokens: 120,
+      },
+      contextWindow: null,
+    });
+    expect(result.tokensUsed).toBe(120);
+  });
+
+  it("returns null tokensUsed when both contextTokensUsed and tokenUsage are absent", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: null,
+      tokenUsage: null,
+      contextWindow: null,
+    });
+    expect(result.tokensUsed).toBeNull();
+  });
+
+  it("sources maxTokens from the breakdown contextLength", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: null,
+      tokenUsage: null,
+      contextWindow: baseBreakdown,
+    });
+    expect(result.maxTokens).toBe(200_000);
+  });
+
+  it("returns null maxTokens when breakdown contextLength is null", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: null,
+      tokenUsage: null,
+      contextWindow: { ...baseBreakdown, contextLength: null },
+    });
+    expect(result.maxTokens).toBeNull();
+  });
+
+  it("returns null maxTokens when breakdown is absent", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: 1000,
+      tokenUsage: null,
+      contextWindow: null,
+    });
+    expect(result.maxTokens).toBeNull();
+  });
+
+  it("passes the full breakdown through", () => {
+    const result = deriveContextWindowState({
+      contextTokensUsed: null,
+      tokenUsage: null,
+      contextWindow: baseBreakdown,
+    });
+    expect(result.breakdown).toEqual(baseBreakdown);
+  });
+});
+
 function CaptureTitleAnimation({
   onValue,
 }: {
@@ -1020,26 +1318,30 @@ function CaptureTitleAnimation({
 }
 
 function RegisterChatSession({
+  conversationId = "conversation-1",
   initialMessages,
 }: {
+  conversationId?: string;
   initialMessages?: UIMessage[];
 }) {
   const { registerSession } = useGlobalChat();
 
   useEffect(() => {
-    registerSession({ conversationId: "conversation-1", initialMessages });
-  }, [initialMessages, registerSession]);
+    registerSession({ conversationId, initialMessages });
+  }, [conversationId, initialMessages, registerSession]);
 
   return null;
 }
 
 function CaptureChatSession({
+  conversationId = "conversation-1",
   onSession,
 }: {
+  conversationId?: string;
   onSession: (session: ChatSessionSnapshot) => void;
 }) {
   const { getSession } = useGlobalChat();
-  const session = getSession("conversation-1");
+  const session = getSession(conversationId);
 
   useEffect(() => {
     onSession(session);

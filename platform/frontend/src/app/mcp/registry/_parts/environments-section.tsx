@@ -400,17 +400,34 @@ function EnvironmentEditorDialog({
       : null;
   const canSave = trimmedName.length > 0 && validationRegexError === null;
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
-  const networkPolicy = {
-    egressMode,
-    domainPreset:
-      egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
-    allowedDomains:
-      egressMode === "restricted" && supportsFqdn
-        ? splitPolicyList(allowedDomainsText)
-        : [],
-    allowedCidrs:
-      egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
-  };
+  const enforcementUnavailable =
+    capabilities?.networkPolicy.provider === "none";
+  // With no enforcer the egress controls are disabled, so the form can't express
+  // intent. Persisting the default "restricted" + empty allowlists would silently
+  // become a deny-all once an enforcer is installed. Keep an existing policy
+  // untouched; for a new/policy-less environment save a non-enforcing one.
+  const originalNetworkPolicy =
+    mode === "default"
+      ? (defaultEnvironment?.networkPolicy ?? null)
+      : (environment?.networkPolicy ?? null);
+  const networkPolicy: NetworkPolicy = enforcementUnavailable
+    ? (originalNetworkPolicy ?? {
+        egressMode: "unrestricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: [],
+      })
+    : {
+        egressMode,
+        domainPreset:
+          egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
+        allowedDomains:
+          egressMode === "restricted" && supportsFqdn
+            ? splitPolicyList(allowedDomainsText)
+            : [],
+        allowedCidrs:
+          egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
+      };
 
   // The current value is included so editing an environment whose namespace
   // predates the configured list never silently drops it.

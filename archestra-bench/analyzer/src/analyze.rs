@@ -123,6 +123,12 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
      show an issue (for breadth) and prefer fixes that generalize across models over patching one \
      model's quirk; never discount a struggle merely because the model is weak. Only set one aside \
      when it is pure raw model capability that no loop, tool, or system-prompt change could address.\n\n\
+     Calibrate each recommendation to the evidence behind it. The run metrics show how many rollouts \
+     and tasks this report rests on; when that set is small or a pattern appears only once or twice, \
+     present the finding as a prioritized hypothesis to review, not an implementation directive. \
+     Weigh the ongoing maintenance cost of any NEW surface you propose — a helper utility, an extra \
+     tool, a new abstraction — against how often the friction actually occurred; on thin evidence \
+     prefer tuning an existing tool, error message, or prompt over adding new machinery.\n\n\
      You have read-only file tools (read_file, glob, grep, git) over the whole repository: both the \
      benchmark fixtures under `archestra-bench/` and the Archestra product under `platform/`. For \
      every issue surfaced in the analyses, cross-check it against the real definition — read the \

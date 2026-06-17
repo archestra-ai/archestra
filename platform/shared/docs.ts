@@ -38,7 +38,6 @@ export const DocsPage = {
   PlatformLlmProxy: "platform-llm-proxy",
   PlatformMastraExample: "platform-mastra-example",
   PlatformMcpGateway: "platform-mcp-gateway",
-  PlatformMcpOauthClients: "platform-mcp-oauth-clients",
   PlatformMigrationKit: "platform-migration-kit",
   PlatformMsTeams: "platform-ms-teams",
   PlatformN8nExample: "platform-n8n-example",

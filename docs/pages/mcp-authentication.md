@@ -56,9 +56,19 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 
 ### OAuth Client Credentials (Service Accounts)
 
-When the caller is a backend service or another team's bot rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. The client exchanges its `client_id` and `client_secret` for a short-lived bearer token scoped to an explicit list of gateways, then sends that token to the gateway like any other OAuth access token. There is no acting user, so per-user dynamic credential resolution does not apply — assign shared or service-account credentials to the tools these gateways expose.
+When the caller is a backend service, automation job, or another team's bot rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an app, not a person.
 
-See [MCP OAuth Clients](/docs/platform-mcp-oauth-clients) for how to create and scope these clients.
+Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+
+The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
+
+- `grant_type=client_credentials`
+- `client_id` and `client_secret`
+- `scope=mcp`
+
+It then sends that token to the gateway like any other OAuth access token (`Authorization: Bearer <token>`). The token is rejected by any gateway not on the client's list, and by gateways in another organization.
+
+Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — for gateways consumed by service accounts, assign tools to a shared or service-account connection rather than **Resolve at call time**.
 
 ### Bearer Token
 

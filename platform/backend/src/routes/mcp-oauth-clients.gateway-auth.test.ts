@@ -3,6 +3,8 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { McpOauthClientModel, OAuthAccessTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { validateMCPGatewayToken } from "./mcp-gateway.utils";
@@ -200,6 +202,33 @@ describe("MCP OAuth client gateway authorization", () => {
       id: oauthClient.id,
       organizationId: org.id,
     });
+
+    expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+  });
+
+  test("rejects a token after its client is disabled", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      name: "service",
+      allowedGatewayIds: [gateway.id],
+    });
+    const token = await mintToken({
+      clientId: oauthClient.clientId,
+      referenceClientUuid: oauthClient.id,
+    });
+
+    await db
+      .update(schema.oauthClientsTable)
+      .set({ disabled: true })
+      .where(eq(schema.oauthClientsTable.id, oauthClient.id));
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
   });

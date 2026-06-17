@@ -47,7 +47,7 @@ import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformPrivateRegistry,
-  "network-policies",
+  "network-egress-policies",
 );
 const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
   DocsPage.PlatformPrivateRegistry,

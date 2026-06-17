@@ -34,7 +34,12 @@ Re-check it after re-resolving (each mode's verify step). The PR's **Docker Imag
 (Platform)** gate stays authoritative — it also covers base-image OS-package CVEs that
 `pnpm audit` can't see — so don't merge until it's green regardless of this local check.
 
-## Mode A — sweep matured temporary pins/exclusions
+**One override change per PR — Mode A and Mode B combined.** A single PR carries exactly one
+modification: either one matured pin unwound (Mode A) **or** one redundant override removed
+(Mode B) — never several, and never one of each in the same PR. Smallest blast radius,
+trivially revertible, easy to bisect. Pick the next one, ship it, repeat.
+
+## Mode A — unwind one matured temporary pin/exclusion
 
 1. List the temporary entries and their clearance dates:
    ```bash
@@ -43,14 +48,15 @@ Re-check it after re-resolving (each mode's verify step). The PR's **Docker Imag
    Each CVE-temp block names a package, its pinned fix version, and a "clears <date>" note.
    Ignore non-CVE excludes like `next` / `@next/*` (kept for a different reason — leave them).
 
-2. For each temp-excluded/pinned package, **recompute** maturity against npm (don't trust the
-   comment date) using the helper — pass each `pkg@pinnedVersion` found in step 1:
+2. **Recompute** maturity against npm (don't trust the comment date) using the helper —
+   pass each `pkg@pinnedVersion` found in step 1:
    ```bash
    python3 <skill-dir>/scripts/maturity.py <pkg>@<pinnedVersion> [<pkg>@<pinnedVersion> ...]
    ```
-   Only sweep entries reported `MATURE`. Leave `QUARANTINED` ones (note when they clear).
+   Pick **one** package reported `MATURE` to unwind in this PR. Leave the rest (`QUARANTINED`
+   ones, and any other matured ones — they're separate PRs).
 
-3. For each MATURE package, edit `platform/pnpm-workspace.yaml`:
+3. For the chosen MATURE package, edit `platform/pnpm-workspace.yaml`:
    - Remove it (and its scoped `@x/*` siblings, e.g. `@esbuild/*`) from `minimumReleaseAgeExclude`, plus the `TEMPORARY:` comment block.
    - In `overrides`, relax the exact pin to a `>=` floor at the fixed version (e.g. `esbuild: 0.28.1` → `esbuild: '>=0.28.1'`) so future patch releases flow in normally — *unless* a comment says it's pinned for a non-CVE reason. If the dependency graph now resolves to a non-vulnerable version without the override at all, you may drop the override entirely (verify in step 5).
 
@@ -82,7 +88,7 @@ Re-check it after re-resolving (each mode's verify step). The PR's **Docker Imag
    corepack pnpm --filter @backend --filter @frontend type-check                 # affected workspaces
    ```
 
-7. Commit `deps: sweep matured CVE pins (<packages>)` and open a PR.
+7. Commit `deps: unwind matured CVE pin (<package>)` and open a PR (one pin).
 
 ## Mode B — find & remove redundant overrides
 

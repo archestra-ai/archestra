@@ -471,6 +471,20 @@ impl EvalClient {
         Ok(())
     }
 
+    /// Turn off org-wide tool auto-assignment so `search_tools` returns only each agent's *assigned*
+    /// tools. Without this, a shared backend's discovery surfaces every lane's sibling `final_answer`
+    /// submit server, leaving the model to guess which one is its own.
+    pub async fn disable_tool_auto_assignment(&self) -> Result<(), ClientError> {
+        self.request(
+            Method::PATCH,
+            "/api/organization/security-settings",
+            None,
+            Some(&serde_json::json!({ "allowToolAutoAssignment": false })),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn list_catalog(&self) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         items(
             self.request(Method::GET, "/api/internal_mcp_catalog", None, None)

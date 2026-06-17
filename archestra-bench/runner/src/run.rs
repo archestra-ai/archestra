@@ -28,11 +28,11 @@ use crate::seeding::{
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
-// Model-visible MCP server name (tools surface as `<name>-<lane>__submit_result`). Kept neutral so
+// Model-visible MCP server name (tools surface as `<name>[-<token>]__submit_result`). Kept neutral so
 // the agent is not cued that it is being evaluated, which can shift model behavior.
-// The model sees the bench tool as `<BENCH_MCP_NAME>[-<idx>]__submit_result`, so this name must never
-// encode the lane/model identity. Shared-backend envs append an opaque lane index (registry names must
-// be unique per backend); isolated lanes own their backend and use the bare name.
+// The name must never encode lane/model identity or position. Shared-backend envs append an opaque
+// random token (registry names must be unique per backend, and tool auto-assignment is disabled so a
+// lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
@@ -508,6 +508,11 @@ async fn setup_shared_env(
         return Err(e.to_string());
     }
 
+    if let Err(e) = client.disable_tool_auto_assignment().await {
+        let _ = instance.shutdown().await;
+        return Err(e.to_string());
+    }
+
     for sref in &env.skills {
         if let Err(e) = seed_skill_ref(
             &client,
@@ -525,8 +530,9 @@ async fn setup_shared_env(
     }
 
     let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
-    for (idx, lane) in env_plan.lanes.iter().enumerate() {
-        let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{idx}")).await {
+    for lane in &env_plan.lanes {
+        let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
+        let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
             Ok(m) => m,
             Err(e) => {
                 stop_mcps(&setups).await;
@@ -607,6 +613,11 @@ async fn run_isolated_lane(
     };
 
     if let Err(e) = client.enable_skill_defaults().await {
+        let _ = instance.shutdown().await;
+        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+    }
+
+    if let Err(e) = client.disable_tool_auto_assignment().await {
         let _ = instance.shutdown().await;
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
     }

@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 mod lanes;
-pub use lanes::{Lane, LaneError, Provider, find_lane, is_slug, load_lanes};
+pub use lanes::{Lane, LaneError, Provider, find_lane, is_slug, load_lanes, split_names};
 
 /// Per-rollout artifact file names.
 pub const RUN_JSON: &str = "run.json";

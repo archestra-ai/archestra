@@ -13,10 +13,8 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
-use crate::client::{
-    AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
-    apply_chat_event,
-};
+use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_chat_event};
+use crate::client::{AgentCreate, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
@@ -240,7 +238,7 @@ fn select_envs(
     env_filter: Option<&str>,
     task_filter: Option<&str>,
 ) -> Result<Vec<(EnvConfig, Vec<Task>)>, RunError> {
-    let env_names = split_names(env_filter);
+    let env_names = archestra_bench_core::split_names(env_filter);
     let chosen: Vec<EnvConfig> = match env_names {
         None => {
             let mut names: Vec<_> = envs.keys().cloned().collect();
@@ -267,7 +265,7 @@ fn select_envs(
         }
     };
 
-    let task_names = split_names(task_filter);
+    let task_names = archestra_bench_core::split_names(task_filter);
     let mut selected = Vec::new();
     let mut matched = HashSet::new();
     for env in chosen {
@@ -304,16 +302,6 @@ fn select_envs(
         ));
     }
     Ok(selected)
-}
-
-fn split_names(value: Option<&str>) -> Option<Vec<String>> {
-    let value = value?;
-    let parts: Vec<String> = value
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.is_empty() { None } else { Some(parts) }
 }
 
 /// A shared-backend env's per-lane agent + MCP, prepared up front so a lane worker can run that env's
@@ -2324,16 +2312,6 @@ mod tests {
         assert_eq!(resolve_workers(None, 2), 2);
         assert_eq!(resolve_workers(None, 10), 4);
         assert_eq!(resolve_workers(None, 0), 1);
-    }
-
-    #[test]
-    fn test_split_names() {
-        assert_eq!(split_names(None), None);
-        assert_eq!(split_names(Some("")), None);
-        assert_eq!(
-            split_names(Some("a, b")),
-            Some(vec!["a".to_string(), "b".to_string()])
-        );
     }
 
     fn dummy_task(id: &str) -> Task {

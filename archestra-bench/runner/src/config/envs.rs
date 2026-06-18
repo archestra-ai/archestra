@@ -79,7 +79,7 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
     let data = toml_util::parse_toml_file(path)?;
 
     let env_id = toml_util::req_str(&data, "id", &ctx)?;
-    if !toml_util::is_slug(&env_id) {
+    if !archestra_bench_core::is_slug(&env_id) {
         return Err(EnvConfigError(format!(
             "{ctx}: env id {env_id:?} must be lowercase alphanumeric with dashes (db-slug-safe)"
         )));
@@ -107,7 +107,7 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
         )));
     }
     for task_id in &task_ids {
-        if !toml_util::is_slug(task_id) {
+        if !archestra_bench_core::is_slug(task_id) {
             return Err(EnvConfigError(format!(
                 "{ctx}: task id {task_id:?} must be lowercase alphanumeric with dashes (slug-safe)"
             )));

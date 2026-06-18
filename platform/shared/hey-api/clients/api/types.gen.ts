@@ -29668,6 +29668,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -29861,6 +29862,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -29960,6 +29962,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30035,6 +30038,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30112,6 +30116,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30587,6 +30592,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30664,6 +30670,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30741,6 +30748,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30818,6 +30826,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30895,6 +30904,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -30972,6 +30982,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31049,6 +31060,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31126,6 +31138,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31201,6 +31214,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31276,6 +31290,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31353,6 +31368,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -31430,6 +31446,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -32148,6 +32165,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -32225,6 +32243,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -32369,6 +32388,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -32562,6 +32582,7 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
             cacheCost: string | null;
@@ -33056,6 +33077,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -33249,6 +33271,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -33348,6 +33371,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -33423,6 +33447,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -33500,6 +33525,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -33975,6 +34001,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34052,6 +34079,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34129,6 +34157,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34206,6 +34235,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34283,6 +34313,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34360,6 +34391,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34437,6 +34469,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34514,6 +34547,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34589,6 +34623,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34664,6 +34699,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34741,6 +34777,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -34818,6 +34855,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -35536,6 +35574,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -35613,6 +35652,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -35757,6 +35797,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;
@@ -35950,6 +35991,7 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         cacheReadTokens: number | null;
         cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
         cacheCost: string | null;

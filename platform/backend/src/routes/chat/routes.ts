@@ -803,7 +803,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
-                  // Repair tool names that carry a leaked harmony channel marker
+                  // Repair tool names that carry a leaked harmony sentinel token
                   // (e.g. `archestra__run_command<|channel|>commentary`) before
                   // they surface as an unrecoverable NoSuchToolError. Repair lands
                   // at tool-call parse, so the earlier tool-input-start chunk keeps

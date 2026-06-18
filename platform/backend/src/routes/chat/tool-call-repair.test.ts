@@ -17,7 +17,13 @@ describe("repairHarmonyToolName", () => {
     ).toBe("archestra__run_command");
   });
 
-  test("strips any marker variant, not just commentary", () => {
+  test("strips any harmony token, not just channel", () => {
+    expect(
+      repairHarmonyToolName(
+        "archestra__run_command<|constrain|>json",
+        AVAILABLE,
+      ),
+    ).toBe("archestra__run_command");
     expect(
       repairHarmonyToolName(
         "archestra__search_tools<|channel|>analysis",
@@ -35,13 +41,13 @@ describe("repairHarmonyToolName", () => {
     ).toBe("context7__resolve-library-id");
   });
 
-  test("returns null for an already-valid name (no marker)", () => {
+  test("returns null for an already-valid name (no token)", () => {
     expect(
       repairHarmonyToolName("archestra__run_command", AVAILABLE),
     ).toBeNull();
   });
 
-  test("returns null when the cleaned name is not a registered tool", () => {
+  test("returns null when the cleaned prefix is not a registered tool", () => {
     expect(
       repairHarmonyToolName(
         "archestra__ghost_tool<|channel|>commentary",
@@ -50,20 +56,40 @@ describe("repairHarmonyToolName", () => {
     ).toBeNull();
   });
 
-  test("returns null when the marker is at the very start (nothing left)", () => {
+  test("returns null when the token is at the very start (nothing left)", () => {
     expect(
       repairHarmonyToolName("<|channel|>commentary", AVAILABLE),
     ).toBeNull();
   });
 
-  test("returns null for a genuinely-unknown name without a marker", () => {
+  test("returns null for a genuinely-unknown name without a token", () => {
     expect(repairHarmonyToolName("totally_made_up", AVAILABLE)).toBeNull();
   });
 
-  test("does not strip an arbitrary `<|` that is not the harmony channel marker", () => {
+  test("does not strip an unclosed `<|` that is not a harmony token", () => {
     // a partial/garbage marker must not silently re-map to a different tool.
     expect(
       repairHarmonyToolName("archestra__run_command<|garbage", AVAILABLE),
     ).toBeNull();
+  });
+
+  test("does not strip a closed sentinel outside the harmony vocabulary", () => {
+    // a closed `<|word|>` that is not a real harmony token must not trigger
+    // repair — only the registered-tool match would otherwise gate it.
+    expect(
+      repairHarmonyToolName(
+        "archestra__run_command<|garbage|>suffix",
+        AVAILABLE,
+      ),
+    ).toBeNull();
+  });
+
+  test("splits on the first harmony token when several are present", () => {
+    expect(
+      repairHarmonyToolName(
+        "archestra__run_command<|constrain|>json<|channel|>commentary",
+        AVAILABLE,
+      ),
+    ).toBe("archestra__run_command");
   });
 });

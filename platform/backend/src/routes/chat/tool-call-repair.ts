@@ -1,30 +1,35 @@
 // Some models (notably OpenAI harmony-format models served via OpenRouter) leak
-// a reasoning-channel marker into the tool-name field, e.g.
-// `archestra__run_command<|channel|>commentary`. The marker is never part of a
-// real tool name, so the call fails to match any registered tool and surfaces a
-// NoSuchToolError. This strips the marker so the call can be re-mapped to the
-// tool the model meant.
+// a reasoning-channel token into the tool-name field, e.g.
+// `archestra__run_command<|channel|>commentary` or `...<|constrain|>json`. The
+// token is never part of a real tool name, so the call fails to match any
+// registered tool and surfaces a NoSuchToolError. This strips the leaked token
+// so the call can be re-mapped to the tool the model meant.
 
-// The exact harmony channel marker the model leaks into the function-name field
-// (e.g. `...<|channel|>commentary`). Matching the full marker rather than a bare
-// `<|` avoids re-mapping an arbitrary unknown name that merely happens to contain
-// `<|`, which could otherwise execute a different tool than the model named.
-const HARMONY_CHANNEL_MARKER = "<|channel|>";
+// A harmony sentinel token at the leak boundary. The set is the closed harmony
+// special-token vocabulary — matching the exact names (not a generic `<|word|>`)
+// keeps repair from firing on an arbitrary closed sentinel a non-harmony model
+// might emit. The registered-tool exact-match below is the real safety gate; this
+// only narrows what counts as a leak worth repairing. Extend if harmony grows.
+const HARMONY_SENTINEL =
+  /<\|(?:start|end|message|channel|constrain|return|call)\|>/;
 
 /**
- * Strip a leaked harmony channel marker from a tool name. Returns the cleaned
- * name only when it differs from the original AND matches a registered tool;
- * otherwise null (no repair — let the existing not-found path handle it).
+ * Strip a leaked harmony sentinel token from a tool name. Returns the cleaned
+ * name only when a real harmony token is present AND the prefix matches a
+ * registered tool; otherwise null (no repair — let the existing not-found path
+ * handle it).
  */
 export function repairHarmonyToolName(
   toolName: string,
   availableNames: Iterable<string>,
 ): string | null {
-  const markerIndex = toolName.indexOf(HARMONY_CHANNEL_MARKER);
-  if (markerIndex === -1) {
+  const match = HARMONY_SENTINEL.exec(toolName);
+  if (match === null) {
     return null;
   }
-  const cleaned = toolName.slice(0, markerIndex).trim();
+  // Only a suffix leak is expected (`NAME<|…`): a sentinel at index 0 leaves
+  // nothing to map, and the prefix before the first token is the intended name.
+  const cleaned = toolName.slice(0, match.index).trim();
   if (cleaned === "") {
     return null;
   }

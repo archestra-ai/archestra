@@ -2000,15 +2000,36 @@
     {
       "idx": 285,
       "version": "7",
-      "when": 1781204601557,
-      "tag": "0285_ordinary_james_howlett",
+      "when": 1781274807410,
+      "tag": "0285_dedup_archestra_builtin_tools_by_short_name",
       "breakpoints": true
     },
     {
       "idx": 286,
       "version": "7",
-      "when": 1781261952526,
-      "tag": "0286_tidy_cannonball",
+      "when": 1781294131210,
+      "tag": "0286_glamorous_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1781344711260,
+      "tag": "0287_mcp_apps",
+      "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "7",
+      "when": 1781515672027,
+      "tag": "0288_agent_environment_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1781755386994,
+      "tag": "0289_dynamic_tool_access",
       "breakpoints": true
     }
   ]

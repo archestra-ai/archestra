@@ -1,0 +1,59 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/github-copilot/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "model_picker_enabled": false,
+          "capabilities": {
+            "type": "chat",
+            "limits": { "max_context_window_tokens": 128000 },
+            "supports": { "tool_calls": true }
+          }
+        },
+        {
+          "id": "claude-sonnet-4",
+          "name": "Claude Sonnet 4",
+          "supported_endpoints": ["/chat/completions"],
+          "capabilities": {
+            "type": "chat",
+            "limits": { "max_context_window_tokens": 200000 },
+            "supports": { "tool_calls": true }
+          }
+        },
+        {
+          "id": "gpt-5.3-codex",
+          "name": "GPT-5.3 Codex",
+          "model_picker_enabled": true,
+          "supported_endpoints": ["/responses"],
+          "capabilities": { "type": "chat" }
+        },
+        {
+          "id": "text-embedding-3-small",
+          "capabilities": { "type": "embeddings" }
+        },
+        {
+          "id": "o1",
+          "name": "o1",
+          "policy": { "state": "disabled" },
+          "capabilities": { "type": "chat" }
+        }
+      ]
+    }
+  }
+}

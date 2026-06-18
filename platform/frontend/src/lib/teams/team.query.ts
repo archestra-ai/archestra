@@ -2,7 +2,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
 
-const { getTeams, getTeamVaultFolder } = archestraApiSdk;
+const { getTeams, getTeamVaultFolder, getTeamLabelKeys, getTeamLabelValues } =
+  archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -20,18 +21,51 @@ export function useTeams(params?: {
    * membership determines which teams can be assigned.
    */
   mine?: boolean;
+  /** Server-side name filter (case-insensitive substring match). */
+  name?: string;
+  /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
+  labels?: string;
 }) {
   const mine = params?.mine ?? false;
+  const name = params?.name?.trim() || undefined;
+  const labels = params?.labels || undefined;
   return useQuery({
-    queryKey: mine ? ["teams", "mine"] : ["teams"],
+    queryKey: [
+      "teams",
+      ...(mine ? ["mine"] : []),
+      ...(name || labels ? [{ name, labels }] : []),
+    ],
     queryFn: async () => {
       const { data } = await getTeams({
-        query: { limit: 100, offset: 0, ...(mine ? { mine: true } : {}) },
+        query: {
+          limit: 100,
+          offset: 0,
+          ...(mine ? { mine: true } : {}),
+          ...(name ? { name } : {}),
+          ...(labels ? { labels } : {}),
+        },
       });
       return data?.data ?? [];
     },
     initialData: params?.initialData as Team[] | undefined,
     enabled: params?.enabled,
+  });
+}
+
+export function useTeamLabelKeys() {
+  return useQuery({
+    queryKey: ["teams", "labels", "keys"],
+    queryFn: async () => (await getTeamLabelKeys()).data ?? [],
+  });
+}
+
+export function useTeamLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["teams", "labels", "values", key],
+    queryFn: async () =>
+      (await getTeamLabelValues({ query: key ? { key } : {} })).data ?? [],
+    enabled: key !== undefined,
   });
 }
 

@@ -9,8 +9,10 @@ import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { MessageModel, SkillModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { activeChatRunService } from "@/services/active-chat-run";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -26,6 +28,7 @@ const mockStreamText = vi.hoisted(() => vi.fn());
 const mockCreateLLMModelForAgent = vi.hoisted(() => vi.fn());
 const mockGetChatMcpTools = vi.hoisted(() => vi.fn());
 const mockGetChatMcpToolUiResourceUris = vi.hoisted(() => vi.fn());
+const mockFetchToolUiResource = vi.hoisted(() => vi.fn());
 const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
@@ -56,6 +59,7 @@ vi.mock("@/clients/chat-mcp-client", async (importOriginal) => {
     ...actual,
     getChatMcpTools: mockGetChatMcpTools,
     getChatMcpToolUiResourceUris: mockGetChatMcpToolUiResourceUris,
+    fetchToolUiResource: mockFetchToolUiResource,
   };
 });
 
@@ -1160,9 +1164,15 @@ function delay(ms: number) {
 }
 
 // streamText result whose fullStream yields the given events. Used to drive the
-// route's empty-response probe/retry loop without a live provider.
-function fakeStreamResult(events: Array<Record<string, unknown>>) {
+// route's empty-response probe/retry loop without a live provider. `state`
+// records whether the probe ever cancelled the iterator via return().
+function fakeStreamResult(
+  events: Array<Record<string, unknown>>,
+  options?: { uiChunks?: Array<Record<string, unknown>> },
+) {
+  const state = { returnCalled: false };
   return {
+    state,
     fullStream: {
       [Symbol.asyncIterator]: () => {
         let index = 0;
@@ -1171,17 +1181,35 @@ function fakeStreamResult(events: Array<Record<string, unknown>>) {
             index < events.length
               ? { done: false, value: events[index++] }
               : { done: true, value: undefined },
+          return: async () => {
+            state.returnCalled = true;
+            return { done: true as const, value: undefined };
+          },
         };
       },
     },
     toUIMessageStream: () =>
       new ReadableStream({
         start(controller) {
+          for (const chunk of options?.uiChunks ?? []) {
+            controller.enqueue(chunk);
+          }
           controller.close();
         },
       }),
     usage: Promise.resolve(null),
   };
+}
+
+async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]> {
+  const chunks: unknown[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
 }
 
 // streamText result whose fullStream throws a context-length error on first read,
@@ -1224,18 +1252,28 @@ const RENDERABLE_STREAM_EVENTS = [
   { type: "finish", finishReason: "stop" },
 ];
 
-describe("POST /api/chat empty-response retry", () => {
+// Composition tests: the ordering and wiring between the (individually
+// unit-tested) helpers — injection-before-normalization, compaction event
+// emission, pre-merge persistence, probe iterator handling, tool-UI chunk
+// placement, and the empty-response/context-trim retry loop.
+describe("POST /api/chat handler composition", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
   let conversationId: string;
   let executionPromise: Promise<void> | undefined;
   let capturedOuterErrorPayload: string | undefined;
+  let writerEvents: Array<{ kind: "write" | "merge"; value: unknown }>;
+  let mergedStreams: ReadableStream<unknown>[];
+  let runExecute = true;
 
   beforeEach(
     async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
       executionPromise = undefined;
       capturedOuterErrorPayload = undefined;
+      writerEvents = [];
+      mergedStreams = [];
+      runExecute = true;
 
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
@@ -1254,6 +1292,7 @@ describe("POST /api/chat empty-response retry", () => {
       mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
       mockGetChatMcpTools.mockResolvedValue({});
       mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
+      mockFetchToolUiResource.mockResolvedValue(null);
       mockExtractAndIngestDocuments.mockResolvedValue(undefined);
       mockCompactMessagesForChat.mockImplementation(
         async ({ messages }: { messages: unknown[] }) => ({
@@ -1267,6 +1306,9 @@ describe("POST /api/chat empty-response retry", () => {
         async ({ callback }: { callback: () => Promise<Response> }) =>
           callback(),
       );
+      mockStreamText.mockImplementation(() =>
+        fakeStreamResult(RENDERABLE_STREAM_EVENTS),
+      );
       mockCreateUIMessageStream.mockImplementation(
         ({
           execute,
@@ -1275,17 +1317,26 @@ describe("POST /api/chat empty-response retry", () => {
           execute: (args: {
             writer: {
               write: (x: unknown) => void;
-              merge: (s: unknown) => void;
+              merge: (s: ReadableStream<unknown>) => void;
             };
           }) => Promise<void>;
           onError: (error: unknown) => string;
         }) => {
-          const writer = { write: vi.fn(), merge: vi.fn() };
-          // route the pre-merge throw (exhausted empty response) to onError,
-          // mirroring how createUIMessageStream surfaces an execute() rejection.
-          executionPromise = execute({ writer }).catch((error) => {
-            capturedOuterErrorPayload = onError(error);
-          });
+          if (runExecute) {
+            const writer = {
+              write: (chunk: unknown) =>
+                writerEvents.push({ kind: "write", value: chunk }),
+              merge: (stream: ReadableStream<unknown>) => {
+                writerEvents.push({ kind: "merge", value: stream });
+                mergedStreams.push(stream);
+              },
+            };
+            // route the pre-merge throw (exhausted empty response) to onError,
+            // mirroring how createUIMessageStream surfaces an execute() rejection.
+            executionPromise = execute({ writer }).catch((error) => {
+              capturedOuterErrorPayload = onError(error);
+            });
+          }
           return new ReadableStream({
             start(controller) {
               controller.close();
@@ -1317,18 +1368,17 @@ describe("POST /api/chat empty-response retry", () => {
     await app.close();
   });
 
-  async function postMessage() {
+  async function postMessage(messages: unknown[] = plainUserMessage("hi")) {
     return app.inject({
       method: "POST",
       url: "/api/chat",
-      payload: {
-        id: conversationId,
-        messages: [
-          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
-        ],
-      },
+      payload: { id: conversationId, messages },
     });
   }
+
+  const plainUserMessage = (text: string) => [
+    { id: "msg-1", role: "user", parts: [{ type: "text", text }] },
+  ];
 
   test("retries a clean-but-empty response, then streams the renderable one", async ({
     expect,
@@ -1379,14 +1429,14 @@ describe("POST /api/chat empty-response retry", () => {
     expect(payload.code).toBe("empty_response");
   });
 
-  test("surfaces an EmptyResponse stream error after exhausting retries", async ({
+  test("surfaces an EmptyResponse stream error after exhausting retries and persists the user message", async ({
     expect,
   }) => {
     mockStreamText.mockImplementation(() =>
       fakeStreamResult(EMPTY_STREAM_EVENTS),
     );
 
-    const response = await postMessage();
+    const response = await postMessage(plainUserMessage("hello empty"));
     expect(response.statusCode).toBe(200);
     await executionPromise;
 
@@ -1394,6 +1444,14 @@ describe("POST /api/chat empty-response retry", () => {
     expect(capturedOuterErrorPayload).toBeDefined();
     const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
     expect(payload.code).toBe("empty_response");
+
+    // the throw happens before any merge, so the stream onError/onFinish never
+    // ran — the route must have persisted the user message itself.
+    expect(writerEvents.filter((e) => e.kind === "merge")).toHaveLength(0);
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const persistedUser = persisted.find((m) => m.role === "user");
+    expect(persistedUser).toBeDefined();
+    expect(JSON.stringify(persistedUser?.content)).toContain("hello empty");
   });
 
   test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({
@@ -1454,5 +1512,229 @@ describe("POST /api/chat empty-response retry", () => {
 
     // initial attempt + exactly one trim retry, then fall through to the merge.
     expect(mockStreamText).toHaveBeenCalledTimes(2);
+  });
+
+  test("injects slash-command skill activation into the model-bound messages but not the persisted ones", async ({
+    makeMember,
+  }) => {
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const { default: OrganizationModel } = await import(
+      "@/models/organization"
+    );
+    await OrganizationModel.patch(organizationId, {
+      skillSlashCommandsEnabled: true,
+      skillToolsEnabled: true,
+    });
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "pdf-processing",
+        description: "Extract text from PDF files.",
+        content: "# PDF Processing\nUse pdftotext.",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    if (!skill) {
+      throw new Error("Failed to create test skill");
+    }
+
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [{ type: "text", text: "extract the attached pdf" }],
+        metadata: { skill: { id: skill.id, name: skill.name } },
+      },
+    ]);
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // The injected activation block must survive the rest of the message
+    // preparation (normalization and the compaction pass-through; conversion
+    // is identity-mocked here) and reach streamText prepended to the user's
+    // text.
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const sentMessages = mockStreamText.mock.calls[0]?.[0].messages as Array<{
+      role: string;
+      parts?: Array<{ type: string; text?: string }>;
+    }>;
+    const sentUserText = sentMessages
+      .filter((m) => m.role === "user")
+      .flatMap((m) => m.parts ?? [])
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+    expect(sentUserText).toContain("# PDF Processing");
+    expect(sentUserText).toContain("extract the attached pdf");
+
+    // The persisted user message stays clean: injection works on a copy.
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const persistedUser = persisted.find((m) => m.role === "user");
+    expect(persistedUser).toBeDefined();
+    expect(JSON.stringify(persistedUser?.content)).not.toContain(
+      "# PDF Processing",
+    );
+  });
+
+  test("emits compaction start/finish and context-window-estimate events in order, before the stream merge", async () => {
+    mockCompactMessagesForChat.mockImplementation(
+      async ({
+        messages,
+        onCompactionStart,
+      }: {
+        messages: unknown[];
+        onCompactionStart: () => void;
+      }) => {
+        onCompactionStart();
+        return {
+          messages,
+          status: "created",
+          compaction: {
+            id: "compaction-1",
+            trigger: "auto",
+            originalTokenEstimate: 120_000,
+            compactedTokenEstimate: 2_000,
+          },
+          inputTokenEstimate: 2_000,
+        };
+      },
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const eventOrder = writerEvents.map((event) =>
+      event.kind === "merge" ? "merge" : (event.value as { type: string }).type,
+    );
+    const startIndex = eventOrder.indexOf("data-context-compaction-start");
+    const finishIndex = eventOrder.indexOf("data-context-compaction-finish");
+    const estimateIndex = eventOrder.indexOf("data-context-window-estimate");
+    const mergeIndex = eventOrder.indexOf("merge");
+    expect(startIndex).toBeGreaterThanOrEqual(0);
+    expect(finishIndex).toBeGreaterThan(startIndex);
+    expect(estimateIndex).toBeGreaterThan(finishIndex);
+    expect(mergeIndex).toBeGreaterThan(estimateIndex);
+
+    const finishEvent = writerEvents[finishIndex]?.value as {
+      data: { status: string };
+    };
+    expect(finishEvent.data).toMatchObject({ status: "created" });
+    const estimateEvent = writerEvents[estimateIndex]?.value as {
+      data: { estimatedTokens: number };
+    };
+    expect(estimateEvent.data.estimatedTokens).toBe(2_000);
+  });
+
+  test("probes the stream without cancelling its iterator, then merges the same result", async () => {
+    const result = fakeStreamResult(RENDERABLE_STREAM_EVENTS);
+    mockStreamText.mockImplementation(() => result);
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // The probe peeks the fullStream iterator; cancelling it (e.g. via a
+    // for-await rewrite) would drop the SDK result's internal tee and break
+    // the merge that follows.
+    expect(result.state.returnCalled).toBe(false);
+    expect(writerEvents.filter((e) => e.kind === "merge")).toHaveLength(1);
+  });
+
+  test("emits data-tool-ui-start inside the merged stream right after tool-input-start, never via writer.write", async () => {
+    mockGetChatMcpToolUiResourceUris.mockResolvedValue({
+      my_app_tool: "ui://my-app/main",
+    });
+    mockFetchToolUiResource.mockResolvedValue({ html: "<div>app</div>" });
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "my_app_tool",
+          },
+          { type: "tool-input-delta", toolCallId: "call-1", delta: "{}" },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("open the app"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mergedStreams).toHaveLength(1);
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+    }>;
+    const toolStartIndex = mergedChunks.findIndex(
+      (chunk) => chunk.type === "tool-input-start",
+    );
+    expect(toolStartIndex).toBeGreaterThanOrEqual(0);
+    expect(mergedChunks[toolStartIndex + 1]).toMatchObject({
+      type: "data-tool-ui-start",
+      data: {
+        toolCallId: "call-1",
+        toolName: "my_app_tool",
+        uiResourceUri: "ui://my-app/main",
+        html: "<div>app</div>",
+      },
+    });
+
+    // Placement is the contract: the UI-start chunk rides the merged stream
+    // (after the probe), not the writer, so the probe can never emit it early.
+    const directWrites = writerEvents
+      .filter((e) => e.kind === "write")
+      .map((e) => (e.value as { type: string }).type);
+    expect(directWrites).not.toContain("data-tool-ui-start");
+  });
+
+  test("persists the user message before the stream executes", async () => {
+    runExecute = false;
+
+    const response = await postMessage(plainUserMessage("persist me early"));
+    expect(response.statusCode).toBe(200);
+
+    // execute() never ran, so the only persistence opportunity was the early
+    // pre-stream persist. A reload during streaming depends on this.
+    const persisted = await MessageModel.findByConversation(conversationId);
+    const persistedUser = persisted.find((m) => m.role === "user");
+    expect(persistedUser).toBeDefined();
+    expect(JSON.stringify(persistedUser?.content)).toContain(
+      "persist me early",
+    );
+  });
+
+  test("does not extract inline attachments when the conversation already has an active run", async () => {
+    const blockingRun = await activeChatRunService.createRun({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(blockingRun).not.toBeNull();
+
+    const dataUrl = `data:text/plain;base64,${Buffer.from("attachment-bytes").toString("base64")}`;
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "with attachment" },
+          { type: "file", url: dataUrl, filename: "a.txt" },
+        ],
+      },
+    ]);
+
+    expect(response.statusCode).toBe(409);
+    const attachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        conversationId,
+      );
+    expect(attachments).toHaveLength(0);
   });
 });

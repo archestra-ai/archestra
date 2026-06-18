@@ -28,6 +28,22 @@ const PROXY = {
   virtualKeyName: "Connection setup — user@example.com",
 };
 
+const GITHUB_COPILOT_PROXY = {
+  authMode: "provider-key" as const,
+  provider: "github-copilot" as const,
+  providerLabel: "GitHub Copilot",
+  url: "https://archestra.example.com/v1/github-copilot/profile-123",
+  proxyName: "default_proxy",
+  virtualKey: null,
+  virtualKeyName: null,
+  githubCopilot: {
+    tokenExchangeUrl:
+      "https://api.github.example.com/copilot_internal/v2/token",
+    deviceAuthBaseUrl: "https://github.example.com",
+    clientId: "Iv1.testclientid",
+  },
+};
+
 const SKILLS = {
   cloneUrl:
     "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
@@ -155,6 +171,81 @@ describe("renderSetupScript", () => {
     expect(script).toContain("export COPILOT_PROVIDER_API_KEY=");
     expect(script).toContain("copilot mcp add --transport http");
     expect(script).toContain("copilot mcp get");
+  });
+
+  test("copilot-cli github-copilot passthrough: links GitHub in-script, token never in argv", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      proxy: GITHUB_COPILOT_PROXY,
+    });
+    await expectValidBash(script);
+
+    // token reuse from the Copilot CLI's local config, then validation
+    expect(script).toContain("github-copilot/apps.json");
+    expect(script).toContain("github-copilot/hosts.json");
+    expect(script).toContain("ghcp_validate");
+    // device-flow endpoints + client id from the server-provided config
+    expect(script).toContain("https://github.example.com/login/device/code");
+    expect(script).toContain(
+      "https://github.example.com/login/oauth/access_token",
+    );
+    expect(script).toContain('{"client_id":"Iv1.testclientid"');
+    expect(script).toContain("urn:ietf:params:oauth:grant-type:device_code");
+    // RFC 8628 poll semantics: slow_down backoff + expires_in deadline
+    expect(script).toContain("slow_down) ghcp_interval=$((ghcp_interval + 5))");
+    expect(script).toContain("ghcp_deadline");
+    // the token travels via stdin curl config / printf, never argv
+    expect(script).toContain(`printf 'header = "authorization: token %s"`);
+    // never the well-known CI variable name
+    expect(script).not.toContain("GITHUB_TOKEN");
+    // export lines come from printf with the runtime token
+    expect(script).toContain('"$ARCHESTRA_GHCP_TOKEN"');
+    expect(script).toContain('export COPILOT_PROVIDER_TYPE="openai"');
+  });
+
+  test("copilot-cli github-copilot virtual-key: injects the virtual key, no device flow", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      proxy: {
+        ...GITHUB_COPILOT_PROXY,
+        authMode: "virtual-key" as const,
+        virtualKey: "arch_deadbeefcafe",
+        virtualKeyName: "Connection setup — user@example.com",
+        githubCopilot: null,
+      },
+    });
+    await expectValidBash(script);
+    expect(script).toContain("'arch_deadbeefcafe'");
+    expect(script).not.toContain("login/device/code");
+    expect(script).not.toContain("ghcp_validate");
+  });
+
+  test("github-copilot passthrough without device-flow config throws", () => {
+    expect(() =>
+      renderSetupScript({
+        ...fullContext("copilot-cli"),
+        proxy: { ...GITHUB_COPILOT_PROXY, githubCopilot: null },
+      }),
+    ).toThrow(/device-flow configuration/);
+  });
+
+  test("github-copilot: hostile server values stay literal in the link section", async () => {
+    const hostile = "https://github.example.com/$(touch /tmp/pwned)";
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      proxy: {
+        ...GITHUB_COPILOT_PROXY,
+        url: `${hostile}/v1/github-copilot/profile-123`,
+        githubCopilot: {
+          tokenExchangeUrl: `${hostile}/token`,
+          deviceAuthBaseUrl: hostile,
+          clientId: `Iv1.$(touch /tmp/pwned)`,
+        },
+      },
+    });
+    await expectValidBash(script);
+    expect(script).toContain(hostile);
+    expect(script).not.toMatch(/<<[ \t]*ARCHESTRA/);
   });
 
   test("cursor: merges mcp.json without auth headers (OAuth) and prints manual proxy steps", () => {

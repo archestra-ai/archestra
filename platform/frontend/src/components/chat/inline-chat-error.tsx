@@ -26,6 +26,7 @@ import {
   mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
+import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 interface InlineChatErrorProps {
   error: Error;
@@ -35,6 +36,8 @@ interface InlineChatErrorProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  /** Re-run the original prompt after the user connects a per-user provider. */
+  onProviderConnected?: () => void;
 }
 
 export function InlineChatError({
@@ -45,12 +48,29 @@ export function InlineChatError({
   agentName,
   selectedModel,
   modelSource,
+  onProviderConnected,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+
+  // A per-user provider the user hasn't linked yet → an inline "connect your
+  // account" card instead of a generic error.
+  if (
+    chatError.code === ChatErrorCode.ProviderAuthRequired &&
+    chatError.authAction
+  ) {
+    return (
+      <ProviderAuthRequiredCard
+        provider={chatError.authAction.provider}
+        providerLabel={chatError.authAction.providerLabel}
+        onConnected={onProviderConnected}
+      />
+    );
+  }
+
   const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
   // An empty turn that survived the backend's auto-retries is the model's
   // answer for this conversation, not a system failure — render it as a

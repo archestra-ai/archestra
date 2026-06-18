@@ -2,8 +2,10 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
+  isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
@@ -72,16 +74,75 @@ export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Detect an owned-app render: a successful `create_app`/`update_app`/`render_app`
+ * result identifies an Archestra-authored MCP App via `structuredContent.id`,
+ * and chat mounts the app-bound runtime from that id. Only archestra-branded
+ * tool names match — a foreign server exposing a tool with the same short name
+ * resolves to `null` and never triggers a mount.
+ */
+export function extractOwnedAppRender(params: {
+  /** Full tool name with any run_tool wrapper already unwrapped */
+  toolName: string;
+  output: unknown;
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}): {
+  appId: string;
+  appName: string | null;
+  latestVersion: number | null;
+} | null {
+  const shortName = params.getToolShortName(params.toolName);
+  // run_tool also accepts bare archestra short names; a bare name can only be
+  // a run_tool target — direct chat tool names are always server-prefixed.
+  const matchesAppTrio =
+    shortName !== null
+      ? isAppRenderingArchestraToolShortName(shortName)
+      : isAppRenderingArchestraToolShortName(params.toolName);
+  if (!matchesAppTrio) {
+    return null;
+  }
+  const structured = (
+    params.output as
+      | {
+          structuredContent?: {
+            id?: unknown;
+            name?: unknown;
+            latestVersion?: unknown;
+          };
+        }
+      | undefined
+  )?.structuredContent;
+  const id = structured?.id;
+  if (typeof id !== "string" || !UUID_PATTERN.test(id)) {
+    return null;
+  }
+  return {
+    appId: id,
+    appName: typeof structured?.name === "string" ? structured.name : null,
+    // Keys the render-loop diagnostics: "app X v3 threw" must point at the
+    // version this render actually showed.
+    latestVersion:
+      typeof structured?.latestVersion === "number"
+        ? structured.latestVersion
+        : null,
+  };
+}
+
 /**
  * Derive the list of MCP App canvases for a conversation directly from its
  * messages (plus any early UI-start data from the active stream).
  *
- * A tool call is a canvas when its output carries `_meta.ui.resourceUri`, or
- * when the backend announced it via a `data-tool-ui-start` event (tracked in
- * `earlyToolUiStarts`) before the result arrived. Deriving the registry from
- * the conversation — rather than from `McpAppSection` mount/unmount effects —
- * makes the sidebar selector deterministic: it matches what a page refresh
- * reconstructs and never empties because a single section briefly unmounts.
+ * A tool call is a canvas when its output carries `_meta.ui.resourceUri`, when
+ * the backend announced it via a `data-tool-ui-start` event (tracked in
+ * `earlyToolUiStarts`) before the result arrived, or when it is an owned-app
+ * management result (see {@link extractOwnedAppRender}). Deriving the registry
+ * from the conversation — rather than from `McpAppSection` mount/unmount
+ * effects — makes the sidebar selector deterministic: it matches what a page
+ * refresh reconstructs and never empties because a single section briefly
+ * unmounts.
  */
 export function deriveCanvasesFromMessages(
   messages: UIMessage[],
@@ -89,6 +150,7 @@ export function deriveCanvasesFromMessages(
     string,
     { uiResourceUri?: string; toolName?: string }
   >,
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null,
 ): CanvasInfo[] {
   const canvases: CanvasInfo[] = [];
   const seen = new Set<string>();
@@ -105,14 +167,23 @@ export function deriveCanvasesFromMessages(
         // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
         Boolean((part.output as any)?._meta?.ui?.resourceUri) ||
         Boolean(early?.uiResourceUri);
-      if (!hasUiResource) continue;
+      const fullToolName = getToolName(part) ?? early?.toolName ?? "";
+      const ownedApp = hasUiResource
+        ? null
+        : extractOwnedAppRender({
+            toolName: resolveRunToolTargetName(part, fullToolName, {
+              getToolShortName,
+            }),
+            output: part.output,
+            getToolShortName,
+          });
+      if (!hasUiResource && !ownedApp) continue;
 
       seen.add(toolCallId);
-      const fullToolName = getToolName(part) ?? early?.toolName ?? "";
       const parsed = parseFullToolName(fullToolName);
       canvases.push({
         toolCallId,
-        label: parsed.toolName || fullToolName,
+        label: ownedApp?.appName ?? (parsed.toolName || fullToolName),
         serverName: parsed.serverName,
         createdAt: createdAt ?? 0,
       });
@@ -120,6 +191,23 @@ export function deriveCanvasesFromMessages(
   }
 
   return canvases;
+}
+
+/** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
+export function resolveRunToolTargetName(
+  part: DynamicToolUIPart | ToolUIPart,
+  fullToolName: string,
+  options: {
+    getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+  },
+): string {
+  if (options.getToolShortName(fullToolName) !== TOOL_RUN_TOOL_SHORT_NAME) {
+    return fullToolName;
+  }
+  const target = (part.input as { tool_name?: unknown } | undefined)?.tool_name;
+  return typeof target === "string" && target.length > 0
+    ? target
+    : fullToolName;
 }
 
 function getMessageCreatedAt(message: UIMessage): number | null {
@@ -231,6 +319,21 @@ export function identifyCompactToolGroups(
       continue;
     // Also skip tools identified as MCP Apps via early UI start or earlyToolUiStarts
     if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) continue;
+    // Owned-app renders escape compaction by OUTPUT, not name, so a run_tool
+    // dispatch targeting create/update/render_app is covered too (its raw name
+    // is run_tool, which nonCompactToolNames deliberately does not contain).
+    if (
+      options?.getToolShortName &&
+      extractOwnedAppRender({
+        toolName: resolveRunToolTargetName(part, getToolName(part) ?? "", {
+          getToolShortName: options.getToolShortName,
+        }),
+        output: part.output,
+        getToolShortName: options.getToolShortName,
+      })
+    ) {
+      continue;
+    }
 
     const callId = part.toolCallId;
     if (callId && seenToolCallIds.has(callId)) {

@@ -163,4 +163,52 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
       error: { message: "Expiration date must be in the future" },
     });
   });
+
+  test("PATCH preserves the owner when an admin edits a key minted for another user", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+    makeMember,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const target = await makeUser();
+    await makeMember(target.id, organizationId);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "owned-by-target",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+        ownerId: target.id,
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    expect(createResponse.json().authorId).toBe(target.id);
+    const id = createResponse.json().id;
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${id}`,
+      payload: {
+        name: "renamed-by-admin",
+        scope: "personal",
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().name).toBe("renamed-by-admin");
+    expect(response.json().authorId).toBe(target.id);
+  });
 });

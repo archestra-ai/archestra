@@ -823,7 +823,19 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`** - Shows the per-environment sandbox binding selector on the agent form, letting an agent's code sandbox run on a deployment environment's dedicated Dagger engine under that environment's egress policy. When off, the selector is hidden. Requires the code runtime and Kubernetes.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
   - Default: `false`
   - Values: `true`, `false`
 
@@ -974,6 +986,21 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_GITHUB_COPILOT_BASE_URL`** - Override the GitHub Copilot API base URL.
+  - Default: `https://api.githubcopilot.com`
+  - For GitHub Enterprise, use `https://copilot-api.<ghe-domain>`
+
+- **`ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL`** - Endpoint that exchanges a user's GitHub OAuth token for a short-lived Copilot API bearer.
+  - Default: `https://api.github.com/copilot_internal/v2/token`
+  - Copilot has no static API keys: provider keys store the user's long-lived GitHub OAuth token, and the proxy performs this exchange (with caching) on every request
+
+- **`ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL`** - GitHub host serving the OAuth device-flow endpoints (`/login/device/code`, `/login/oauth/access_token`) used by the "Sign in with GitHub" flow and the connection-page setup script.
+  - Default: `https://github.com`
+
+- **`ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`** - GitHub App client id used for the Copilot device flow.
+  - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
+  - Override this if your organization registers its own GitHub App with Copilot API access
+
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
   - Foundry v1 format: `https://<resource-name>.services.ai.azure.com/openai/v1`
@@ -1044,9 +1071,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.

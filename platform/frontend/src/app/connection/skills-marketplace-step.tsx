@@ -233,11 +233,11 @@ function ExistingLinkPanel({
       previousLinkId: link.id,
       body: { skillIds, expiresAt: link.expiresAt },
     });
-    if (!result?.created) return;
+    if (!result) return;
     onReveal({
-      linkId: result.created.link.id,
-      cloneUrl: result.created.cloneUrl,
-      marketplaceName: result.created.marketplaceName,
+      linkId: result.link.id,
+      cloneUrl: result.cloneUrl,
+      marketplaceName: result.marketplaceName,
     });
   }, [rotateShare, link, onReveal]);
 
@@ -509,8 +509,7 @@ function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
   return links.find((l) => l.status === "active") ?? null;
 }
 
-/** Shared with the connect-command step, which snapshots the same full skill set. */
-export async function fetchAllSkillIds(): Promise<string[]> {
+async function fetchAllSkillIds(): Promise<string[]> {
   const ids: string[] = [];
   const limit = 100;
   let offset = 0;
@@ -530,8 +529,7 @@ export async function fetchAllSkillIds(): Promise<string[]> {
   return ids;
 }
 
-/** @public — also used by the connect-command step */
-export function useTotalSkillCount() {
+function useTotalSkillCount() {
   return useQuery({
     queryKey: ["skills", "total-count"],
     queryFn: async () => {

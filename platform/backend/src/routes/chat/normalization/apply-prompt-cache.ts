@@ -103,6 +103,13 @@ export function applyPromptCacheBreakpoints(params: {
     if (budget <= 0) break;
     // Already cacheable via its own marker — don't spend budget re-marking it.
     if (breakpointCount(messages[index], config) > 0) continue;
+    // Bedrock turns a message-level cachePoint into a standalone content block
+    // appended after the message's parts. When that message carries a document,
+    // Bedrock rejects the trailing cachePoint with
+    // `messages.N.content.M.type: Field required` (Anthropic-on-Bedrock can't
+    // place a standalone cachePoint after a document). Skip the breakpoint for
+    // such messages; the breakpoint budget is spent on other candidates.
+    if (config.key === "bedrock" && hasDocumentPart(messages[index])) continue;
     indicesToMark.add(index);
     budget--;
   }
@@ -140,6 +147,23 @@ function breakpointCount(
     }
   }
   return count;
+}
+
+// True when a message carries a document file part — a non-image `file` part.
+// Images are excluded: Bedrock accepts a trailing cachePoint after an image
+// block, but not after a document.
+function hasDocumentPart(message: ModelMessage): boolean {
+  if (!Array.isArray(message.content)) {
+    return false;
+  }
+  return message.content.some((part) => {
+    const filePart = part as { type?: string; mediaType?: unknown };
+    return (
+      filePart.type === "file" &&
+      typeof filePart.mediaType === "string" &&
+      !filePart.mediaType.startsWith("image/")
+    );
+  });
 }
 
 function hasCacheBreakpoint(

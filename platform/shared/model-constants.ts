@@ -21,6 +21,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "azure",
+  "github-copilot",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -45,6 +46,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "minimax:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "github-copilot:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -81,6 +83,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
+  "github-copilot": "GitHub Copilot",
 };
 
 /**
@@ -105,6 +108,26 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "azure",
   "vllm",
 ]);
+
+/**
+ * Providers whose credential is an individual user's token rather than a shared
+ * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
+ * account's Copilot seat). Sharing one token across users is a ToS gray area
+ * and breaks per-user attribution, so for these providers:
+ * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
+ * - request-time resolution uses ONLY the acting user's personal key — never an
+ *   agent's attached key, a conversation key, a team/org key, or the shared env
+ *   fallback;
+ * - a missing personal key surfaces a "link your account" prompt, not a fallback.
+ */
+export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
+  new Set<SupportedProvider>(["github-copilot"]);
+
+export function providerRequiresPerUserCredential(
+  provider: SupportedProvider,
+): boolean {
+  return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
+}
 
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
@@ -175,6 +198,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   azure: "https://<resource>.openai.azure.com/openai",
+  "github-copilot": "https://api.githubcopilot.com",
 };
 
 /**
@@ -263,6 +287,13 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "claude-sonnet",
     "amazon.nova-pro",
   ],
+  "github-copilot": [
+    "claude-opus",
+    "claude-sonnet",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
 };
 
 /**
@@ -287,6 +318,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   bedrock: "anthropic.claude-opus-4-8",
   minimax: "MiniMax-M3",
   azure: "gpt-5.5",
+  "github-copilot": "gpt-4o",
 };
 
 /**
@@ -332,6 +364,9 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
     "amazon-bedrock": null,
     azure: null,
+    // GitHub Copilot model availability depends on the user's subscription tier,
+    // so models are synced from Copilot's own /models endpoint, not models.dev
+    "github-copilot": null,
     perplexity: null,
     nvidia: null,
   };

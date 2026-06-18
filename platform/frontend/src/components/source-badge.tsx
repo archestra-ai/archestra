@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Database,
   Globe,
+  LayoutGrid,
   Mail,
   Minimize2,
   Route,
@@ -121,6 +122,7 @@ function getSourceIcon({
     "knowledge:embedding": <Database className="h-3 w-3 shrink-0" />,
     "knowledge:reranker": <Database className="h-3 w-3 shrink-0" />,
     "knowledge:query-expansion": <Database className="h-3 w-3 shrink-0" />,
+    "app:llm_complete": <LayoutGrid className="h-3 w-3 shrink-0" />,
   };
 
   return sourceIcon[source];

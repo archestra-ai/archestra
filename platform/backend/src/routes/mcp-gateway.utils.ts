@@ -50,6 +50,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -67,13 +68,14 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import type {
-  AgentAccessContext,
-  AgentType,
-  CommonToolCall,
-  SelectTeamToken,
-  SelectUserToken,
-  ToolExposureMode,
+import {
+  type AgentAccessContext,
+  type AgentType,
+  agentOwner,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  type ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -169,6 +171,17 @@ export async function createAgentServer(
 
   const agent = await AgentModel.findById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -363,6 +376,8 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            teams,
+            userTeams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -460,14 +475,16 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          teams,
+          userTeams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCall(
+            const r = await mcpClient.executeToolCallForOwner(
               toolCall,
-              agentId,
+              agentOwner(agentId),
               tokenAuth,
               {
                 elicitationHandler: async (request) => {
@@ -1544,7 +1561,10 @@ async function buildSearchToolsDescription(
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }

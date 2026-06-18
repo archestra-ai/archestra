@@ -955,8 +955,8 @@ function visitSchema(
 }
 
 // search_tools only runs in search_and_run_only mode, where the meta tools and
-// the always-exposed runtime tools (skills + sandbox) are already top-level —
-// returning them as results would be redundant noise. But "always-exposed" only
+// the always-exposed runtime tools (skills + sandbox + apps) are already
+// top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
 // via sandbox:execute is NOT top-level, so surface it here so the model can
 // discover and run it. Meta tools are never useful as results.

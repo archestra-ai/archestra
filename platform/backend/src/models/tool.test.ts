@@ -14,9 +14,10 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -25,6 +26,18 @@ import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
+
+// these suites assert exact assigned-tool sets after agent creation; pin the
+// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
+// auto-assigned app tools into them (app-tool assignment is covered in
+// tool-archestra-assignment.test.ts)
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = false;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -2886,6 +2899,62 @@ describe("ToolModel", () => {
       expect(artifactTool).toBeDefined();
     });
 
+    test("does not crash startup when a legacy/branded prefix duplicate exists", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      const brandedOrg = { appName: "Acme Copilot", iconLogo: null };
+
+      archestraMcpBranding.syncFromOrganization(brandedOrg);
+      const brandedName = archestraMcpBranding.getToolName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      );
+      const legacyName = getArchestraToolFullName(
+        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        { appName: null, fullWhiteLabeling: false },
+      );
+
+      await db.insert(schema.internalMcpCatalogTable).values({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        ...getArchestraMcpCatalogMetadata(),
+      });
+      // Stage a legacy + branded sibling for one built-in (same short name,
+      // different prefix). Branded row first so reconciliation keeps the legacy
+      // row and attempts the colliding rename onto the existing branded name.
+      await db.insert(schema.toolsTable).values({
+        name: brandedName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+      await db.insert(schema.toolsTable).values({
+        name: legacyName,
+        parameters: {},
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        agentId: null,
+      });
+
+      // Reseeding under branding renames the legacy row toward the branded name,
+      // which collides with the staged sibling. One built-in conflict must not
+      // crash startup — seeding resolves.
+      await expect(
+        ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID, brandedOrg),
+      ).resolves.not.toThrow();
+
+      // The branded built-in converges to exactly one row.
+      const brandedRows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, brandedName),
+          ),
+        );
+      expect(brandedRows).toHaveLength(1);
+    });
+
     test("does not duplicate built-in tool rows across repeated seeds", async () => {
       archestraMcpBranding.syncFromOrganization(null);
 
@@ -2917,6 +2986,33 @@ describe("ToolModel", () => {
         ARCHESTRA_MCP_CATALOG_ID,
       );
       expect(secondRun).toEqual([]);
+    });
+
+    test("keeps a feature-flagged-off built-in but prunes a truly-removed one", async () => {
+      // The suite pins config.apps.enabled = false, so getArchestraMcpTools()
+      // omits app tools. A pre-existing app-tool row must survive reseed (the
+      // definition still exists, the feature is merely dark); a row whose short
+      // name is gone from the registry is the only kind that is genuinely stale.
+      archestraMcpBranding.syncFromOrganization(null);
+      const catalogId = randomUUID();
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const flaggedOffName = "archestra__create_app";
+      const removedName = "archestra__obsolete_tool";
+      await db.insert(schema.toolsTable).values([
+        { name: flaggedOffName, parameters: {}, catalogId, agentId: null },
+        { name: removedName, parameters: {}, catalogId, agentId: null },
+      ]);
+
+      await ToolModel.seedArchestraTools(catalogId);
+
+      const survivors = await db
+        .select({ name: schema.toolsTable.name })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalogId));
+      const names = new Set(survivors.map((t) => t.name));
+      expect(names.has(flaggedOffName)).toBe(true);
+      expect(names.has(removedName)).toBe(false);
     });
 
     test("rejects a duplicate built-in tool row at the database level", async () => {

@@ -11,6 +11,7 @@ import type {
   ChatReplyOptions,
   IncomingChatMessage,
 } from "@/types";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   buildChatOpsSessionId,
   ChatOpsManager,
@@ -290,6 +291,65 @@ describe("ChatOpsManager security validation", () => {
     expect(sendReplySpy).not.toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining("Access Denied"),
+      }),
+    );
+  });
+
+  test("per-user provider not connected - replies with a connect link", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new LlmProviderAuthRequiredError("github-copilot"),
+    );
+
+    const user = await makeUser({ email: "copilot@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "copilot@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    // The reply names the provider and links the user to connect their account.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("GitHub Copilot"),
+      }),
+    );
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("/settings"),
       }),
     );
   });

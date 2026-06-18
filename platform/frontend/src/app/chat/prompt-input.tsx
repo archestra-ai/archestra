@@ -2,6 +2,7 @@
 
 import {
   type ChatSkillMetadata,
+  type ContextWindowBreakdown,
   E2eTestId,
   getAcceptedFileTypes,
   supportsFileUploads,
@@ -66,6 +67,14 @@ export interface ArchestraPromptInputProps
   agentId: string;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /** Per-category breakdown of the assembled request (for context usage panel) */
+  contextWindow?: ContextWindowBreakdown | null;
+  /** Most recent compaction result, surfaced as a marker in the context panel */
+  lastCompaction?: {
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+    trigger?: "auto" | "manual";
+  } | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
   /** Disable chat input while context compaction is running */
@@ -109,6 +118,8 @@ const PromptInputContent = ({
   tokensUsed = 0,
   cachedTokens,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
@@ -120,6 +131,8 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -607,7 +620,11 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             onResetModelOverride={onResetModelOverride}
+            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            agentModelDisplayName={agentModelDisplayName}
             textareaRef={textareaRef}
+            contextWindow={contextWindow}
+            lastCompaction={lastCompaction}
           />
           <div className="flex items-center gap-2">
             <PromptInputSpeechButton
@@ -649,6 +666,8 @@ const ArchestraPromptInput = ({
   tokensUsed = 0,
   cachedTokens,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
@@ -660,6 +679,8 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: ArchestraPromptInputProps) => {
   const handleProviderFileError = useCallback(
     (err: {
@@ -701,6 +722,8 @@ const ArchestraPromptInput = ({
           tokensUsed={tokensUsed}
           cachedTokens={cachedTokens}
           maxContextLength={maxContextLength}
+          contextWindow={contextWindow}
+          lastCompaction={lastCompaction}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
@@ -712,6 +735,8 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          agentModelDisplayName={agentModelDisplayName}
         />
       </PromptInputProvider>
     </div>

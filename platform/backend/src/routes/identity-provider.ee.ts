@@ -8,6 +8,7 @@ import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
 import logger from "@/logging";
 import AccountModel from "@/models/account";
 import IdentityProviderModel from "@/models/identity-provider.ee";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import {
   ApiError,
   constructResponseSchema,
@@ -84,6 +85,48 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user }, reply) => {
       const url = await getIdpLogoutUrl(user.id);
       return reply.send({ url });
+    },
+  );
+
+  fastify.get(
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id/link-status`,
+    {
+      schema: {
+        operationId: RouteId.GetIdentityProviderLinkStatus,
+        description:
+          "Get whether the current user has a usable token for this identity provider",
+        tags: ["Identity Providers"],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            providerId: z.string(),
+            connected: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const provider = await IdentityProviderModel.findById(id, organizationId);
+      if (!provider) {
+        throw new ApiError(404, "Identity provider not found");
+      }
+
+      const token = await resolveSessionExternalIdpToken({
+        identityProviderId: provider.id,
+        userId: user.id,
+      });
+
+      return reply.send({
+        providerId: provider.providerId,
+        connected:
+          token !== null &&
+          isUsableEnterpriseSubjectToken({
+            provider,
+            rawToken: token.rawToken,
+          }),
+      });
     },
   );
 
@@ -315,6 +358,56 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
     );
   }
   return logoutUrl.toString();
+}
+
+// Audiences Entra uses for Microsoft Graph access tokens (public + national
+// clouds). Graph tokens carry a proprietary nonce-transformed signature, so
+// they can never pass signature validation as an Entra OBO assertion
+// (AADSTS50013). Report such links as not connected so the install preflight
+// sends the user back through the link flow with the provider's current
+// scopes instead of letting the exchange fail.
+const MICROSOFT_GRAPH_AUDIENCES = new Set([
+  "00000003-0000-0000-c000-000000000000",
+  "https://graph.microsoft.com",
+  "https://graph.microsoft.us",
+  "https://dod-graph.microsoft.us",
+  "https://graph.microsoft.de",
+  "https://microsoftgraph.chinacloudapi.cn",
+]);
+
+function isUsableEnterpriseSubjectToken(params: {
+  provider: {
+    oidcConfig?: {
+      enterpriseManagedCredentials?: {
+        exchangeStrategy?: string;
+      };
+    } | null;
+  };
+  rawToken: string;
+}): boolean {
+  const exchangeStrategy =
+    params.provider.oidcConfig?.enterpriseManagedCredentials?.exchangeStrategy;
+  if (exchangeStrategy !== "entra_obo") {
+    return true;
+  }
+
+  let audiences: string[];
+  try {
+    const claims = jwtDecode<{ aud?: string | string[] }>(params.rawToken);
+    audiences = Array.isArray(claims.aud)
+      ? claims.aud
+      : claims.aud
+        ? [claims.aud]
+        : [];
+  } catch {
+    // Not a decodable JWT — keep prior behavior and let the exchange surface
+    // its own error rather than forcing a reconnect loop.
+    return true;
+  }
+
+  return !audiences.some((audience) =>
+    MICROSOFT_GRAPH_AUDIENCES.has(audience.replace(/\/$/, "")),
+  );
 }
 
 function decodeStoredTokenClaims(params: {

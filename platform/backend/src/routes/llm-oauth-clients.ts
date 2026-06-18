@@ -1,4 +1,8 @@
-import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  RouteId,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -196,6 +200,15 @@ async function validateLlmOauthClientConfig(params: {
       throw new ApiError(
         400,
         `Provider API key "${apiKey.name}" is for ${apiKey.provider}, not ${mapping.provider}`,
+      );
+    }
+    // OAuth client credentials are a shared service credential with no acting
+    // user, so a per-user provider (GitHub Copilot) can't be mapped — its token
+    // belongs to one person and would be served to every caller.
+    if (providerRequiresPerUserCredential(mapping.provider)) {
+      throw new ApiError(
+        400,
+        `${mapping.provider} is per-user and cannot be mapped to an OAuth client; each user connects their own account.`,
       );
     }
   }

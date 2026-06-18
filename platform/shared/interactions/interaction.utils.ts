@@ -12,6 +12,7 @@ import type {
 } from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
+import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
@@ -46,6 +47,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "vllm:chatCompletions": (i) => new VllmChatCompletionInteraction(i),
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
+  "github-copilot:chatCompletions": (i) =>
+    new GithubCopilotChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),

@@ -63,7 +63,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -93,7 +93,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -131,7 +131,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -146,7 +146,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -161,13 +161,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
 
       # the shipped scripts are zero-dependency; this gates the contributor tooling
       # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
@@ -183,7 +183,7 @@ jobs:
       pull-requests: write # Required for dependency-review-action PR comments.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -219,6 +219,11 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Backstop: every check here finishes in well under 10m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
+    # and hold the step's log pipe open, leaving a *finished* job hanging until
+    # GitHub's 6h default. Fail fast instead.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
@@ -244,14 +249,14 @@ jobs:
 
       - name: Checkout project
         if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Checkout project for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -268,7 +273,7 @@ jobs:
 
       - name: Update checkout credentials for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
           ref: ${{ github.head_ref }}
@@ -316,6 +321,9 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
+          # Generate the full Archestra MCP tool catalog (incl. flag-gated app
+          # tools) so codegen matches the committed docs; mirrors values-ci.yaml.
+          ARCHESTRA_APPS_ENABLED: "true"
         run: |
           set -e
 
@@ -397,7 +405,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -473,7 +481,7 @@ jobs:
             use-build-action: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -495,13 +503,13 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Build sandbox-rs musl smoke target
+      - name: Build rust-napi musl smoke target
         if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
-          target: sandbox-rs-musl-smoke
+          target: rust-napi-musl-smoke
           # amd64 only: this is a smoke build, and building arm64 here runs under
           # QEMU emulation, which makes the Rust release compile 2-3x slower.
           platforms: linux/amd64
@@ -533,7 +541,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1

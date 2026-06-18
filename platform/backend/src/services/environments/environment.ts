@@ -1,3 +1,5 @@
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
+import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import {
   ApiError,
@@ -7,6 +9,22 @@ import {
   type UpdateEnvironment,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
+
+/**
+ * Provision (or update) the environment's per-env Dagger engine + egress
+ * NetworkPolicy in the background. Fire-and-forget: a k8s hiccup must not fail
+ * environment CRUD, and the manager no-ops when code-runtime/k8s is off.
+ */
+function reconcileEnvironmentEngine(environment: Environment): void {
+  void daggerEnvironmentRuntimeManager
+    .reconcileEnvironment(environment)
+    .catch((err) =>
+      logger.error(
+        { err, environmentId: environment.id },
+        "[DaggerEnvRuntime] background reconcile failed",
+      ),
+    );
+}
 
 // === Public API ===
 
@@ -29,7 +47,7 @@ export async function createEnvironment(params: {
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
   }
-  return EnvironmentModel.create({
+  const created = await EnvironmentModel.create({
     organizationId,
     name: data.name,
     description: data.description ?? null,
@@ -38,6 +56,8 @@ export async function createEnvironment(params: {
     restricted: data.restricted,
     validationRegex: data.validationRegex ?? null,
   });
+  reconcileEnvironmentEngine(created);
+  return created;
 }
 
 export async function updateEnvironment(params: {
@@ -66,6 +86,7 @@ export async function updateEnvironment(params: {
   if (!updated) {
     throw new ApiError(404, "Environment not found");
   }
+  reconcileEnvironmentEngine(updated);
   return updated;
 }
 

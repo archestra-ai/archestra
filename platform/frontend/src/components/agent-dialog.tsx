@@ -49,6 +49,7 @@ import {
 import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
+  type McpEnvConflict,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -58,7 +59,7 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
@@ -132,6 +133,7 @@ import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -210,6 +212,10 @@ function getBuiltInAgentConfigForSave(params: {
     case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
       return {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      };
+    case BUILT_IN_AGENT_IDS.APP_RUNTIME:
+      return {
+        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
@@ -589,6 +595,31 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
+  // Sandbox environment binding (internal agents only): the agent's code sandbox
+  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
+  // Gated behind a feature flag (off by default) until the per-env runtime ships.
+  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
+  const { data: environmentsData } = useEnvironments(
+    open && agentType === "agent" && !!agentEnvironmentsEnabled,
+  );
+  const environments = environmentsData?.environments ?? [];
+  // Assigning a restricted environment needs environment:deploy-to-restricted
+  // (environment:admin implies it); the backend enforces it, so hide the
+  // restricted environments the caller can't deploy to rather than letting them
+  // pick one and fail on save — same gate the MCP-catalog form uses.
+  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  const { data: hasDeployToRestricted } = useHasPermissions({
+    environment: ["deploy-to-restricted"],
+  });
+  const canDeployRestricted =
+    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
+  const accessibleEnvironments = environments.filter(
+    (env) => !env.restricted || canDeployRestricted,
+  );
+  // Scope the agent's MCP list to its environment only when the feature is on
+  // for an internal agent (same gate as the environment selector).
+  const environmentScopingEnabled =
+    agentType === "agent" && !!agentEnvironmentsEnabled;
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -646,6 +677,10 @@ export function AgentDialog({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
+  const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -716,6 +751,7 @@ export function AgentDialog({
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
         setIdentityProviderId(agentData.identityProviderId ?? undefined);
+        setEnvironmentId(agentData.environmentId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
@@ -749,6 +785,7 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(undefined);
+        setEnvironmentId(undefined);
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
@@ -960,6 +997,7 @@ export function AgentDialog({
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
+              environmentId: environmentId || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
@@ -998,6 +1036,7 @@ export function AgentDialog({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
+            environmentId: environmentId || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {
@@ -1085,6 +1124,7 @@ export function AgentDialog({
     llmApiKeyId,
     llmModel,
     identityProviderId,
+    environmentId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1298,6 +1338,35 @@ export function AgentDialog({
                   />
                 </div>
               )}
+
+              {/* Sandbox Environment (Agent only): binds the agent's code
+                  sandbox to a per-environment Dagger engine + egress policy.
+                  Feature-flagged off by default. */}
+              {isInternalAgent &&
+                agentEnvironmentsEnabled &&
+                accessibleEnvironments.length > 0 && (
+                  <div className="rounded-lg border bg-card p-4 space-y-2">
+                    <Label>Environment</Label>
+                    <Select
+                      value={environmentId ?? "none"}
+                      onValueChange={(value) =>
+                        setEnvironmentId(value === "none" ? null : value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Default</SelectItem>
+                        {accessibleEnvironments.map((env) => (
+                          <SelectItem key={env.id} value={env.id}>
+                            {env.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (
@@ -1541,6 +1610,13 @@ export function AgentDialog({
                           assignmentScope={scope}
                           assignmentTeamIds={assignedTeamIds}
                           onSelectedCountChange={setSelectedToolsCount}
+                          environmentScopingEnabled={environmentScopingEnabled}
+                          agentEnvironmentId={environmentId ?? null}
+                          agentEnvironmentName={
+                            environments.find((env) => env.id === environmentId)
+                              ?.name ?? null
+                          }
+                          onConflictsChange={setMcpEnvConflicts}
                           openComboboxOnMount={openToolsCombobox}
                         />
                       </div>
@@ -2080,6 +2156,36 @@ export function AgentDialog({
               )}
             </div>
           </fieldset>
+          {!readOnly && mcpEnvConflicts.length > 0 && (
+            <Alert variant="warning" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>
+                {mcpEnvConflicts.length} MCP server
+                {mcpEnvConflicts.length === 1 ? "" : "s"} not in this
+                environment
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or
+                  change the environment before saving:{" "}
+                  <span className="font-medium text-foreground">
+                    {mcpEnvConflicts.map((c) => c.name).join(", ")}
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() =>
+                    agentToolsEditorRef.current?.removeIncompatibleTools()
+                  }
+                >
+                  Remove incompatible
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               {readOnly ? "Close" : "Cancel"}
@@ -2093,6 +2199,7 @@ export function AgentDialog({
                   createAgent.isPending ||
                   updateAgent.isPending ||
                   requiresTeamSelection ||
+                  mcpEnvConflicts.length > 0 ||
                   (!isAdmin && scope === "team" && hasNoAvailableTeams)
                 }
               >

@@ -1,6 +1,7 @@
 import type { UIMessageChunk } from "ai";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import { expect, test } from "@/test";
 
@@ -321,4 +322,113 @@ test("markRunningAsFailedByIds is a no-op for an empty id list", async () => {
       error: "unused",
     }),
   ).toBe(0);
+});
+
+test("appendEvents reports run_missing after the run row is cascade-deleted (non-touch path)", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  await ConversationModel.delete(conversation.id, user.id, organization.id);
+
+  // The run row is gone via cascade, so the insert hits the run_id FK. The model
+  // must report this lifecycle race rather than throw a raw FK error that would
+  // escape as an unhandled rejection.
+  await expect(
+    ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 1,
+      payloads: [{ type: "start" }],
+    }),
+  ).resolves.toBe("run_missing");
+});
+
+test("appendEvents reports run_missing after the run row is cascade-deleted (touchRun path)", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  await ConversationModel.delete(conversation.id, user.id, organization.id);
+
+  // The transaction path (insert + run touch) must classify the FK identically.
+  await expect(
+    ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 1,
+      payloads: [{ type: "start" }],
+      touchRun: true,
+    }),
+  ).resolves.toBe("run_missing");
+});
+
+test("appendEvents reports appended for a live run on both write paths", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  await expect(
+    ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 1,
+      payloads: [{ type: "start" }],
+    }),
+  ).resolves.toBe("appended");
+  await expect(
+    ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 2,
+      payloads: [{ type: "finish", finishReason: "stop" }],
+      touchRun: true,
+    }),
+  ).resolves.toBe("appended");
+  // An empty payload is a no-op write, not a missing run.
+  await expect(
+    ActiveChatRunModel.appendEvents({
+      runId: run?.id ?? "",
+      seq: 3,
+      payloads: [],
+    }),
+  ).resolves.toBe("appended");
 });

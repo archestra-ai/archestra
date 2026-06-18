@@ -1,6 +1,6 @@
 {
-  "id": "880f2af5-05f9-4f84-9845-52d9b2820dc1",
-  "prevId": "d336151d-ecf1-4fea-8c36-e537c535f0a3",
+  "id": "8207e88e-5bac-46b5-bc27-8aa65b22dac8",
+  "prevId": "a4225bc0-b5b1-4c19-8de4-5c8e069ed416",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1238,13 +1238,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'full'"
-        },
-        "access_all_tools": {
-          "name": "access_all_tools",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
@@ -4932,12 +4925,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "dynamic_connection_mcp_server_id": {
-          "name": "dynamic_connection_mcp_server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         },
         "server_url": {
           "name": "server_url",
@@ -12053,6 +12040,92 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.team_labels": {
+      "name": "team_labels",
+      "schema": "",
+      "columns": {
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key_id": {
+          "name": "key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value_id": {
+          "name": "value_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "team_labels_team_id_team_id_fk": {
+          "name": "team_labels_team_id_team_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "team",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_labels_key_id_label_keys_id_fk": {
+          "name": "team_labels_key_id_label_keys_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "label_keys",
+          "columnsFrom": [
+            "key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_labels_value_id_label_values_id_fk": {
+          "name": "team_labels_value_id_label_values_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "label_values",
+          "columnsFrom": [
+            "value_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "team_labels_team_id_key_id_pk": {
+          "name": "team_labels_team_id_key_id_pk",
+          "columns": [
+            "team_id",
+            "key_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

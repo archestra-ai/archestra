@@ -3,6 +3,7 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -23,6 +24,7 @@ import type {
   ChatOpsProviderType,
   IncomingChatMessage,
 } from "@/types";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import type { InteractionSource } from "../../../../shared";
 import {
   buildApprovalDecisionSendMessageRequest,
@@ -1402,6 +1404,16 @@ export class ChatOpsManager {
       );
 
       if (sendReply) {
+        // A per-user provider the user hasn't linked yet → a friendly prompt
+        // with a link to connect (chatops can't render the interactive flow).
+        if (error instanceof LlmProviderAuthRequiredError) {
+          await provider.sendReply({
+            originalMessage: message,
+            text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+            conversationReference: message.metadata?.conversationReference,
+          });
+          return { success: false, error: errorMessage(error) };
+        }
         const errMsg = errorMessage(error);
         // Show truncated error details as a subtle footer (max 500 chars)
         const errorDetail =

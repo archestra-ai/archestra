@@ -15,6 +15,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
@@ -722,14 +723,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
-// off. the former `run_python` code-runtime env vars now gate the sandbox.
+// off.
 const skillsSandboxRequested =
   process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
-  envValue:
-    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST ||
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST,
+  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
 // a missing/invalid runner host disables the feature instead of crashing boot.
 const skillsSandboxEnabled =
@@ -769,7 +768,7 @@ const config = {
     endpoint: "/v1/mcp",
   },
   skillMarketplace: {
-    endpoint: "/skills/m",
+    endpoint: SKILL_MARKETPLACE_PREFIX,
     /**
      * Cache directory for materialized share-link git repos. The cache is a
      * derived view of the `skill_share_link_revision` history — wiping it is
@@ -791,6 +790,8 @@ const config = {
   },
   agents: {
     skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
+    environmentsEnabled:
+      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -917,6 +918,34 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     },
+    "github-copilot": {
+      baseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
+        "https://api.githubcopilot.com",
+      /**
+       * Endpoint exchanging a long-lived GitHub OAuth token for a short-lived
+       * Copilot API bearer. Overridable for GitHub Enterprise
+       * (https://copilot-api.<ghe-domain>/copilot_internal/v2/token) and e2e tests.
+       */
+      tokenExchangeUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL ||
+        "https://api.github.com/copilot_internal/v2/token",
+      /**
+       * Host serving the GitHub OAuth device-flow endpoints
+       * (/login/device/code and /login/oauth/access_token).
+       */
+      deviceAuthBaseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL ||
+        "https://github.com",
+      /**
+       * GitHub App client id used for the device flow. Defaults to the
+       * community-standard VS Code client id accepted by the Copilot token
+       * exchange; organizations with their own GitHub App can override it.
+       */
+      clientId:
+        process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
+        "Iv1.b507a08c87ecfe98",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -990,6 +1019,9 @@ const config = {
     },
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    "github-copilot": {
+      apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
@@ -1123,7 +1155,6 @@ const config = {
     runnerHost: daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
-      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
       undefined,
     maxConcurrent: parsePositiveInt(
@@ -1152,6 +1183,14 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
+  },
+  /**
+   * user-authored MCP Apps — first-class apps created inside Archestra (from
+   * chat or the /apps page), backed by a per-app data store and assignable
+   * tools. Ships dark: off by default until the feature is ready to surface.
+   */
+  apps: {
+    enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

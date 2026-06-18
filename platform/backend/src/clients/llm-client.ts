@@ -13,6 +13,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
@@ -39,6 +40,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -269,6 +271,12 @@ export async function createLLMModelForAgent(params: {
     !isOllama &&
     !isAzureWithEntra
   ) {
+    // Per-user providers (GitHub Copilot) need the acting user's own linked
+    // account; surface a typed error so callers can prompt them to connect
+    // rather than showing a generic "configure a key" message.
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new LlmProviderAuthRequiredError(provider);
+    }
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -443,6 +451,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  "github-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
+    // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
+    // the short-lived Copilot bearer — exchanging here too would hand the
+    // proxy an already-exchanged bearer it cannot exchange again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["github-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
   },
 
   azure: {

@@ -5,11 +5,12 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { AlertTriangle, Check, Copy } from "lucide-react";
+import { AlertTriangle, Check, Copy, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
@@ -42,6 +43,7 @@ const PROVIDER_ICONS: Record<
   deepseek: { bg: "#4d6bfe", fg: "#fff", glyph: "D" },
   minimax: { bg: "#0ea5a4", fg: "#fff", glyph: "M" },
   zhipuai: { bg: "#dc2626", fg: "#fff", glyph: "Z" },
+  "github-copilot": { bg: "#24292f", fg: "#fff", glyph: "gh" },
 };
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
@@ -63,6 +65,7 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com/",
   minimax: "https://api.minimax.io/v1/",
   zhipuai: "https://open.bigmodel.cn/api/",
+  "github-copilot": "https://api.githubcopilot.com/",
 };
 
 interface ProxyClientInstructionsProps {
@@ -74,11 +77,6 @@ interface ProxyClientInstructionsProps {
   shownProviders?: readonly SupportedProvider[] | null;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
   baseUrl: string;
-  /**
-   * Script-capable clients only need the provider picked — the generated
-   * setup command does the wiring, so the manual instructions are hidden.
-   */
-  selectionOnly?: boolean;
 }
 
 const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
@@ -101,7 +99,6 @@ export function ProxyClientInstructions({
   profileName,
   shownProviders,
   baseUrl,
-  selectionOnly = false,
 }: ProxyClientInstructionsProps) {
   const shownSet = useMemo(
     () => (shownProviders ? new Set(shownProviders) : null),
@@ -206,8 +203,7 @@ export function ProxyClientInstructions({
         onSelect={handleProviderSelect}
       />
 
-      {selectionOnly || !selectedProvider ? null : client.proxy.kind ===
-          "generic" &&
+      {!selectedProvider ? null : client.proxy.kind === "generic" &&
         url &&
         providerLabel &&
         originalUrl ? (
@@ -511,12 +507,21 @@ function ProviderGrid({
     "groq",
   ];
   const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
   const compact = providers.filter((p) => PRIMARY.includes(p));
   // If the admin's allow-list excludes every primary provider, there's
   // nothing to collapse to — fall through to the full list instead of
   // rendering an empty grid behind a "Show all" button.
   const canCollapse = compact.length > 0 && compact.length < providers.length;
-  const visible = showAll || !canCollapse ? providers : compact;
+  const normalizedQuery = query.trim().toLowerCase();
+  const searching = normalizedQuery.length > 0;
+  // When searching, ignore the compact/expanded toggle and search all providers.
+  const base = searching || showAll || !canCollapse ? providers : compact;
+  const visible = searching
+    ? base.filter((p) =>
+        providerDisplayNames[p].toLowerCase().includes(normalizedQuery),
+      )
+    : base;
 
   return (
     <div>
@@ -525,17 +530,36 @@ function ProviderGrid({
           Select a provider
         </h3>
         {canCollapse && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-9 text-xs"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Show fewer" : `Show all (${providers.length})`}
-          </Button>
+          <div className="flex items-center gap-3">
+            {!searching && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs"
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? "Show fewer" : `Show all (${providers.length})`}
+              </Button>
+            )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search"
+                className="h-9 w-56 rounded-full pl-8"
+              />
+            </div>
+          </div>
         )}
       </div>
+      {searching && visible.length === 0 && (
+        <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-xs text-muted-foreground">
+          No providers match "{query}".
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {visible.map((p) => {
           const isSupported = supported.includes(p);

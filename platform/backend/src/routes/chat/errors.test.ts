@@ -18,6 +18,7 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import { NoSuchToolError } from "ai";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
@@ -29,6 +30,22 @@ import {
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
+});
+
+describe("mapProviderError - per-user provider auth required", () => {
+  it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
+    const result = mapProviderError(
+      new LlmProviderAuthRequiredError("github-copilot"),
+      "github-copilot",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.authAction).toEqual({
+      provider: "github-copilot",
+      providerLabel: "GitHub Copilot",
+    });
+  });
 });
 
 // =============================================================================
@@ -1483,6 +1500,55 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should map OpenRouter upstream idle timeouts to retryable network errors", () => {
+    // Faithful to the real shape: the mid-stream SSE idle timeout reaches the
+    // mapper as a bare Error (no statusCode/responseBody), whose non-enumerable
+    // message serializes to `{}` in the raw-error field.
+    const error = new Error("Upstream idle timeout exceeded");
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.NetworkError]);
+    // The real upstream message is preserved for debugging, unlike the bare
+    // termination case which is rewritten to a generic close message.
+    expect(result.originalError?.message).toBe(
+      "Upstream idle timeout exceeded",
+    );
+  });
+
+  it("should map an idle timeout delivered as an HTTP 408 with a body too", () => {
+    // The other delivery shape: when the timeout fires before the stream opens,
+    // OpenRouter returns HTTP 408 with a body. 408 falls through to Unknown, so
+    // the same message-text reclassification must apply.
+    const error = {
+      statusCode: 408,
+      responseBody: JSON.stringify({
+        error: { code: 408, message: "Upstream idle timeout exceeded" },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+  });
+
+  it("should not reclassify a recognized error that mentions idle timeout", () => {
+    const error = {
+      statusCode: 401,
+      responseBody: JSON.stringify({
+        error: {
+          type: OpenAIErrorTypes.AUTHENTICATION,
+          message: "Auth failed while waiting on upstream idle timeout",
+        },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.Authentication);
+    expect(result.isRetryable).toBe(false);
+  });
+
   it("should handle string errors", () => {
     const result = mapProviderError("Simple string error", "openai");
 
@@ -1715,6 +1781,28 @@ describe("ProviderError", () => {
       isRetryable: true,
       usageLimitExceeded: true,
       usageLimitEntityType: "organization",
+    });
+  });
+
+  it("preserves authAction so the connect card renders in slim chat mode", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.ProviderAuthRequired,
+        message: "Connect your GitHub Copilot account to use this model.",
+        isRetryable: false,
+        authAction: {
+          provider: "github-copilot",
+          providerLabel: "GitHub Copilot",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: "Connect your GitHub Copilot account to use this model.",
+      isRetryable: false,
+      authAction: {
+        provider: "github-copilot",
+        providerLabel: "GitHub Copilot",
+      },
     });
   });
 });

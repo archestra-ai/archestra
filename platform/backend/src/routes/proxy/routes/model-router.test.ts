@@ -1619,8 +1619,11 @@ describe("model router proxy routes", () => {
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledWith(
       "test-anthropic-key",
+      // The proxy re-fetches the agent, so the object passed downstream carries
+      // the server-resolved LLM metadata (resolvedLlmProvider, etc.) that the
+      // freshly-created object doesn't — objectContaining tolerates those.
       expect.objectContaining({
-        agent,
+        agent: expect.objectContaining(agent),
       }),
     );
     expect(response.json()).toMatchObject({

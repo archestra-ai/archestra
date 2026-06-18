@@ -76,6 +76,7 @@ export function makeUserPermissions(
     environment: ["admin", "deploy-to-restricted"],
     agent: [...ALL, "team-admin"],
     agentTrigger: [...ALL],
+    skill: [...ALL, "team-admin"],
     chat: [...ALL],
     team: [...ALL],
     member: [...ALL],

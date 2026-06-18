@@ -191,7 +191,13 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `model_router`, `api`, `chat`). Useful for filtering traces by origin.
-- `archestra.label.<key>` - Custom agent labels (e.g., `archestra.label.environment=production`)
+- `archestra.agent.label.<key>` - Custom agent labels (e.g., `archestra.agent.label.environment=production`)
+- `archestra.agent.team.ids` - IDs of the teams the agent belongs to (array-valued; an agent can belong to multiple teams)
+- `archestra.agent.team.names` - Names of the teams the agent belongs to (array-valued)
+- `archestra.agent.team.label.<key>` - Custom agent-team labels (array-valued). Values are merged per key across all of the agent's teams, e.g., `archestra.agent.team.label.environment=["production","staging"]`
+- `archestra.user.team.ids` - IDs of the teams the requesting user belongs to (array-valued)
+- `archestra.user.team.names` - Names of the teams the requesting user belongs to (array-valued)
+- `archestra.user.team.label.<key>` - Custom user-team labels, merged per key across the user's teams (array-valued)
 - `archestra.user.id` - The Archestra user ID who made the request (when available)
 - `archestra.user.email` - The Archestra user email (when available)
 - `archestra.user.name` - The Archestra user display name (when available)
@@ -235,7 +241,13 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `gen_ai.agent.name` - Internal Archestra agent name
 - `gen_ai.conversation.id` - Session ID (when available)
 - `archestra.agent.type` - Agent type
-- `archestra.label.<key>` - Custom agent labels
+- `archestra.agent.label.<key>` - Custom agent labels
+- `archestra.agent.team.ids` - IDs of the teams the agent belongs to (array-valued)
+- `archestra.agent.team.names` - Names of the teams the agent belongs to (array-valued)
+- `archestra.agent.team.label.<key>` - Custom agent-team labels, merged per key across the agent's teams (array-valued)
+- `archestra.user.team.ids` - IDs of the teams the requesting user belongs to (array-valued)
+- `archestra.user.team.names` - Names of the teams the requesting user belongs to (array-valued)
+- `archestra.user.team.label.<key>` - Custom user-team labels, merged per key across the user's teams (array-valued)
 - `archestra.user.id` - The Archestra user ID (when available)
 - `archestra.user.email` - The Archestra user email (when available)
 - `archestra.user.name` - The Archestra user display name (when available)
@@ -298,7 +310,7 @@ External LLM proxy calls produce independent root traces.
 Labels are key-value pairs that can be configured when creating or updating agents through the Archestra UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:
 
 - **Metrics** - As additional label dimensions on all LLM and MCP metrics. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
-- **Traces** - As `archestra.label.<key>` span attributes. Use them to filter traces.
+- **Traces** - As `archestra.agent.label.<key>` span attributes. Use them to filter traces.
 
 ## Grafana Dashboards
 

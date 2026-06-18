@@ -2,13 +2,16 @@ import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
   isModelSelectionComplete,
+  providerRequiresPerUserCredential,
   RouteId,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
@@ -108,6 +111,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ToolModel.syncArchestraBuiltInCatalog({
             organization: organization,
           });
+        }
+
+        // appName is baked into the built-in skills' stored rows (name, body,
+        // tool-prefix references), so re-brand them now — without this the
+        // catalog/load_skill output only updates after a backend restart. A
+        // pristine copy auto-rebrands; an admin-edited copy is preserved.
+        if (appNameChanged) {
+          await syncBuiltInSkillsForOrganization(organization);
         }
       }
 
@@ -312,6 +323,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(
               400,
               `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+            );
+          }
+          // Per-user providers (GitHub Copilot) can't back a shared default:
+          // each user connects their own account at setup time, so an admin
+          // default would be meaningless (and the connection flow would refuse
+          // to wrap someone else's personal key).
+          if (
+            providerRequiresPerUserCredential(provider as SupportedProvider)
+          ) {
+            throw new ApiError(
+              400,
+              `${provider} is per-user — each user connects their own account, so it can't be set as a default provider key for setup commands.`,
             );
           }
         }

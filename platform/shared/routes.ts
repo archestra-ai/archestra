@@ -111,6 +111,8 @@ export const RouteId = {
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  GetTeamLabelKeys: "getTeamLabelKeys",
+  GetTeamLabelValues: "getTeamLabelValues",
 
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
@@ -267,6 +269,19 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - GitHub Copilot
+  GithubCopilotChatCompletionsWithDefaultAgent:
+    "githubCopilotChatCompletionsWithDefaultAgent",
+  GithubCopilotChatCompletionsWithAgent:
+    "githubCopilotChatCompletionsWithAgent",
+  GithubCopilotListModelsWithDefaultAgent:
+    "githubCopilotListModelsWithDefaultAgent",
+  GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
+
+  // GitHub Copilot device-flow sign-in (creates personal provider keys)
+  GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
+  GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -406,6 +421,7 @@ export const RouteId = {
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
+  GetIdentityProviderLinkStatus: "getIdentityProviderLinkStatus",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -549,10 +565,28 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+  RotateSkillShareLink: "rotateSkillShareLink",
 
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
   GetConnectionSetupScript: "getConnectionSetupScript",
+
+  // MCP App Routes
+  GetApps: "getApps",
+  CreateApp: "createApp",
+  GetApp: "getApp",
+  UpdateApp: "updateApp",
+  DeleteApp: "deleteApp",
+  GetAppVersions: "getAppVersions",
+  GetAppVersion: "getAppVersion",
+  GetAppTools: "getAppTools",
+  AssignToolToApp: "assignToolToApp",
+  UnassignToolFromApp: "unassignToolFromApp",
+  GetAppTemplates: "getAppTemplates",
+  PostAppRenderDiagnostics: "postAppRenderDiagnostics",
+  PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
+  McpAppProxyPost: "mcpAppProxyPost",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

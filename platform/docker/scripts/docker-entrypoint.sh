@@ -221,7 +221,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     fi
 
     # Bundle the Dagger Engine that backs the skill sandbox / code runtime
-    # (archestra__run_python). It runs as a privileged pod in the embedded KinD
+    # (archestra__run_command and friends). It runs as a privileged pod in the embedded KinD
     # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
     # dial-stdio), so no Service or TCP port is needed. The manifest is the
     # helm/dagger-runtime chart rendered with laptop-sized resources.

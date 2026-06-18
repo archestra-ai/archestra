@@ -803,10 +803,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
-  [RouteId.PromoteChatAttachmentToKnowledgeFile]: {
-    chat: ["read"],
-    knowledgeFile: ["create"],
-  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },
@@ -1283,15 +1279,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
-  // Knowledge File Routes
-  [RouteId.GetKnowledgeFiles]: { knowledgeFile: ["read"] },
-  [RouteId.UploadKnowledgeFiles]: { knowledgeFile: ["create"] },
-  [RouteId.GetKnowledgeFile]: { knowledgeFile: ["read"] },
-  [RouteId.GetKnowledgeFileContent]: { knowledgeFile: ["read"] },
-  [RouteId.UpdateKnowledgeFile]: { knowledgeFile: ["update"] },
-  [RouteId.DeleteKnowledgeFile]: { knowledgeFile: ["delete"] },
-  [RouteId.GetKnowledgeFileUploadConfig]: { knowledgeFile: ["read"] },
-
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.CreateSkill]: { skill: ["create"] },
@@ -1458,7 +1445,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
-  "/knowledge/files": { knowledgeFile: ["read"] },
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings

@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases. For direct document uploads, use **Knowledge > Files**; see the [Knowledge Files section](/docs/platform-knowledge-bases#files).
+Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 
 ## Visibility
 

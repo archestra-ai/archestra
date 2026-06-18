@@ -1,17 +1,7 @@
 "use client";
 
-import {
-  type ChatSkillMetadata,
-  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
-  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-} from "@archestra/shared";
-import {
-  AlertTriangle,
-  FilePlus2,
-  FileText,
-  Paperclip,
-  Sparkles,
-} from "lucide-react";
+import type { ChatSkillMetadata } from "@archestra/shared";
+import { AlertTriangle, FileText, Paperclip, Sparkles } from "lucide-react";
 import Link from "next/link";
 import {
   type KeyboardEventHandler,
@@ -26,11 +16,6 @@ import { UserMessageText } from "@/components/chat/user-message-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
@@ -52,7 +37,6 @@ interface EditableUserMessageProps {
   isEditing: boolean;
   editDisabled?: boolean;
   attachments?: FileAttachment[];
-  canPromoteAttachments?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: ChatSkillMetadata;
   onStartEdit: (partKey: string, messageId: string) => void;
@@ -62,7 +46,6 @@ interface EditableUserMessageProps {
     partIndex: number,
     newText: string,
   ) => Promise<void>;
-  onPromoteAttachment?: (attachment: FileAttachment) => void;
 }
 
 export function EditableUserMessage({
@@ -73,12 +56,10 @@ export function EditableUserMessage({
   isEditing,
   editDisabled = false,
   attachments = [],
-  canPromoteAttachments = false,
   skill,
   onStartEdit,
   onCancelEdit,
   onSave,
-  onPromoteAttachment,
 }: EditableUserMessageProps) {
   const [editedText, setEditedText] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
@@ -280,32 +261,10 @@ export function EditableUserMessage({
                       })}
                   </span>
                 </Link>
-                {canPromoteAttachments &&
-                  isPromotableKnowledgeAttachment(attachment) && (
-                    <PromoteAttachmentButton
-                      variant="ghost"
-                      onClick={() => onPromoteAttachment?.(attachment)}
-                    />
-                  )}
               </div>
             ))}
           </div>
         )}
-        {imageAttachments.length > 0 &&
-          canPromoteAttachments &&
-          imageAttachments.some(isPromotableKnowledgeAttachment) && (
-            <div className="flex flex-wrap gap-1 justify-end mb-2">
-              {imageAttachments
-                .filter(isPromotableKnowledgeAttachment)
-                .map((attachment) => (
-                  <PromoteAttachmentButton
-                    key={`promote-${attachment.url}`}
-                    variant="outline"
-                    onClick={() => onPromoteAttachment?.(attachment)}
-                  />
-                ))}
-            </div>
-          )}
         {/* Text message bubble - only show if there's text */}
         {text && (
           <div className="group/user-message-text-row flex max-w-[80%] items-center justify-end gap-2">
@@ -331,48 +290,3 @@ export function EditableUserMessage({
     </Message>
   );
 }
-
-function PromoteAttachmentButton({
-  variant,
-  onClick,
-}: {
-  variant: "ghost" | "outline";
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          size="icon"
-          variant={variant}
-          className="h-7 w-7 shrink-0"
-          aria-label="Save to Knowledge"
-          onClick={onClick}
-        >
-          <FilePlus2 className="h-3.5 w-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">Save to Knowledge</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function isPromotableKnowledgeAttachment(attachment: FileAttachment): boolean {
-  if (!attachment.url.includes("/api/chat/attachments/")) return false;
-  const filename = attachment.filename?.toLowerCase() ?? "";
-  const extension = filename.split(".").pop();
-  if (extension && supportedKnowledgeFileExtensions.has(extension)) {
-    return true;
-  }
-
-  const mimeType = attachment.mediaType.split(";")[0].trim().toLowerCase();
-  return supportedKnowledgeFileMimeTypes.has(mimeType);
-}
-
-const supportedKnowledgeFileExtensions = new Set<string>(
-  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
-);
-const supportedKnowledgeFileMimeTypes = new Set<string>(
-  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-);

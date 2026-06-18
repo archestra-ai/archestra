@@ -173,13 +173,6 @@ function ConnectorsList() {
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        if (row.original.connectorType === "file_upload") {
-          return (
-            <span className="text-xs text-muted-foreground">
-              Manual uploads
-            </span>
-          );
-        }
         return (
           <div className="flex items-center gap-2">
             {row.original.lastSyncAt ? (
@@ -207,13 +200,6 @@ function ConnectorsList() {
       id: "schedule",
       header: "Schedule",
       cell: ({ row }) => {
-        if (row.original.connectorType === "file_upload") {
-          return (
-            <span className="text-xs text-muted-foreground">
-              Manual uploads
-            </span>
-          );
-        }
         return (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Database className="h-3.5 w-3.5" />

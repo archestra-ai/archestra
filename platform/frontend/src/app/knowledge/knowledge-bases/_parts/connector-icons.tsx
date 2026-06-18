@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { FolderGit2, Github, Globe, Upload } from "lucide-react";
+import { FolderGit2, Github, Globe } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -21,10 +21,6 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   notion: { kind: "img", src: "/icons/notion.png" },
   sharepoint: { kind: "img", src: "/icons/sharepoint.png" },
   gdrive: { kind: "img", src: "/icons/gdrive.png" },
-  file_upload: {
-    kind: "element",
-    render: (className) => <Upload className={className} />,
-  },
   linear: { kind: "img", src: "/icons/linear.png" },
   dropbox: { kind: "img", src: "/icons/dropbox.png" },
   onedrive: { kind: "img", src: "/icons/onedrive.png" },

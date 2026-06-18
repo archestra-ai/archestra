@@ -119,7 +119,6 @@ export function EditConnectorDialog({
     connectorType === "github" && authMethod === "github_app";
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
-  const showScheduleAndAdvanced = connectorType !== "file_upload";
   const {
     apiTokenHelpText,
     apiTokenLabel,
@@ -340,22 +339,20 @@ export function EditConnectorDialog({
             />
           )}
 
-          {showScheduleAndAdvanced && (
-            <Collapsible>
-              <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                <span className="text-sm font-medium">Advanced</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4 space-y-4">
-                <SchedulePicker form={form} name="schedule" />
-                <ConnectorAdvancedConfigFields
-                  connectorType={connectorType}
-                  form={form}
-                  mode="edit"
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          )}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+              <span className="text-sm font-medium">Advanced</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4 space-y-4">
+              <SchedulePicker form={form} name="schedule" />
+              <ConnectorAdvancedConfigFields
+                connectorType={connectorType}
+                form={form}
+                mode="edit"
+              />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </Form>
     </StandardFormDialog>

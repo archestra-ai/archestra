@@ -1125,17 +1125,23 @@ async function handleStreaming<
           llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, state.responseId);
         }
         if (state.usage) {
-          llmSpan.setAttribute(
-            ATTR_GENAI_USAGE_INPUT_TOKENS,
-            state.usage.inputTokens,
-          );
+          // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached
+          // tokens. Internally state.usage.inputTokens is uncached-only (cost,
+          // metrics, and DB depend on that), so add cache read/write back for
+          // the span attributes. The uncached value is still derivable as
+          // input_tokens - cache_read.input_tokens - cache_creation.input_tokens.
+          const totalInputTokens =
+            state.usage.inputTokens +
+            (state.usage.cacheReadTokens ?? 0) +
+            (state.usage.cacheWriteTokens ?? 0);
+          llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_OUTPUT_TOKENS,
             state.usage.outputTokens,
           );
           llmSpan.setAttribute(
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
-            state.usage.inputTokens + state.usage.outputTokens,
+            totalInputTokens + state.usage.outputTokens,
           );
           if (state.usage.cacheReadTokens) {
             llmSpan.setAttribute(
@@ -1469,11 +1475,20 @@ async function handleNonStreaming<
       const usage = adapter.getUsage();
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_MODEL, adapter.getModel());
       llmSpan.setAttribute(ATTR_GENAI_RESPONSE_ID, adapter.getId());
-      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, usage.inputTokens);
+      // Per the GenAI semconv, gen_ai.usage.input_tokens includes cached tokens.
+      // Internally usage.inputTokens is uncached-only (cost, metrics, and DB
+      // depend on that), so add cache read/write back for the span attributes.
+      // The uncached value is still derivable as input_tokens -
+      // cache_read.input_tokens - cache_creation.input_tokens.
+      const totalInputTokens =
+        usage.inputTokens +
+        (usage.cacheReadTokens ?? 0) +
+        (usage.cacheWriteTokens ?? 0);
+      llmSpan.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, totalInputTokens);
       llmSpan.setAttribute(ATTR_GENAI_USAGE_OUTPUT_TOKENS, usage.outputTokens);
       llmSpan.setAttribute(
         ATTR_GENAI_USAGE_TOTAL_TOKENS,
-        usage.inputTokens + usage.outputTokens,
+        totalInputTokens + usage.outputTokens,
       );
       if (usage.cacheReadTokens) {
         llmSpan.setAttribute(

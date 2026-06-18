@@ -208,12 +208,12 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 
 - `gen_ai.response.model` - The model that actually generated the response (may differ from request model)
 - `gen_ai.response.id` - Provider-assigned response ID
-- `gen_ai.usage.input_tokens` - Number of input tokens consumed
+- `gen_ai.usage.input_tokens` - Number of input tokens consumed. Per the GenAI semantic conventions this includes cached tokens, so the uncached portion is `input_tokens - cache_read.input_tokens - cache_creation.input_tokens`. (Note: the `llm_tokens_total{type="input"}` metric and stored cost are uncached-only by design, so they will read lower than this attribute when caching is active.)
 - `gen_ai.usage.output_tokens` - Number of output tokens generated
 - `gen_ai.usage.reasoning.output_tokens` - Output tokens spent on reasoning / extended thinking (a subset of `gen_ai.usage.output_tokens`). Reported by OpenAI (`reasoning_tokens`) and Gemini (`thoughtsTokenCount`); unset for providers that do not break reasoning tokens out separately.
-- `gen_ai.usage.total_tokens` - Total tokens (input + output)
-- `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache (set only when the response read from cache)
-- `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache (set only when the response cached a prefix)
+- `gen_ai.usage.total_tokens` - Total tokens (input including cache + output)
+- `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache, a subset of `input_tokens` (set only when the response read from cache)
+- `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache, a subset of `input_tokens` (set only when the response cached a prefix)
 - `archestra.usage.cache_creation.1h_input_tokens` - Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock), billed at a higher surcharge than the 5-minute default. Uses the `archestra.*` namespace because the GenAI semantic conventions have no per-TTL breakdown. The remainder of `gen_ai.usage.cache_creation.input_tokens` is the 5-minute portion.
 - `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)

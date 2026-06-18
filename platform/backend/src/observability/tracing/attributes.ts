@@ -54,9 +54,9 @@ export const ATTR_GENAI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
 export const ATTR_GENAI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
 export const ATTR_GENAI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
 // Prompt-cache token counts, per the GenAI semconv. Read = served from a
-// provider cache, creation = written to it. The spec models both as a subset
-// of gen_ai.usage.input_tokens; our normalized input_tokens excludes them, so
-// the subset relationship does not hold here (tracked separately).
+// provider cache, creation = written to it. Both are a subset of
+// gen_ai.usage.input_tokens (the span attribute adds cache read/write back onto
+// our internally-uncached input count, so the spec's subset relationship holds).
 export const ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS =
   "gen_ai.usage.cache_read.input_tokens";
 export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =

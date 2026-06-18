@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -311,8 +312,13 @@ export function ChatSidebarSection({
                 )}
               </span>
               {conv.projectName && (
-                <span className="ml-1 max-w-24 shrink-0 truncate rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                  {conv.projectName}
+                <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  <AgentIcon
+                    icon={conv.projectIcon}
+                    fallbackType="project"
+                    size={10}
+                  />
+                  <span className="truncate">{conv.projectName}</span>
                 </span>
               )}
               {(canUpdateConversation || canDeleteConversation) && (

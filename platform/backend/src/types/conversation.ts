@@ -46,6 +46,8 @@ export const SelectConversationSchema = createSelectSchema(
   share: ConversationShareSummarySchema,
   /** Project name when the chat belongs to one; populated by list queries only. */
   projectName: z.string().nullable().optional(),
+  /** Project icon (emoji or data URL) for the chat's project; list queries only. */
+  projectIcon: z.string().nullable().optional(),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),

@@ -51,14 +51,30 @@ class ProjectModel {
     return row ?? null;
   }
 
-  static async updateDescription(params: {
+  /**
+   * Update the owner-editable fields. Only the keys present in `fields` are
+   * written, so a caller can change name, description, and/or icon
+   * independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   */
+  static async update(params: {
     id: string;
-    description: string | null;
+    fields: {
+      name?: string;
+      description?: string | null;
+      icon?: string | null;
+    };
   }): Promise<void> {
-    await db
-      .update(schema.projectsTable)
-      .set({ description: params.description, updatedAt: new Date() })
-      .where(eq(schema.projectsTable.id, params.id));
+    try {
+      await db
+        .update(schema.projectsTable)
+        .set({ ...params.fields, updatedAt: new Date() })
+        .where(eq(schema.projectsTable.id, params.id));
+    } catch (error) {
+      if (isUniqueViolation(error) && params.fields.name !== undefined) {
+        throw new ProjectNameExistsError(params.fields.name);
+      }
+      throw error;
+    }
   }
 
   static async delete(id: string): Promise<void> {

@@ -1,9 +1,12 @@
 "use client";
 
+import type { archestraApiTypes } from "@archestra/shared";
 import {
   Eye,
   File as FileIcon,
   FileText,
+  Globe,
+  Lock,
   MessageCircle,
   Pencil,
   Trash2,
@@ -12,7 +15,10 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AgentIcon } from "@/components/agent-icon";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type FileListItem,
   FileSection,
@@ -22,29 +28,18 @@ import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
+import { StandardFormDialog } from "@/components/standard-dialog";
+import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
 import {
   useDeleteProject,
   useProject,
@@ -106,15 +101,17 @@ function ProjectDetail() {
     <div className="flex h-full w-full min-h-0">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <PageLayout
-          title={project.name}
+          title={
+            <span className="flex items-center gap-2">
+              <AgentIcon icon={project.icon} fallbackType="project" size={22} />
+              {project.name}
+            </span>
+          }
           description={project.description ?? ""}
           actionButton={
             project.isOwner ? (
               <div className="flex items-center gap-1">
-                <EditDescriptionButton
-                  projectId={project.id}
-                  description={project.description}
-                />
+                <EditProjectButton project={project} />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -123,7 +120,6 @@ function ProjectDetail() {
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-                <SharePopover projectId={project.id} />
               </div>
             ) : (
               <Badge variant="secondary">Shared with you</Badge>
@@ -332,149 +328,218 @@ function ProjectFilesSidebar({
   );
 }
 
-function EditDescriptionButton({
-  projectId,
-  description,
-}: {
-  projectId: string;
-  description: string | null;
-}) {
-  const updateProject = useUpdateProject();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(description ?? "");
+type ProjectVisibility = "none" | "organization" | "team";
+type EditProjectForm = {
+  name: string;
+  description: string;
+  icon: string | null;
+};
 
+/**
+ * Single edit entry point for the owner: name, description, and icon plus the
+ * shared visibility control (replacing the old separate description dialog and
+ * share popover).
+ */
+function EditProjectButton({
+  project,
+}: {
+  project: archestraApiTypes.GetProjectResponses["200"];
+}) {
+  const [open, setOpen] = useState(false);
   return (
     <>
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Edit description"
-        onClick={() => {
-          setDraft(description ?? "");
-          setOpen(true);
-        }}
+        aria-label="Edit project"
+        onClick={() => setOpen(true)}
       >
         <Pencil className="h-4 w-4" />
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit description</DialogTitle>
-          </DialogHeader>
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={4}
-            maxLength={4096}
-            placeholder="What is this project about?"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={updateProject.isPending}
-              onClick={async () => {
-                const ok = await updateProject.mutateAsync({
-                  id: projectId,
-                  description: draft.trim() || null,
-                });
-                if (ok) setOpen(false);
-              }}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {open && (
+        <EditProjectDialog
+          project={project}
+          open={open}
+          onOpenChange={setOpen}
+        />
+      )}
     </>
   );
 }
 
-/** Compact share control: a button summarizing visibility, details in a popover. */
-function SharePopover({ projectId }: { projectId: string }) {
-  const { data: project } = useProject(projectId);
-  const { data: teams } = useTeams();
+function EditProjectDialog({
+  project,
+  open,
+  onOpenChange,
+}: {
+  project: archestraApiTypes.GetProjectResponses["200"];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const updateProject = useUpdateProject();
   const setShare = useSetProjectShare();
+  const { data: teams = [] } = useTeams({ enabled: open });
 
-  if (!project) return null;
-  const visibility = project.visibility ?? "none";
-  const shareTeamIds = project.shareTeamIds ?? [];
-  const label =
-    visibility === "organization"
-      ? "Shared · Org"
-      : visibility === "team"
-        ? `Shared · ${shareTeamIds.length} team${shareTeamIds.length === 1 ? "" : "s"}`
-        : "Share";
+  const form = useForm<EditProjectForm>({
+    defaultValues: {
+      name: project.name,
+      description: project.description ?? "",
+      icon: project.icon,
+    },
+  });
+  const icon = form.watch("icon");
+  const initialVisibility: ProjectVisibility = project.visibility ?? "none";
+  const [visibility, setVisibility] =
+    useState<ProjectVisibility>(initialVisibility);
+  const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
+
+  const visibilityOptions: Array<VisibilityOption<ProjectVisibility>> = [
+    {
+      value: "none",
+      label: "Only me",
+      description: "No one else can see this project.",
+      icon: Lock,
+    },
+    {
+      value: "organization",
+      label: "Organization",
+      description: "Everyone in your organization can see this project.",
+      icon: Globe,
+    },
+    {
+      value: "team",
+      label: "Teams",
+      description: "Share this project with selected teams.",
+      icon: Users,
+      disabled: teams.length === 0,
+      disabledLabel: teams.length === 0 ? "No teams available" : undefined,
+    },
+  ];
+
+  const isPending = updateProject.isPending || setShare.isPending;
+  const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
+
+  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
+    if (teamSelectionMissing) return;
+    const ok = await updateProject.mutateAsync({
+      id: project.id,
+      name: name.trim(),
+      description: description.trim() || null,
+      icon,
+    });
+    if (!ok) return;
+
+    const nextTeamIds = visibility === "team" ? teamIds : [];
+    const shareChanged =
+      visibility !== initialVisibility ||
+      (visibility === "team" &&
+        nextTeamIds.slice().sort().join() !==
+          (project.shareTeamIds ?? []).slice().sort().join());
+    if (shareChanged) {
+      const shareOk = await setShare.mutateAsync({
+        id: project.id,
+        visibility,
+        teamIds: nextTeamIds,
+      });
+      if (!shareOk) return;
+    }
+    onOpenChange(false);
+  });
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Users className="h-4 w-4" />
-          {label}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 space-y-3">
-        <p className="text-sm font-medium">Who can see this project</p>
-        <Select
-          value={visibility}
-          onValueChange={(value) =>
-            setShare.mutate({
-              id: projectId,
-              visibility: value as "organization" | "team" | "none",
-              teamIds: value === "team" ? shareTeamIds : [],
-            })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Only me</SelectItem>
-            <SelectItem value="organization">Whole organization</SelectItem>
-            <SelectItem value="team">Specific teams</SelectItem>
-          </SelectContent>
-        </Select>
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit project"
+      size="medium"
+      onSubmit={onSubmit}
+      bodyClassName="space-y-4"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={
+              isPending ||
+              !form.watch("name").trim().length ||
+              teamSelectionMissing
+            }
+          >
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="flex items-start gap-3">
+        <AgentIconPicker
+          value={icon}
+          onChange={(next) => form.setValue("icon", next)}
+          fallbackType="project"
+        />
+        <div className="flex-1 space-y-3">
+          <Input
+            placeholder="Project name"
+            {...form.register("name", { required: true, maxLength: 256 })}
+          />
+          <Textarea
+            placeholder="What is this project about?"
+            rows={3}
+            {...form.register("description", { maxLength: 4096 })}
+          />
+        </div>
+      </div>
+
+      <VisibilitySelector
+        heading="Sharing"
+        value={visibility}
+        options={visibilityOptions}
+        onValueChange={setVisibility}
+      >
         {visibility === "team" && (
-          <div className="space-y-1">
-            {(teams ?? []).map((team) => {
-              const checked = shareTeamIds.includes(team.id);
-              return (
-                <label
-                  key={team.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() =>
-                      setShare.mutate({
-                        id: projectId,
-                        visibility: "team",
-                        teamIds: checked
-                          ? shareTeamIds.filter((t) => t !== team.id)
-                          : [...shareTeamIds, team.id],
-                      })
-                    }
-                  />
-                  {team.name}
-                </label>
-              );
-            })}
-            {(teams ?? []).length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                No teams exist yet.
-              </p>
+          <div className="space-y-2">
+            <Label>Teams</Label>
+            <AssignmentCombobox
+              items={teams.map((team) => ({ id: team.id, name: team.name }))}
+              selectedIds={teamIds}
+              onToggle={(teamId) =>
+                setTeamIds((current) =>
+                  current.includes(teamId)
+                    ? current.filter((id) => id !== teamId)
+                    : [...current, teamId],
+                )
+              }
+              label="Select teams"
+              placeholder="Search teams..."
+              emptyMessage="No teams found."
+              className="h-9 w-full justify-between border text-sm text-foreground"
+            />
+            {teamIds.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {teams
+                  .filter((team) => teamIds.includes(team.id))
+                  .map((team) => (
+                    <Badge key={team.id} variant="secondary">
+                      {team.name}
+                    </Badge>
+                  ))}
+              </div>
             )}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          People you share with can read every chat, start their own, and work
-          with the project's files through chats. Writing in a chat stays with
-          its author.
-        </p>
-      </PopoverContent>
-    </Popover>
+      </VisibilitySelector>
+
+      <p className="text-xs text-muted-foreground">
+        People you share with can read every chat, start their own, and work
+        with the project's files through chats. Writing in a chat stays with its
+        author.
+      </p>
+    </StandardFormDialog>
   );
 }

@@ -48,12 +48,13 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     const patch = await app.inject({
       method: "PATCH",
       url: `/api/projects/${project.id}`,
-      payload: { description: "updated" },
+      payload: { name: "renamed", description: "updated", icon: "🚀" },
     });
     expect(patch.statusCode).toBe(200);
-    expect((await ProjectModel.findById(project.id))?.description).toBe(
-      "updated",
-    );
+    const afterPatch = await ProjectModel.findById(project.id);
+    expect(afterPatch?.description).toBe("updated");
+    expect(afterPatch?.name).toBe("renamed");
+    expect(afterPatch?.icon).toBe("🚀");
 
     const share = await app.inject({
       method: "PUT",
@@ -79,6 +80,18 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     });
     expect(del.statusCode).toBe(200);
     expect(await ProjectModel.findById(project.id)).toBeNull();
+  });
+
+  test("renaming to an existing project name returns 409", async () => {
+    await seedProject("taken");
+    const project = await seedProject("free");
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { name: "taken" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect((await ProjectModel.findById(project.id))?.name).toBe("free");
   });
 
   test("non-owners get 404 on every mutation, even with project read access", async ({

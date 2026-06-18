@@ -2052,6 +2052,13 @@
       "when": 1781738400001,
       "tag": "0292_fixed_madrox",
       "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "7",
+      "when": 1781792323492,
+      "tag": "0293_project_icon",
+      "breakpoints": true
     }
   ]
 }

@@ -5103,7 +5103,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
 /**
- * Update a project's description (owner only). The name is immutable.
+ * Update a project's name, description, and/or icon (owner only). Only the provided fields change.
  *
  * Authentication:
  *

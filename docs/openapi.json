@@ -74608,6 +74608,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "projectIcon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "messages": {
                         "type": "array",
                         "items": {}
@@ -75354,6 +75358,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -76068,6 +76076,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -76826,6 +76838,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -79091,6 +79107,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -80172,6 +80192,10 @@
                           "additionalProperties": false
                         },
                         "projectName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "projectIcon": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -81848,6 +81872,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -82589,6 +82617,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "messages": {
                       "type": "array",
                       "items": {}
@@ -83319,6 +83351,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -84062,6 +84098,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -205181,6 +205221,11 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 4096
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000000
                   }
                 },
                 "required": [
@@ -205210,6 +205255,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isOwner": {
                       "type": "boolean"
                     },
@@ -205235,6 +205284,7 @@
                     "id",
                     "name",
                     "description",
+                    "icon",
                     "isOwner",
                     "conversationCount",
                     "visibility",
@@ -205509,6 +205559,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "isOwner": {
                         "type": "boolean"
                       },
@@ -205534,6 +205588,7 @@
                       "id",
                       "name",
                       "description",
+                      "icon",
                       "isOwner",
                       "conversationCount",
                       "visibility",
@@ -205821,6 +205876,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isOwner": {
                       "type": "boolean"
                     },
@@ -205853,6 +205912,7 @@
                     "id",
                     "name",
                     "description",
+                    "icon",
                     "isOwner",
                     "conversationCount",
                     "visibility",
@@ -206105,7 +206165,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's description (owner only). The name is immutable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Update a project's name, description, and/or icon (owner only). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -206113,15 +206173,22 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "description": {
                     "nullable": true,
                     "type": "string",
                     "maxLength": 4096
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000000
                   }
-                },
-                "required": [
-                  "description"
-                ]
+                }
               }
             }
           }
@@ -211641,6 +211708,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },

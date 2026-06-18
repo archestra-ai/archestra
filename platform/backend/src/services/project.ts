@@ -44,6 +44,7 @@ class ProjectService {
     userId: string;
     name: string;
     description: string | null;
+    icon?: string | null;
   }): Promise<Project> {
     const name = params.name.trim();
     const invalid = validateProjectName(name);
@@ -56,6 +57,7 @@ class ProjectService {
         userId: params.userId,
         name,
         description: params.description,
+        icon: params.icon ?? null,
       });
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
@@ -77,6 +79,7 @@ class ProjectService {
       id: p.id,
       name: p.name,
       description: p.description,
+      icon: p.icon,
       isOwner: p.userId === params.userId,
       conversationCount: counts.get(p.id) ?? 0,
       visibility: p.visibility,
@@ -99,6 +102,7 @@ class ProjectService {
       id: project.id,
       name: project.name,
       description: project.description,
+      icon: project.icon,
       isOwner,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
@@ -108,14 +112,44 @@ class ProjectService {
     };
   }
 
-  async updateDescription(params: {
+  /** Update owner-editable fields (name/description/icon); only provided keys change. */
+  async update(params: {
     id: string;
     organizationId: string;
     userId: string;
-    description: string | null;
+    name?: string;
+    description?: string | null;
+    icon?: string | null;
   }): Promise<void> {
     await this.requireOwned(params);
-    await ProjectModel.updateDescription(params);
+    const fields: {
+      name?: string;
+      description?: string | null;
+      icon?: string | null;
+    } = {};
+    if (params.name !== undefined) {
+      const name = params.name.trim();
+      const invalid = validateProjectName(name);
+      if (invalid) {
+        throw new ApiError(400, `project name is invalid: ${invalid}`);
+      }
+      fields.name = name;
+    }
+    if (params.description !== undefined)
+      fields.description = params.description;
+    if (params.icon !== undefined) fields.icon = params.icon;
+    if (Object.keys(fields).length === 0) return;
+    try {
+      await ProjectModel.update({ id: params.id, fields });
+    } catch (error) {
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(
+          409,
+          `a project named "${fields.name}" already exists`,
+        );
+      }
+      throw error;
+    }
   }
 
   /** Upsert (or remove, when visibility is null) the project's share. */

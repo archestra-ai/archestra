@@ -21425,6 +21425,7 @@ export type GetChatConversationsResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21585,6 +21586,7 @@ export type CreateChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21826,6 +21828,7 @@ export type GetChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21989,6 +21992,7 @@ export type UpdateChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22505,6 +22509,7 @@ export type ForkChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22765,6 +22770,7 @@ export type CompactChatConversationResponses = {
                 visibility: 'organization' | 'team' | 'user';
             } | null;
             projectName?: string | null;
+            projectIcon?: string | null;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
@@ -23195,6 +23201,7 @@ export type GetSharedConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23354,6 +23361,7 @@ export type ForkSharedConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23515,6 +23523,7 @@ export type GenerateChatConversationTitleResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23675,6 +23684,7 @@ export type UpdateChatMessageResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -53852,6 +53862,7 @@ export type GetProjectsResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -53865,6 +53876,7 @@ export type CreateProjectData = {
     body: {
         name: string;
         description?: string | null;
+        icon?: string | null;
     };
     path?: never;
     query?: never;
@@ -53944,6 +53956,7 @@ export type CreateProjectResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -54120,6 +54133,7 @@ export type GetProjectResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -54132,7 +54146,9 @@ export type GetProjectResponse = GetProjectResponses[keyof GetProjectResponses];
 
 export type UpdateProjectData = {
     body: {
-        description: string | null;
+        name?: string;
+        description?: string | null;
+        icon?: string | null;
     };
     path: {
         id: string;
@@ -55647,6 +55663,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;

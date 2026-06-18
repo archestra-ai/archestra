@@ -30,6 +30,8 @@ export const ProjectListItemSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
+  /** Emoji or base64 image data URL; null = use the default project icon. */
+  icon: z.string().nullable(),
   isOwner: z.boolean(),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */

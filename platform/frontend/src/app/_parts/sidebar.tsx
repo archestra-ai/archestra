@@ -684,9 +684,12 @@ export function AppSidebar() {
                   searchParams={searchParams}
                   permissionMap={permissionMap}
                 />
-                <SidebarGroup className="pt-0">
+                {/* Recents scrolls within its own region so the community
+                    links below (NavSecondary, mt-auto) stay pinned to the
+                    bottom on the chats tab instead of being pushed off-screen. */}
+                <SidebarGroup className="min-h-0 flex-1 overflow-hidden pt-0">
                   <SidebarGroupLabel>Recents</SidebarGroupLabel>
-                  <SidebarGroupContent>
+                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
                     <SidebarMenu>
                       <SidebarMenuItem>
                         <ChatSidebarSection slots={15} flat />

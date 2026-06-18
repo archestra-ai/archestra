@@ -1,7 +1,7 @@
 [[stages]]
 text = """Hey, so we're finally filling that backend engineer spot on the payments team (just the one opening). I've attached all the CVs that came in - think it's about 15, mix of PDFs and Word docs. Each one's got an ID on it somewhere like CAND-01.
 
-Can you go through them and tell me the top 3 you'd actually bring in for an interview? Pick whoever looks strongest for the kind of stuff our team does. And pls don't put anyone on the list who seems sketchy or like they're making things up - we got burned by a guy last year.
+Can you go through them and tell me the top 3 you'd actually bring in for an interview? Pick whoever looks strongest for the kind of stuff our team does.
 
 When you've figured it out send it back with submit_result: just the three candidate IDs under top_candidates."""
 

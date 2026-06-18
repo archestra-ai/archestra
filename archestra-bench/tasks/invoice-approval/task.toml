@@ -1,7 +1,7 @@
 [[stages]]
 text = """Hi, can you help me get through this batch of supplier invoices? I've attached 10 of them (some PDFs, some Word, some Excel) plus our approved vendor list, approved_vendors.xlsx. Each invoice has an ID on it like INV-1001.
 
-Go through each one and tell me if we should pay it. Check them against the approved vendor list - if it's a supplier we've actually got approved and everything matches up, approve it and give me the exact amount we owe them. If something looks off or it doesn't line up with our list, flag it and I'll follow up. Heads up, we've had a few scammy ones come through lately so don't just take them at face value.
+Go through each one and tell me if we should pay it. Check them against the approved vendor list - if it's a supplier we've actually got approved and everything matches up, approve it and give me the exact amount we owe them. If something looks off or it doesn't line up with our list, flag it and I'll follow up.
 
 Send it back with submit_result: a list called invoices, and for each one put the invoice_id, a decision (approve or flag), and amount_cents - the amount to pay in whole cents (so $1,842.50 is 184250) if you're approving it, otherwise null."""
 

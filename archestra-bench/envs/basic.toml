@@ -26,17 +26,17 @@ repo = "github.com/openai/skills"
 path = "skills"
 ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
 
-# Benchmark-owned skills that gate decode-cipher and xlsx-live-formulas. Pinned to a pushed branch
-# SHA so the GitHub import resolves them; retarget to the merge SHA after this lands.
+# Benchmark-owned skills that gate decode-cipher and xlsx-live-formulas. Pinned to the merge SHA of
+# PR #5672 (where these skills landed on main) so the GitHub import resolves them.
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/cipher-decoder"
-ref = "a95fb2ceff176e528646ac86903ddee1ada3caf1"
+ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
 
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/sales-ledger"
-ref = "a95fb2ceff176e528646ac86903ddee1ada3caf1"
+ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
 
 # Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
 # requires them). Each must list tools without auth or env setup hard-fails naming it.

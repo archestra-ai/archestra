@@ -9,9 +9,9 @@
 #   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
 
 [[lane]]
-name = "or-poolside"
+name = "or-nex"
 provider = "openrouter"
-model = "poolside/laguna-m.1:free"
+model = "nex-agi/nex-n2-pro:free"
 
 [[lane]]
 name = "or-owl"

@@ -6,9 +6,12 @@ import {
   type CreateEnvironment,
   type Environment,
   type EnvironmentList,
+  type InternalMcpCatalogServerType,
+  type NetworkPolicy,
   type UpdateEnvironment,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
+import { isHostAllowedByNetworkPolicy } from "./network-policy-match";
 
 /**
  * Provision (or update) the environment's per-env Dagger engine + egress
@@ -160,6 +163,48 @@ export async function assertValuesMatchEnvironmentRegex(params: {
   }
 }
 
+/**
+ * Enforce that a remote MCP server's URL is reachable under its governing
+ * environment's network egress policy. No-op for self-hosted servers (their
+ * egress is enforced by the real k8s NetworkPolicy on the pod) and for
+ * unrestricted / built-in policies. Throws `ApiError(400)` when the policy
+ * would block the backend's outbound connection to the server URL.
+ *
+ * Enforced only at catalog create/edit time: existing remote servers are
+ * grandfathered until their URL or environment is next changed.
+ */
+export async function assertRemoteServerUrlAllowedByNetworkPolicy(params: {
+  serverType: InternalMcpCatalogServerType;
+  serverUrl: string | null | undefined;
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<void> {
+  const { serverType, serverUrl, environmentId, organizationId } = params;
+  if (serverType !== "remote" || !serverUrl) return;
+
+  const { policy, label } = await resolveEnvironmentNetworkPolicy({
+    environmentId,
+    organizationId,
+  });
+  if (!policy || policy.egressMode === "unrestricted") return;
+
+  let host: string;
+  try {
+    host = new URL(serverUrl).hostname;
+  } catch {
+    throw new ApiError(400, "Remote server URL is not a valid URL.");
+  }
+
+  if (isHostAllowedByNetworkPolicy({ host, policy })) return;
+
+  throw new ApiError(
+    400,
+    policy.egressMode === "off"
+      ? `The "${label}" environment blocks all outbound internet egress, so it cannot reach the remote MCP server at "${host}". Assign this server to an environment whose network policy permits egress.`
+      : `The remote MCP server host "${host}" is not permitted by the "${label}" environment's network egress policy. Add it to the environment's allowed domains or CIDRs, or relax the policy.`,
+  );
+}
+
 export async function deleteEnvironment(params: {
   id: string;
   organizationId: string;
@@ -219,6 +264,38 @@ async function resolveEnvironmentValidationRegex(params: {
   );
   return {
     regex: environment?.validationRegex ?? null,
+    label: environment?.name ?? "Default",
+  };
+}
+
+/**
+ * Resolve the effective network egress policy governing a catalog item, plus a
+ * human-readable environment label for error messages. Mirrors
+ * `resolveEnvironmentValidationRegex`: a set `environmentId` resolves to that
+ * environment's policy (falling back to the org default); a null/undefined one
+ * resolves the org default environment's policy.
+ */
+async function resolveEnvironmentNetworkPolicy(params: {
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<{ policy: NetworkPolicy | null; label: string }> {
+  const { environmentId, organizationId } = params;
+  const organization = await OrganizationModel.getById(organizationId);
+
+  if (!environmentId) {
+    return {
+      policy: organization?.defaultNetworkPolicy ?? null,
+      label: organization?.defaultEnvironmentName ?? "Default",
+    };
+  }
+
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    environmentId,
+    organizationId,
+  );
+  return {
+    policy:
+      environment?.networkPolicy ?? organization?.defaultNetworkPolicy ?? null,
     label: environment?.name ?? "Default",
   };
 }

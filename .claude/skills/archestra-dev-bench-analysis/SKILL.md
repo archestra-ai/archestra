@@ -16,84 +16,62 @@ The subagent fan-out runs through the **native Workflow tool** — two scripts u
 `workflows/` directory drive the map and crawl phases, so the orchestrator never hand-batches Agent
 calls and the per-rollout triages never flow through its context. Calling those scripts here is your
 explicit opt-in to Workflow. The exact map/reduce prompt text lives in `reference/prompts.md` (this
-skill's directory) — read it and pass it through verbatim; do not paraphrase it.
+skill's directory) — `bin/prepare.sh` extracts the MAP block automatically; you still read the
+**REDUCE** sections verbatim in step 4. Do not paraphrase those prompts.
 
 `<SKILL_DIR>` below is this skill's absolute directory (the one containing this file).
 
-## 1. Resolve the run dir (absolute)
+## 1. Prepare (deterministic: dir resolution + Rust `prepare` + arg shaping)
 
-If `$ARGUMENTS` names a run dir, use it; otherwise pick the newest under
-`archestra-bench/experiments/` (the `YYYYMMDD_HHMMSS` names sort chronologically). Resolve it to an
-**absolute** path — `realpath` it — so every path in the manifest is absolute and readable from any
-subagent's working directory:
+Run the helper (from anywhere — it derives the repo root). Pass a run dir, or omit it to pick the
+newest under `archestra-bench/experiments/`:
 
 ```
-realpath "$( [ -n "<ARG>" ] && echo "<ARG>" || ls -1d archestra-bench/experiments/*/ | sort | tail -1 )"
+<SKILL_DIR>/bin/prepare.sh "$ARGUMENTS"
 ```
 
-State which dir you chose. Use this absolute path as `<RUN_DIR>` everywhere below.
+It resolves the run dir to an absolute path, runs `archestra-bench prepare` (failures-first manifest;
+**fail-fast** — if it exits non-zero, surface the printed `path:line` error and stop), and writes
+under `<RUN_DIR>/_prep_claude/`: `manifest.json`, `metrics.md`, `order.tsv` (`idx<TAB>id<TAB>outcome`,
+manifest order), and `map-args.json` (ready-to-pass `args` for the map workflow). It prints a
+`KEY=value` summary — capture `RUN_DIR`, `TS`, `TRIAGE_DIR`, `MAP_ARGS`, `METRICS`, `ORDER`,
+`ANALYSES_DOC`, `REPORT_DOC` — then the metrics block. **State which `RUN_DIR` it chose.**
 
-## 2. Prepare (deterministic, Rust)
+## 2. Map — one triage workflow
 
-Run from the repo root:
+`Read` the `MAP_ARGS` file (`map-args.json`) and pass its JSON as `args` to the Workflow tool with
+`scriptPath: <SKILL_DIR>/workflows/map.mjs`. The args already contain `triageDir`, the verbatim
+`mapTemplate`, and the `rollouts` array (`{idx,id,outcome,outcomeSummary,trajectoryMd}`) in manifest
+order — no hand-shaping. The workflow fans out one **Sonnet** triage agent per rollout (auto-batched
+at the concurrency cap — no manual 8-at-a-time loop), each reads its own trajectory and `Write`s its
+triage (≤6000 chars) to `<TRIAGE_DIR>/<NN>.md` (zero-padded `idx`). It returns `{written, total}`; if
+`written < total`, note which indices are missing a triage file before continuing. Sonnet is
+deliberate — triage is a cheap bounded read; reserve the stronger model for the reduce synthesis.
 
-```
-cargo run -q --manifest-path archestra-bench/cli/Cargo.toml -- prepare --run-dir <RUN_DIR>
-```
-
-stdout is a JSON manifest `{ metrics_block, rollouts: [{ id, outcome, outcome_summary,
-trajectory_md }] }`, already failures-first. It renders each rollout's `trajectory.md`. Parse it; if
-the command errors (e.g. a malformed trajectory aborts with `path:line`), surface the error and
-stop. Capture a timestamp once for the output filenames: `date +%Y%m%d-%H%M%S` (call it `<ts>`).
-Create the triage scratch dir: `mkdir -p <RUN_DIR>/_triage_claude`.
-
-## 3. Map — one triage workflow, not a manual batch loop
-
-Read the **MAP** prompt block from `reference/prompts.md` verbatim (with its `{ROLLOUT_ID}`,
-`{OUTCOME_SUMMARY}`, `{TRAJECTORY_MD_PATH}` placeholders intact). Then call the Workflow tool with
-`scriptPath: <SKILL_DIR>/workflows/map.mjs` and `args`:
-
-```
-{
-  "triageDir": "<RUN_DIR>/_triage_claude",
-  "mapTemplate": "<the verbatim MAP block>",
-  "rollouts": [ { "idx": 0, "id": "<id>", "outcome": "<outcome>",
-                  "outcomeSummary": "<outcome_summary>", "trajectoryMd": "<trajectory_md>" }, ... ]
-}
-```
-
-`rollouts` is the manifest `rollouts` array in order, with `idx` = its 0-based manifest index. The
-workflow fans out one **Sonnet** triage agent per rollout (auto-batched at the concurrency cap — no
-manual 8-at-a-time loop), each reads its own trajectory and `Write`s its triage (≤6000 chars) to
-`<RUN_DIR>/_triage_claude/<NN>.md` where `<NN>` is the zero-padded `idx`. It returns
-`{ written, total }`; if `written < total`, note which indices are missing a triage file before
-continuing. Sonnet is deliberate here — triage is a cheap bounded read; reserve the stronger model
-for the reduce synthesis (step 5).
-
-## 4. Assemble the analyses doc (deterministic, in this loop)
+## 3. Assemble the analyses doc (deterministic, in this loop)
 
 The triage files are on disk; concatenate them in **manifest order** with bash (file→file, so the
-triages never enter your context). From the repo root, with `<ts>` and the manifest from step 2:
+triages never enter your context), reusing the `METRICS` and `ORDER` files from step 1:
 
 ```
-RUN_DIR=<RUN_DIR>; TS=<ts>; T="$RUN_DIR/_triage_claude"; OUT="$RUN_DIR/trajectory_analyses_claude_$TS.md"
-# write <metrics_block> to /tmp/_metrics.md first, and id/outcome rows (manifest order) to /tmp/_order.tsv as "idx\tid\toutcome"
-{ cat /tmp/_metrics.md; printf '\n# Per-trajectory analyses\n'; \
+T=<TRIAGE_DIR>; OUT=<ANALYSES_DOC>
+{ cat <METRICS>; printf '\n# Per-trajectory analyses\n'; \
   while IFS=$'\t' read -r idx id outcome; do f=$(printf '%s/%02d.md' "$T" "$idx"); \
     printf '\n## %s — %s\n\n' "$id" "$outcome"; \
     if [ "$(wc -m < "$f")" -gt 6000 ]; then head -c 6000 "$f"; printf '\n[analysis truncated]\n'; \
     else cat "$f"; printf '\n'; fi; \
-  done < /tmp/_order.tsv; } > "$OUT"
+  done < <ORDER>; } > "$OUT"
 ```
 
-Truncation parity with the Rust analyzer (`[analysis truncated]` past 6000 chars). This file is
-written **before** the reduce step — a reduce failure must never discard the map work.
+Truncation parity with the Rust analyzer (`[analysis truncated]` past 6000 chars). Write this
+**before** the reduce step — a reduce failure must never discard the map work.
 
-## 5. Reduce — repo-grounded report
+## 4. Reduce — repo-grounded report
 
-`Read` the analyses doc from step 4. Adopt the **REDUCE system guidance** from `reference/prompts.md`
-as your framing, then carry out the **REDUCE task message** (fill `{ANALYSES_DOC_PATH}` with the file
-from step 4, `{RUN_DIR}` absolute, `{BACKEND_LOG_PATHS}` with `<RUN_DIR>/*.backend.log`).
+`Read` the analyses doc (`ANALYSES_DOC`). Adopt the **REDUCE system guidance** from
+`reference/prompts.md` as your framing, then carry out the **REDUCE task message** (fill
+`{ANALYSES_DOC_PATH}` with `ANALYSES_DOC`, `{RUN_DIR}` absolute, `{BACKEND_LOG_PATHS}` with
+`<RUN_DIR>/*.backend.log`).
 
 Ground every finding in `file:line` across `platform/` (Tier 1) and `archestra-bench/` (Tier 2) by
 fanning the crawlers out through the **crawl workflow**: derive one issue/subsystem per cluster from
@@ -108,15 +86,16 @@ the analyses doc, then call the Workflow tool with `scriptPath: <SKILL_DIR>/work
 }
 ```
 
-It returns `[{ label, evidence }]` — the grounding you synthesize the report from. Before citing a
-surprising map claim, open the rollout's raw `trajectory.md` and confirm it.
+It returns `[{ label, evidence }]` (`.filter(Boolean)` it — a hard-failing crawler yields a null) —
+the grounding you synthesize the report from. Before citing a surprising map claim, open the
+rollout's raw `trajectory.md` and confirm it.
 
 **Hard rule:** the backend-log files (`<RUN_DIR>/*.backend.log`, e.g. `basic.backend.log`) are
 ~tens of MB. Never `Read`/`cat` them (yours or a subagent's) — only capped grep, e.g.
 `grep -n -m 50 -F '<pattern>' <RUN_DIR>/basic.backend.log`.
 
-`Write` the report to `<RUN_DIR>/trajectory_analysis_claude_<ts>.md` (same `<ts>` as step 4).
+`Write` the report to `REPORT_DOC` (`<RUN_DIR>/trajectory_analysis_claude_<TS>.md`).
 
-## 6. Report
+## 5. Report
 
 Tell the user both output paths and a one-line headline (overall pass rate + the top Tier-1 finding).

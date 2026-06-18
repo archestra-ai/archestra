@@ -343,6 +343,62 @@ describe("sandbox tools (runtime enabled)", () => {
       );
     });
 
+    test("target {fresh:false} resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { fresh: false } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: sandboxes[0].id }),
+      );
+    });
+
+    test("target with an empty id resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "" } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalled();
+    });
+
+    test("target with a non-empty but malformed id returns a clear error", async () => {
+      const ctx = await makeConversationCtx();
+      stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "not-a-uuid" } },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("UUID");
+    });
+
     test("target {id} from a different conversation is rejected", async () => {
       const ctxA = await makeConversationCtx();
       stubRunCommand("x");

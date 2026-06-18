@@ -67,31 +67,35 @@ const UUID_REGEX =
 // typed target — no magic strings. omitted = the conversation's default
 // sandbox (lazily created); { fresh: true } = a new isolated sandbox (its id is
 // returned); { id } = an explicit existing sandbox in the same conversation.
+// Both fields are optional and weakly typed on purpose: models routinely guess
+// `{ fresh: false }` or `{ id: "" }` meaning "the default sandbox", so the
+// schema accepts those shapes and `normalizeTarget` maps any no-op guess back to
+// the default rather than rejecting it.
 const SandboxTargetSchema = z
-  .union([
-    z
-      .strictObject({ fresh: z.literal(true) })
+  .strictObject({
+    fresh: z
+      .boolean()
+      .optional()
       .describe(
-        "Run against a brand-new isolated sandbox; its id is returned.",
+        "Set true for a brand-new isolated sandbox; its id is returned.",
       ),
-    z
-      .strictObject({
-        id: z
-          .string()
-          .trim()
-          .regex(UUID_REGEX, "must be a sandbox id (UUID)")
-          .describe("An existing sandbox id returned by an earlier call."),
-      })
-      .describe("Run against a specific existing sandbox."),
-  ])
+    id: z
+      .string()
+      .optional()
+      .describe("An existing sandbox id (UUID) returned by an earlier call."),
+  })
   .optional()
   .describe(
-    "Which sandbox to use. Omit for the conversation's default sandbox " +
-      '(created on first use). Pass `{ "fresh": true }` for a new isolated ' +
+    "Which sandbox to use. Omit (or leave empty) for the conversation's default " +
+      'sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated ' +
       'sandbox, or `{ "id": "<uuid>" }` to target a specific one.',
   );
 
 type SandboxTarget = z.infer<typeof SandboxTargetSchema>;
+
+// Canonical target intent after normalizing a (loosely typed) SandboxTarget:
+// a fresh sandbox, a specific id, or the default (undefined).
+type SandboxTargetIntent = { fresh: true } | { id: string } | undefined;
 
 const RunCommandSchema = z
   .strictObject({
@@ -825,6 +829,34 @@ function ensureUsable(
 }
 
 /**
+ * Map a loosely-typed {@link SandboxTarget} to a canonical intent. Models often
+ * express "the default sandbox" as `{ fresh: false }`, `{ id: "" }`, or `{}`, so
+ * those collapse to the default (undefined). `fresh: true` wins over an id; a
+ * non-empty id is validated as a UUID and otherwise reported clearly.
+ */
+function normalizeTarget(
+  target: SandboxTarget,
+): { intent: SandboxTargetIntent } | { error: string } {
+  if (!target) {
+    return { intent: undefined };
+  }
+  if (target.fresh === true) {
+    return { intent: { fresh: true } };
+  }
+  const id = target.id?.trim();
+  if (id) {
+    if (!UUID_REGEX.test(id)) {
+      return {
+        error: `target.id must be a sandbox id (UUID). Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+      };
+    }
+    return { intent: { id } };
+  }
+  // `{ fresh: false }`, `{ id: "" }`, or `{}` — the model meant the default.
+  return { intent: undefined };
+}
+
+/**
  * Resolve a {@link SandboxTarget} to a concrete sandbox id, creating the
  * conversation default (or a fresh sandbox) as needed. Explicit ids are scoped
  * to the calling user + organization.
@@ -838,8 +870,14 @@ async function resolveTarget(params: {
   const conversationId = context.conversationId ?? null;
   const isolationKey = context.isolationKey ?? null;
 
-  if (target && "id" in target) {
-    const sandbox = await SkillSandboxModel.findById(target.id);
+  const normalized = normalizeTarget(target);
+  if ("error" in normalized) {
+    return { error: normalized.error };
+  }
+  const intent = normalized.intent;
+
+  if (intent && "id" in intent) {
+    const sandbox = await SkillSandboxModel.findById(intent.id);
     // scope to the same org + user + conversation (or, for conversation-less
     // sandboxes, the same execution): an explicit id must not be a back door
     // to a sandbox from another conversation or another headless execution.
@@ -859,19 +897,19 @@ async function resolveTarget(params: {
           organizationId: userCtx.organizationId,
           userId: userCtx.userId,
           conversationId,
-          targetId: target.id,
+          targetId: intent.id,
           reason: "out_of_scope_sandbox_id",
         },
         "[Sandbox] rejected out-of-scope sandbox id",
       );
       return {
-        error: `No accessible sandbox with id ${target.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+        error: `No accessible sandbox with id ${intent.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
       };
     }
     return { sandboxId: asSandboxId(sandbox.id) };
   }
 
-  if (target && "fresh" in target) {
+  if (intent && "fresh" in intent) {
     let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
     try {
       sandbox = await SkillSandboxModel.create({

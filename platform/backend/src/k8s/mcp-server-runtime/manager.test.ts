@@ -540,9 +540,11 @@ describe("McpServerRuntimeManager", () => {
       const deploymentOptions = mockK8sDeploymentInstances.at(-1)?.options;
       expect(deploymentOptions).toHaveProperty("k8sCustomObjectsApi");
       expect(deploymentOptions).toMatchObject({
+        // The mock exposes no provider CRDs, so no NetworkPolicy enforcer is
+        // detected and the capability reports "none".
         networkPolicyCapabilities: {
-          kubernetesNetworkPolicy: true,
-          provider: "kubernetes",
+          kubernetesNetworkPolicy: false,
+          provider: "none",
           supportsFqdn: false,
         },
       });

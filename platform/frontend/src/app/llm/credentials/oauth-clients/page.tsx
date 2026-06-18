@@ -4,6 +4,10 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  AgentSelector,
+  type AgentSelectorAgent,
+} from "@/components/agent-selector";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
@@ -26,7 +30,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -37,7 +40,7 @@ import {
   useUpdateLlmOauthClient,
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { formatRelativeTime } from "@/lib/utils/date-time";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
 type LlmOauthClient =
@@ -132,7 +135,7 @@ export default function OAuthClientsPage() {
         header: "Created",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {formatRelativeTime(row.original.createdAt)}
+            {formatRelativeTimeFromNow(row.original.createdAt)}
           </span>
         ),
       },
@@ -335,7 +338,7 @@ function CreateOAuthClientDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  llmProxies: archestraApiTypes.GetAllAgentsResponses["200"];
+  llmProxies: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     values: archestraApiTypes.CreateLlmOauthClientData["body"],
@@ -395,14 +398,14 @@ function CreateOAuthClientDialog({
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
-            <MultiSelectCombobox
-              options={llmProxies.map((proxy) => ({
-                value: proxy.id,
-                label: proxy.name,
-              }))}
+            <AgentSelector
+              mode="multiple"
+              flat
+              agents={llmProxies}
               value={selectedProxyIds}
-              onChange={setSelectedProxyIds}
+              onValueChange={setSelectedProxyIds}
               placeholder="Select LLM proxies"
+              searchPlaceholder="Search LLM proxies"
               emptyMessage="No LLM proxies found"
             />
           </div>
@@ -440,7 +443,7 @@ function EditOAuthClientDialog({
 }: {
   oauthClient: LlmOauthClient | null;
   onOpenChange: (open: boolean) => void;
-  llmProxies: archestraApiTypes.GetAllAgentsResponses["200"];
+  llmProxies: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     id: string,
@@ -499,14 +502,14 @@ function EditOAuthClientDialog({
 
           <div className="space-y-2">
             <Label>Allowed LLM proxies</Label>
-            <MultiSelectCombobox
-              options={llmProxies.map((proxy) => ({
-                value: proxy.id,
-                label: proxy.name,
-              }))}
+            <AgentSelector
+              mode="multiple"
+              flat
+              agents={llmProxies}
               value={selectedProxyIds}
-              onChange={setSelectedProxyIds}
+              onValueChange={setSelectedProxyIds}
               placeholder="Select LLM proxies"
+              searchPlaceholder="Search LLM proxies"
               emptyMessage="No LLM proxies found"
             />
           </div>

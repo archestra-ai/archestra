@@ -69,6 +69,8 @@ import {
   MessageModel,
   ModelModel,
   OrganizationModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TeamModel,
@@ -101,6 +103,7 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { createAbortiveTurnTracker } from "./abortive-turn";
 import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
@@ -116,6 +119,7 @@ import {
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
 import {
+  buildAbortiveTurnError,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
@@ -719,6 +723,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
+                // Loaded once and reused for both message assembly (to know
+                // which attachment types this model can read) and the context
+                // window breakdown below. A failed lookup is non-fatal.
+                const modelRow = await ModelModel.findByProviderAndModelId(
+                  provider,
+                  selectedModel,
+                ).catch((error) => {
+                  logger.warn(
+                    { error, conversationId },
+                    "[chat] failed to load model row for the turn",
+                  );
+                  return null;
+                });
+
                 const modelMessages = await buildModelMessages({
                   messages: normalizedMessagesForLLM,
                   conversationId,
@@ -727,6 +745,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   agentId: conversation.agentId,
                   provider,
                   selectedModel,
+                  inputModalities: modelRow?.inputModalities ?? null,
                   agentLlmApiKeyId: agent.llmApiKeyId,
                   systemPrompt,
                   abortSignal: chatAbortController.signal,
@@ -745,10 +764,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 let latestBreakdown: ContextWindowBreakdown | null = null;
                 let breakdownPricePerToken: number | null = null;
                 try {
-                  const modelRow = await ModelModel.findByProviderAndModelId(
-                    provider,
-                    selectedModel,
-                  );
                   breakdownPricePerToken = resolveInputPricePerToken(modelRow);
                   const breakdown = buildContextWindowBreakdown({
                     provider,
@@ -1028,13 +1043,47 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Inject data-tool-ui-start right after each tool-input-start
                 // chunk (see createToolUiStartTransform — kept out of onChunk so
                 // the empty-response probe can't emit it before its own tool).
+                // The abortive-turn tracker taps the same merged stream to spot a
+                // tool call the model started but never completed and, on stream
+                // end, appends the same retryable error a clean-but-empty turn
+                // would surface — instead of completing silently. The start-of-
+                // stream probe can't catch this: the turn opened with renderable
+                // content. Emitting from the tracker's flush keeps it in stream
+                // order and avoids an execute-side await on a not-yet-drained
+                // stream.
                 writer.merge(
-                  modelUiStream.pipeThrough(
-                    createToolUiStartTransform({
-                      prefetchedUiResources,
-                      toolUiResourceUris,
-                    }),
-                  ),
+                  modelUiStream
+                    .pipeThrough(
+                      createToolUiStartTransform({
+                        prefetchedUiResources,
+                        toolUiResourceUris,
+                      }),
+                    )
+                    .pipeThrough(
+                      createAbortiveTurnTracker({
+                        onUnresolvedToolCall: () => {
+                          if (
+                            chatAbortController.signal.aborted ||
+                            activeRunError ||
+                            !conversationId
+                          ) {
+                            return null;
+                          }
+                          const mappedError = buildAbortiveTurnError(provider);
+                          activeRunError = mappedError.message;
+                          return {
+                            type: "error",
+                            errorText: buildStreamErrorPayload({
+                              error: new Error(mappedError.message),
+                              mappedError,
+                              conversationId,
+                              slimChatErrorUi,
+                              stage: "via stream",
+                            }),
+                          };
+                        },
+                      }),
+                    ),
                 );
 
                 // Wait for the stream to complete and get usage data.
@@ -1397,7 +1446,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversationFiles,
         description:
-          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+          "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(ConversationFilesResponseSchema),
@@ -1417,6 +1466,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
+          conversationOwnerUserId: conversation.userId,
+          requestingUserId: user.id,
         }),
       );
     },
@@ -1644,20 +1695,42 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          projectId: true,
         })
           .required({ agentId: true })
           .partial({
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            projectId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
+      {
+        body: { agentId, title, modelId, chatApiKeyId, projectId },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
+      // A chat born in a project belongs to it; the caller must be able to
+      // read the project. "No access" reads as 404, like the project routes.
+      if (projectId) {
+        const project = await ProjectModel.findById(projectId);
+        if (
+          !project ||
+          !(await ProjectShareModel.userCanAccessProject({
+            project,
+            userId: user.id,
+            organizationId,
+          }))
+        ) {
+          throw new ApiError(404, "Project not found");
+        }
+      }
+
       // Check if user is an agent admin
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -1710,6 +1783,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          projectId: projectId ?? null,
         }),
       );
     },

@@ -1,4 +1,5 @@
-//! Typed model of a benchmark `trajectory.jsonl` and its markdown rendering.
+//! Loading a benchmark `trajectory.jsonl` and rendering it to markdown. The `Event` shape lives in
+//! `archestra-bench-core` (shared with the harness writer).
 //!
 //! Each line is one `kind`-tagged event. Parsing is clean-or-fail: a non-JSON line or a
 //! known-kind record missing a required field aborts the rollout with its `path:line`; only an
@@ -7,7 +8,7 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use archestra_bench_core::Event;
 use serde_json::Value;
 
 /// Per-field render cap (Unicode scalar values), so a single huge tool blob or reasoning dump
@@ -26,48 +27,6 @@ fn cap_chars(s: &str, max: usize) -> String {
         &s[..cut],
         s.chars().count()
     )
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Event {
-    ConversationCreated,
-    AssistantText {
-        text: String,
-    },
-    ToolCall {
-        tool_name: String,
-        input: Value,
-    },
-    ToolOutput {
-        output: Value,
-    },
-    TokenUsage,
-    Finish,
-    StageComplete {
-        stage: u32,
-    },
-    AgentError {
-        error: String,
-    },
-    Error {
-        error: String,
-    },
-    /// Boot/seed/setup failure; the sole record in an infra-failed rollout's trajectory (run.py).
-    InfraError {
-        error: String,
-    },
-    ArtifactMissing {
-        error: String,
-    },
-    ParseError {
-        #[serde(default)]
-        reason: Option<String>,
-    },
-    /// Raw stream framing the harness could not classify, plus any future event kinds: rendered
-    /// nowhere (noise), but still validated as JSON by the loader.
-    #[serde(other)]
-    Unknown,
 }
 
 /// A parse failure pinned to its source line, so the operator can find the offending record.

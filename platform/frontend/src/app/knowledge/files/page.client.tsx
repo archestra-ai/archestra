@@ -3,6 +3,7 @@
 import {
   KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE,
   KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL,
+  MAX_KNOWLEDGE_FILES_PER_UPLOAD,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -20,7 +21,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import {
@@ -298,8 +300,73 @@ function UploadKnowledgeFilesDialog({
   const uploadDisabled =
     files.length === 0 || teamSelectionInvalid || isUploading;
 
-  const handleSelectedFiles = (selectedFiles: FileList | File[]) => {
-    setFiles(Array.from(selectedFiles));
+  const exceededLimitRef = useRef(false);
+
+  const addFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const fileKey = (file: File) =>
+      `${file.name}:${file.size}:${file.lastModified}`;
+    setFiles((prev) => {
+      const seen = new Set(prev.map(fileKey));
+      const merged = [...prev];
+      for (const file of incoming) {
+        const key = fileKey(file);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(file);
+      }
+      if (merged.length > MAX_KNOWLEDGE_FILES_PER_UPLOAD) {
+        exceededLimitRef.current = true;
+        return merged.slice(0, MAX_KNOWLEDGE_FILES_PER_UPLOAD);
+      }
+      return merged;
+    });
+  };
+
+  // Warn after commit rather than inside the updater so the toast fires once.
+  useEffect(() => {
+    if (!exceededLimitRef.current) return;
+    exceededLimitRef.current = false;
+    toast.warning(
+      `Up to ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} files can be uploaded at once. Only the first ${MAX_KNOWLEDGE_FILES_PER_UPLOAD} were kept.`,
+    );
+  });
+
+  const removeFile = (target: File) => {
+    setFiles((prev) => prev.filter((file) => file !== target));
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+
+    const items = Array.from(event.dataTransfer.items);
+    if (items.length === 0) {
+      addFiles(Array.from(event.dataTransfer.files));
+      return;
+    }
+
+    const droppedFiles: File[] = [];
+    let hadDirectory = false;
+    for (const item of items) {
+      if (item.kind !== "file") continue;
+      const entry = item.webkitGetAsEntry?.();
+      if (entry?.isDirectory) {
+        hadDirectory = true;
+        continue;
+      }
+      const file = item.getAsFile();
+      if (file) droppedFiles.push(file);
+    }
+    if (hadDirectory) {
+      toast.warning("Folders aren't supported — drop individual files.");
+    }
+    if (droppedFiles.length === 0 && !hadDirectory) {
+      // Browser without the entry API: stage whatever it exposed directly.
+      addFiles(Array.from(event.dataTransfer.files));
+      return;
+    }
+    addFiles(droppedFiles);
   };
 
   return (
@@ -335,7 +402,11 @@ function UploadKnowledgeFilesDialog({
             accept={KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE}
             multiple
             className="hidden"
-            onChange={(event) => handleSelectedFiles(event.target.files ?? [])}
+            onChange={(event) => {
+              addFiles(Array.from(event.target.files ?? []));
+              // Reset so re-picking the same file fires onChange again.
+              event.target.value = "";
+            }}
           />
           <Button
             type="button"
@@ -359,11 +430,7 @@ function UploadKnowledgeFilesDialog({
               event.preventDefault();
               setIsDraggingFiles(false);
             }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDraggingFiles(false);
-              handleSelectedFiles(event.dataTransfer.files);
-            }}
+            onDrop={handleDrop}
           >
             <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
             <p className="text-sm font-medium">
@@ -376,15 +443,33 @@ function UploadKnowledgeFilesDialog({
           </p>
           {files.length > 0 && (
             <div className="rounded-md border">
+              <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
+                <span>Selected files</span>
+                <span>
+                  {files.length} / {MAX_KNOWLEDGE_FILES_PER_UPLOAD}
+                </span>
+              </div>
               {files.map((file) => (
                 <div
                   key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className="flex items-center justify-between border-b px-3 py-2 last:border-b-0"
+                  className="flex items-center gap-2 border-b px-3 py-2 last:border-b-0"
                 >
-                  <span className="min-w-0 truncate text-sm">{file.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {file.name}
+                  </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatFileSize(file.size)}
                   </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() => removeFile(file)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               ))}
             </div>

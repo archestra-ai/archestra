@@ -53,7 +53,6 @@ overrides:
   # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
   hono: 4.12.25
   kysely: 0.28.17
-  lodash: '>=4.18.0'
   lodash-es: 4.18.1
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
@@ -71,13 +70,11 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  defu: '>=6.1.5'
   postcss: '>=8.5.10'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
   brace-expansion: '>=5.0.6'
   smol-toml: '>=1.6.1'
-  yaml: '>=2.8.3'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
   # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4

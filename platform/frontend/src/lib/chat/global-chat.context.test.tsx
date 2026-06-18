@@ -79,7 +79,7 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-describe.skip("ChatProvider retries", () => {
+describe("ChatProvider retries", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
   beforeEach(() => {
@@ -745,7 +745,7 @@ describe.skip("ChatProvider retries", () => {
   });
 });
 
-describe.skip("ChatProvider auto title generation", () => {
+describe("ChatProvider auto title generation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     conversationMock.data = { title: null };
@@ -964,7 +964,7 @@ describe.skip("ChatProvider auto title generation", () => {
   });
 });
 
-describe.skip("ChatProvider title animation", () => {
+describe("ChatProvider title animation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -1003,19 +1003,26 @@ describe.skip("ChatProvider title animation", () => {
   });
 });
 
-describe.skip("context window breakdown state", () => {
+describe("context window breakdown state", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     chatOptions = undefined;
+    // The real useChat returns a referentially-stable messages array between
+    // renders when nothing changed. Returning a fresh [] from each mock call
+    // instead makes stableMessages a new identity every render, which re-fires
+    // the session-sync effect → notifySessionUpdate → re-render in an infinite
+    // loop that hangs render(<ChatProvider>) and never exits the worker. Hoist
+    // one stable empty array so the mock honors that contract.
+    const messages: UIMessage[] = [];
     mocks.useChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: [],
+        messages,
         regenerate: mocks.regenerate,
         resumeStream: mocks.resumeStream,
         sendMessage: mocks.sendMessage,
@@ -1197,7 +1204,7 @@ describe.skip("context window breakdown state", () => {
   });
 });
 
-describe.skip("deriveContextWindowState", () => {
+describe("deriveContextWindowState", () => {
   const baseBreakdown = {
     provider: "anthropic",
     model: "claude-sonnet-4-6",

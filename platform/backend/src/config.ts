@@ -546,6 +546,17 @@ export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
 
   addHostFromUrl(frontendBaseUrl);
 
+  // In local development the Next.js dev server always serves on
+  // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
+  // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
+  // client connecting to the local origin can still complete the gateway OAuth
+  // handshake without extra config. Never enabled in production, where the
+  // allowlist must stay restricted to the configured public hosts.
+  if (isDevelopment) {
+    addHostFromUrl("http://localhost:3000");
+    addHostFromUrl("http://127.0.0.1:3000");
+  }
+
   const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {
     for (const url of externalUrls.split(",")) {
@@ -1191,6 +1202,15 @@ const config = {
    */
   apps: {
     enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
+  },
+  /**
+   * Projects + the persistent "My Files" file system on top of the skill
+   * sandbox. Ships dark: off by default until ready to surface. Gates the
+   * project APIs, the My Files endpoints, the search_files / save_result MCP
+   * tools, and the my_file upload source.
+   */
+  projects: {
+    enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

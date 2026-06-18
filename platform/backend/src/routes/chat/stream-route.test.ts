@@ -1694,6 +1694,182 @@ describe("POST /api/chat handler composition", () => {
     expect(directWrites).not.toContain("data-tool-ui-start");
   });
 
+  test("appends a retryable IncompleteToolCall error when a tool call never completes", async () => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+    // Renderable first event so the probe commits the turn; the UI stream opens
+    // with reasoning text then a tool call that never reaches tool-input-available.
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          { type: "text-start", id: "t0" },
+          { type: "text-delta", id: "t0", delta: "<think>call whoami</think>" },
+          { type: "text-end", id: "t0" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "whoami",
+          },
+          {
+            type: "tool-input-delta",
+            toolCallId: "call-1",
+            inputTextDelta: "{",
+          },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("show me my tasks"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mergedStreams).toHaveLength(1);
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+      errorText?: string;
+    }>;
+    const errorChunk = mergedChunks.find((chunk) => chunk.type === "error");
+    expect(errorChunk).toBeDefined();
+    expect(mergedChunks.at(-1)).toBe(errorChunk); // trailing, after model content
+    const payload = JSON.parse(errorChunk?.errorText ?? "{}");
+    expect(payload.code).toBe("incomplete_tool_call");
+    expect(payload.isRetryable).toBe(true);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(1);
+    expect(persistedErrors[0]?.error.code).toBe("incomplete_tool_call");
+  });
+
+  test("does not flag a completed tool call", async () => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "whoami",
+          },
+          {
+            type: "tool-input-available",
+            toolCallId: "call-1",
+            toolName: "whoami",
+            input: {},
+          },
+          { type: "tool-output-available", toolCallId: "call-1", output: "ok" },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("who am i"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+    }>;
+    expect(mergedChunks.some((chunk) => chunk.type === "error")).toBe(false);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("does not flag a tool call paused for approval (input completed first)", async () => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "whoami",
+          },
+          {
+            type: "tool-input-available",
+            toolCallId: "call-1",
+            toolName: "whoami",
+            input: {},
+          },
+          { type: "tool-approval-request", toolCallId: "call-1" },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("who am i"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+    }>;
+    expect(mergedChunks.some((chunk) => chunk.type === "error")).toBe(false);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("does not flag a tool call whose input errored (tool-input-error)", async () => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(RENDERABLE_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "start" },
+          {
+            type: "tool-input-start",
+            toolCallId: "call-1",
+            toolName: "whoami",
+          },
+          {
+            type: "tool-input-delta",
+            toolCallId: "call-1",
+            inputTextDelta: "{",
+          },
+          {
+            type: "tool-input-error",
+            toolCallId: "call-1",
+            toolName: "whoami",
+            input: {},
+            errorText: "malformed tool call",
+          },
+          { type: "finish" },
+        ],
+      }),
+    );
+
+    const response = await postMessage(plainUserMessage("who am i"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const mergedChunks = (await readAll(mergedStreams[0])) as Array<{
+      type: string;
+    }>;
+    expect(mergedChunks.some((chunk) => chunk.type === "error")).toBe(false);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
   test("persists the user message before the stream executes", async () => {
     runExecute = false;
 

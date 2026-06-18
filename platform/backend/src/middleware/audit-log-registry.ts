@@ -13,6 +13,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
@@ -429,6 +430,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/llm-oauth-clients/:id": {
     resourceType: "llmOauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
+  },
+
+  "/api/mcp-oauth-clients": {
+    resourceType: "mcpOauthClient",
+    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/mcp-oauth-clients/:id": {
+    resourceType: "mcpOauthClient",
+    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
   // LLM model catalog (admin) — sync has distinct semantics from a generic update.

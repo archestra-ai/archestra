@@ -1,6 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("sonner", () => ({
+  toast: {
+    warning: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+    info: vi.fn(),
+  },
+}));
 
 beforeAll(() => {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -155,5 +165,111 @@ describe("KnowledgeFilesPage", () => {
         "Choose which agents and MCP gateways can retrieve this file, or make it available to all of them.",
       ),
     ).toBeInTheDocument();
+  });
+
+  describe("upload file staging", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    const makeFile = (name: string, content = "x", lastModified = 1000) =>
+      new File([content], name, { type: "text/markdown", lastModified });
+
+    const stageFiles = (input: HTMLInputElement, files: File[]) => {
+      Object.defineProperty(input, "files", {
+        value: files,
+        configurable: true,
+      });
+      fireEvent.change(input);
+    };
+
+    const openUploadDialog = async () => {
+      const user = userEvent.setup();
+      render(<KnowledgeFilesPage />);
+      await user.click(screen.getByRole("button", { name: "Upload Files" }));
+      const input = document.querySelector(
+        'input[type="file"]',
+      ) as HTMLInputElement;
+      return { user, input };
+    };
+
+    it("appends newly picked files to the existing selection", async () => {
+      const { input } = await openUploadDialog();
+
+      stageFiles(input, [makeFile("first.md")]);
+      stageFiles(input, [makeFile("second.md")]);
+
+      expect(screen.getByText("first.md")).toBeInTheDocument();
+      expect(screen.getByText("second.md")).toBeInTheDocument();
+      expect(screen.getByText("2 / 20")).toBeInTheDocument();
+    });
+
+    it("ignores re-picking the identical file", async () => {
+      const { input } = await openUploadDialog();
+
+      stageFiles(input, [makeFile("dup.md", "same", 1000)]);
+      stageFiles(input, [makeFile("dup.md", "same", 1000)]);
+
+      expect(screen.getAllByText("dup.md")).toHaveLength(1);
+      expect(screen.getByText("1 / 20")).toBeInTheDocument();
+    });
+
+    it("keeps same-named files that differ in content", async () => {
+      const { input } = await openUploadDialog();
+
+      stageFiles(input, [makeFile("notes.md", "first", 1000)]);
+      stageFiles(input, [makeFile("notes.md", "second-longer", 2000)]);
+
+      expect(screen.getAllByText("notes.md")).toHaveLength(2);
+      expect(screen.getByText("2 / 20")).toBeInTheDocument();
+    });
+
+    it("removes a staged file", async () => {
+      const { user, input } = await openUploadDialog();
+
+      stageFiles(input, [makeFile("remove-me.md")]);
+      await user.click(
+        screen.getByRole("button", { name: "Remove remove-me.md" }),
+      );
+
+      expect(screen.queryByText("remove-me.md")).not.toBeInTheDocument();
+    });
+
+    it("caps the selection at the upload limit", async () => {
+      const { input } = await openUploadDialog();
+
+      stageFiles(
+        input,
+        Array.from({ length: 25 }, (_, index) => makeFile(`file-${index}.md`)),
+      );
+
+      expect(screen.getByText("20 / 20")).toBeInTheDocument();
+      expect(toast.warning).toHaveBeenCalled();
+    });
+
+    it("rejects dropped folders without staging them", async () => {
+      await openUploadDialog();
+      const dropzone = screen.getByRole("button", {
+        name: /Drop files here or click to browse/,
+      });
+
+      fireEvent.drop(dropzone, {
+        dataTransfer: {
+          items: [
+            {
+              kind: "file",
+              webkitGetAsEntry: () => ({ isDirectory: true }),
+              getAsFile: () => null,
+            },
+          ],
+          files: [],
+        },
+      });
+
+      expect(toast.warning).toHaveBeenCalledWith(
+        "Folders aren't supported — drop individual files.",
+      );
+      expect(screen.queryByText("0 / 20")).not.toBeInTheDocument();
+    });
   });
 });

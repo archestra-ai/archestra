@@ -1,5 +1,6 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type * as k8s from "@kubernetes/client-node";
+import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
@@ -406,14 +407,20 @@ class DaggerEnvironmentRuntimeManager {
       });
     } catch (error) {
       if (!isConflict(error)) throw error;
-      await customObjectsApi.replaceNamespacedCustomObject({
-        group,
-        version,
-        namespace,
-        plural,
-        name,
-        body,
-      });
+      // Merge-patch, not replace (PUT): the AWS ApplicationNetworkPolicy CRD
+      // rejects a PUT without metadata.resourceVersion (422), and a merge patch
+      // also leaves controller-owned fields like finalizers intact.
+      await customObjectsApi.patchNamespacedCustomObject(
+        {
+          group,
+          version,
+          namespace,
+          plural,
+          name,
+          body,
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      );
     }
   }
 }

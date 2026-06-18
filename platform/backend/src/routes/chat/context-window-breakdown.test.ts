@@ -30,7 +30,7 @@ function itemsFor(
   );
 }
 
-describe.skip("buildContextWindowBreakdown", () => {
+describe("buildContextWindowBreakdown", () => {
   const baseParams = {
     provider: "openai" as const,
     model: "gpt-4o",
@@ -568,7 +568,7 @@ describe.skip("buildContextWindowBreakdown", () => {
 // resolveInputPricePerToken
 // ---------------------------------------------------------------------------
 
-describe.skip("resolveInputPricePerToken", () => {
+describe("resolveInputPricePerToken", () => {
   it("returns null for a null model row", () => {
     expect(resolveInputPricePerToken(null)).toBeNull();
   });
@@ -629,7 +629,7 @@ describe.skip("resolveInputPricePerToken", () => {
 // refreshBreakdownUsedTokens
 // ============================================================================
 
-describe.skip("refreshBreakdownUsedTokens", () => {
+describe("refreshBreakdownUsedTokens", () => {
   const baseBreakdown = buildContextWindowBreakdown({
     provider: "anthropic",
     model: "claude-sonnet-4-6",

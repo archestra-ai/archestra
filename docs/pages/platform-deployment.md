@@ -839,6 +839,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_PROJECTS_ENABLED`** - Enables Projects and the persistent "My Files" file system built on the skill sandbox. When off, the `/projects` and `/my-files` pages and their sidebar links are hidden, the project APIs and My Files endpoints are not served, the `search_files` / `save_result` MCP tools and the `my_file` upload source are unavailable, and the chat Files panel shows only generated outputs and attachments.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
 

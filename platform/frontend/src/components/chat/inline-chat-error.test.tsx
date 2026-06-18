@@ -175,6 +175,26 @@ describe("InlineChatError", () => {
     expect(container.querySelector(".bg-muted\\/30")).not.toBeNull();
   });
 
+  it("renders an incomplete-tool-call turn as a retryable destructive error, not a neutral outcome", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "incomplete_tool_call",
+              message:
+                "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(container.querySelector(".bg-destructive\\/10")).not.toBeNull();
+    expect(container.querySelector(".bg-muted\\/30")).toBeNull();
+  });
+
   it("keeps destructive styling for genuine errors", () => {
     const { container } = render(
       <InlineChatError

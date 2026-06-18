@@ -2,23 +2,22 @@
 name = "trajectory-analyzer"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
-[[bin]]
-name = "analyze-trajectories"
-path = "src/main.rs"
+[lib]
+name = "trajectory_analyzer"
+path = "src/lib.rs"
 
 [dependencies]
+archestra-bench-core = { path = "../core" }
 nitpicker-agent = "0.1"
 rig-core = "0.38"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
-clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 glob = "0.3"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 tempfile = "3"
 indicatif = "0.18"

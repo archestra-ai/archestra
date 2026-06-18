@@ -20,6 +20,16 @@ const apiFiles = {
       createdAt: "2026-06-08T00:00:00.000Z",
     },
   ],
+  myFiles: [
+    {
+      id: "x1",
+      name: "q2.csv",
+      mimeType: "text/csv",
+      contentUrl: "/api/skill-sandbox/artifacts/x1",
+      createdAt: "2026-06-08T00:00:00.000Z",
+    },
+  ],
+  projectName: null,
 };
 
 describe("assembleFileSections", () => {
@@ -61,11 +71,39 @@ describe("assembleFileSections", () => {
   });
 
   it("handles a null files payload (artifact only)", () => {
-    const { generated, attachments } = assembleFileSections({
+    const { generated, attachments, myFiles } = assembleFileSections({
       files: null,
       artifact: "# hello",
     });
     expect(generated.map((f) => f.id)).toEqual(["artifact"]);
     expect(attachments).toEqual([]);
+    expect(myFiles).toEqual([]);
+  });
+
+  it("maps myFiles to the my-file source with the artifact byte URL", () => {
+    const { myFiles } = assembleFileSections({
+      files: apiFiles,
+      artifact: null,
+    });
+    expect(myFiles).toEqual([
+      {
+        id: "x1",
+        name: "q2.csv",
+        mimeType: "text/csv",
+        contentUrl: "/api/skill-sandbox/artifacts/x1",
+        source: "my-file",
+      },
+    ]);
+  });
+
+  it("titles the myFiles section by scope: project vs personal", () => {
+    const personal = assembleFileSections({ files: apiFiles, artifact: null });
+    expect(personal.myFilesTitle).toBe("My Files");
+
+    const project = assembleFileSections({
+      files: { ...apiFiles, projectName: "hello" },
+      artifact: null,
+    });
+    expect(project.myFilesTitle).toBe("Project files");
   });
 });

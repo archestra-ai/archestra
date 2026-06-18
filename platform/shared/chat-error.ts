@@ -273,6 +273,12 @@ export enum ChatErrorCode {
   /** Provider finished cleanly but produced no content - retryable */
   EmptyResponse = "empty_response",
   /**
+   * The model started a tool call but never completed it, so the turn produced
+   * no reply and executed nothing - retryable. Distinct from EmptyResponse: the
+   * model did begin output, it just abandoned it mid tool-call.
+   */
+  IncompleteToolCall = "incomplete_tool_call",
+  /**
    * The provider needs a per-user credential the acting user hasn't linked yet
    * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
    * to link their account rather than showing a generic key error.
@@ -305,6 +311,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.EmptyResponse]:
     "The model ended its turn without a reply. Rephrasing your message may help.",
+  [ChatErrorCode.IncompleteToolCall]:
+    "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
@@ -318,6 +326,7 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
   ChatErrorCode.EmptyResponse,
+  ChatErrorCode.IncompleteToolCall,
 ]);
 
 /**

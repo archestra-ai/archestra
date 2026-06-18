@@ -9,14 +9,14 @@
 #   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
 
 [[lane]]
-name = "gemini-flash"
-provider = "gemini"
-model = "gemini-3.5-flash"
+name = "or-poolside"
+provider = "openrouter"
+model = "poolside/laguna-m.1:free"
 
-# [[lane]]
-# name = "or-free"
-# provider = "openrouter"
-# model = "openrouter/free"
+[[lane]]
+name = "or-owl"
+provider = "openrouter"
+model = "openrouter/owl-alpha"
 
 [[lane]]
 name = "minimax"

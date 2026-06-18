@@ -1,12 +1,12 @@
 "use client";
 
 import { format } from "date-fns";
-import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { FileText, Globe, Pin, PinOff, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
+import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -16,14 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 
 export type RightPanelTab = "files" | "browser" | "canvas";
-
-/** Smallest the panel itself may shrink to. */
-const MIN_PANEL_WIDTH = 300;
-/** Width the conversation column must always keep so it never squashes. */
-const MIN_CHAT_WIDTH = 400;
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -66,108 +60,6 @@ export function RightSidePanel({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
-  const [width, setWidth] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("archestra-right-panel-width");
-      return saved ? Number.parseInt(saved, 10) : 500;
-    }
-    return 500;
-  });
-  const [isResizing, setIsResizing] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Largest the panel may grow to: the width of the chat layout row (chat
-  // column + this panel) minus the minimum chat column width. The panel's
-  // direct parent is a tight flex wrapper whose width equals the panel, so we
-  // measure its parent — the row — which spans the whole chat area (everything
-  // right of the left nav). Falls back to the viewport before layout exists.
-  const getMaxWidth = useCallback(() => {
-    const row = panelRef.current?.parentElement?.parentElement;
-    const available =
-      row?.getBoundingClientRect().width ??
-      (typeof window !== "undefined" ? window.innerWidth : 0);
-    return Math.max(MIN_PANEL_WIDTH, available - MIN_CHAT_WIDTH);
-  }, []);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  }, []);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      const step = e.shiftKey ? 50 : 10; // Larger step with shift key
-      const maxWidth = getMaxWidth();
-
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        const newWidth = Math.min(maxWidth, width + step);
-        setWidth(newWidth);
-        localStorage.setItem(
-          "archestra-right-panel-width",
-          newWidth.toString(),
-        );
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        const newWidth = Math.max(MIN_PANEL_WIDTH, width - step);
-        setWidth(newWidth);
-        localStorage.setItem(
-          "archestra-right-panel-width",
-          newWidth.toString(),
-        );
-      }
-    },
-    [width, getMaxWidth],
-  );
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const newWidth = window.innerWidth - e.clientX;
-      const clampedWidth = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(getMaxWidth(), newWidth),
-      );
-      setWidth(clampedWidth);
-      localStorage.setItem(
-        "archestra-right-panel-width",
-        clampedWidth.toString(),
-      );
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizing, getMaxWidth]);
-
-  // Keep the panel within bounds when the window resizes (or on first mount),
-  // so a previously-saved width never squashes the chat column.
-  useEffect(() => {
-    const clamp = () => {
-      setWidth((prev) =>
-        Math.max(MIN_PANEL_WIDTH, Math.min(getMaxWidth(), prev)),
-      );
-    };
-    clamp();
-    window.addEventListener("resize", clamp);
-    return () => window.removeEventListener("resize", clamp);
-  }, [getMaxWidth]);
-
   const {
     canvases,
     pinnedCanvasId,
@@ -197,44 +89,7 @@ export function RightSidePanel({
   }
 
   return (
-    <div
-      ref={panelRef}
-      style={{ width: `${width}px` }}
-      className={cn("h-full border-l bg-background flex flex-col relative")}
-    >
-      {/* Resize handle */}
-      {/* biome-ignore lint/a11y/useSemanticElements: This is a draggable resize handle, not a semantic separator */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize bg-transparent hover:bg-primary/10 transition-all z-10"
-        onMouseDown={handleMouseDown}
-        onKeyDown={handleKeyDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panel. Use arrow keys to resize, hold shift for larger steps."
-        aria-valuenow={width}
-        aria-valuemin={MIN_PANEL_WIDTH}
-        aria-valuemax={getMaxWidth()}
-        tabIndex={0}
-      >
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
-
-      {/* While dragging, a transparent full-viewport overlay sits above any
-          iframes (MCP App / Browser tabs) so they don't swallow the mouse
-          events that drive the resize — without it, the resize freezes the
-          moment the cursor crosses an iframe. */}
-      {isResizing &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] cursor-col-resize"
-            aria-hidden
-          />,
-          document.body,
-        )}
-
+    <ResizableRightPanel>
       <Tabs
         value={resolvedTab}
         onValueChange={(value) => onTabChange(value as RightPanelTab)}
@@ -377,6 +232,6 @@ export function RightSidePanel({
           )}
         </div>
       </Tabs>
-    </div>
+    </ResizableRightPanel>
   );
 }

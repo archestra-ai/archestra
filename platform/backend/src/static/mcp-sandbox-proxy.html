@@ -159,15 +159,28 @@ document.addEventListener("securitypolicyviolation", function(e) {\
  * Inject CSP meta tag and violation listener into HTML (Inspector pattern).
  * Used for srcdoc loading where HTTP headers aren't available.
  */
-function injectCSP(html, cspValue) {
-  var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+function injectCSP(html, cspValue, ownedApp) {
   var violationListener = buildViolationListenerScript();
-  // Expose the served SDK URL so the injected Apps SDK can import it (apps
-  // themselves never touch it). APP_SDK_URL is
-  // location.origin-derived (no user input), but JSON-encode defensively so it
-  // can never break out of the inline script.
-  var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
-  var injection = cspMeta + sdkGlobal + violationListener;
+  var injection;
+  // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
+  // envelope (app-sdk-injection.ts), so they work identically here and in a
+  // foreign host. The proxy must NOT add a second CSP for them — a differing
+  // policy would intersect and break the render — so it only adds the violation
+  // listener. This MUST key off the trusted host-set `ownedApp` flag, never the
+  // HTML: the HTML for external MCP-UI apps is attacker-controlled, so a content
+  // marker could be spoofed to suppress the platform CSP. External apps get the
+  // full proxy CSP + SDK-URL injection.
+  if (ownedApp === true) {
+    injection = violationListener;
+  } else {
+    var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+    // Expose the served SDK URL so the injected Apps SDK can import it (apps
+    // themselves never touch it). APP_SDK_URL is
+    // location.origin-derived (no user input), but JSON-encode defensively so it
+    // can never break out of the inline script.
+    var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
+    injection = cspMeta + sdkGlobal + violationListener;
+  }
 
   // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
   // serve-time SDK injection (app-sdk-injection.ts) exactly: both chains
@@ -285,7 +298,9 @@ window.addEventListener("message", async (event) => {
     }
 
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
-      const { html, sandbox, csp, permissions } = event.data.params;
+      // `ownedApp` is set by the trusted host (origin-validated above) only for
+      // Archestra-owned apps, whose envelope already carries the platform CSP.
+      const { html, sandbox, csp, permissions, ownedApp } = event.data.params;
       if (typeof sandbox === "string") {
         // Only allow known-safe sandbox tokens to prevent a compromised MCP
         // server from injecting e.g. allow-top-navigation to escape the sandbox.
@@ -304,7 +319,7 @@ window.addEventListener("message", async (event) => {
       if (typeof html === "string") {
         // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
-        const processedHtml = injectCSP(html, buildCSP(csp));
+        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
 
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc

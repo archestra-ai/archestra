@@ -24,8 +24,9 @@
  *   archestra.context               — { appId, version } of the running app (sync)
  *
  * Delivery contract (both globals are injected before this file loads):
- *   window.__ARCHESTRA_APP_SDK_URL__  — ext-apps guest SDK bundle URL (sandbox proxy)
- *   window.__ARCHESTRA_APP_CONTEXT__  — per-viewer bootstrap { user, tools, appId, version } (backend)
+ *   window.__ARCHESTRA_APP_CONTEXT__  — per-viewer bootstrap { user, tools, appId, version, sdkUrl } (backend)
+ *   window.__ARCHESTRA_APP_SDK_URL__  — ext-apps guest SDK bundle URL (sandbox proxy, same-origin fallback)
+ *   (the bundle URL is read from context.sdkUrl first, so a foreign host needs no proxy global)
  *
  * Classic (non-module) script: `window.archestra` exists synchronously before
  * any app script. Connects eagerly at load — the host only delivers
@@ -112,7 +113,10 @@
   const context = window.__ARCHESTRA_APP_CONTEXT__ || {};
 
   const connectPromise = (async () => {
-    const sdkUrl = window.__ARCHESTRA_APP_SDK_URL__;
+    // Prefer the bundle URL the backend embedded in the bootstrap context
+    // (absolute, present in any host); fall back to the proxy-injected global
+    // for the same-origin sandbox path.
+    const sdkUrl = context.sdkUrl || window.__ARCHESTRA_APP_SDK_URL__;
     if (!sdkUrl) {
       throw new Error(
         "Archestra Apps SDK: host did not provide the guest SDK URL",

@@ -9,6 +9,8 @@ import {
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
+import { buildPlatformCspContent } from "./app-sdk-injection";
+import { APP_PLATFORM_CSP } from "./app-ui-policy";
 
 // The injectAppSdk envelope logic moved to the app_runtime_core Rust crate; its
 // behavior (anchor selection, escaping, injection order) is covered by that
@@ -74,5 +76,31 @@ describe("the Apps SDK static file", () => {
     expect(sdk).toContain("__ARCHESTRA_APP_CONTEXT__");
     expect(sdk).toContain("auth_required");
     expect(sdk).toContain("auth_expired");
+  });
+
+  // The SDK also reads the bundle URL from the bootstrap context, so a foreign
+  // host that never runs the sandbox proxy can still load it.
+  test("prefers the context-provided guest SDK URL", () => {
+    expect(sdk).toContain("context.sdkUrl");
+  });
+});
+
+describe("buildPlatformCspContent", () => {
+  test("pins the platform sandbox with absolute, origin-rooted asset URLs", () => {
+    const csp = buildPlatformCspContent(
+      "https://app.example.com",
+      APP_PLATFORM_CSP,
+    );
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("form-action 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    // Both platform scripts are allowed from the absolute origin.
+    expect(csp).toContain("https://app.example.com/_sandbox/ext-apps-app.js");
+    expect(csp).toContain(
+      "https://app.example.com/_sandbox/archestra-app-sdk.js",
+    );
+    // The CDN allowlist feeds the resource directives.
+    expect(csp).toContain("cdn.jsdelivr.net");
   });
 });

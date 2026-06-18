@@ -920,7 +920,7 @@ export class OpenAIResponseAdapter
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
       this.response.usage,
     );
     return {
@@ -928,6 +928,7 @@ export class OpenAIResponseAdapter
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      reasoningTokens: reasoning,
     };
   }
 
@@ -1011,6 +1012,12 @@ export class OpenAIStreamAdapter
             | { cached_tokens?: number }
             | undefined
         )?.cached_tokens ?? 0;
+      const reasoningTokens =
+        (
+          chunk.usage.completion_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0;
       this.state.usage = {
         inputTokens: Math.max(
           0,
@@ -1019,6 +1026,7 @@ export class OpenAIStreamAdapter
         outputTokens: chunk.usage.completion_tokens ?? 0,
         cacheReadTokens,
         cacheWriteTokens: 0,
+        reasoningTokens,
       };
     }
 
@@ -1356,11 +1364,18 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
   const cacheRead =
     (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
       ?.cached_tokens ?? 0;
+  const reasoning =
+    (
+      usage.completion_tokens_details as
+        | { reasoning_tokens?: number }
+        | undefined
+    )?.reasoning_tokens ?? 0;
   return {
     input: Math.max(0, usage.prompt_tokens - cacheRead),
     output: usage.completion_tokens,
     cacheRead,
     cacheWrite: 0,
+    reasoning,
   };
 }
 

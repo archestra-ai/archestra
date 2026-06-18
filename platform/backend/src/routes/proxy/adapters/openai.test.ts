@@ -31,6 +31,9 @@ function createMockResponse(
       ...(usage?.prompt_tokens_details
         ? { prompt_tokens_details: usage.prompt_tokens_details }
         : {}),
+      ...(usage?.completion_tokens_details
+        ? { completion_tokens_details: usage.completion_tokens_details }
+        : {}),
     },
   };
 }
@@ -259,6 +262,7 @@ describe("OpenAIResponseAdapter", () => {
         outputTokens: 75,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
     });
 
@@ -280,7 +284,24 @@ describe("OpenAIResponseAdapter", () => {
         outputTokens: 75,
         cacheReadTokens: 120,
         cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
+    });
+
+    test("extracts reasoning_tokens from completion_tokens_details", () => {
+      const response = createMockResponse(
+        { role: "assistant", content: "Test" },
+        {
+          prompt_tokens: 150,
+          completion_tokens: 75,
+          completion_tokens_details: { reasoning_tokens: 40 },
+        },
+      );
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+
+      // reasoning_tokens are a subset already inside completion_tokens.
+      expect(adapter.getUsage().reasoningTokens).toBe(40);
     });
   });
 

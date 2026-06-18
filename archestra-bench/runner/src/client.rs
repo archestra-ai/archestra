@@ -657,13 +657,31 @@ impl EvalClient {
         )
     }
 
+    /// Fetch a conversation's persisted messages in UI-message shape (`{id, role, parts, ...}`).
+    /// The platform chat route is request-body-authoritative — it never backfills history from the
+    /// DB — so callers must resend these on follow-up turns to preserve context across stages.
+    pub async fn get_conversation_messages(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<JsonValue>, ClientError> {
+        let body = self
+            .get_json(&format!("/api/chat/conversations/{conversation_id}"))
+            .await?;
+        Ok(body
+            .get("messages")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default())
+    }
+
     pub async fn stream_chat_records(
         &self,
         conversation_id: &str,
+        prior_messages: &[JsonValue],
         text: &str,
         files: &[FilePart],
     ) -> Result<impl Stream<Item = ChatStreamRecord> + use<'_>, ClientError> {
-        let body = build_chat_body(conversation_id, text, files);
+        let body = build_chat_body(conversation_id, prior_messages, text, files);
         let url = self.url("/api/chat", None);
         let mut req = self
             .http
@@ -1173,7 +1191,12 @@ fn github_token() -> Option<String> {
 /// Build the `POST /api/chat` request body. Pinned sampling lives here so reruns of the same config
 /// don't diverge on temperature alone — the backend forwards `temperature` to `streamText`, and a
 /// provider that can't honor it (e.g. a reasoning model) drops it with a warning rather than erroring.
-fn build_chat_body(conversation_id: &str, text: &str, files: &[FilePart]) -> JsonValue {
+fn build_chat_body(
+    conversation_id: &str,
+    prior_messages: &[JsonValue],
+    text: &str,
+    files: &[FilePart],
+) -> JsonValue {
     let mut parts = vec![serde_json::json!({
         "type": "text",
         "text": text,
@@ -1181,13 +1204,17 @@ fn build_chat_body(conversation_id: &str, text: &str, files: &[FilePart]) -> Jso
     for file in files {
         parts.push(file.to_data_url_part());
     }
+    // Resend the persisted history verbatim (keeping each message's backend id, so
+    // persistNewMessages dedupes them) and append only the new user turn with a fresh id.
+    let mut messages = prior_messages.to_vec();
+    messages.push(serde_json::json!({
+        "id": uuid::Uuid::new_v4().to_string(),
+        "role": "user",
+        "parts": parts,
+    }));
     serde_json::json!({
         "id": conversation_id,
-        "messages": [{
-            "id": uuid::Uuid::new_v4().to_string(),
-            "role": "user",
-            "parts": parts,
-        }],
+        "messages": messages,
         "temperature": BENCH_TEMPERATURE,
         "trigger": "submit-message",
     })
@@ -1199,7 +1226,7 @@ mod tests {
 
     #[test]
     fn test_chat_body_pins_temperature() {
-        let body = build_chat_body("conv-1", "hello", &[]);
+        let body = build_chat_body("conv-1", &[], "hello", &[]);
         assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
         assert_eq!(body["id"], "conv-1");
         assert_eq!(body["trigger"], "submit-message");

@@ -105,6 +105,19 @@ pub fn format_to_markdown(events: &[Event]) -> String {
     let mut out = String::from("# Agent trajectory\n\n");
     for event in events {
         match event {
+            Event::Prompts {
+                system_prompt,
+                user_message,
+            } => {
+                if !system_prompt.trim().is_empty() {
+                    out.push_str("### System prompt\n");
+                    out.push_str(&cap_chars(system_prompt, MAX_FIELD_CHARS));
+                    out.push_str("\n\n");
+                }
+                out.push_str("### Task\n");
+                out.push_str(&cap_chars(user_message, MAX_FIELD_CHARS));
+                out.push_str("\n\n");
+            }
             Event::AssistantText { text } => {
                 out.push_str("### Agent\n");
                 out.push_str(&cap_chars(text, MAX_FIELD_CHARS));
@@ -170,12 +183,15 @@ mod tests {
             r#"{"sequence":11,"timestamp":"t","kind":"infra_error","error":"boot failed"}"#,
             r#"{"sequence":12,"timestamp":"t","kind":"parse_error","raw":"...","reason":"bad chunk"}"#,
             r#"{"sequence":13,"timestamp":"t","kind":"chat_stream","event":{"type":"x"}}"#,
+            r#"{"sequence":14,"timestamp":"t","kind":"prompts","system_prompt":"be helpful","user_message":"find the answer"}"#,
         ]);
         let events = load_trajectory(&path).unwrap();
-        assert_eq!(events.len(), 13);
+        assert_eq!(events.len(), 14);
 
         let md = format_to_markdown(&events);
         assert!(md.contains("### Agent\nthinking"));
+        assert!(md.contains("### System prompt\nbe helpful"));
+        assert!(md.contains("### Task\nfind the answer"));
         assert!(md.contains("### Tool call: `run`"));
         assert!(md.contains("### Tool result"));
         assert!(md.contains("boom"));

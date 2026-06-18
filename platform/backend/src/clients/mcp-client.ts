@@ -38,6 +38,7 @@ import {
   McpHttpSessionModel,
   McpServerModel,
   McpToolCallModel,
+  TeamModel,
   ToolModel,
 } from "@/models";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
@@ -1513,10 +1514,13 @@ class McpClient {
       );
     }
 
-    // Resolve at call time: strictly the caller's own connection — a user
-    // token uses that user's install, nothing else. No team or org fallback;
-    // sharing a connection is an explicit choice (the pin above).
+    // Resolve at call time (no pinned connection). The chatting identity's own
+    // connection takes priority, then falls back to a connection it can access:
+    // user token -> personal, then a team the user belongs to, then org-scoped;
+    // team token -> the team's connection, then org-scoped. Pinning a service
+    // account (above) overrides this to force one connection for every caller.
     if (tokenAuth.userId) {
+      // Priority 1: Personal credential owned by current user
       const userServer = allServers.find(
         (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
       );
@@ -1535,9 +1539,51 @@ class McpClient {
           mcpServerName: userServer.name,
         };
       }
+
+      // Priority 2: Team-owned server for a team the user is a member of
+      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const teamServer = allServers.find(
+        (s) => s.teamId && userTeamIds.has(s.teamId),
+      );
+      if (teamServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: teamServer.id,
+            teamId: teamServer.teamId,
+            userId: tokenAuth.userId,
+          },
+          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
+        );
+        return {
+          targetMcpServerId: teamServer.id,
+          mcpServerName: teamServer.name,
+        };
+      }
+
+      // Priority 3: Org-scoped install
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: orgServer.id,
+            userId: tokenAuth.userId,
+          },
+          `Dynamic resolution: using org-scoped server for user ${tokenAuth.userId}`,
+        );
+        return {
+          targetMcpServerId: orgServer.id,
+          mcpServerName: orgServer.name,
+        };
+      }
     }
 
-    // Team token: the token's own team installation is its identity.
+    // Team token: try team-owned servers for the token's team, then fall back
+    // to an org-scoped install.
     if (tokenAuth.teamId) {
       const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
       if (teamServer) {
@@ -1553,6 +1599,23 @@ class McpClient {
         return {
           targetMcpServerId: teamServer.id,
           mcpServerName: teamServer.name,
+        };
+      }
+
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: orgServer.id,
+            teamId: tokenAuth.teamId,
+          },
+          `Dynamic resolution: using org-scoped server for team ${tokenAuth.teamId}`,
+        );
+        return {
+          targetMcpServerId: orgServer.id,
+          mcpServerName: orgServer.name,
         };
       }
     }

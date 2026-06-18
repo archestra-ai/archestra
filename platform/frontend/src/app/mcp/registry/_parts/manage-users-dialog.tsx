@@ -998,7 +998,8 @@ function AgentConnectionsSection({
           {!pinnedId ? (
             <>
               Agents act on behalf of whoever is chatting — each person uses
-              their own connection, and is asked to connect if they haven't yet.
+              their own connection if they have one, otherwise a team or
+              organization connection they can access.
             </>
           ) : pinRemoved ? (
             <>

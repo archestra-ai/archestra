@@ -187,7 +187,7 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
 
-- **On behalf of the user** (default): strictly the caller's own connection. A user token uses that user's connection; a team token uses that team's. There is no fallback — a caller without a connection gets an actionable connect prompt instead of silently borrowing a team or organization credential.
+- **On behalf of the user** (default): the chatting identity's own connection takes priority, falling back to a connection it can access. A user token resolves to that user's personal connection, then a connection for a team they belong to, then an org-scoped connection; a team token resolves to that team's connection, then an org-scoped one. A caller with no reachable connection gets an actionable connect prompt.
 - **Always use one account**: every runtime-resolved call goes through the chosen connection, regardless of the caller — a service account. Use this when the whole org or a team should share one upstream account. If that connection is revoked, the server returns to on-behalf-of-the-user resolution.
 
 ```mermaid
@@ -198,10 +198,13 @@ flowchart TD
     P -- Yes --> S["Use that account<br/>(service account)"]
     P -- No --> D{Caller has their<br/>own connection?}
     D -- Yes --> E["Use the caller's<br/>own credential"]
-    D -- No --> J["Return error +<br/>connect link"]
+    D -- No --> F{Reachable team or<br/>org connection?}
+    F -- Yes --> G["Use that<br/>connection"]
+    F -- No --> J["Return error +<br/>connect link"]
 
     style S fill:#d4edda,stroke:#28a745
     style E fill:#d4edda,stroke:#28a745
+    style G fill:#d4edda,stroke:#28a745
     style J fill:#f8d7da,stroke:#dc3545
 ```
 

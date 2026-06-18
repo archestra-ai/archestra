@@ -601,8 +601,9 @@ describe("McpClient", () => {
     });
 
     // The catalog item defines how agents connect when credentials resolve at
-    // call time: NULL = strictly the caller's own connection (no team/org
-    // fallback); a pinned mcp_servers.id = a service account every call uses.
+    // call time: NULL = the caller's own connection, falling back to a team or
+    // org connection it can access; a pinned mcp_servers.id = a service account
+    // every call uses regardless of the caller.
     describe("agent connections (catalog dynamic-connection policy)", () => {
       async function makeDynamicCatalogTool() {
         const catalogItem = await InternalMcpCatalogModel.create({
@@ -633,7 +634,7 @@ describe("McpClient", () => {
         };
       }
 
-      test("resolve at call time never borrows team or org connections", async ({
+      test("resolve at call time falls back to a team connection the user can access", async ({
         makeMember,
         makeOrganization,
         makeTeam,
@@ -647,19 +648,17 @@ describe("McpClient", () => {
         await TeamModel.addMember(team.id, user.id, "member");
 
         const { catalogItem, tool } = await makeDynamicCatalogTool();
-        // Team (the user is a member) and org connections exist — but the user
-        // has not connected their own account.
+        // The user has not connected their own account, but a connection for a
+        // team they belong to exists — resolution falls back to it.
         await McpServerModel.create({
           name: `${catalogItem.name}-team`,
           catalogId: catalogItem.id,
           serverType: "remote",
           teamId: team.id,
         });
-        await McpServerModel.create({
-          name: `${catalogItem.name}-org`,
-          catalogId: catalogItem.id,
-          serverType: "remote",
-          scope: "org",
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via team connection" }],
+          isError: false,
         });
 
         const result = await mcpClient.executeToolCallForOwner(
@@ -668,11 +667,8 @@ describe("McpClient", () => {
           userToken(user.id, org.id),
         );
 
-        expect(result.isError).toBe(true);
-        expect(JSON.stringify(result.content)).toContain(
-          "Authentication required",
-        );
-        expect(mockCallTool).not.toHaveBeenCalled();
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
       });
 
       test("resolve at call time uses the caller's own connection", async ({

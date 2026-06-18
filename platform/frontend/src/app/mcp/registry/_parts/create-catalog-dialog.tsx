@@ -61,17 +61,23 @@ export function CreateCatalogDialog({
     onClose();
   };
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (values: McpCatalogFormValues) => {
     const apiData = {
       ...transformFormToApiData(values),
       // Record clone lineage (null for a plain "Add Server").
       clonedFrom: clonedFrom ?? null,
     };
-    const createdItem = await createMutation.mutateAsync(apiData);
-    handleClose();
-    if (createdItem) {
-      onSuccess?.({ ...createdItem, toolCount: 0 });
-    }
+    // Use the callback form so the dialog only closes on success; on a
+    // validation error the mutation's onError surfaces the message and the
+    // dialog stays open for correction.
+    createMutation.mutate(apiData, {
+      onSuccess: (createdItem) => {
+        handleClose();
+        if (createdItem) {
+          onSuccess?.({ ...createdItem, toolCount: 0 });
+        }
+      },
+    });
   };
 
   const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {

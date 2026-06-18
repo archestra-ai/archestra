@@ -87,18 +87,23 @@ export function EditCatalogContent({
     (s) => s.catalogId === item.id,
   ).length;
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (values: McpCatalogFormValues) => {
     const { multitenant: _multitenant, ...updateData } =
       transformFormToApiData(values);
 
-    await updateMutation.mutateAsync({
-      id: item.id,
-      data: updateData,
-    });
-
-    if (!keepOpenOnSave) {
-      onClose();
-    }
+    // Callback form so the dialog only closes on success; on a validation
+    // error the mutation's onError surfaces the message and the dialog stays
+    // open for correction.
+    updateMutation.mutate(
+      { id: item.id, data: updateData },
+      {
+        onSuccess: () => {
+          if (!keepOpenOnSave) {
+            onClose();
+          }
+        },
+      },
+    );
   };
 
   if (canEditLoading) {

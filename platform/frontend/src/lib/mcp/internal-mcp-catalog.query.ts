@@ -66,16 +66,22 @@ export function useCreateInternalMcpCatalogItem() {
     mutationFn: async (
       data: archestraApiTypes.CreateInternalMcpCatalogItemData["body"],
     ) => {
-      const response = await createInternalMcpCatalogItem({ body: data });
-      return response.data;
+      const { data: created, error } = await createInternalMcpCatalogItem({
+        body: data,
+      });
+      if (error) throw new Error(error.error.message);
+      return created;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("Catalog item created successfully");
     },
     onError: (error) => {
-      console.error("Create error:", error);
-      toast.error("Failed to create catalog item");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to create catalog item",
+      );
     },
   });
 }
@@ -84,11 +90,12 @@ export function useUpdateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: UpdateInternalMcpCatalogItemParams) => {
-      const response = await updateInternalMcpCatalogItem({
+      const { data: updated, error } = await updateInternalMcpCatalogItem({
         path: { id },
         body: data,
       });
-      return response.data;
+      if (error) throw new Error(error.error.message);
+      return updated;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
@@ -98,8 +105,11 @@ export function useUpdateInternalMcpCatalogItem() {
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
-      console.error("Edit error:", error);
-      toast.error("Failed to update catalog item");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update catalog item",
+      );
     },
   });
 }

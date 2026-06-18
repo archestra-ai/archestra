@@ -44,6 +44,7 @@ import {
 } from "@/models";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
@@ -1813,6 +1814,27 @@ class McpClient {
       if (catalogItem.serverType === "remote") {
         if (!catalogItem.serverUrl) {
           throw new Error("Remote server missing serverUrl");
+        }
+
+        // Runtime egress enforcement: refuse the outbound connection when the
+        // server's host is not permitted by its environment's network policy.
+        // This is the actual boundary — it also catches grandfathered servers
+        // and servers whose environment policy was tightened after creation,
+        // which the create/edit-time check does not re-validate. Applies to
+        // both tool calls and tools/list inspection (both build the transport
+        // here). Skipped only when org context can't be resolved.
+        const organizationId =
+          catalogItem.organizationId ?? tokenAuth?.organizationId;
+        if (organizationId) {
+          const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy({
+            serverType: "remote",
+            serverUrl: catalogItem.serverUrl,
+            environmentId: catalogItem.environmentId,
+            organizationId,
+          });
+          if (!verdict.allowed) {
+            throw new Error(verdict.message);
+          }
         }
 
         const headers = buildStaticCredentialHeaders({

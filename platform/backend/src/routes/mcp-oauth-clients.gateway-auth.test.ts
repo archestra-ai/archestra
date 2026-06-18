@@ -232,4 +232,91 @@ describe("MCP OAuth client gateway authorization", () => {
 
     expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
   });
+
+  /**
+   * authorization_code clients mint USER-BOUND tokens via better-auth's standard
+   * authorize→token exchange. These carry no `mcp-oauth-client:` referenceId, so
+   * the gateway validates them on the user-identity path — the token resolves to
+   * the acting user, which is what makes per-user "Resolve at call time"
+   * connection resolution work for a pre-registered client.
+   */
+  test("accepts a user-bound token from an authorization_code client and resolves the acting user", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    // A plain member is enough: an org-scoped (teamless) gateway is accessible to
+    // any org member, so the token need not carry gateway-admin permission.
+    await makeMember(user.id, org.id, { role: "member" });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      name: "Agentic Chat Server",
+      grantType: "authorization_code",
+      redirectUris: ["https://chat.example.com/oauth/callback"],
+    });
+
+    const accessToken = `${randomBytes(32).toString("base64url")}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+      // No referenceId → user-identity path (not the client_credentials branch).
+      referenceId: null,
+    });
+
+    const result = await validateMCPGatewayToken(gateway.id, accessToken);
+
+    expect(result).not.toBeNull();
+    expect(result?.isUserToken).toBe(true);
+    expect(result?.userId).toBe(user.id);
+    expect(result?.organizationId).toBe(org.id);
+  });
+
+  test("rejects a user-bound authorization_code token when the user has no access to the gateway", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    // A team-scoped gateway tied to a team the user is not a member of must stay
+    // inaccessible — a pre-registered client does not widen the user's own access.
+    const owningTeam = await makeTeam(org.id, user.id, { name: "Owners" });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [owningTeam.id],
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      name: "Agentic Chat Server",
+      grantType: "authorization_code",
+      redirectUris: ["https://chat.example.com/oauth/callback"],
+    });
+
+    const accessToken = `${randomBytes(32).toString("base64url")}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+      referenceId: null,
+    });
+
+    expect(await validateMCPGatewayToken(gateway.id, accessToken)).toBeNull();
+  });
 });

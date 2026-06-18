@@ -44000,7 +44000,9 @@ export type GetMcpOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44012,7 +44014,9 @@ export type GetMcpOauthClientsResponse = GetMcpOauthClientsResponses[keyof GetMc
 export type CreateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -44093,7 +44097,9 @@ export type CreateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44191,7 +44197,9 @@ export type DeleteMcpOauthClientResponse = DeleteMcpOauthClientResponses[keyof D
 export type UpdateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path: {
         id: string;
@@ -44274,7 +44282,9 @@ export type UpdateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44366,7 +44376,9 @@ export type RotateMcpOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;

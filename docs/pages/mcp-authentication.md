@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-05-06
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -27,9 +27,9 @@ Use this page to choose the gateway authentication method for your client, then 
 
 ## Gateway Authentication
 
-The MCP Gateway supports five client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+The MCP Gateway supports six client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
 
-- **OAuth 2.1**, **OAuth client credentials**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
+- **OAuth 2.1**, **OAuth client credentials**, **OAuth authorization code (manually registered)**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
 - **Bearer token** sends a static platform-managed token directly to the gateway.
 
@@ -68,7 +68,20 @@ The client exchanges its credentials for a short-lived (1-hour) bearer token at 
 
 It then sends that token to the gateway like any other OAuth access token (`Authorization: Bearer <token>`). The token is rejected by any gateway not on the client's list, and by gateways in another organization.
 
-Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — for gateways consumed by applications, assign tools to a shared connection rather than **Resolve at call time**.
+Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — assign tools to a shared connection rather than **Resolve at call time**. To let a pre-registered application act with the user's identity instead, use the authorization code grant below.
+
+### OAuth Authorization Code (On behalf of users)
+
+When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
+
+Create it under **MCPs > Credentials > OAuth Clients**, choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+
+The application runs the standard browser flow:
+
+- `GET /api/auth/oauth2/authorize` with `response_type=code`, `scope=mcp` (add `offline_access` for a refresh token), the registered `redirect_uri`, and a PKCE challenge.
+- `POST /api/auth/oauth2/token` with `grant_type=authorization_code`, `client_id`, `client_secret`, and the PKCE verifier.
+
+The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow, and the signed-in user must already have access to the gateway.
 
 ### Bearer Token
 

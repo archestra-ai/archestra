@@ -167874,7 +167874,20 @@
                       "organizationId": {
                         "type": "string"
                       },
+                      "grantType": {
+                        "type": "string",
+                        "enum": [
+                          "client_credentials",
+                          "authorization_code"
+                        ]
+                      },
                       "allowedGatewayIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "redirectUris": {
                         "type": "array",
                         "items": {
                           "type": "string"
@@ -167897,7 +167910,9 @@
                       "clientId",
                       "name",
                       "organizationId",
+                      "grantType",
                       "allowedGatewayIds",
+                      "redirectUris",
                       "disabled",
                       "createdAt",
                       "updatedAt"
@@ -168162,19 +168177,32 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedGatewayIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedGatewayIds"
+                  "name"
                 ]
               }
             }
@@ -168200,7 +168228,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -168226,7 +168267,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -168493,19 +168536,32 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedGatewayIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedGatewayIds"
+                  "name"
                 ]
               }
             }
@@ -168541,7 +168597,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -168564,7 +168633,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt"
@@ -169120,7 +169191,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -169146,7 +169230,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",

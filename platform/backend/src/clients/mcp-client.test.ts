@@ -16,6 +16,7 @@ import {
   AgentModel,
   AgentToolModel,
   AppToolModel,
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -6166,3 +6167,44 @@ function base64UrlEncode(value: unknown): string {
 function futureExpSeconds(secondsFromNow: number = 3600): number {
   return Math.floor(Date.now() / 1000) + secondsFromNow;
 }
+
+describe("connectAndGetTools network egress enforcement", () => {
+  test("blocks a remote server whose host is forbidden by its environment policy", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "locked",
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["allowed.example.com"],
+        allowedCidrs: [],
+      },
+    });
+    // Seeded directly via the model (grandfathered): a remote server pointing at
+    // a host the policy forbids, as if the env policy was tightened after it was
+    // created. The create/edit-time check never re-ran for it.
+    const catalogItem = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: env.id,
+      serverType: "remote",
+      serverUrl: "https://blocked.example.com/mcp",
+    });
+
+    mockConnect.mockClear();
+
+    await expect(
+      mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId: randomUUID(),
+        secrets: {},
+      }),
+    ).rejects.toThrow(/not permitted by the "locked" environment/);
+
+    // The guard fails the call before any connection is attempted.
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+});

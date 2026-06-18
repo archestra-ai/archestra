@@ -181,7 +181,10 @@ export async function assertRemoteServerUrlAllowedByNetworkPolicy(params: {
 }): Promise<void> {
   const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy(params);
   if (!verdict.allowed) {
-    throw new ApiError(400, verdict.message);
+    // internal_code lets the frontend attach this to the Server URL field
+    // inline instead of a generic toast. Keep in sync with the frontend
+    // constant of the same value.
+    throw new ApiError(400, verdict.message, "remote_server_url_not_allowed");
   }
 }
 

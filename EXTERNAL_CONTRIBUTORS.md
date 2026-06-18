@@ -617,3 +617,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @SohamBamane
 - @Akash504-ai
 - @clutchpbcfo
+- @kish-00

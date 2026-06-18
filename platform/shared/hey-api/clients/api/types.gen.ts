@@ -20978,6 +20978,7 @@ export type StreamChatData = {
         id: string;
         messages: Array<unknown>;
         trigger?: 'submit-message' | 'regenerate-message';
+        temperature?: number;
     };
     path?: never;
     query?: never;

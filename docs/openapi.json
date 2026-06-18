@@ -73258,6 +73258,11 @@
                       "submit-message",
                       "regenerate-message"
                     ]
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
                   }
                 },
                 "required": [

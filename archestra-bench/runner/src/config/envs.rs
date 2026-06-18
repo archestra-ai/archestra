@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
 use super::tasks::TaskConfigError;
 use super::toml_util::{self, TomlTable};
-use super::types::{EnvConfig, Mcp, SkillRef};
+use super::types::{EnvConfig, Mcp, PlatformConfig, SkillRef, ToolExposureMode};
 
 // Empty by default: lanes mimic a regular Archestra user who sets no custom system prompt, so the
 // agent runs on Archestra's stock chat instructions. Submission guidance is appended to the user
@@ -134,6 +135,8 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
     )?;
     let share_backend = toml_util::opt_bool(&data, "share_backend", &ctx, false)?;
 
+    let platform = load_platform(&data, &ctx)?;
+
     Ok(EnvConfig {
         id: env_id,
         name,
@@ -144,7 +147,22 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
         tasks,
         tools,
         share_backend,
+        platform,
     })
+}
+
+fn load_platform(data: &TomlTable, ctx: &str) -> Result<PlatformConfig, EnvConfigError> {
+    let platform = toml_util::table_with_default(data, "platform", ctx)?;
+    let platform_ctx = format!("{ctx} [platform]");
+    let mode = toml_util::req_str_with_default(
+        &platform,
+        "tool_exposure_mode",
+        &platform_ctx,
+        ToolExposureMode::default().as_str(),
+    )?;
+    let tool_exposure_mode = ToolExposureMode::from_str(&mode)
+        .map_err(|e| EnvConfigError(format!("{platform_ctx}: {e}")))?;
+    Ok(PlatformConfig { tool_exposure_mode })
 }
 
 fn load_skills(data: &TomlTable, ctx: &str) -> Result<Vec<SkillRef>, EnvConfigError> {
@@ -280,6 +298,51 @@ share_backend = {}
         assert!(envs["basic"].share_backend);
         assert!(!envs["api"].share_backend);
         assert_eq!(envs["api"].tools, vec!["create_skill"]);
+    }
+
+    // Write an env that declares task `t1` plus a verbatim `[platform]` fragment, then load it.
+    fn load_env_with_platform(platform_fragment: &str) -> Result<EnvConfig, EnvConfigError> {
+        let tmp = tempfile::tempdir().unwrap();
+        make_task_dir(tmp.path(), "t1");
+        let path = tmp.path().join("e.toml");
+        let content = format!("id = \"e\"\nname = \"e\"\ntasks = [\"t1\"]\n{platform_fragment}");
+        std::fs::write(&path, content).unwrap();
+        load_env(&path, tmp.path())
+    }
+
+    #[test]
+    fn test_platform_defaults_to_search_and_run_only() {
+        let env = load_env_with_platform("").unwrap();
+        assert_eq!(
+            env.platform.tool_exposure_mode,
+            ToolExposureMode::SearchAndRunOnly
+        );
+    }
+
+    #[test]
+    fn test_platform_full_is_parsed() {
+        let env = load_env_with_platform("[platform]\ntool_exposure_mode = \"full\"\n").unwrap();
+        assert_eq!(env.platform.tool_exposure_mode, ToolExposureMode::Full);
+    }
+
+    #[test]
+    fn test_platform_unknown_mode_errors() {
+        let err =
+            load_env_with_platform("[platform]\ntool_exposure_mode = \"nope\"\n").unwrap_err();
+        assert!(err.0.contains("tool_exposure_mode"), "{}", err.0);
+        assert!(err.0.contains("nope"), "{}", err.0);
+    }
+
+    #[test]
+    fn test_platform_non_string_mode_errors() {
+        let err = load_env_with_platform("[platform]\ntool_exposure_mode = 7\n").unwrap_err();
+        assert!(err.0.contains("must be a string"), "{}", err.0);
+    }
+
+    #[test]
+    fn test_platform_non_table_errors() {
+        let err = load_env_with_platform("platform = \"x\"\n").unwrap_err();
+        assert!(err.0.contains("[platform] must be a table"), "{}", err.0);
     }
 
     #[test]

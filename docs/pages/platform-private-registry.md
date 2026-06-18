@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-06-01
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -87,6 +87,8 @@ An environment can be marked **restricted**. Only members with the `environment:
 Network egress policies are configured directly on environments. They can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When an MCP server runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
+
+Egress policies apply only to **self-hosted servers**, which run as pods inside your cluster. **Remote servers** run outside Archestra and are reached over HTTP from the Archestra backend, so an environment's egress policy does not govern their network access — a remote server keeps working regardless of the environment it is assigned to. A self-hosted server that needs broad outbound access — for example a browser-automation server that visits arbitrary sites — will fail or time out under a restrictive policy unless its destinations are allowlisted, while a remote server reached over HTTP is unaffected.
 
 | Cluster provider        | IP/CIDR rules                                                         | Domain rules                                                                               |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |

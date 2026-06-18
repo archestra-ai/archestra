@@ -23,8 +23,12 @@ import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
 import { __test } from "./search-tools";
 
-const { makeRankingCandidate, prepareSearchQuery, rankCandidatesByKeyword } =
-  __test;
+const {
+  makeRankingCandidate,
+  prepareSearchQuery,
+  rankCandidatesByKeyword,
+  findUnmatchedQueryTerms,
+} = __test;
 
 function rank(
   candidates: Parameters<typeof makeRankingCandidate>[0][],
@@ -34,6 +38,16 @@ function rank(
     candidates.map(makeRankingCandidate),
     prepareSearchQuery(query),
   ).map((candidate) => candidate.toolName);
+}
+
+function unmatched(
+  candidates: Parameters<typeof makeRankingCandidate>[0][],
+  query: string,
+): string[] {
+  return findUnmatchedQueryTerms(
+    candidates.map(makeRankingCandidate),
+    prepareSearchQuery(query),
+  );
 }
 
 type SearchToolsStructuredContent = {
@@ -330,7 +344,7 @@ describe("search_tools", () => {
       total: 0,
       matchCount: 0,
       truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode.",
+      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: trusted, data, policy.",
       tools: [],
     });
   });
@@ -637,6 +651,64 @@ describe("search_tools", () => {
       expect(rank([{ toolName: "solo__tool" }], "solo")).toEqual([
         "solo__tool",
       ]);
+    });
+  });
+
+  describe("unmatched query terms (golden cases)", () => {
+    test("reports every term when the whole query is absent from the corpus", () => {
+      expect(
+        unmatched([{ toolName: "slack__post_message" }], "send carrier pigeon"),
+      ).toEqual(["send", "carrier", "pigeon"]);
+    });
+
+    test("reports only the absent term on a partial match", () => {
+      const candidates = [
+        {
+          toolName: "slack__post_message",
+          description: "Post a message to a channel",
+        },
+      ];
+      // 'message' hits the description; 'gif' appears nowhere -> only 'gif'.
+      expect(rank(candidates, "message gif")).toEqual(["slack__post_message"]);
+      expect(unmatched(candidates, "message gif")).toEqual(["gif"]);
+    });
+
+    test("does not report a term that only matches via substring boost", () => {
+      const candidates = [{ toolName: "github__search_repositories" }];
+      // 'repo' has no token match (indexed token is 'repositories') but drives a
+      // result through the whole-query name substring boost, so it is matched.
+      expect(rank(candidates, "repo")).toEqual(["github__search_repositories"]);
+      expect(unmatched(candidates, "repo")).toEqual([]);
+    });
+
+    test("reports nothing when every query term hits some tool text", () => {
+      expect(
+        unmatched(
+          [{ toolName: "github__search_repositories" }],
+          "search repositories",
+        ),
+      ).toEqual([]);
+    });
+
+    test("treats a term found in any field (e.g. argument names) as matched", () => {
+      const candidates = [
+        {
+          toolName: "x__tool",
+          parameters: {
+            properties: { channel: { type: "string" } },
+          },
+        },
+      ];
+      expect(unmatched(candidates, "channel")).toEqual([]);
+    });
+
+    test("reports a term that is only a substring of an unrelated word", () => {
+      // "gif" sits inside the description token "gift" but is neither an indexed
+      // token nor a name/title substring, so it contributes no ranking signal.
+      const candidates = [
+        { toolName: "store__redeem", description: "Redeem a gift card" },
+      ];
+      expect(unmatched(candidates, "gif")).toEqual(["gif"]);
     });
   });
 
@@ -1002,6 +1074,147 @@ describe("search_tools", () => {
       expect(structured.matchCount).toBe(0);
       expect(structured.hint).toContain("No tools matched");
       expect(structured.hint).toContain("GitHub MCP");
+    });
+
+    test("a partial match reports the query terms that hit no tool text", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Partial",
+        organizationId: org.id,
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "Slack MCP",
+      });
+      const tool = await makeTool({
+        name: "slack__post_message",
+        description: "Post a message to a channel",
+        catalogId: catalog.id,
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "message gif", limit: 5 },
+        context,
+      );
+      const structured =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structured.matchCount).toBe(1);
+      expect(structured.hint).toContain("No tool text matches");
+      expect(structured.hint).toContain("gif");
+      expect(structured.hint).not.toContain("message");
+    });
+
+    test("composes the truncation and unmatched-terms clauses", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ name: "Both", organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "GitHub MCP",
+      });
+      for (const name of [
+        "github__search_repositories",
+        "github__search_issues",
+        "github__search_code",
+      ]) {
+        const tool = await makeTool({
+          name,
+          description: "github search",
+          catalogId: catalog.id,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      // 'search' matches all three (-> truncated at limit 1); 'zzznope' matches
+      // nothing -> both clauses must appear.
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "search zzznope", limit: 1 },
+        context,
+      );
+      const structured =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structured.truncated).toBe(true);
+      expect(structured.hint).toContain("top 1 of 3");
+      expect(structured.hint).toContain("No tool text matches");
+      expect(structured.hint).toContain("zzznope");
+    });
+
+    test("regex mode never appends an unmatched-terms clause", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ name: "Regex", organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "GitHub MCP",
+      });
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        description: "search",
+        catalogId: catalog.id,
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "^github__", limit: 5, mode: "regex" },
+        context,
+      );
+      const structured =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structured.matchCount).toBe(1);
+      expect(structured.hint).toBeNull();
     });
   });
 

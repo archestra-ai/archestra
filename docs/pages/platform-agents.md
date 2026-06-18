@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-06-03
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -58,6 +58,12 @@ Agents can be assigned one or more Knowledge Bases or knowledge connectors. This
 When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
 
 See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
+
+## Environments
+
+An agent can be assigned to an [environment](/docs/platform-private-registry#environments). The agent's code sandbox then runs under that environment's egress network policy — the same machinery that governs self-hosted MCP server pods — so its outbound network access is restricted to what the policy allows. With no environment assigned, the agent uses the default runtime.
+
+See [Network Egress Policies](/docs/platform-private-registry#network-egress-policies) for how policies are configured and which destinations are reachable.
 
 ## Delegation
 

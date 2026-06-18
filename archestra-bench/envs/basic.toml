@@ -7,6 +7,13 @@ tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "gi
 # once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
 share_backend = true
 
+# Platform feature flags applied when creating this env's agents. Optional; defaults shown.
+# `tool_exposure_mode`: "search_and_run_only" (model discovers tools via search_tools/run_tool) or
+# "full" (model gets the whole assigned tool list up front). To A/B a flag, flip it and run twice --
+# task ids are globally unique across envs, so the same tasks can't sit in two envs in one run.
+# [platform]
+# tool_exposure_mode = "search_and_run_only"
+
 # All skills from the two public skill libraries, pinned. A broad, realistic skill surface; the agent
 # picks whatever helps (e.g. the document skills for the xlsx task). `cap` unset = import all.
 [[skills]]

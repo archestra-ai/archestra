@@ -115,16 +115,9 @@ export const McpAppRuntime = function McpAppRuntime({
   containerMaxHeight?: number;
 }) {
   const { resolvedTheme } = useTheme();
-  // Owned apps inject the runtime SDK + baseline stylesheet server-side, served
-  // only via the runtime proxy's resources/read. The SSE-preloaded HTML is the
-  // stored pre-injection source, so rendering it directly boots an app with no
-  // SDK and it stays blank. Owned apps therefore always fetch the resource (as
-  // the standalone run page does); the preload fast-path is for non-owned
-  // (agent / external MCP-UI) resources, which already carry everything they need.
-  const isOwnedApp = endpoint.kind === "app";
   const [bridge, setBridge] = useState<AppBridge | null>(null);
   const [appResource, setAppResource] = useState<AppResourceMeta | null>(
-    isOwnedApp ? null : (preloadedResource ?? null),
+    preloadedResource ?? null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -168,7 +161,7 @@ export const McpAppRuntime = function McpAppRuntime({
   // Render-loop diagnostics (owned apps only): runtime errors / CSP violations
   // forwarded by the sandbox proxy are validated and collected per
   // (appId, version) so the chat can hand them back to the authoring model.
-  const ownedAppId = isOwnedApp ? endpoint.appId : null;
+  const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
   const appVersionRef = useRef(appVersion);
   appVersionRef.current = appVersion;
   const containerMaxHeightRef = useRef(containerMaxHeight);
@@ -474,9 +467,8 @@ export const McpAppRuntime = function McpAppRuntime({
       setBridge(appBridge);
     }
 
-    // Skip HTTP fetch when the backend already sent the HTML via SSE (non-owned
-    // resources only — owned apps need the injected resources/read response).
-    if (preloadedResource && !isOwnedApp) {
+    // Skip HTTP fetch when the backend already sent the HTML via SSE.
+    if (preloadedResource) {
       if (!cancelled) {
         setAppResource(preloadedResource);
         onResourceStateChangeRef.current(
@@ -546,14 +538,14 @@ export const McpAppRuntime = function McpAppRuntime({
   // Only set if no resource is loaded yet to avoid overwriting a fetch result.
   // Cancel any in-flight fallback fetch to prevent a double-render.
   useEffect(() => {
-    if (preloadedResource && !isOwnedApp && !appResource && !loadError) {
+    if (preloadedResource && !appResource && !loadError) {
       fetchCancelledRef.current = true;
       setAppResource(preloadedResource);
       onResourceStateChangeRef.current(
         isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
       );
     }
-  }, [preloadedResource, isOwnedApp, appResource, loadError]);
+  }, [preloadedResource, appResource, loadError]);
 
   // Send partial inputs during streaming. The Vercel AI SDK populates part.input
   // progressively during input-streaming state, so toolInput changes on each delta.

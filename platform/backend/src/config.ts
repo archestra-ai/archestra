@@ -1212,6 +1212,16 @@ const config = {
   projects: {
     enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
   },
+  /**
+   * Dynamic tool access UI. Ships dark: off by default until ready to surface.
+   * Gates the per-agent "All / Custom" tools selector and the per-server
+   * "Agent connections" (on-behalf-of vs pinned service account) selector. The
+   * backend still honors a stored access_all_tools flag and the per-server
+   * connection policy; this only controls whether those controls are exposed.
+   */
+  dynamicToolAccess: {
+    enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
+  },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },

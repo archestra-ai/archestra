@@ -90266,6 +90266,9 @@
                         "projectsEnabled": {
                           "type": "boolean"
                         },
+                        "dynamicToolAccessEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -90360,6 +90363,7 @@
                         "agentEnvironmentsEnabled",
                         "appsEnabled",
                         "projectsEnabled",
+                        "dynamicToolAccessEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

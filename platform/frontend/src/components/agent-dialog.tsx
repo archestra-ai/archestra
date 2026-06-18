@@ -697,6 +697,10 @@ export function AgentDialog({
   const isInternalAgent = agentType === "agent";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
+  const dynamicToolAccessEnabled = useFeature("dynamicToolAccessEnabled");
+  // When the dynamic-tool-access feature is gated off, the selector is hidden
+  // and the agent is always treated as "Custom" (explicitly assigned tools).
+  const allToolsMode = accessAllTools && dynamicToolAccessEnabled;
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -790,13 +794,11 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        // New internal agents default to dynamic access — all tools and
-        // knowledge through search_tools/run_tool. Gateways and proxies are
-        // deliberately-configured surfaces and stay assigned-tools-only.
-        setToolExposureMode(
-          agentType === "agent" ? "search_and_run_only" : "full",
-        );
-        setAccessAllTools(agentType === "agent");
+        // New agents default to "Custom" — explicitly assigned tools. The
+        // "All tools" dynamic-access mode is opt-in (and gated behind the
+        // dynamicToolAccessEnabled feature flag).
+        setToolExposureMode("full");
+        setAccessAllTools(false);
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -804,7 +806,7 @@ export function AgentDialog({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [open, agent, freshAgent, refetchAgent, agentType]);
+  }, [open, agent, freshAgent, refetchAgent]);
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping
@@ -1544,24 +1546,26 @@ export function AgentDialog({
                   {/* Tools & knowledge */}
                   <div className="space-y-2">
                     <Label>Tools & Knowledge Sources</Label>
-                    <Tabs
-                      value={accessAllTools ? "all" : "specific"}
-                      onValueChange={(value) => {
-                        const all = value === "all";
-                        setAccessAllTools(all);
-                        // Dynamic access only works through the search/run
-                        // dispatch surface, so picking it enables that mode.
-                        if (all) {
-                          setToolExposureMode("search_and_run_only");
-                        }
-                      }}
-                    >
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="all">All</TabsTrigger>
-                        <TabsTrigger value="specific">Custom</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                    {accessAllTools && (
+                    {dynamicToolAccessEnabled && (
+                      <Tabs
+                        value={allToolsMode ? "all" : "specific"}
+                        onValueChange={(value) => {
+                          const all = value === "all";
+                          setAccessAllTools(all);
+                          // Dynamic access only works through the search/run
+                          // dispatch surface, so picking it enables that mode.
+                          if (all) {
+                            setToolExposureMode("search_and_run_only");
+                          }
+                        }}
+                      >
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="all">All</TabsTrigger>
+                          <TabsTrigger value="specific">Custom</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    )}
+                    {allToolsMode && (
                       <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
@@ -1570,8 +1574,8 @@ export function AgentDialog({
                         </li>
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
-                          Used with the user's own credentials, resolved at call
-                          time
+                          Connects per the server's policy — on behalf of the
+                          chatting user by default
                         </li>
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
@@ -1591,9 +1595,7 @@ export function AgentDialog({
                     )}
                     {/* Kept mounted while hidden so pending selections and the
                         save-time ref survive switching to "All". */}
-                    <div
-                      className={cn("space-y-3", accessAllTools && "hidden")}
-                    >
+                    <div className={cn("space-y-3", allToolsMode && "hidden")}>
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-muted-foreground">
                           Tools ({selectedToolsCount})
@@ -1781,7 +1783,7 @@ export function AgentDialog({
 
                   {/* Progressive loading is only a choice for custom tools —
                       "All" requires the search/run dispatch surface. */}
-                  {!accessAllTools && (
+                  {!allToolsMode && (
                     <div className="flex items-center justify-between gap-4">
                       <div className="space-y-0.5">
                         <Label htmlFor="load-tools-when-needed">

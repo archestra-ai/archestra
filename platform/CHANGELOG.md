@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.68](https://github.com/archestra-ai/archestra/compare/platform-v1.2.67...platform-v1.2.68) (2026-06-18)
+
+
+### Features
+
+* **archestra-bench:** pin temperature and MCP tool surface for reproducibility ([#5653](https://github.com/archestra-ai/archestra/issues/5653)) ([a4336d8](https://github.com/archestra-ai/archestra/commit/a4336d85ecf1237c161121591f75afe369d9cd1f))
+
 ## [1.2.67](https://github.com/archestra-ai/archestra/compare/platform-v1.2.66...platform-v1.2.67) (2026-06-18)
 
 

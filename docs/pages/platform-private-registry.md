@@ -88,7 +88,9 @@ Network egress policies are configured directly on environments. They can disabl
 
 When an MCP server runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
 
-Egress policies apply only to **self-hosted servers**, which run as pods inside your cluster. **Remote servers** run outside Archestra and are reached over HTTP from the Archestra backend, so an environment's egress policy does not govern their network access — a remote server keeps working regardless of the environment it is assigned to. A self-hosted server that needs broad outbound access — for example a browser-automation server that visits arbitrary sites — will fail or time out under a restrictive policy unless its destinations are allowlisted, while a remote server reached over HTTP is unaffected.
+How a policy applies depends on the server type. A **self-hosted server** runs as a pod in your cluster, so the policy is enforced continuously at the network layer — a server that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
+
+A **remote server** runs outside Archestra and is reached over HTTP, so the policy cannot constrain what the server itself reaches downstream. Instead, Archestra checks the server's URL host against the environment's policy and blocks one the policy would forbid. This check runs only when the catalog entry is created or when its URL or environment changes — a remote server added before its environment's policy was tightened is not retroactively blocked, and is re-checked the next time its URL or environment is edited.
 
 | Cluster provider        | IP/CIDR rules                                                         | Domain rules                                                                               |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |

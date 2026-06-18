@@ -53,7 +53,7 @@ Some MCP servers expose resources through `resources/list` instead of callable t
 
 A self-hosted MCP server is deployed into an [environment](/docs/platform-private-registry#environments) — a deployment target that controls the Kubernetes namespace it runs in and the egress network policy applied to its pod. Use environments to isolate a sandbox server from production resources or to limit what a server can reach on the network.
 
-Egress policies govern self-hosted servers only. Remote MCP servers run outside Archestra and are reached over HTTP, so an environment's network policy does not apply to them. See [Network Egress Policies](/docs/platform-private-registry#network-egress-policies) for the full model.
+For self-hosted servers the egress policy is enforced continuously on the pod. Remote servers run outside Archestra and are reached over HTTP, so the policy cannot constrain what they reach; instead Archestra validates a remote server's URL against the environment's policy when it is added or reassigned. See [Network Egress Policies](/docs/platform-private-registry#network-egress-policies) for the full model.
 
 ## Authentication Model
 

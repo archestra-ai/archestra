@@ -192,7 +192,7 @@ describe("internal MCP catalog routes", () => {
     }
 
     test("POST blocks a remote server whose URL host is not allowed by its environment", async () => {
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
 
       const response = await app.inject({
         method: "POST",
@@ -211,7 +211,7 @@ describe("internal MCP catalog routes", () => {
     });
 
     test("POST allows a remote server whose URL host is in the environment allowlist", async () => {
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
 
       const response = await app.inject({
         method: "POST",
@@ -219,7 +219,7 @@ describe("internal MCP catalog routes", () => {
         payload: {
           name: "allowed-remote",
           serverType: "remote",
-          serverUrl: "https://splunk.example.com/mcp",
+          serverUrl: "https://allowed.example.com/mcp",
           environmentId: env.id,
           scope: "org",
         },
@@ -229,7 +229,7 @@ describe("internal MCP catalog routes", () => {
     });
 
     test("POST does not apply the egress policy to self-hosted servers", async () => {
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
 
       const response = await app.inject({
         method: "POST",
@@ -264,7 +264,7 @@ describe("internal MCP catalog routes", () => {
     test("PUT grandfathers an existing remote server when an unrelated field changes", async ({
       makeInternalMcpCatalog,
     }) => {
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
       // Seeded via the model, bypassing route validation — simulates a server
       // that predates the policy (or the feature).
       const item = await makeInternalMcpCatalog({
@@ -286,12 +286,12 @@ describe("internal MCP catalog routes", () => {
     test("PUT re-validates the URL against the policy when the URL changes", async ({
       makeInternalMcpCatalog,
     }) => {
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
       const item = await makeInternalMcpCatalog({
         organizationId,
         environmentId: env.id,
         serverType: "remote",
-        serverUrl: "https://splunk.example.com/mcp",
+        serverUrl: "https://allowed.example.com/mcp",
       });
 
       const blocked = await app.inject({
@@ -304,7 +304,7 @@ describe("internal MCP catalog routes", () => {
       const allowed = await app.inject({
         method: "PUT",
         url: `/api/internal_mcp_catalog/${item.id}`,
-        payload: { serverUrl: "https://splunk.example.com/v2/mcp" },
+        payload: { serverUrl: "https://allowed.example.com/v2/mcp" },
       });
       expect(allowed.statusCode).toBe(200);
     });
@@ -318,7 +318,7 @@ describe("internal MCP catalog routes", () => {
         serverType: "remote",
         serverUrl: "https://legacy.example.com/mcp",
       });
-      const env = await makeRestrictedEnv(["splunk.example.com"]);
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
 
       const response = await app.inject({
         method: "PUT",

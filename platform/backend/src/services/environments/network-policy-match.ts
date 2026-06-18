@@ -1,5 +1,5 @@
-import ipaddr from "ipaddr.js";
 import type { NetworkPolicy } from "@/types";
+import { ipMatchesAnyCidr, isIpLiteralHost } from "@/utils/network";
 import { networkPolicyDomains } from "./network-policy-domains";
 
 // === Public API ===
@@ -30,9 +30,8 @@ export function isHostAllowedByNetworkPolicy(params: {
   const normalizedHost = stripTrailingDot(host.trim().toLowerCase());
   if (!normalizedHost) return false;
 
-  const ipLiteral = stripBrackets(normalizedHost);
-  if (ipaddr.isValid(ipLiteral)) {
-    return ipMatchesAnyCidr(ipLiteral, policy.allowedCidrs);
+  if (isIpLiteralHost(normalizedHost)) {
+    return ipMatchesAnyCidr(normalizedHost, policy.allowedCidrs);
   }
 
   return domainMatchesAny(normalizedHost, networkPolicyDomains(policy));
@@ -40,32 +39,8 @@ export function isHostAllowedByNetworkPolicy(params: {
 
 // === Internal helpers ===
 
-function stripBrackets(host: string): string {
-  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-}
-
 function stripTrailingDot(host: string): string {
   return host.endsWith(".") ? host.slice(0, -1) : host;
-}
-
-function ipMatchesAnyCidr(ip: string, cidrs: string[]): boolean {
-  let addr: ipaddr.IPv4 | ipaddr.IPv6;
-  try {
-    addr = ipaddr.parse(ip);
-  } catch {
-    return false;
-  }
-  return cidrs.some((cidr) => {
-    let range: [ipaddr.IPv4 | ipaddr.IPv6, number];
-    try {
-      range = ipaddr.parseCIDR(cidr);
-    } catch {
-      return false;
-    }
-    // `match` throws when the address kinds differ (IPv4 vs IPv6), so guard.
-    if (addr.kind() !== range[0].kind()) return false;
-    return addr.match(range);
-  });
 }
 
 function domainMatchesAny(host: string, allowed: string[]): boolean {

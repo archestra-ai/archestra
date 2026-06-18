@@ -38,18 +38,24 @@ describe("isHostAllowedByNetworkPolicy", () => {
   });
 
   describe("restricted: exact domains", () => {
-    const p = policy({ allowedDomains: ["splunk.example.com"] });
+    const p = policy({ allowedDomains: ["allowed.example.com"] });
 
     test("allows an exact match (case-insensitive)", () => {
       expect(
-        isHostAllowedByNetworkPolicy({ host: "splunk.example.com", policy: p }),
-      ).toBe(true);
-      expect(
-        isHostAllowedByNetworkPolicy({ host: "SPLUNK.Example.COM", policy: p }),
+        isHostAllowedByNetworkPolicy({
+          host: "allowed.example.com",
+          policy: p,
+        }),
       ).toBe(true);
       expect(
         isHostAllowedByNetworkPolicy({
-          host: "splunk.example.com.",
+          host: "ALLOWED.Example.COM",
+          policy: p,
+        }),
+      ).toBe(true);
+      expect(
+        isHostAllowedByNetworkPolicy({
+          host: "allowed.example.com.",
           policy: p,
         }),
       ).toBe(true);

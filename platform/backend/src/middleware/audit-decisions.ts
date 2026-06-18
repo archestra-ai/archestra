@@ -168,6 +168,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: conversation × tool; chat surface",
   },
+  conversationFileTouchesTable: {
+    audited: false,
+    reason: "join: conversation × file the agent touched; chat Files panel",
+  },
   conversationSharesTable: {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",

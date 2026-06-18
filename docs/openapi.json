@@ -77894,7 +77894,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List files for a conversation: this chat's own outputs, user attachments, and the pre-existing files the agent actually touched in this chat (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -77977,7 +77977,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "myFiles": {
+                    "referenced": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -78016,7 +78016,7 @@
                   "required": [
                     "generated",
                     "attachments",
-                    "myFiles",
+                    "referenced",
                     "projectName"
                   ],
                   "additionalProperties": false

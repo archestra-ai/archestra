@@ -771,6 +771,73 @@ describe("McpClient", () => {
         expect(result.isError).toBe(false);
         expect(mockCallTool).toHaveBeenCalledTimes(1);
       });
+
+      test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
+        makeAgent,
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        // Agent in "All tools" mode (access_all_tools = true).
+        const allAgent = await makeAgent({
+          name: "All Tools Agent",
+          organizationId: org.id,
+          scope: "org",
+          accessAllTools: true,
+        });
+
+        const catalogItem = await InternalMcpCatalogModel.create({
+          name: `connected-server-${randomUUID().slice(0, 8)}`,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Connection-policy tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        const orgServer = await McpServerModel.create({
+          name: `${catalogItem.name}-org`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          scope: "org",
+        });
+        const pinnedAwayServer = await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        // Catalog pins the service account to the org connection...
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: orgServer.id,
+        });
+        // ...but a leftover static assignment pins the tool elsewhere.
+        await AgentToolModel.create(allAgent.id, tool.id, {
+          mcpServerId: pinnedAwayServer.id,
+          credentialResolutionMode: "static",
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via org service account" }],
+          isError: false,
+        });
+        const findByIdSpy = vi.spyOn(McpServerModel, "findById");
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_all_mode", name: tool.name, arguments: {} },
+          agentOwner(allAgent.id),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        // Resolved via the catalog's org pin, not the static assignment's server.
+        expect(findByIdSpy).toHaveBeenCalledWith(orgServer.id);
+        expect(findByIdSpy).not.toHaveBeenCalledWith(pinnedAwayServer.id);
+      });
     });
 
     test("expires idle active connections and recreates them on the next tool call", async () => {

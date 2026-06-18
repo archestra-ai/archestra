@@ -34,6 +34,7 @@ import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AgentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -1228,7 +1229,8 @@ class McpClient {
     // mode from and can't carry a static pin, so it resolves its connection at
     // call time — which still defers to the MCP server's connection policy
     // (on-behalf-of the caller, or a pinned service account). An assigned row
-    // keeps precedence, so a per-agent credential pin always wins over this.
+    // keeps precedence here; in "All tools" mode the override below then routes
+    // even a leftover static assignment through the server's connection policy.
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
         toolName: availableTool.name,
@@ -1256,6 +1258,33 @@ class McpClient {
             toolName: toolCall.name,
           },
         ),
+      };
+    }
+
+    // "All tools" mode overrides a leftover per-tool credential pin. When the
+    // agent has access_all_tools on, credentials follow the MCP server's
+    // connection policy (on-behalf-of the caller, or a pinned service account)
+    // for every tool — a static assignment left over from Custom mode must not
+    // dictate the credential. The assignment row stays in the DB so switching
+    // back to Custom restores it. Only static pins are rewritten; dynamic is
+    // already server-policy and enterprise-managed keeps its own mechanism.
+    if (
+      tool.credentialResolutionMode === "static" &&
+      owner.type === "agent" &&
+      (await AgentModel.getAccessAllTools(owner.id))
+    ) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          agentId: owner.id,
+          mcpServerId: tool.mcpServerId,
+        },
+        "All-tools mode: ignoring static assignment pin, resolving via the MCP server's connection policy",
+      );
+      tool = {
+        ...tool,
+        mcpServerId: null,
+        credentialResolutionMode: "dynamic",
       };
     }
 

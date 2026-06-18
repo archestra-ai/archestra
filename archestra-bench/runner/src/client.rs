@@ -12,6 +12,8 @@ use serde_json::Value as JsonValue;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep, timeout};
 
+use crate::config::types::ToolExposureMode;
+
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
 /// Sampling temperature pinned on every benchmark chat request. Greedy decoding (`0.0`) is the main
@@ -89,7 +91,7 @@ pub struct AgentCreate {
     #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
     #[serde(rename = "toolExposureMode")]
-    pub tool_exposure_mode: String,
+    pub tool_exposure_mode: ToolExposureMode,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1254,6 +1256,36 @@ mod tests {
         assert_eq!(v["serverType"], "remote");
         assert_eq!(v["serverUrl"], "http://127.0.0.1:1/mcp");
         assert!(v.get("server_url").is_none(), "snake_case key leaked");
+    }
+
+    #[test]
+    fn test_agent_create_serializes_tool_exposure_mode_wire_value() {
+        let agent = AgentCreate {
+            name: "a".into(),
+            scope: "org".into(),
+            agent_type: "agent".into(),
+            system_prompt: None,
+            tool_exposure_mode: ToolExposureMode::SearchAndRunOnly,
+        };
+        let v = serde_json::to_value(&agent).unwrap();
+        assert_eq!(v["toolExposureMode"], "search_and_run_only");
+        assert!(
+            v.get("tool_exposure_mode").is_none(),
+            "snake_case key leaked"
+        );
+        assert!(
+            v.get("systemPrompt").is_none(),
+            "empty prompt must be omitted"
+        );
+
+        let full = AgentCreate {
+            tool_exposure_mode: ToolExposureMode::Full,
+            ..agent
+        };
+        assert_eq!(
+            serde_json::to_value(&full).unwrap()["toolExposureMode"],
+            "full"
+        );
     }
 
     #[test]

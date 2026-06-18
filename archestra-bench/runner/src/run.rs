@@ -17,7 +17,7 @@ use crate::client::{
     AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
     apply_chat_event,
 };
-use crate::config::types::{EnvConfig, Stage, Task};
+use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
@@ -36,9 +36,6 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
-// Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
-// discovers its assigned tools dynamically rather than seeing the full list up front.
-const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 // Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
 // the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
 // solves the task still closes the loop by finding and calling its submit tool instead of replying in
@@ -851,6 +848,7 @@ async fn setup_lane_agent(
         client,
         &format!("{}-{}", env.agent_name, lane.slug()),
         &env.agent_system_prompt,
+        env.platform.tool_exposure_mode,
     )
     .await?;
     let submit_tool =
@@ -862,8 +860,12 @@ async fn ensure_agent(
     client: &EvalClient,
     name: &str,
     system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
 ) -> Result<String, RunError> {
     let existing = client.list_agents(Some(name), Some("org")).await?;
+    // Reuse by name is intra-run idempotency only: each run boots a fresh per-run database that
+    // teardown drops (see lifecycle::Instance::start), so no agent created with a different
+    // tool_exposure_mode can survive into a later run with a flipped flag.
     if let Some(agent) = existing
         .iter()
         .find(|a| a.get("name").and_then(|v| v.as_str()) == Some(name))
@@ -880,7 +882,7 @@ async fn ensure_agent(
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
             system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
-            tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
+            tool_exposure_mode,
         })
         .await?;
     Ok(created
@@ -1103,6 +1105,7 @@ async fn run_lane(
             &root_run_dir,
             &env.id,
             &env.agent_system_prompt,
+            env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
             &task,
@@ -1123,6 +1126,7 @@ async fn run_one(
     root_run_dir: &Path,
     env_id: &str,
     agent_system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1158,6 +1162,7 @@ async fn run_one(
         "lane": lane.name,
         "provider": lane.provider,
         "model": lane.model,
+        "tool_exposure_mode": tool_exposure_mode,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
         "submit_tool": submit_tool,
@@ -2220,6 +2225,7 @@ async fn write_run_config(
                 "id": p.env.id,
                 "tasks": p.tasks.iter().map(|t| &t.id).collect::<Vec<_>>(),
                 "share_backend": p.share_backend(),
+                "tool_exposure_mode": p.env.platform.tool_exposure_mode,
             })
         })
         .collect();
@@ -2364,6 +2370,7 @@ mod tests {
             tasks,
             tools: vec![],
             share_backend: false,
+            platform: crate::config::types::PlatformConfig::default(),
         }
     }
 
@@ -2528,6 +2535,11 @@ mod tests {
             .collect();
         // two envs, but each lane listed exactly once and in declaration order.
         assert_eq!(names, ["l1", "l2"]);
+        // each env records its active tool exposure mode (default here) for reproducibility.
+        assert_eq!(
+            config["environments"][0]["tool_exposure_mode"],
+            "search_and_run_only"
+        );
     }
 
     #[tokio::test]

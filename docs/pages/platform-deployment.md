@@ -1038,6 +1038,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
 
+- **`ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS`** - Headers/body timeout (milliseconds) for LLM-call fetches, applied as a custom undici dispatcher on both the chat→proxy and proxy→upstream hops.
+  - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
+  - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
+  - Keep it finite so genuinely-dead upstreams still surface as errors
+
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`
   - Set to `true` to use the AWS credential chain (IRSA, instance profiles, env vars) instead of API keys

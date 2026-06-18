@@ -11,6 +11,7 @@
 import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
@@ -613,6 +614,12 @@ export function getObservableFetch(
     url: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults (and
+    // `init`) untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+    const dispatchedInit = dispatcher
+      ? ({ ...init, dispatcher } as RequestInit)
+      : init;
     logger.info(
       {
         url: typeof url === "string" ? url : url.toString(),
@@ -622,7 +629,7 @@ export function getObservableFetch(
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return fetch(url, init);
+      return fetch(url, dispatchedInit);
     }
 
     // Extract model from request body if available
@@ -641,7 +648,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await fetch(url, init);
+      response = await fetch(url, dispatchedInit);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 

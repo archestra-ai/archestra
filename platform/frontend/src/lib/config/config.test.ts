@@ -370,8 +370,8 @@ describe("getMcpSandboxBaseUrl", () => {
   });
 
   it("swaps the page's actual port, not the backend port — so it works behind a tunnel", () => {
-    // Backend is :9000; the regression was swapping THAT instead of the page
-    // origin, which is dead when only the frontend port (:13000) is forwarded.
+    // Pin the backend to a different port than the page so the assertion proves
+    // the swap targets the page origin, not the backend URL.
     process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
       "http://localhost:9000";
     setOrigin("http://localhost:13000");

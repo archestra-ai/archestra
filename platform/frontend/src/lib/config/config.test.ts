@@ -8,6 +8,7 @@ vi.mock("next-runtime-env", () => ({
 import {
   getBackendBaseUrl,
   getExternalProxyUrls,
+  getMcpSandboxBaseUrl,
   getWebSocketUrl,
 } from "./config";
 
@@ -333,5 +334,56 @@ describe("getWebSocketUrl", () => {
 
       expect(result).toBe("ws://localhost:9000/ws");
     });
+  });
+});
+
+describe("getMcpSandboxBaseUrl", () => {
+  const originalWindow = global.window;
+
+  afterEach(() => {
+    global.window = originalWindow;
+  });
+
+  const setOrigin = (origin: string, protocol = "http:") => {
+    Object.defineProperty(window, "location", {
+      value: { origin, protocol },
+      writable: true,
+    });
+  };
+
+  it("uses the page's own origin verbatim when no sandbox domain is set", () => {
+    setOrigin("http://localhost:3000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://localhost:3000",
+      hasCrossOrigin: false,
+    });
+  });
+
+  it("does NOT rewrite the host to 127.0.0.1 — the iframe must stay reachable on a tunnelled/remote localhost", () => {
+    setOrigin("http://localhost:13000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://localhost:13000",
+      hasCrossOrigin: false,
+    });
+  });
+
+  it("leaves a 127.0.0.1 origin unchanged (no swap to localhost either)", () => {
+    setOrigin("http://127.0.0.1:3000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://127.0.0.1:3000",
+      hasCrossOrigin: false,
+    });
+  });
+
+  it("uses a per-server subdomain (real cross-origin) when a sandbox domain is configured", () => {
+    setOrigin("https://app.example.com", "https:");
+
+    const result = getMcpSandboxBaseUrl("mcp.example.com", "server-prefix");
+
+    expect(result.hasCrossOrigin).toBe(true);
+    expect(result.baseUrl).toMatch(/^https:\/\/[a-z0-9]+\.mcp\.example\.com$/);
   });
 });

@@ -2,7 +2,8 @@
 //!
 //! `archestra-bench benchmark` runs the eval; `archestra-bench analyze` turns a finished run into a
 //! recommendations report; `archestra-bench full` does both, feeding the run it just produced straight
-//! into the analyzer.
+//! into the analyzer; `archestra-bench prepare` renders a finished run's trajectories and emits a JSON
+//! manifest (metrics + per-rollout summary) for external analysis tooling.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -12,7 +13,7 @@ use archestra_bench::results::Outcome;
 use archestra_bench::run::{RunError, RunOutcome, run};
 use clap::{Args, Parser, Subcommand};
 use tracing::info;
-use trajectory_analyzer::{AnalyzeConfig, analyze};
+use trajectory_analyzer::{AnalyzeConfig, analyze, prepare_run_dir};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -32,6 +33,9 @@ enum Cmd {
     Analyze(AnalyzeArgs),
     /// Run the benchmark, then analyze the run it just produced.
     Full(FullArgs),
+    /// Render a finished run's trajectories and print a JSON manifest (metrics + per-rollout
+    /// summary + trajectory.md paths) for external analysis tooling. No LLM, no API key.
+    Prepare(PrepareArgs),
 }
 
 /// Flags shared by `benchmark` and `full` — what to run and where. Flattened into both so the two can
@@ -130,6 +134,12 @@ struct FullArgs {
     knobs: AnalyzeKnobs,
 }
 
+#[derive(Args, Debug)]
+struct PrepareArgs {
+    #[arg(long, help = "Run directory to prepare (an experiments/<id> dir)")]
+    run_dir: PathBuf,
+}
+
 fn default_bench_dir() -> &'static str {
     // CARGO_MANIFEST_DIR is archestra-bench/cli; the benchmark root is its parent.
     concat!(env!("CARGO_MANIFEST_DIR"), "/..")
@@ -143,7 +153,7 @@ async fn main() -> ExitCode {
     // under this same filter, and its spinner already shows turn/tool/subagent counts). `analyze` alone
     // wants a quiet default. `RUST_LOG` overrides either.
     let default_filter = match &cli.cmd {
-        Cmd::Analyze(_) => "warn",
+        Cmd::Analyze(_) | Cmd::Prepare(_) => "warn",
         _ => "info,rmcp=warn,nitpicker_agent=warn",
     };
     init_tracing(default_filter);
@@ -152,15 +162,19 @@ async fn main() -> ExitCode {
         Cmd::Benchmark(a) => run_benchmark(a).await,
         Cmd::Analyze(a) => run_analyze(a).await,
         Cmd::Full(a) => run_full(a).await,
+        Cmd::Prepare(a) => run_prepare(a),
     }
 }
 
+/// Logs go to stderr so stdout carries only program output — `prepare`'s JSON manifest and
+/// `benchmark`'s report — uncorrupted even when `RUST_LOG` is set.
 fn init_tracing(default: &str) {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default)),
         )
+        .with_writer(std::io::stderr)
         .init();
 }
 
@@ -196,6 +210,28 @@ async fn run_analyze(a: AnalyzeArgs) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("✗ analyze failed: {e:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Render the run's trajectories and print the manifest as JSON on stdout. Synchronous: no network,
+/// no LLM. stdout carries only the JSON (logs are routed to stderr by `init_tracing`).
+fn run_prepare(a: PrepareArgs) -> ExitCode {
+    let manifest = match prepare_run_dir(&a.run_dir) {
+        Ok(manifest) => manifest,
+        Err(e) => {
+            eprintln!("✗ prepare failed: {e:#}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match serde_json::to_string_pretty(&manifest) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("✗ prepare failed to serialize manifest: {e}");
             ExitCode::FAILURE
         }
     }

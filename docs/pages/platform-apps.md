@@ -20,7 +20,7 @@ Ships behind `ARCHESTRA_APPS_ENABLED` (off by default). See [Deployment](./platf
 
 Create an app from a starter template (the HTML seed) and a name. Editing the HTML forks a new immutable version; the head version is served when the app runs. Run an app standalone at `/apps/:id/run` (no chat chrome), or from chat: a successful `create_app`, `update_app`, or `render_app` call renders the app inline in the conversation. Both surfaces drive the same app-bound runtime, so behavior is identical.
 
-While the feature is enabled, newly created agents get the app management tools (`create_app`, `update_app`, `render_app`, `list_apps`, `delete_app`) assigned by default, so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+While the feature is enabled, newly created agents get the full app tool set assigned by default — the authoring loop (`create_app`, `read_app`, `edit_app`, `update_app`, `preview_app_tool`, `get_app_diagnostics`) plus `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
 ## External MCP clients
 

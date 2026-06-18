@@ -1,0 +1,54 @@
+[[stages]]
+text = """You are on call. A backend service is intermittently **restarting under load**. Attached to this chat is the on-call dump for the incident: a zip of unsorted logs -- several interleaved JSON-line log files from different sources (backend, a background worker, the MCP gateway, and pod events), not sorted by time.
+
+Pinpoint the single root cause of the restarts. The logs contain unrelated errors and noise (red herrings); identify which one actually crashes the process. Then call submit_result with:
+
+- `root_cause_component`: the component at fault, exactly one of:
+  `chat-active-run-drain`, `mcp-gateway-auth-cache`, `user-token-model`, `llm-proxy-adapter`, `k8s-network-policy`, `context-compaction`.
+- `failure_class`: the failure category, exactly one of:
+  `fk_violation_on_cascade_delete`, `unique_constraint_race`, `negative_cache_ttl_refresh`, `upstream_idle_timeout_misclassified`, `image_token_overestimate`, `dns_egress_blocked`.
+- `evidence_id`: the exact `runId` value carried by the database error responsible for the crash (copy it verbatim from the log line).
+- `summary`: one or two sentences explaining the root cause in your own words.
+
+Example shape: result = {"root_cause_component": "...", "failure_class": "...", "evidence_id": "...", "summary": "..."}."""
+
+  [[stages.files]]
+  src = "logs.zip"
+  dest = "/home/sandbox/attachments/logs.zip"
+  mime_type = "application/zip"
+
+[result_schema]
+type = "object"
+required = ["root_cause_component", "failure_class", "evidence_id", "summary"]
+additionalProperties = false
+
+  [result_schema.properties.root_cause_component]
+  enum = [
+    "chat-active-run-drain",
+    "mcp-gateway-auth-cache",
+    "user-token-model",
+    "llm-proxy-adapter",
+    "k8s-network-policy",
+    "context-compaction",
+  ]
+
+  [result_schema.properties.failure_class]
+  enum = [
+    "fk_violation_on_cascade_delete",
+    "unique_constraint_race",
+    "negative_cache_ttl_refresh",
+    "upstream_idle_timeout_misclassified",
+    "image_token_overestimate",
+    "dns_egress_blocked",
+  ]
+
+  [result_schema.properties.evidence_id]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.summary]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = []

@@ -91,7 +91,7 @@ fresh backend per lane. Add a new environment by dropping another `envs/*.toml` 
 
 `basic` ships all skills from `anthropics/skills` + `openai/skills`, three public no-auth remote MCPs
 (DeepWiki, Microsoft Learn, Context7) as a realistic surface, `share_backend = true` (its tasks are
-read-only against backend state), and six tasks —
+read-only against backend state), and a set of sandbox tasks including —
 
 - `pi-gif-zip` — estimate π by Monte-Carlo, render an animated GIF, invert its colors, zip and export
   it; the verifier asserts a valid zip containing a valid GIF (sandbox + file output).
@@ -107,6 +107,13 @@ read-only against backend state), and six tasks —
   count grows without bound, so there is no fixed offline fixture).
 - `lena-png-size` — report the size in KiB (floored) of scikit-image's pinned `lena.png`; the verifier
   checks against recorded ground truth.
+- `ai-sre-fk-drain` — triage a zip of unsorted incident logs (a reconstructed real incident) and
+  name the root cause of a crash-looping backend: a foreign-key violation when a conversation is
+  deleted mid-drain; the verifier exact-matches a closed-set component/failure-class plus the `runId`
+  evidence buried in the logs (red herrings included), with a free-text RCA captured but not graded.
+- `ai-sre-cache-treadmill` — the same triage shape for self-healing 401s caused by a negative-auth-cache
+  TTL that refreshes on every retry; the graded evidence is the `profileId` stuck in the treadmill,
+  distinguished from a genuinely-expired-token red herring.
 
 `archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
 tool and skill catalog is the subject under test; `tools = ["create_skill"]`) with two tasks —
@@ -128,6 +135,23 @@ Dagger host) take effect without a git worktree, a second Tilt, or any edit to `
 second backend runs the already-built `dist/server.mjs` the main stack keeps fresh, so it never
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
+
+## Reproducibility
+
+A rerun of the same config should grade the same way; two knobs cut variance at the source (rather than
+averaging it out over more rollouts):
+
+- **Sampling temperature is pinned** to `0.0` on every chat request — the harness sends `temperature` in
+  the `/api/chat` body and the backend forwards it to `streamText` (a provider that can't honor it, e.g. a
+  reasoning model, drops it with a warning rather than erroring). The value is recorded in `config.json`.
+  This is variance *reduction*, not bitwise determinism — MoE routing and parallel tool-call ordering keep
+  agent runs non-bitwise-stable.
+- **The remote-MCP tool surface can be pinned** per env. Remote servers add/rename/remove tools over time,
+  silently changing the agent's action space; a committed `envs/<id>.mcp.lock` (MCP name → sorted tool
+  short-names) snapshots it. On a run, a drift from the lock aborts that env's setup with a per-MCP diff;
+  `archestra-bench benchmark --env <id> --update-mcp-lock` (re)generates the lock from the live surface.
+  Pinning is opt-in — an env with no lock runs unchanged. The lock pins the tool *surface*, not MCP
+  response bodies (live data stays live by design).
 
 ## Outcomes
 

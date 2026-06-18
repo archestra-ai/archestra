@@ -12,7 +12,13 @@ use serde_json::Value as JsonValue;
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep, timeout};
 
+use crate::config::types::ToolExposureMode;
+
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
+
+/// Sampling temperature pinned on every benchmark chat request. Greedy decoding (`0.0`) is the main
+/// lever against run-to-run variance — see the reproducibility notes in the repo README.
+pub(crate) const BENCH_TEMPERATURE: f32 = 0.0;
 
 #[derive(Debug, Clone)]
 pub struct ArchestraApiError {
@@ -85,7 +91,7 @@ pub struct AgentCreate {
     #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
     #[serde(rename = "toolExposureMode")]
-    pub tool_exposure_mode: String,
+    pub tool_exposure_mode: ToolExposureMode,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -653,28 +659,31 @@ impl EvalClient {
         )
     }
 
+    /// Fetch a conversation's persisted messages in UI-message shape (`{id, role, parts, ...}`).
+    /// The platform chat route is request-body-authoritative — it never backfills history from the
+    /// DB — so callers must resend these on follow-up turns to preserve context across stages.
+    pub async fn get_conversation_messages(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<JsonValue>, ClientError> {
+        let body = self
+            .get_json(&format!("/api/chat/conversations/{conversation_id}"))
+            .await?;
+        Ok(body
+            .get("messages")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default())
+    }
+
     pub async fn stream_chat_records(
         &self,
         conversation_id: &str,
+        prior_messages: &[JsonValue],
         text: &str,
         files: &[FilePart],
     ) -> Result<impl Stream<Item = ChatStreamRecord> + use<'_>, ClientError> {
-        let mut parts = vec![serde_json::json!({
-            "type": "text",
-            "text": text,
-        })];
-        for file in files {
-            parts.push(file.to_data_url_part());
-        }
-        let body = serde_json::json!({
-            "id": conversation_id,
-            "messages": [{
-                "id": uuid::Uuid::new_v4().to_string(),
-                "role": "user",
-                "parts": parts,
-            }],
-            "trigger": "submit-message",
-        });
+        let body = build_chat_body(conversation_id, prior_messages, text, files);
         let url = self.url("/api/chat", None);
         let mut req = self
             .http
@@ -1181,9 +1190,50 @@ fn github_token() -> Option<String> {
         })
 }
 
+/// Build the `POST /api/chat` request body. Pinned sampling lives here so reruns of the same config
+/// don't diverge on temperature alone — the backend forwards `temperature` to `streamText`, and a
+/// provider that can't honor it (e.g. a reasoning model) drops it with a warning rather than erroring.
+fn build_chat_body(
+    conversation_id: &str,
+    prior_messages: &[JsonValue],
+    text: &str,
+    files: &[FilePart],
+) -> JsonValue {
+    let mut parts = vec![serde_json::json!({
+        "type": "text",
+        "text": text,
+    })];
+    for file in files {
+        parts.push(file.to_data_url_part());
+    }
+    // Resend the persisted history verbatim (keeping each message's backend id, so
+    // persistNewMessages dedupes them) and append only the new user turn with a fresh id.
+    let mut messages = prior_messages.to_vec();
+    messages.push(serde_json::json!({
+        "id": uuid::Uuid::new_v4().to_string(),
+        "role": "user",
+        "parts": parts,
+    }));
+    serde_json::json!({
+        "id": conversation_id,
+        "messages": messages,
+        "temperature": BENCH_TEMPERATURE,
+        "trigger": "submit-message",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_body_pins_temperature() {
+        let body = build_chat_body("conv-1", &[], "hello", &[]);
+        assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
+        assert_eq!(body["id"], "conv-1");
+        assert_eq!(body["trigger"], "submit-message");
+        assert_eq!(body["messages"][0]["parts"][0]["text"], "hello");
+    }
 
     #[test]
     fn test_sse_data_payload() {
@@ -1206,6 +1256,36 @@ mod tests {
         assert_eq!(v["serverType"], "remote");
         assert_eq!(v["serverUrl"], "http://127.0.0.1:1/mcp");
         assert!(v.get("server_url").is_none(), "snake_case key leaked");
+    }
+
+    #[test]
+    fn test_agent_create_serializes_tool_exposure_mode_wire_value() {
+        let agent = AgentCreate {
+            name: "a".into(),
+            scope: "org".into(),
+            agent_type: "agent".into(),
+            system_prompt: None,
+            tool_exposure_mode: ToolExposureMode::SearchAndRunOnly,
+        };
+        let v = serde_json::to_value(&agent).unwrap();
+        assert_eq!(v["toolExposureMode"], "search_and_run_only");
+        assert!(
+            v.get("tool_exposure_mode").is_none(),
+            "snake_case key leaked"
+        );
+        assert!(
+            v.get("systemPrompt").is_none(),
+            "empty prompt must be omitted"
+        );
+
+        let full = AgentCreate {
+            tool_exposure_mode: ToolExposureMode::Full,
+            ..agent
+        };
+        assert_eq!(
+            serde_json::to_value(&full).unwrap()["toolExposureMode"],
+            "full"
+        );
     }
 
     #[test]

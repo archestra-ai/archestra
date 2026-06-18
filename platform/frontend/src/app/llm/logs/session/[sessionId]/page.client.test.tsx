@@ -77,6 +77,55 @@ describe("SessionDetailPage", () => {
       screen.queryByText("Loading session logs..."),
     ).not.toBeInTheDocument();
   });
+
+  it("shows cache read/write totals when the session used prompt caching", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            totalInputTokens: 1250,
+            totalOutputTokens: 430,
+            totalCacheReadTokens: 98000,
+            totalCacheWriteTokens: 12000,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractions).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractions>);
+
+    renderSessionDetailPage();
+
+    expect(
+      await screen.findByText(/98,000 cache read \/ 12,000 cache write/),
+    ).toBeVisible();
+  });
+
+  it("hides the cache line when the session used no caching", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            totalInputTokens: 1250,
+            totalOutputTokens: 430,
+            totalCacheReadTokens: 0,
+            totalCacheWriteTokens: 0,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractions).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractions>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText(/1,250 in/)).toBeVisible();
+    expect(screen.queryByText(/cache read/)).not.toBeInTheDocument();
+  });
 });
 
 function renderSessionDetailPage() {

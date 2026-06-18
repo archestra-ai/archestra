@@ -100,6 +100,11 @@ struct BenchArgs {
     out: Option<PathBuf>,
     #[arg(long, help = "Reuse an existing run directory")]
     run_dir: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Rewrite each selected env's envs/<id>.mcp.lock from the live MCP tool surface instead of enforcing it"
+    )]
+    update_mcp_lock: bool,
 }
 
 #[derive(Args, Debug)]
@@ -160,7 +165,14 @@ fn init_tracing(default: &str) {
 }
 
 async fn run_benchmark(a: BenchArgs) -> ExitCode {
-    match guarded_run(&a.common, a.out.as_deref(), a.run_dir.as_deref()).await {
+    match guarded_run(
+        &a.common,
+        a.out.as_deref(),
+        a.run_dir.as_deref(),
+        a.update_mcp_lock,
+    )
+    .await
+    {
         None => ExitCode::FAILURE,
         Some(Err(e)) => {
             tracing::error!("benchmark failed: {e}");
@@ -192,7 +204,7 @@ async fn run_analyze(a: AnalyzeArgs) -> ExitCode {
 async fn run_full(a: FullArgs) -> ExitCode {
     // A fresh run dir every time (no --run-dir): `full` must never overwrite an existing run's
     // config.json/aggregate.json. `run()` picks the timestamped dir and returns it for the analyze step.
-    let outcome = match guarded_run(&a.common, None, None).await {
+    let outcome = match guarded_run(&a.common, None, None, false).await {
         None => return ExitCode::FAILURE,
         Some(Err(e)) => {
             tracing::error!("benchmark failed: {e}");
@@ -227,6 +239,7 @@ async fn guarded_run(
     common: &CommonBenchArgs,
     out: Option<&Path>,
     run_dir: Option<&Path>,
+    update_mcp_lock: bool,
 ) -> Option<Result<RunOutcome, RunError>> {
     let result = tokio::select! {
         biased;
@@ -247,6 +260,7 @@ async fn guarded_run(
             out,
             run_dir,
             common.max_workers,
+            update_mcp_lock,
         ) => Some(result),
     };
     if result.is_none() {

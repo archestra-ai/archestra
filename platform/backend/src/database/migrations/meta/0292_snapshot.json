@@ -1,5 +1,5 @@
 {
-  "id": "cfc259e1-9134-4920-ad77-38f98c92a67c",
+  "id": "742af067-3983-4d81-ac69-d6dd1ea0d7f3",
   "prevId": "523fbaff-bb89-430c-89f5-1c1c24e124c9",
   "version": "7",
   "dialect": "postgresql",
@@ -1244,13 +1244,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'full'"
-        },
-        "access_all_tools": {
-          "name": "access_all_tools",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
@@ -5754,6 +5747,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cache_write_1h_tokens": {
+          "name": "cache_write_1h_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "baseline_cost": {
           "name": "baseline_cost",
           "type": "numeric(13, 10)",
@@ -6070,12 +6069,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "dynamic_connection_mcp_server_id": {
-          "name": "dynamic_connection_mcp_server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         },
         "server_url": {
           "name": "server_url",

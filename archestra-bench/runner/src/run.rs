@@ -17,14 +17,15 @@ use crate::client::{
     AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
     apply_chat_event,
 };
-use crate::config::types::{EnvConfig, Stage, Task};
+use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
+use crate::mcp_lock;
 use crate::mcp_server::{BenchmarkMcp, Submission};
 use crate::results::{Outcome, RunResult, render_markdown};
 use crate::seeding::{
     ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures,
-    seed_skill_ref,
+    seed_skill_ref, tool_name,
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
@@ -35,19 +36,14 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
-// Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
-// discovers its assigned tools dynamically rather than seeing the full list up front.
-const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 // Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
 // the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
 // solves the task still closes the loop by finding and calling its submit tool instead of replying in
 // prose.
-const SUBMIT_INSTRUCTION: &str =
-    "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
+const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
 // One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
 // SUBMIT_INSTRUCTION, so this only has to call out the omission.
-const SUBMIT_NUDGE: &str =
-    "You ended your turn without submitting a result. The task is not complete until you submit it.";
+const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -84,6 +80,10 @@ pub struct RunCtx {
     pub root_run_dir: PathBuf,
     pub run_id: String,
     pub api_keys: HashMap<String, String>,
+    /// Where `envs/<id>.toml` and their `*.mcp.lock` siblings live, for the MCP tool-surface pin.
+    pub envs_dir: PathBuf,
+    /// Rewrite each env's `*.mcp.lock` from the observed surface instead of enforcing it.
+    pub update_mcp_lock: bool,
 }
 
 /// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
@@ -124,8 +124,10 @@ pub async fn run(
     out: Option<&Path>,
     run_dir: Option<&Path>,
     max_workers: Option<usize>,
+    update_mcp_lock: bool,
 ) -> Result<RunOutcome, RunError> {
-    let envs = load_envs(&bench_dir.join("envs")).map_err(|e| RunError::Config(e.to_string()))?;
+    let envs_dir = bench_dir.join("envs");
+    let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
     let default_lanes_path = bench_dir.join("lanes.toml");
     let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
     let lane_list =
@@ -153,6 +155,8 @@ pub async fn run(
         root_run_dir,
         run_id,
         api_keys,
+        envs_dir,
+        update_mcp_lock,
     };
 
     let results = execute_plan(plan, ctx.clone(), workers).await;
@@ -557,10 +561,25 @@ async fn setup_shared_env(
 
     if !env.mcps.is_empty() {
         let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _)| id.clone()).collect();
-        if let Err(e) = seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await {
+        let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
+        {
+            Ok(registered) => registered,
+            Err(e) => {
+                stop_mcps(&setups).await;
+                let _ = instance.shutdown().await;
+                return Err(e.to_string());
+            }
+        };
+        if let Err(e) = mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        ) {
             stop_mcps(&setups).await;
             let _ = instance.shutdown().await;
-            return Err(e.to_string());
+            return Err(e);
         }
     }
 
@@ -659,18 +678,40 @@ async fn run_isolated_lane(
         }
     };
 
-    if !env.mcps.is_empty()
-        && let Err(e) = seed_mcp_fixtures(
+    if !env.mcps.is_empty() {
+        let registered = match seed_mcp_fixtures(
             &client,
             &env.mcps,
             "org",
             Some(std::slice::from_ref(&agent_id)),
         )
         .await
-    {
-        mcp.stop().await;
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+        {
+            Ok(registered) => registered,
+            Err(e) => {
+                mcp.stop().await;
+                let _ = instance.shutdown().await;
+                return infra_results_for_lane(
+                    &env,
+                    &tasks,
+                    &lane,
+                    &ctx,
+                    &progress,
+                    &e.to_string(),
+                );
+            }
+        };
+        if let Err(e) = mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        ) {
+            mcp.stop().await;
+            let _ = instance.shutdown().await;
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
+        }
     }
 
     let results = run_lane(
@@ -729,6 +770,7 @@ fn infra_results_for_lane(
             "lane": lane.name,
             "provider": lane.provider,
             "model": lane.model,
+            "tool_exposure_mode": env.platform.tool_exposure_mode,
             "outcome": Outcome::AgentError.value(),
             "agent_error": format!("infra: {error}"),
             "finished_at": stamp,
@@ -807,6 +849,7 @@ async fn setup_lane_agent(
         client,
         &format!("{}-{}", env.agent_name, lane.slug()),
         &env.agent_system_prompt,
+        env.platform.tool_exposure_mode,
     )
     .await?;
     let submit_tool =
@@ -818,8 +861,12 @@ async fn ensure_agent(
     client: &EvalClient,
     name: &str,
     system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
 ) -> Result<String, RunError> {
     let existing = client.list_agents(Some(name), Some("org")).await?;
+    // Reuse by name is intra-run idempotency only: each run boots a fresh per-run database that
+    // teardown drops (see lifecycle::Instance::start), so no agent created with a different
+    // tool_exposure_mode can survive into a later run with a flipped flag.
     if let Some(agent) = existing
         .iter()
         .find(|a| a.get("name").and_then(|v| v.as_str()) == Some(name))
@@ -836,7 +883,7 @@ async fn ensure_agent(
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
             system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
-            tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
+            tool_exposure_mode,
         })
         .await?;
     Ok(created
@@ -1025,7 +1072,7 @@ async fn assert_agent_tool_surface(
 
 fn find_submit_tool(tools: &[HashMap<String, serde_json::Value>]) -> Result<String, RunError> {
     for tool in tools {
-        if let Some(name) = tool.get("name").and_then(|v| v.as_str())
+        if let Some(name) = tool_name(tool)
             && name.ends_with(SUBMIT_TOOL_SUFFIX)
         {
             return Ok(name.to_string());
@@ -1058,6 +1105,8 @@ async fn run_lane(
             &submit_tool,
             &root_run_dir,
             &env.id,
+            &env.agent_system_prompt,
+            env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
             &task,
@@ -1077,6 +1126,8 @@ async fn run_one(
     submit_tool: &str,
     root_run_dir: &Path,
     env_id: &str,
+    agent_system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1112,6 +1163,7 @@ async fn run_one(
         "lane": lane.name,
         "provider": lane.provider,
         "model": lane.model,
+        "tool_exposure_mode": tool_exposure_mode,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
         "submit_tool": submit_tool,
@@ -1137,6 +1189,7 @@ async fn run_one(
         bench_mcp,
         submit_tool,
         env_id,
+        agent_system_prompt,
         lane,
         agent_id,
         task,
@@ -1160,6 +1213,7 @@ async fn grade_rollout(
     bench_mcp: BenchmarkMcp,
     _submit_tool: &str,
     env_id: &str,
+    agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1199,6 +1253,25 @@ async fn grade_rollout(
         ("cell".to_string(), rollout_token(rollout_key, &lane.model)),
         ("agent_id".to_string(), agent_id.to_string()),
     ]);
+
+    // Capture once: the agent's configured system prompt plus the expanded stage-0 task text
+    // (pre-SUBMIT_INSTRUCTION, i.e. the human-authored prompt). drive_stage appends
+    // SUBMIT_INSTRUCTION when it actually sends each stage.
+    let initial_user_message = task
+        .stages
+        .first()
+        .map(|stage| expand_runtime(&stage.text, &runtime))
+        .unwrap_or_default();
+    artifacts
+        .append(
+            "prompts",
+            serde_json::json!({
+                "system_prompt": agent_system_prompt,
+                "user_message": initial_user_message,
+            }),
+        )
+        .await;
+
     let mut run = ChatRunResult::default();
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
@@ -1214,6 +1287,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            index > 0,
         )
         .await?;
         if stage_error.is_some() {
@@ -1235,7 +1309,9 @@ async fn grade_rollout(
         && run.finish_reason.as_deref() == Some("stop")
         && !bench_mcp.has_submission(rollout_key).await
     {
-        artifacts.append("submit_nudge", serde_json::json!({})).await;
+        artifacts
+            .append("submit_nudge", serde_json::json!({}))
+            .await;
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
             files: Vec::new(),
@@ -1248,6 +1324,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            true,
         )
         .await?;
     }
@@ -1425,6 +1502,7 @@ async fn drive_stage(
     run: &mut ChatRunResult,
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
+    expect_prior_history: bool,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1447,8 +1525,25 @@ async fn drive_stage(
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
 
+    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
+    // platform builds LLM context from the request body only. The first turn has no history yet;
+    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
+    // the rollout loudly rather than silently run the agent on contextless history.
+    let prior_messages = if expect_prior_history {
+        let messages = client.get_conversation_messages(conversation_id).await?;
+        if messages.is_empty() {
+            return Ok(Some(
+                "conversation history empty on a follow-up turn; the prior turn likely failed to \
+                 persist — refusing to continue on contextless history"
+                    .to_string(),
+            ));
+        }
+        messages
+    } else {
+        Vec::new()
+    };
     let mut stream = client
-        .stream_chat_records(conversation_id, &text, &files)
+        .stream_chat_records(conversation_id, &prior_messages, &text, &files)
         .await?;
     loop {
         let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
@@ -2131,6 +2226,7 @@ async fn write_run_config(
                 "id": p.env.id,
                 "tasks": p.tasks.iter().map(|t| &t.id).collect::<Vec<_>>(),
                 "share_backend": p.share_backend(),
+                "tool_exposure_mode": p.env.platform.tool_exposure_mode,
             })
         })
         .collect();
@@ -2172,6 +2268,7 @@ async fn write_run_config(
         "lanes": lanes,
         "max_workers": max_workers,
         "git_commit": git_commit,
+        "temperature": crate::client::BENCH_TEMPERATURE,
     });
     fs::write(
         run_dir.join("config.json"),
@@ -2274,6 +2371,7 @@ mod tests {
             tasks,
             tools: vec![],
             share_backend: false,
+            platform: crate::config::types::PlatformConfig::default(),
         }
     }
 
@@ -2438,6 +2536,38 @@ mod tests {
             .collect();
         // two envs, but each lane listed exactly once and in declaration order.
         assert_eq!(names, ["l1", "l2"]);
+        // each env records its active tool exposure mode (default here) for reproducibility.
+        assert_eq!(
+            config["environments"][0]["tool_exposure_mode"],
+            "search_and_run_only"
+        );
+    }
+
+    #[test]
+    fn infra_failure_run_json_records_tool_exposure_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = RunCtx {
+            root_run_dir: tmp.path().to_path_buf(),
+            run_id: "rid".to_string(),
+            api_keys: std::collections::HashMap::new(),
+            envs_dir: tmp.path().to_path_buf(),
+            update_mcp_lock: false,
+        };
+        let mut env = dummy_env("e", vec![dummy_task("t1")]);
+        env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;
+        let lane = dummy_lane("l1");
+        let progress = ProgressBar::hidden();
+        // Setup failed before any agent existed -- the env's configured flag must still land in
+        // run.json, since that is where the analyzer reads it (RunMeta).
+        infra_results_for_lane(&env, &env.tasks, &lane, &ctx, &progress, "boom");
+        let run_json = tmp
+            .path()
+            .join(run_subdir("e", "t1", &lane))
+            .join("run.json");
+        let meta: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(run_json).unwrap()).unwrap();
+        assert_eq!(meta["tool_exposure_mode"], "full");
+        assert_eq!(meta["outcome"], Outcome::AgentError.value());
     }
 
     #[tokio::test]

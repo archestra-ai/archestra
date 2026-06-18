@@ -99,6 +99,8 @@ pub struct RunMeta {
     pub lane: String,
     pub provider: String,
     pub model: String,
+    #[serde(default)]
+    pub tool_exposure_mode: Option<String>,
     pub outcome: String,
     #[serde(default)]
     pub finish_reason: Option<String>,
@@ -168,6 +170,14 @@ impl RunMeta {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
     ConversationCreated,
+    /// The agent's configured system prompt plus the initial task message, captured once at
+    /// conversation start. This is the harness-side configured input, not the full prompt the
+    /// platform materializes server-side (skill catalog, tool instructions, hook context).
+    Prompts {
+        #[serde(default)]
+        system_prompt: String,
+        user_message: String,
+    },
     AssistantText {
         text: String,
     },
@@ -247,6 +257,14 @@ mod tests {
         assert!(m.is_pass());
         assert_eq!(m.turn_count, 0);
         assert_eq!(m.rollout_id().to_string(), "e/t__l");
+        // Older run.json predates the flag -> absent field must default to None, not fail to parse.
+        assert_eq!(m.tool_exposure_mode, None);
+
+        let with_flag: RunMeta = serde_json::from_str(
+            r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"passed","tool_exposure_mode":"full"}"#,
+        )
+        .unwrap();
+        assert_eq!(with_flag.tool_exposure_mode.as_deref(), Some("full"));
     }
 
     #[test]
@@ -257,5 +275,23 @@ mod tests {
         assert!(matches!(tool, Event::ToolCall { .. }));
         let unknown: Event = serde_json::from_str(r#"{"kind":"brand_new_kind"}"#).unwrap();
         assert!(matches!(unknown, Event::Unknown));
+    }
+
+    #[test]
+    fn event_parses_prompts_with_default_system_prompt() {
+        let with_system: Event = serde_json::from_str(
+            r#"{"kind":"prompts","system_prompt":"be helpful","user_message":"do the task"}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(with_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt == "be helpful" && user_message == "do the task")
+        );
+        let no_system: Event =
+            serde_json::from_str(r#"{"kind":"prompts","user_message":"do the task"}"#).unwrap();
+        assert!(
+            matches!(no_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt.is_empty() && user_message == "do the task")
+        );
     }
 }

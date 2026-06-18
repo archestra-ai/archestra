@@ -553,7 +553,7 @@ export const McpAppRuntime = function McpAppRuntime({
         isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
       );
     }
-  }, [preloadedResource, appResource, loadError]);
+  }, [preloadedResource, isOwnedApp, appResource, loadError]);
 
   // Send partial inputs during streaming. The Vercel AI SDK populates part.input
   // progressively during input-streaming state, so toolInput changes on each delta.

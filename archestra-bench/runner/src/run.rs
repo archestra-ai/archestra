@@ -770,6 +770,7 @@ fn infra_results_for_lane(
             "lane": lane.name,
             "provider": lane.provider,
             "model": lane.model,
+            "tool_exposure_mode": env.platform.tool_exposure_mode,
             "outcome": Outcome::AgentError.value(),
             "agent_error": format!("infra: {error}"),
             "finished_at": stamp,
@@ -2540,6 +2541,33 @@ mod tests {
             config["environments"][0]["tool_exposure_mode"],
             "search_and_run_only"
         );
+    }
+
+    #[test]
+    fn infra_failure_run_json_records_tool_exposure_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = RunCtx {
+            root_run_dir: tmp.path().to_path_buf(),
+            run_id: "rid".to_string(),
+            api_keys: std::collections::HashMap::new(),
+            envs_dir: tmp.path().to_path_buf(),
+            update_mcp_lock: false,
+        };
+        let mut env = dummy_env("e", vec![dummy_task("t1")]);
+        env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;
+        let lane = dummy_lane("l1");
+        let progress = ProgressBar::hidden();
+        // Setup failed before any agent existed -- the env's configured flag must still land in
+        // run.json, since that is where the analyzer reads it (RunMeta).
+        infra_results_for_lane(&env, &env.tasks, &lane, &ctx, &progress, "boom");
+        let run_json = tmp
+            .path()
+            .join(run_subdir("e", "t1", &lane))
+            .join("run.json");
+        let meta: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(run_json).unwrap()).unwrap();
+        assert_eq!(meta["tool_exposure_mode"], "full");
+        assert_eq!(meta["outcome"], Outcome::AgentError.value());
     }
 
     #[tokio::test]

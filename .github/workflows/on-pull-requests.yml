@@ -202,7 +202,12 @@ jobs:
           # reachable. The Dagger client only does TLS against a trusted local
           # engine session, so attacker-controlled CRL parsing is not reachable.
           # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
-          allow-ghsas: GHSA-82j2-j2ch-gfr8
+          # GHSA-vmh5-mc38-953g (undici HIGH, TLS bypass via SOCKS5 ProxyAgent, >=7.23.0 <7.28.0)
+          # GHSA-5v7r-6r5c-r473 (undici MODERATE, cache whitespace bypass, >=7.0.0 <7.28.0)
+          # Fix is undici 7.28.0 (published 2026-06-15, clears minimumReleaseAge on 2026-06-22).
+          # Neither applies: we use plain Agent (no ProxyAgent/SOCKS5), outbound LLM traffic only.
+          # TODO: remove both entries and bump undici to 7.28.0 after 2026-06-22.
+          allow-ghsas: GHSA-82j2-j2ch-gfr8, GHSA-vmh5-mc38-953g, GHSA-5v7r-6r5c-r473
 
   dependency-review-merge-group:
     name: Dependency Review

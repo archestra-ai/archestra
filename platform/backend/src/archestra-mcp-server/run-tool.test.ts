@@ -376,7 +376,7 @@ describe("run_tool", () => {
         dynamicContext.tokenAuth,
         {
           conversationId: testConversationId,
-          dynamicTool: expect.objectContaining({
+          availableTool: expect.objectContaining({
             name: "github__search_repositories",
             catalogId: catalog.id,
           }),

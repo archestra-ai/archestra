@@ -140,7 +140,7 @@ const registry = defineArchestraTools([
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
-      let dynamicTool: Tool | null = null;
+      let availableTool: Tool | null = null;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
         // agent's assigned tools, so an unassigned tool can never be enabled in
@@ -148,7 +148,7 @@ const registry = defineArchestraTools([
         if (await checkConversationGate(resolvedName)) {
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
-        dynamicTool = await resolveDynamicTool({
+        availableTool = await resolveDynamicTool({
           toolName: resolvedName,
           agentId: context.agentId,
           userId: context.userId,
@@ -159,11 +159,11 @@ const registry = defineArchestraTools([
             agentId: context.agentId,
             requestedName,
             resolvedName,
-            dynamicallyResolved: dynamicTool != null,
+            dynamicallyResolved: availableTool != null,
           },
           `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
         );
-        if (!dynamicTool) {
+        if (!availableTool) {
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
       } else {
@@ -183,7 +183,7 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
         enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-        enabledToolNames: dynamicTool
+        enabledToolNames: availableTool
           ? new Set([...assignedToolNames, resolvedName])
           : assignedToolNames,
       });
@@ -206,12 +206,13 @@ const registry = defineArchestraTools([
         // mcp-client scopes per-conversation sessions (e.g. browser contexts)
         // by this key; headless executions use their isolation key so
         // concurrent runs never share a session and cleanup can close it.
-        // dynamicTool lets an unassigned-but-user-accessible tool execute with
-        // call-time credential resolution; it is only ever set after the
-        // dynamic-access gates above passed.
+        // availableTool lets a tool the agent has no assignment for execute in
+        // "All tools" mode; it is only ever set after the dynamic-access gates
+        // above passed, and the MCP server's connection policy still decides
+        // which credential the call uses.
         {
           conversationId: context.isolationKey ?? context.conversationId,
-          dynamicTool: dynamicTool ?? undefined,
+          availableTool: availableTool ?? undefined,
         },
       );
 

@@ -346,12 +346,16 @@ class McpClient {
       elicitationHandler?: McpElicitationHandler;
       /**
        * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
-       * execute a tool that is not assigned to the agent, with call-time
-       * ("dynamic") credential resolution. Authorization happens at the
-       * dispatch layer (archestra-mcp-server/dynamic-tools.ts) before this is
-       * set — the gateway path never sets it.
+       * execute a tool the agent was never assigned. This governs tool ACCESS
+       * only. Whose credential/connection the call uses is still decided by
+       * the MCP server's connection policy (on-behalf-of the caller, or a
+       * pinned service account) — identical to an assigned tool. An
+       * unassigned tool has no assignment row, so it resolves its connection
+       * at call time (it can't carry a static pin). Access authorization
+       * happens at the dispatch layer (archestra-mcp-server/dynamic-tools.ts)
+       * before this is set; the gateway path never sets it.
        */
-      dynamicTool?: CatalogTool;
+      availableTool?: CatalogTool;
     },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
@@ -367,7 +371,7 @@ class McpClient {
     const validationResult = await this.validateAndGetTool(
       toolCall,
       owner,
-      options?.dynamicTool,
+      options?.availableTool,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -1176,7 +1180,7 @@ class McpClient {
   private async validateAndGetTool(
     toolCall: CommonToolCall,
     owner: ToolOwner,
-    dynamicTool?: CatalogTool,
+    availableTool?: CatalogTool,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1217,19 +1221,21 @@ class McpClient {
 
     let tool: McpToolAssignment | undefined = mcpTools[0];
 
-    // Dynamic tool access: the dispatcher pre-resolved an unassigned tool the
-    // user can access. Shape it like an assignment with call-time ("dynamic")
-    // credential resolution — the same mode a resolve-at-call-time assignment
-    // would have — so the downstream server/credential resolution is identical.
-    // An assigned row keeps precedence so per-agent credential pinning wins.
-    if (!tool && dynamicTool && dynamicTool.name === toolCall.name) {
+    // Dynamic tool access ("All tools" mode): the dispatcher pre-resolved a
+    // tool the agent has no assignment row for. Shape it like an assignment so
+    // downstream resolution is identical. It has no row to inherit a credential
+    // mode from and can't carry a static pin, so it resolves its connection at
+    // call time — which still defers to the MCP server's connection policy
+    // (on-behalf-of the caller, or a pinned service account). An assigned row
+    // keeps precedence, so a per-agent credential pin always wins over this.
+    if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
-        toolName: dynamicTool.name,
+        toolName: availableTool.name,
         mcpServerId: null,
         credentialResolutionMode: "dynamic",
-        catalogId: dynamicTool.catalogId,
+        catalogId: availableTool.catalogId,
         catalogName: null,
-        meta: dynamicTool.meta ?? null,
+        meta: availableTool.meta ?? null,
       };
     }
 

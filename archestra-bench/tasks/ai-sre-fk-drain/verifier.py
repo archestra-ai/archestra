@@ -10,13 +10,13 @@ import os
 from pathlib import Path
 
 
-def _result() -> dict:
+def _result() -> dict[str, object]:
     path = os.environ.get("BENCH_RESULT")
     assert path, "BENCH_RESULT is not set"
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _expected() -> dict:
+def _expected() -> dict[str, object]:
     base = os.environ.get("BENCH_FIXTURES")
     assert base, "BENCH_FIXTURES is not set"
     return json.loads(Path(base, "expected", "expected.json").read_text(encoding="utf-8"))

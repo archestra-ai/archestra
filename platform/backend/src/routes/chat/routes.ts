@@ -805,7 +805,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   abortSignal: chatAbortController.signal,
                   // Repair tool names that carry a leaked harmony channel marker
                   // (e.g. `archestra__run_command<|channel|>commentary`) before
-                  // they surface as an unrecoverable NoSuchToolError.
+                  // they surface as an unrecoverable NoSuchToolError. Repair lands
+                  // at tool-call parse, so the earlier tool-input-start chunk keeps
+                  // the raw name — execution is correct, but an MCP App UI start
+                  // keyed off that earlier name may not render for such calls.
                   experimental_repairToolCall: async ({ toolCall, error }) => {
                     if (!NoSuchToolError.isInstance(error)) {
                       return null;

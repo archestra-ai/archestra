@@ -61,6 +61,7 @@ describe("probeFirstRenderableEvent", () => {
       { type: "start-step" },
       { type: "tool-input-start" },
       { type: "tool-input-delta" },
+      { type: "finish-step", finishReason: "tool-calls" },
       { type: "finish", finishReason: "tool-calls" },
     ];
 

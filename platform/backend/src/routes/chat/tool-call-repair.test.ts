@@ -59,4 +59,11 @@ describe("repairHarmonyToolName", () => {
   test("returns null for a genuinely-unknown name without a marker", () => {
     expect(repairHarmonyToolName("totally_made_up", AVAILABLE)).toBeNull();
   });
+
+  test("does not strip an arbitrary `<|` that is not the harmony channel marker", () => {
+    // a partial/garbage marker must not silently re-map to a different tool.
+    expect(
+      repairHarmonyToolName("archestra__run_command<|garbage", AVAILABLE),
+    ).toBeNull();
+  });
 });

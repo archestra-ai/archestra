@@ -1301,6 +1301,7 @@ const ABORTIVE_TOOL_CALL_STREAM_EVENTS = [
   { type: "start-step" },
   { type: "tool-input-start" },
   { type: "tool-input-delta" },
+  { type: "finish-step", finishReason: "tool-calls" },
   { type: "finish", finishReason: "tool-calls" },
 ];
 
@@ -1621,8 +1622,14 @@ describe("POST /api/chat handler composition", () => {
   test("bounds abortive tool-call retries and commits the result (tracker surfaces the incomplete call)", async ({
     expect,
   }) => {
+    // the merged UI stream replays the unresolved tool call so the abortive-turn
+    // tracker (piped onto the merge) can append its error chunk.
     mockStreamText.mockImplementation(() =>
-      fakeStreamResult(ABORTIVE_TOOL_CALL_STREAM_EVENTS),
+      fakeStreamResult(ABORTIVE_TOOL_CALL_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "tool-input-start", toolCallId: "t1", toolName: "x" },
+        ],
+      }),
     );
 
     const response = await postMessage();
@@ -1632,8 +1639,16 @@ describe("POST /api/chat handler composition", () => {
     // initial attempt + exactly one retry, then commit (the abortive-turn
     // tracker emits IncompleteToolCall inline rather than throwing).
     expect(mockStreamText).toHaveBeenCalledTimes(2);
-    expect(writerEvents.filter((e) => e.kind === "merge")).not.toHaveLength(0);
     expect(capturedOuterErrorPayload).toBeUndefined();
+
+    const merged = mergedStreams.at(-1);
+    expect(merged).toBeDefined();
+    const chunks = (await readAll(merged as ReadableStream<unknown>)) as Array<{
+      type?: string;
+      errorText?: string;
+    }>;
+    const errorChunk = chunks.find((c) => c.type === "error");
+    expect(errorChunk?.errorText).toContain("incomplete_tool_call");
   });
 
   test("does not emit token-usage from a discarded abortive retry attempt", async ({

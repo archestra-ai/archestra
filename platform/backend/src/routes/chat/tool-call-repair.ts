@@ -5,9 +5,11 @@
 // NoSuchToolError. This strips the marker so the call can be re-mapped to the
 // tool the model meant.
 
-// Harmony channel markers always open with this sequence, which never appears in
-// a valid tool name. Everything from the first occurrence onward is dropped.
-const HARMONY_MARKER = "<|";
+// The exact harmony channel marker the model leaks into the function-name field
+// (e.g. `...<|channel|>commentary`). Matching the full marker rather than a bare
+// `<|` avoids re-mapping an arbitrary unknown name that merely happens to contain
+// `<|`, which could otherwise execute a different tool than the model named.
+const HARMONY_CHANNEL_MARKER = "<|channel|>";
 
 /**
  * Strip a leaked harmony channel marker from a tool name. Returns the cleaned
@@ -18,12 +20,12 @@ export function repairHarmonyToolName(
   toolName: string,
   availableNames: Iterable<string>,
 ): string | null {
-  const markerIndex = toolName.indexOf(HARMONY_MARKER);
+  const markerIndex = toolName.indexOf(HARMONY_CHANNEL_MARKER);
   if (markerIndex === -1) {
     return null;
   }
   const cleaned = toolName.slice(0, markerIndex).trim();
-  if (cleaned === "" || cleaned === toolName) {
+  if (cleaned === "") {
     return null;
   }
   for (const name of availableNames) {

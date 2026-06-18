@@ -168,6 +168,14 @@ impl RunMeta {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
     ConversationCreated,
+    /// The agent's configured system prompt plus the initial task message, captured once at
+    /// conversation start. This is the harness-side configured input, not the full prompt the
+    /// platform materializes server-side (skill catalog, tool instructions, hook context).
+    Prompts {
+        #[serde(default)]
+        system_prompt: String,
+        user_message: String,
+    },
     AssistantText {
         text: String,
     },
@@ -257,5 +265,23 @@ mod tests {
         assert!(matches!(tool, Event::ToolCall { .. }));
         let unknown: Event = serde_json::from_str(r#"{"kind":"brand_new_kind"}"#).unwrap();
         assert!(matches!(unknown, Event::Unknown));
+    }
+
+    #[test]
+    fn event_parses_prompts_with_default_system_prompt() {
+        let with_system: Event = serde_json::from_str(
+            r#"{"kind":"prompts","system_prompt":"be helpful","user_message":"do the task"}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(with_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt == "be helpful" && user_message == "do the task")
+        );
+        let no_system: Event =
+            serde_json::from_str(r#"{"kind":"prompts","user_message":"do the task"}"#).unwrap();
+        assert!(
+            matches!(no_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt.is_empty() && user_message == "do the task")
+        );
     }
 }

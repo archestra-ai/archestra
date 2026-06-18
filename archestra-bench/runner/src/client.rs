@@ -653,9 +653,27 @@ impl EvalClient {
         )
     }
 
+    /// Fetch a conversation's persisted messages in UI-message shape (`{id, role, parts, ...}`).
+    /// The platform chat route is request-body-authoritative — it never backfills history from the
+    /// DB — so callers must resend these on follow-up turns to preserve context across stages.
+    pub async fn get_conversation_messages(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<JsonValue>, ClientError> {
+        let body = self
+            .get_json(&format!("/api/chat/conversations/{conversation_id}"))
+            .await?;
+        Ok(body
+            .get("messages")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default())
+    }
+
     pub async fn stream_chat_records(
         &self,
         conversation_id: &str,
+        prior_messages: &[JsonValue],
         text: &str,
         files: &[FilePart],
     ) -> Result<impl Stream<Item = ChatStreamRecord> + use<'_>, ClientError> {
@@ -666,13 +684,17 @@ impl EvalClient {
         for file in files {
             parts.push(file.to_data_url_part());
         }
+        // Resend the persisted history verbatim (keeping each message's backend id, so
+        // persistNewMessages dedupes them) and append only the new user turn with a fresh id.
+        let mut messages = prior_messages.to_vec();
+        messages.push(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "role": "user",
+            "parts": parts,
+        }));
         let body = serde_json::json!({
             "id": conversation_id,
-            "messages": [{
-                "id": uuid::Uuid::new_v4().to_string(),
-                "role": "user",
-                "parts": parts,
-            }],
+            "messages": messages,
             "trigger": "submit-message",
         });
         let url = self.url("/api/chat", None);

@@ -1058,6 +1058,7 @@ async fn run_lane(
             &submit_tool,
             &root_run_dir,
             &env.id,
+            &env.agent_system_prompt,
             &lane,
             &agent_id,
             &task,
@@ -1077,6 +1078,7 @@ async fn run_one(
     submit_tool: &str,
     root_run_dir: &Path,
     env_id: &str,
+    agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1137,6 +1139,7 @@ async fn run_one(
         bench_mcp,
         submit_tool,
         env_id,
+        agent_system_prompt,
         lane,
         agent_id,
         task,
@@ -1160,6 +1163,7 @@ async fn grade_rollout(
     bench_mcp: BenchmarkMcp,
     _submit_tool: &str,
     env_id: &str,
+    agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1199,6 +1203,25 @@ async fn grade_rollout(
         ("cell".to_string(), rollout_token(rollout_key, &lane.model)),
         ("agent_id".to_string(), agent_id.to_string()),
     ]);
+
+    // Capture once: the agent's configured system prompt plus the expanded stage-0 task text
+    // (pre-SUBMIT_INSTRUCTION, i.e. the human-authored prompt). drive_stage appends
+    // SUBMIT_INSTRUCTION when it actually sends each stage.
+    let initial_user_message = task
+        .stages
+        .first()
+        .map(|stage| expand_runtime(&stage.text, &runtime))
+        .unwrap_or_default();
+    artifacts
+        .append(
+            "prompts",
+            serde_json::json!({
+                "system_prompt": agent_system_prompt,
+                "user_message": initial_user_message,
+            }),
+        )
+        .await;
+
     let mut run = ChatRunResult::default();
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
@@ -1214,6 +1237,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            index > 0,
         )
         .await?;
         if stage_error.is_some() {
@@ -1248,6 +1272,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            true,
         )
         .await?;
     }
@@ -1425,6 +1450,7 @@ async fn drive_stage(
     run: &mut ChatRunResult,
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
+    expect_prior_history: bool,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1447,8 +1473,25 @@ async fn drive_stage(
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
 
+    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
+    // platform builds LLM context from the request body only. The first turn has no history yet;
+    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
+    // the rollout loudly rather than silently run the agent on contextless history.
+    let prior_messages = if expect_prior_history {
+        let messages = client.get_conversation_messages(conversation_id).await?;
+        if messages.is_empty() {
+            return Ok(Some(
+                "conversation history empty on a follow-up turn; the prior turn likely failed to \
+                 persist — refusing to continue on contextless history"
+                    .to_string(),
+            ));
+        }
+        messages
+    } else {
+        Vec::new()
+    };
     let mut stream = client
-        .stream_chat_records(conversation_id, &text, &files)
+        .stream_chat_records(conversation_id, &prior_messages, &text, &files)
         .await?;
     loop {
         let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {

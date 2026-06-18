@@ -120,6 +120,8 @@ export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent file system (My Files): files agents produced, across conversations
 export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 export const TOOL_SAVE_RESULT_SHORT_NAME = "save_result";
+export const TOOL_EDIT_FILE_SHORT_NAME = "edit_file";
+export const TOOL_DELETE_FILE_SHORT_NAME = "delete_file";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
 export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
 export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
@@ -209,6 +211,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
@@ -380,6 +384,10 @@ export const TOOL_SEARCH_FILES_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_FILES_SHORT_NAME}` as const;
 export const TOOL_SAVE_RESULT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SAVE_RESULT_SHORT_NAME}` as const;
+export const TOOL_EDIT_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_FILE_SHORT_NAME}` as const;
+export const TOOL_DELETE_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_FILE_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -437,6 +445,8 @@ const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SAVE_RESULT_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
@@ -464,7 +474,11 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
-  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  // delete_file is destructive and never intent-time-critical, so — like
+  // delete_app — it stays behind search_tools/run_tool rather than top-level.
+  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES.filter(
+    (name) => name !== TOOL_DELETE_FILE_SHORT_NAME,
+  ),
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,

@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use tracing::info;
+use uuid::Uuid;
 
 use crate::config::types::Mcp;
 use crate::seeding::{RegisteredMcp, tool_name};
@@ -76,12 +77,33 @@ pub fn enforce(
     registered: &[RegisteredMcp],
     update: bool,
 ) -> Result<(), String> {
+    // Defensive: every declared MCP must have produced exactly one registration. A mismatch would
+    // make `zip` below silently drop entries — loud here so a truncated surface is never pinned.
+    if mcps.len() != registered.len() {
+        return Err(format!(
+            "env {env_id}: {} MCP registrations for {} declared servers",
+            registered.len(),
+            mcps.len()
+        ));
+    }
     let observed = observed_surface(mcps, registered);
     let path = lock_path(envs_dir, env_id);
 
     if update {
         let json = serde_json::to_string_pretty(&observed).map_err(|e| e.to_string())? + "\n";
-        std::fs::write(&path, json).map_err(|e| format!("writing {}: {e}", path.display()))?;
+        // Write atomically (temp + rename): with an isolated env, concurrent lanes regenerate the
+        // same lock path, and a non-atomic write could interleave into a corrupt file. A unique
+        // temp name avoids two writers colliding; rename within the dir is atomic, so the final
+        // lock is always a complete, valid snapshot.
+        let tmp = path.with_file_name(format!(
+            "{}.{}.tmp",
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("mcp.lock"),
+            Uuid::new_v4().simple()
+        ));
+        std::fs::write(&tmp, json).map_err(|e| format!("writing {}: {e}", tmp.display()))?;
+        std::fs::rename(&tmp, &path).map_err(|e| format!("renaming {}: {e}", tmp.display()))?;
         info!("wrote MCP tool-surface lock {}", path.display());
         return Ok(());
     }
@@ -201,6 +223,20 @@ mod tests {
         let err = enforce(dir.path(), "basic", &mcps, &[registered(&["t1"])], false).unwrap_err();
         assert!(err.contains("drift"), "{err}");
         assert!(err.contains("removed [\"t2\"]"), "{err}");
+    }
+
+    #[test]
+    fn registration_count_mismatch_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = enforce(
+            dir.path(),
+            "basic",
+            &[mcp("a"), mcp("b")],
+            &[registered(&["t"])],
+            true,
+        )
+        .unwrap_err();
+        assert!(err.contains("1 MCP registrations for 2"), "{err}");
     }
 
     #[test]

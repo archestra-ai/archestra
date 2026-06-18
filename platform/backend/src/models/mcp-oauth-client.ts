@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, sql } from "drizzle-orm";
+import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
 import {
   MCP_OAUTH_CLIENT_METADATA_TYPE,
@@ -49,7 +50,11 @@ class McpOauthClientModel {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
     const clientSecret = createClientSecret();
-    const clientSecretHash = await hashClientSecret(clientSecret);
+    // authorization_code secrets are verified by better-auth (deterministic
+    // hash); client_credentials secrets are verified by this model (bcrypt).
+    const clientSecretHash = isAuthorizationCode
+      ? hashOauthClientSecret(clientSecret)
+      : await hashClientSecret(clientSecret);
     // allowedGatewayIds only governs client_credentials tokens (the gateway
     // validator keys on it). authorization_code access is governed by the acting
     // user's own permissions, so it is always stored empty for those clients.
@@ -158,11 +163,18 @@ class McpOauthClientModel {
   }
 
   static async rotateSecret(params: { id: string; organizationId: string }) {
+    // Hash the new secret with the scheme this client's grant type uses.
+    const existing = await McpOauthClientModel.findById(params);
+    if (!existing) return null;
     const clientSecret = createClientSecret();
+    const clientSecretHash =
+      existing.grantType === "authorization_code"
+        ? hashOauthClientSecret(clientSecret)
+        : await hashClientSecret(clientSecret);
     const [client] = await db
       .update(schema.oauthClientsTable)
       .set({
-        clientSecret: await hashClientSecret(clientSecret),
+        clientSecret: clientSecretHash,
         updatedAt: new Date(),
       })
       .where(

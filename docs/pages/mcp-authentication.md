@@ -83,6 +83,8 @@ The application runs the standard browser flow:
 
 The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow, and the signed-in user must already have access to the gateway.
 
+To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_ENABLED=false`. This disables Dynamic Client Registration and CIMD auto-registration (above), so the gateway accepts OAuth flows only from clients you registered explicitly — both `client_credentials` and `authorization_code`.
+
 ### Bearer Token
 
 For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.

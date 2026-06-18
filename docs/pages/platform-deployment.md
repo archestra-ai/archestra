@@ -898,6 +898,11 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_AUTH_DCR_ENABLED`** - Controls OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+  - Default: `true`
+  - Set to `false` to allow only pre-registered OAuth clients to run OAuth flows. Runtime self-registration (`POST /api/auth/oauth2/register`) returns `403`, CIMD auto-registration is skipped, and the well-known metadata stops advertising the registration endpoint
+  - Pair with manually registered [MCP OAuth clients](/docs/mcp-authentication) (both `client_credentials` and `authorization_code`) when you want to restrict gateway access to a known set of applications
+
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
   - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)

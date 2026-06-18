@@ -185497,7 +185497,6 @@
                     "issuer",
                     "authorization_endpoint",
                     "token_endpoint",
-                    "registration_endpoint",
                     "jwks_uri",
                     "response_types_supported",
                     "grant_types_supported",

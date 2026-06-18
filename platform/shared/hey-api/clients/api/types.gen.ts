@@ -48754,7 +48754,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
         issuer: string;
         authorization_endpoint: string;
         token_endpoint: string;
-        registration_endpoint: string;
+        registration_endpoint?: string;
         jwks_uri: string;
         response_types_supported: Array<string>;
         grant_types_supported: Array<string>;

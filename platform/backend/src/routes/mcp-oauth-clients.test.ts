@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -214,6 +215,12 @@ describe("mcpOauthClientsRoutes", () => {
     expect(row.scopes).toEqual(
       expect.arrayContaining(["mcp", "offline_access"]),
     );
+    // better-auth verifies the secret at the token endpoint by hashing the
+    // presented value and comparing it to what is stored, so the stored secret
+    // must be exactly this deterministic hash (not a bcrypt hash, which it could
+    // never match). This is the contract that makes the real authorize→token
+    // exchange succeed.
+    expect(row.clientSecret).toBe(hashOauthClientSecret(created.clientSecret));
   });
 
   test("requires at least one redirect URI for authorization_code clients", async () => {

@@ -871,6 +871,15 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    /**
+     * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+     * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
+     * pre-registered OAuth clients (e.g. manually registered MCP OAuth clients) to
+     * run OAuth flows — runtime self-registration is then rejected. Instance-level
+     * because unauthenticated DCR has no org to scope a per-org toggle to.
+     */
+    dynamicClientRegistrationEnabled:
+      process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
   },
   analytics: getAnalyticsConfig(),
   database: {

@@ -22,7 +22,7 @@ static HTML_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
 static DOCTYPE_ANCHOR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<!DOCTYPE[^>]*>").expect("static doctype anchor regex"));
 
-/// Inject the platform baseline stylesheet, the per-viewer bootstrap, and the
+/// Inject the platform CSP, baseline stylesheet, per-viewer bootstrap, and the
 /// Apps SDK into an owned app's HTML, at the start of `<head>`, in that order.
 ///
 /// `context_json` is the per-viewer context the caller has already serialized
@@ -31,8 +31,24 @@ static DOCTYPE_ANCHOR: LazyLock<Regex> =
 /// inline-script-safe escaping — the serialization byte format is the caller's
 /// contract (the TypeScript backend uses `JSON.stringify`), so this function
 /// never re-serializes it and cannot drift from that format.
-pub fn prepare_app_envelope(html: &str, context_json: &str) -> String {
-    let injection = build_injection(&escape_inline_script(context_json));
+///
+/// `base_origin` is prefixed onto the served asset URLs (SDK script, baseline
+/// stylesheet) so they resolve from an opaque-origin iframe in a foreign MCP
+/// host; an empty string keeps them path-relative (same-origin only).
+/// `csp_content` is the pre-built Content-Security-Policy the caller pins for
+/// the app; an empty string omits the CSP `<meta>` (the host supplies one). Both
+/// are the caller's contract — this function never derives them.
+pub fn prepare_app_envelope(
+    html: &str,
+    context_json: &str,
+    base_origin: &str,
+    csp_content: &str,
+) -> String {
+    let injection = build_injection(
+        &escape_inline_script(context_json),
+        base_origin,
+        csp_content,
+    );
 
     // First matching anchor wins; injection is spliced in literally (no JS-style
     // `$&`/`$'` replacement-pattern expansion to corrupt the escaped context).
@@ -48,12 +64,21 @@ pub fn prepare_app_envelope(html: &str, context_json: &str) -> String {
     format!("{injection}{html}")
 }
 
-fn build_injection(escaped_context: &str) -> String {
-    // The baseline stylesheet leads the cascade (first `<link>`), the bootstrap
-    // must precede the SDK script (the SDK reads the context global at parse
-    // time), and the SDK script runs last.
+fn build_injection(escaped_context: &str, base_origin: &str, csp_content: &str) -> String {
+    // The CSP meta must precede the resources it governs (it only applies to
+    // fetches after it in document order), then the baseline stylesheet leads
+    // the cascade (first `<link>`), the bootstrap must precede the SDK script
+    // (the SDK reads the context global at parse time), and the SDK runs last.
+    let csp = if csp_content.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<meta http-equiv="Content-Security-Policy" content="{}">"#,
+            escape_attribute(csp_content),
+        )
+    };
     let base_css = format!(
-        r#"<link rel="stylesheet" href="{}" {}>"#,
+        r#"<link rel="stylesheet" href="{base_origin}{}" {}>"#,
         contract::APP_BASE_CSS_PATH,
         contract::APP_BASE_CSS_MARKER,
     );
@@ -64,11 +89,11 @@ fn build_injection(escaped_context: &str) -> String {
         escaped_context,
     );
     let sdk = format!(
-        r#"<script {} src="{}"></script>"#,
+        r#"<script {} src="{base_origin}{}"></script>"#,
         contract::APP_SDK_MARKER,
         contract::APP_SDK_PATH,
     );
-    format!("{base_css}{bootstrap}{sdk}")
+    format!("{csp}{base_css}{bootstrap}{sdk}")
 }
 
 fn splice(html: &str, at: usize, insert: &str) -> String {
@@ -77,6 +102,13 @@ fn splice(html: &str, at: usize, insert: &str) -> String {
     out.push_str(insert);
     out.push_str(&html[at..]);
     out
+}
+
+/// Escape a value for a double-quoted HTML attribute. The CSP content is
+/// caller-built from a config-derived origin; escaping `&`/`"` (order matters)
+/// keeps a stray quote from breaking out of the `content="…"` attribute.
+fn escape_attribute(value: &str) -> String {
+    value.replace('&', "&amp;").replace('"', "&quot;")
 }
 
 /// Escape a JSON string for embedding inside an inline `<script>`. `JSON`
@@ -110,7 +142,7 @@ mod tests {
 
     #[test]
     fn injects_base_then_bootstrap_then_sdk_each_once() {
-        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON);
+        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON, "", "");
         assert!(result.contains(&format!("<head>{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>")));
         assert_eq!(count(&result, BASE_CSS_MARKER), 1);
         assert_eq!(count(&result, BOOTSTRAP_MARKER), 1);
@@ -125,7 +157,7 @@ mod tests {
 
     #[test]
     fn embeds_viewer_identity_and_tool_descriptors() {
-        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON);
+        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON, "", "");
         assert!(result.contains(r#""user":{"id":"u1","name":"Alice"}"#));
         assert!(result.contains(r#""hf__paper_search""#));
     }
@@ -134,7 +166,7 @@ mod tests {
     fn display_name_cannot_break_out_of_the_inline_script() {
         let context =
             r#"{"user":{"id":"u1","name":"</script><script>alert(\"pwn\")</script>"},"tools":[]}"#;
-        let result = prepare_app_envelope(COMPLETE_DOC, context);
+        let result = prepare_app_envelope(COMPLETE_DOC, context, "", "");
         assert!(!result.contains(r#"</script><script>alert("pwn")</script>"#));
         assert!(result.contains("\\u003c/script\\u003e"));
     }
@@ -142,7 +174,7 @@ mod tests {
     #[test]
     fn replace_substitution_patterns_in_content_are_inert() {
         let context = r#"{"user":{"id":"u1","name":"$& $' $$ $`"},"tools":[{"name":"t","description":"costs $$$ &c.","inputSchema":{}}]}"#;
-        let result = prepare_app_envelope(COMPLETE_DOC, context);
+        let result = prepare_app_envelope(COMPLETE_DOC, context, "", "");
         assert!(result.contains(r#""name":"$& $' $$ $`""#));
         assert!(result.contains(r#""costs $$$ &c.""#));
         assert_eq!(count(&result, "<head>"), 1);
@@ -150,7 +182,8 @@ mod tests {
 
     #[test]
     fn injects_after_uppercase_head() {
-        let result = prepare_app_envelope("<HTML><HEAD></HEAD><BODY/></HTML>", CONTEXT_JSON);
+        let result =
+            prepare_app_envelope("<HTML><HEAD></HEAD><BODY/></HTML>", CONTEXT_JSON, "", "");
         assert!(result.contains(&format!("<HEAD>{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>")));
     }
 
@@ -159,6 +192,8 @@ mod tests {
         let result = prepare_app_envelope(
             r#"<html lang="en"><head lang="en"></head><body/></html>"#,
             CONTEXT_JSON,
+            "",
+            "",
         );
         assert!(result.contains(&format!(
             r#"<head lang="en">{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>"#
@@ -168,13 +203,14 @@ mod tests {
 
     #[test]
     fn header_tag_is_not_a_head_anchor() {
-        let result = prepare_app_envelope("<header>nav</header><p>fragment</p>", CONTEXT_JSON);
+        let result =
+            prepare_app_envelope("<header>nav</header><p>fragment</p>", CONTEXT_JSON, "", "");
         assert!(result.starts_with(BASE_CSS_LINK));
     }
 
     #[test]
     fn creates_a_head_when_only_html_exists() {
-        let result = prepare_app_envelope("<html><body>hi</body></html>", CONTEXT_JSON);
+        let result = prepare_app_envelope("<html><body>hi</body></html>", CONTEXT_JSON, "", "");
         assert!(result.contains(&format!(
             "<html><head>{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>"
         )));
@@ -183,14 +219,14 @@ mod tests {
 
     #[test]
     fn anchors_on_doctype_when_no_html_or_head() {
-        let result = prepare_app_envelope("<!DOCTYPE html><p>bare</p>", CONTEXT_JSON);
+        let result = prepare_app_envelope("<!DOCTYPE html><p>bare</p>", CONTEXT_JSON, "", "");
         assert!(result.starts_with(&format!("<!DOCTYPE html><head>{BASE_CSS_LINK}<script ")));
         assert!(result.ends_with("<p>bare</p>"));
     }
 
     #[test]
     fn prepends_to_fragment_documents() {
-        let result = prepare_app_envelope("<p>fragment</p>", CONTEXT_JSON);
+        let result = prepare_app_envelope("<p>fragment</p>", CONTEXT_JSON, "", "");
         assert!(result.starts_with(BASE_CSS_LINK));
         assert!(result.ends_with("<p>fragment</p>"));
     }
@@ -200,6 +236,8 @@ mod tests {
         let result = prepare_app_envelope(
             &format!("<html><head></head><body><p>{BOOTSTRAP_MARKER}</p></body></html>"),
             CONTEXT_JSON,
+            "",
+            "",
         );
         assert_eq!(count(&result, BOOTSTRAP_MARKER), 2);
         assert!(result.contains(&format!("<head>{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>")));
@@ -210,6 +248,8 @@ mod tests {
         let result = prepare_app_envelope(
             "<html><head></head><body><p>&lt;head&gt;</p></body></html>",
             CONTEXT_JSON,
+            "",
+            "",
         );
         assert_eq!(count(&result, BOOTSTRAP_MARKER), 1);
     }
@@ -220,7 +260,7 @@ mod tests {
     #[test]
     fn feff_after_head_name_is_an_attribute_separator_like_js() {
         // U+FEFF is whitespace in JS `\s`, so `<head\u{FEFF}x>` anchors as head.
-        let result = prepare_app_envelope("<head\u{FEFF}x></head>", CONTEXT_JSON);
+        let result = prepare_app_envelope("<head\u{FEFF}x></head>", CONTEXT_JSON, "", "");
         assert!(result.contains(&format!("<head\u{FEFF}x>{BASE_CSS_LINK}")));
     }
 
@@ -228,7 +268,60 @@ mod tests {
     fn nel_after_head_name_is_not_whitespace_like_js() {
         // U+0085 (NEL) is NOT whitespace in JS `\s`, so `<head\u{0085}x>` is not
         // a head anchor; with no html/doctype the injection prepends.
-        let result = prepare_app_envelope("<head\u{0085}x></head>", CONTEXT_JSON);
+        let result = prepare_app_envelope("<head\u{0085}x></head>", CONTEXT_JSON, "", "");
         assert!(result.starts_with(BASE_CSS_LINK));
+    }
+
+    #[test]
+    fn base_origin_makes_asset_urls_absolute() {
+        let result = prepare_app_envelope(
+            COMPLETE_DOC,
+            CONTEXT_JSON,
+            "https://archestra.example.com",
+            "",
+        );
+        assert!(
+            result.contains(
+                r#"href="https://archestra.example.com/_sandbox/archestra-app-base.css""#
+            )
+        );
+        assert!(
+            result.contains(r#"src="https://archestra.example.com/_sandbox/archestra-app-sdk.js""#)
+        );
+    }
+
+    #[test]
+    fn csp_content_is_injected_as_a_meta_before_the_assets() {
+        let csp = "default-src 'none'; script-src 'unsafe-inline'";
+        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON, "https://h.example.com", csp);
+        assert!(result.contains(&format!(
+            r#"<head><meta http-equiv="Content-Security-Policy" content="{csp}">"#
+        )));
+        // The CSP must precede the stylesheet/script it governs.
+        let meta = result.find("Content-Security-Policy").unwrap();
+        let css = result.find(BASE_CSS_MARKER).unwrap();
+        let sdk = result.find(SDK_MARKER).unwrap();
+        assert!(meta < css);
+        assert!(meta < sdk);
+    }
+
+    #[test]
+    fn empty_csp_omits_the_meta() {
+        let result = prepare_app_envelope(COMPLETE_DOC, CONTEXT_JSON, "", "");
+        assert!(!result.contains("Content-Security-Policy"));
+    }
+
+    #[test]
+    fn csp_content_cannot_break_out_of_the_attribute() {
+        let result = prepare_app_envelope(
+            COMPLETE_DOC,
+            CONTEXT_JSON,
+            "",
+            r#"default-src 'none'; "><script>alert(1)</script>"#,
+        );
+        // The stray quote is escaped, so the injected markup stays inside the
+        // attribute value (inert) rather than closing it.
+        assert!(!result.contains(r#""><script"#));
+        assert!(result.contains("&quot;><script"));
     }
 }

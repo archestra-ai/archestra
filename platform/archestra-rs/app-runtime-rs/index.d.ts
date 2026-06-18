@@ -38,12 +38,15 @@ export declare function formatDiagnosticEntryLines(entries: Array<AppDiagnosticE
 export declare function mergeDiagnosticEntries(existing: Array<AppDiagnosticEntry>, incoming: Array<AppDiagnosticEntry>, maxEntries: number, dedupPrefixLen: number): Array<AppDiagnosticEntry>
 
 /**
- * Inject the platform baseline stylesheet, per-viewer bootstrap, and Apps SDK
- * into an owned app's HTML. `contextJson` is the caller-serialized per-viewer
- * context (identity + assigned-tool descriptors); see the core crate for the
- * trust boundary on its byte format.
+ * Inject the platform CSP, baseline stylesheet, per-viewer bootstrap, and Apps
+ * SDK into an owned app's HTML. `contextJson` is the caller-serialized
+ * per-viewer context (identity + assigned-tool descriptors). `baseOrigin`
+ * prefixes the served asset URLs so they resolve in a foreign host's
+ * opaque-origin iframe (empty keeps them path-relative); `csp` is the pinned
+ * Content-Security-Policy injected as a `<meta>` (empty omits it). See the core
+ * crate for the trust boundary on these inputs.
  */
-export declare function prepareAppEnvelope(html: string, contextJson: string): string
+export declare function prepareAppEnvelope(html: string, contextJson: string, baseOrigin: string, csp: string): string
 
 /**
  * Scan authored app HTML for save-time policy violations. Returns a rejection

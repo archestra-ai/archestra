@@ -1,4 +1,7 @@
-import { MCP_APPS_SERVER_EXTENSION_CAPABILITIES } from "@archestra/shared";
+import {
+  getArchestraAppResourceUri,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+} from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -21,7 +24,9 @@ import {
   AppToolModel,
   AppVersionModel,
   McpToolCallModel,
+  TeamTokenModel,
   UserModel,
+  UserTokenModel,
 } from "@/models";
 import {
   type AppSdkTool,
@@ -39,6 +44,16 @@ import {
 } from "./mcp-gateway.utils";
 
 type McpListTool = ListToolsResult["tools"][number];
+
+/**
+ * Synthetic per-app tool that hands a host the app's UI resource. ext-apps
+ * hosts discover a renderable UI from a tool's `_meta.ui.resourceUri` (not from
+ * resources/list), so an external MCP client needs a tool to call to open the
+ * app. Always offered to a viewer who can already see the app (they passed the
+ * visibility check to reach this server), so it sits outside the per-tool RBAC
+ * filter applied to assigned upstream tools.
+ */
+export const APP_LAUNCH_TOOL_NAME = "open";
 
 /**
  * Build the app-bound MCP server: a single endpoint carrying an app's whole
@@ -72,7 +87,10 @@ export async function createAppServer(
   if (!app) throw new Error(`App not found: ${appId}`);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await buildPermittedAppToolList(appId, tokenAuth);
+    const tools = [
+      buildAppLaunchTool(appId, app),
+      ...(await buildPermittedAppToolList(appId, tokenAuth)),
+    ];
 
     try {
       await McpToolCallModel.create({
@@ -99,6 +117,15 @@ export async function createAppServer(
   server.setRequestHandler(
     ReadResourceRequestSchema,
     async ({ params: { uri } }) => {
+      // The server is route-bound to one app; only its own UI resource is
+      // readable. Reject any other URI rather than serving this app's HTML under
+      // a foreign URI (keeps listed == served and avoids mislabeled caching).
+      if (uri !== getArchestraAppResourceUri(appId)) {
+        throw {
+          code: -32002,
+          message: `Resource not found: ${uri}`,
+        };
+      }
       const current = await AppModel.findById(appId);
       const head = current
         ? await AppVersionModel.findByAppAndVersion(
@@ -151,6 +178,14 @@ export async function createAppServer(
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
+      // The synthetic launch tool just points the host at the app's UI resource.
+      if (name === APP_LAUNCH_TOOL_NAME) {
+        return {
+          content: [{ type: "text", text: `Opening ${app.name}.` }],
+          _meta: { ui: { resourceUri: getArchestraAppResourceUri(appId) } },
+        };
+      }
+
       // Reserved app-runtime built-ins (App Data Store + the LLM completion)
       // run in-process with the route-bound appId so they can only ever act for
       // this app. Other Archestra tools (the management/chat surface) are NOT
@@ -218,6 +253,38 @@ export async function createAppServer(
 }
 
 /**
+ * Resolve an app-runtime Bearer token to its viewer. Apps are viewer-scoped
+ * (per-user data partitions, per-viewer RBAC), so only tokens that yield a
+ * concrete `userId` are accepted; an organization/team token resolves no viewer
+ * and is rejected explicitly rather than silently failing later. This only
+ * establishes identity — visibility of the specific app is enforced by the
+ * caller via {@link AppModel.findByIdForCaller}.
+ */
+export type AppGatewayTokenAuth =
+  | { ok: true; userId: string; organizationId: string; tokenId: string }
+  | { ok: false; reason: "invalid" | "no_viewer" };
+
+export async function validateAppGatewayToken(
+  token: string,
+): Promise<AppGatewayTokenAuth> {
+  const userToken = await UserTokenModel.validateToken(token);
+  if (userToken) {
+    return {
+      ok: true,
+      userId: userToken.userId,
+      organizationId: userToken.organizationId,
+      tokenId: userToken.id,
+    };
+  }
+  // A valid organization/team token authenticates, but carries no viewer — apps
+  // need one. Surface that distinctly so the route can explain it.
+  if (await TeamTokenModel.validateToken(token)) {
+    return { ok: false, reason: "no_viewer" };
+  }
+  return { ok: false, reason: "invalid" };
+}
+
+/**
  * The app endpoint's tool list (assigned upstream tools + the App Data Store
  * built-ins), RBAC-filtered for the viewing user. Shared by the MCP
  * tools/list handler and the SDK bootstrap.
@@ -260,6 +327,16 @@ async function buildAppSdkTools(
       description: tool.description ?? null,
       inputSchema: tool.inputSchema,
     }));
+}
+
+function buildAppLaunchTool(appId: string, app: App): McpListTool {
+  return {
+    name: APP_LAUNCH_TOOL_NAME,
+    title: `Open ${app.name}`,
+    description: `Open the "${app.name}" app and render its UI.`,
+    inputSchema: { type: "object", properties: {} },
+    _meta: { ui: { resourceUri: getArchestraAppResourceUri(appId) } },
+  };
 }
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {

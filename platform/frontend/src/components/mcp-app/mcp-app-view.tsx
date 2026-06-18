@@ -665,6 +665,7 @@ export const McpAppRuntime = function McpAppRuntime({
           }
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
+          ownedApp={ownedAppId != null}
         />
       )}
     </div>
@@ -701,6 +702,7 @@ function SandboxIframe({
   initialHeight = UNCAPPED_INITIAL_HEIGHT,
   onDiagnostic,
   onScreenshot,
+  ownedApp,
 }: {
   html: string;
   sandboxUrl: URL;
@@ -719,6 +721,9 @@ function SandboxIframe({
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
   onScreenshot?: (data: unknown) => void;
+  /** Archestra-owned app: its envelope carries the platform CSP, so the proxy
+   * must not inject a second one. A trusted host signal, not derived from HTML. */
+  ownedApp?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -871,13 +876,22 @@ function SandboxIframe({
   useEffect(() => {
     if (!ready || !html) return;
     appBridge
-      .sendSandboxResourceReady({ html, csp, permissions })
+      // `ownedApp` is a trusted host signal: Archestra-owned apps carry the
+      // platform CSP in their backend envelope, so the proxy must not add a
+      // second one. It is NOT in the ext-apps notification type, but the
+      // notification forwards params verbatim and the proxy reads it raw.
+      .sendSandboxResourceReady({
+        html,
+        csp,
+        permissions,
+        ...(ownedApp ? { ownedApp: true } : {}),
+      } as Parameters<typeof appBridge.sendSandboxResourceReady>[0])
       .catch((err) => {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         onErrorRef.current?.(error);
       });
-  }, [ready, html, appBridge, csp, permissions]);
+  }, [ready, html, appBridge, csp, permissions, ownedApp]);
 
   // Send tool input when available
   useEffect(() => {

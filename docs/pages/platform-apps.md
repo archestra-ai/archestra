@@ -22,6 +22,12 @@ Create an app from a starter template (the HTML seed) and a name. Editing the HT
 
 While the feature is enabled, newly created agents get the app management tools (`create_app`, `update_app`, `render_app`, `list_apps`, `delete_app`) assigned by default, so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
+## External MCP clients
+
+An owned app is also a standalone MCP server at `POST /api/mcp/app/:id`. An external MCP client (for example a desktop MCP host) connects there with a **user (personal) token**, which resolves to a concrete viewer; organization/team tokens are rejected, because an app needs a viewer for its per-user store and RBAC. The connection binds the app from the route, so the client speaks ordinary MCP: `tools/list` exposes the app's assigned tools, its data-store tools, and an `open` tool whose result carries the app's `ui://` resource; `resources/read` returns the app's HTML. Tool calls reuse the connecting token for upstream MCP servers, exactly as in-app calls do — so an app behaves the same whether driven from Archestra or another client.
+
+To render the UI in a foreign host, the served HTML is self-contained (absolute asset URLs, host-agnostic SDK bootstrap), so a host that implements MCP-UI (`io.modelcontextprotocol/ui`) can render it; set `ARCHESTRA_API_BASE_URL` so those asset URLs resolve. The platform CSP travels with the resource as a `<meta>` tag, but a foreign host ultimately controls its own iframe — Archestra's network lockdown is enforced on Archestra's surfaces, and the [shared-app trust boundary](#shared-app-trust-boundary) applies in full when an app runs elsewhere.
+
 ## The Apps SDK
 
 An app's HTML is pure UI authored against the **Archestra Apps SDK** — a client microframework the platform injects at serve time as `window.archestra` (the stored HTML never contains it). Apps carry no SDK imports or postMessage wiring — and must not add any: HTML that bootstraps the connection itself, or loads the SDK script on its own, is rejected on save, because a second connection would race the injected one.

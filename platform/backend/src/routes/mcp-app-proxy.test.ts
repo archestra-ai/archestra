@@ -1,6 +1,8 @@
 import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
+  getArchestraAppResourceUri,
   getArchestraToolFullName,
+  TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -14,7 +16,7 @@ import {
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AppDataModel } from "@/models";
+import { AppDataModel, TeamTokenModel, UserTokenModel } from "@/models";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
@@ -69,6 +71,34 @@ async function buildApp(
   await app.register(mcpAppProxyRoutes);
   return app;
 }
+
+// External-client harness: no session preHandler, mirroring how the auth
+// middleware skips its session check for Bearer requests to this path. The
+// route must authenticate the Bearer token itself.
+async function buildBearerApp(): Promise<FastifyInstance> {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ApiError) {
+      return reply
+        .status(error.statusCode)
+        .send({ error: { message: error.message, type: error.type } });
+    }
+    const err = error as Error & { statusCode?: number };
+    return reply
+      .status(err.statusCode ?? 500)
+      .send({ error: { message: err.message } });
+  });
+  await app.register(mcpAppProxyRoutes);
+  return app;
+}
+
+const bearer = (token: string) => ({
+  "content-type": "application/json",
+  accept: "application/json, text/event-stream",
+  authorization: `Bearer ${token}`,
+});
 
 const JSON_RPC_HEADERS = {
   "content-type": "application/json",
@@ -322,7 +352,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       payload: {
         jsonrpc: "2.0",
         method: "resources/read",
-        params: { uri: `ui://app/${created.id}` },
+        params: { uri: getArchestraAppResourceUri(created.id) },
         id: 1,
       },
     });
@@ -337,6 +367,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
       "<h1>hello app</h1>",
       expect.stringContaining(`"id":"${user.id}"`),
+      expect.any(String),
+      expect.any(String),
     );
     expect(content.mimeType).toContain("text/html");
   });
@@ -358,7 +390,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       payload: {
         jsonrpc: "2.0",
         method: "resources/read",
-        params: { uri: `ui://app/${created.id}` },
+        params: { uri: getArchestraAppResourceUri(created.id) },
         id: 1,
       },
     });
@@ -425,5 +457,231 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         key: "secret",
       }),
     ).toBeNull();
+  });
+
+  test("tools/list advertises the synthetic launch tool with its UI resource", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const launch = response
+      .json()
+      .result.tools.find((t: { name: string }) => t.name === "open");
+    expect(launch?._meta?.ui?.resourceUri).toBe(
+      getArchestraAppResourceUri(created.id),
+    );
+  });
+
+  test("the launch tool is callable and returns the app's UI resource", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "open", arguments: {} },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Not rejected by the assignment gate, and carries the UI resource.
+    expect(JSON.stringify(body)).not.toContain("not assigned to this app");
+    expect(body.result?._meta?.ui?.resourceUri).toBe(
+      getArchestraAppResourceUri(created.id),
+    );
+  });
+
+  test("resources/read rejects a URI that is not this app's own", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const other = await makeApp({ organizationId: created.organizationId });
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/read",
+        params: { uri: getArchestraAppResourceUri(other.id) },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().error?.code).toBe(-32002);
+  });
+
+  // ---- External MCP clients (Bearer token) ----
+
+  test("a user token round-trips the App Data Store over the Bearer path", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const { value } = await UserTokenModel.create(
+      user.id,
+      created.organizationId,
+    );
+    app = await buildBearerApp();
+
+    const set = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer(value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: getArchestraToolFullName(TOOL_APP_DATA_SET_SHORT_NAME),
+          arguments: { key: "k", value: { v: 1 } },
+        },
+        id: 1,
+      },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().result?.isError ?? false).toBe(false);
+
+    const get = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer(value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
+          arguments: { key: "k" },
+        },
+        id: 2,
+      },
+    });
+    expect(get.statusCode).toBe(200);
+    // The viewer bound from the token wrote/read its own partition.
+    expect(
+      await AppDataModel.get({ appId: created.id, userId: user.id, key: "k" }),
+    ).toMatchObject({ value: { v: 1 } });
+  });
+
+  test("rejects an organization token (no viewer) with a clear error", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp();
+    const { value } = await TeamTokenModel.create({
+      organizationId: created.organizationId,
+      teamId: null,
+      isOrganizationToken: true,
+      name: "Org Token",
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer(value),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error?.message).toContain("user-scoped token");
+  });
+
+  test("rejects an invalid Bearer token", async ({ makeApp }) => {
+    const created = await makeApp();
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer("archestra_not_a_real_token"),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("a user token cannot reach an app its viewer may not see", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOrganization,
+  }) => {
+    const created = await makeApp({ scope: "personal" });
+    // A user in a different organization holds a valid token, but cannot view
+    // this app — visibility is enforced from the token's viewer.
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser();
+    await makeMember(outsider.id, otherOrg.id, { role: "admin" });
+    const { value } = await UserTokenModel.create(outsider.id, otherOrg.id);
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer(value),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("returns 404 on the Bearer path when the apps feature is disabled", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const { value } = await UserTokenModel.create(
+      user.id,
+      created.organizationId,
+    );
+    (config.apps as { enabled: boolean }).enabled = false;
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearer(value),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    (config.apps as { enabled: boolean }).enabled = true;
+    expect(response.statusCode).toBe(404);
   });
 });

@@ -338,15 +338,21 @@ describe("getWebSocketUrl", () => {
 });
 
 describe("getMcpSandboxBaseUrl", () => {
+  const originalEnv = process.env;
   const originalWindow = global.window;
 
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
   afterEach(() => {
+    process.env = originalEnv;
     global.window = originalWindow;
   });
 
-  // Set hostname too (not just origin): the regression this guards was a branch
-  // on window.location.hostname, so a mock without it would let the old swap
-  // silently no-op and the negative assertions would pass vacuously.
+  // hostname mirrors origin: the swap branches on window.location.hostname, so a
+  // mock without it would no-op the swap and let assertions pass vacuously.
   const setOrigin = (origin: string, protocol = "http:") => {
     Object.defineProperty(window, "location", {
       value: { origin, protocol, hostname: new URL(origin).hostname },
@@ -354,29 +360,42 @@ describe("getMcpSandboxBaseUrl", () => {
     });
   };
 
-  it("uses the page's own origin verbatim when no sandbox domain is set", () => {
+  it("swaps a localhost page origin to 127.0.0.1 for a zero-config cross-origin sandbox", () => {
     setOrigin("http://localhost:3000");
 
     expect(getMcpSandboxBaseUrl()).toEqual({
-      baseUrl: "http://localhost:3000",
-      hasCrossOrigin: false,
+      baseUrl: "http://127.0.0.1:3000",
+      hasCrossOrigin: true,
     });
   });
 
-  it("does NOT rewrite the host to 127.0.0.1 — the iframe must stay reachable on a tunnelled/remote localhost", () => {
+  it("swaps the page's actual port, not the backend port — so it works behind a tunnel", () => {
+    // Backend is :9000; the regression was swapping THAT instead of the page
+    // origin, which is dead when only the frontend port (:13000) is forwarded.
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+      "http://localhost:9000";
     setOrigin("http://localhost:13000");
 
     expect(getMcpSandboxBaseUrl()).toEqual({
-      baseUrl: "http://localhost:13000",
-      hasCrossOrigin: false,
+      baseUrl: "http://127.0.0.1:13000",
+      hasCrossOrigin: true,
     });
   });
 
-  it("leaves a 127.0.0.1 origin unchanged (no swap to localhost either)", () => {
+  it("swaps a 127.0.0.1 page origin back to localhost", () => {
     setOrigin("http://127.0.0.1:3000");
 
     expect(getMcpSandboxBaseUrl()).toEqual({
-      baseUrl: "http://127.0.0.1:3000",
+      baseUrl: "http://localhost:3000",
+      hasCrossOrigin: true,
+    });
+  });
+
+  it("uses the page origin as an opaque same-origin sandbox for a non-loopback host", () => {
+    setOrigin("https://app.example.com", "https:");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "https://app.example.com",
       hasCrossOrigin: false,
     });
   });

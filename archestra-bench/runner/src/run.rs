@@ -10,13 +10,14 @@ use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
 use crate::client::{
     AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
     apply_chat_event,
 };
-use crate::config::types::{EnvConfig, Task};
+use crate::config::types::{EnvConfig, Stage, Task};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
 use crate::mcp_server::{BenchmarkMcp, Submission};
@@ -27,18 +28,32 @@ use crate::seeding::{
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
-// Model-visible MCP server name (tools surface as `<name>-<lane>__submit_result`). Kept neutral so
+// Model-visible MCP server name (tools surface as `<name>[-<token>]__submit_result`). Kept neutral so
 // the agent is not cued that it is being evaluated, which can shift model behavior.
-// The model sees the bench tool as `<BENCH_MCP_NAME>[-<idx>]__submit_result`, so this name must never
-// encode the lane/model identity. Shared-backend envs append an opaque lane index (registry names must
-// be unique per backend); isolated lanes own their backend and use the bare name.
+// The name must never encode lane/model identity or position. Shared-backend envs append an opaque
+// random token (registry names must be unique per backend, and tool auto-assignment is disabled so a
+// lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
 // discovers its assigned tools dynamically rather than seeing the full list up front.
 const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
+// Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
+// the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
+// solves the task still closes the loop by finding and calling its submit tool instead of replying in
+// prose.
+const SUBMIT_INSTRUCTION: &str =
+    "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
+// One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
+// SUBMIT_INSTRUCTION, so this only has to call out the omission.
+const SUBMIT_NUDGE: &str =
+    "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
+// Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
+// the stage. Set above the backend's 10-min stale-run reaper so that backstop wins in the normal
+// case and this only fires when the backend stops emitting entirely.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 const REQUIRED_TOOL_SHORT_NAMES: &[&str] = &[
     "artifact_write",
@@ -497,6 +512,11 @@ async fn setup_shared_env(
         return Err(e.to_string());
     }
 
+    if let Err(e) = client.disable_tool_auto_assignment().await {
+        let _ = instance.shutdown().await;
+        return Err(e.to_string());
+    }
+
     for sref in &env.skills {
         if let Err(e) = seed_skill_ref(
             &client,
@@ -514,8 +534,9 @@ async fn setup_shared_env(
     }
 
     let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
-    for (idx, lane) in env_plan.lanes.iter().enumerate() {
-        let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{idx}")).await {
+    for lane in &env_plan.lanes {
+        let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
+        let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
             Ok(m) => m,
             Err(e) => {
                 stop_mcps(&setups).await;
@@ -596,6 +617,11 @@ async fn run_isolated_lane(
     };
 
     if let Err(e) = client.enable_skill_defaults().await {
+        let _ = instance.shutdown().await;
+        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+    }
+
+    if let Err(e) = client.disable_tool_auto_assignment().await {
         let _ = instance.shutdown().await;
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
     }
@@ -809,7 +835,7 @@ async fn ensure_agent(
             name: name.to_string(),
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
-            system_prompt: Some(system_prompt.to_string()),
+            system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
             tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
         })
         .await?;
@@ -1201,6 +1227,31 @@ async fn grade_rollout(
             .await;
     }
 
+    // Safety net: a capable model often solves the task and reports the answer in chat, then ends its
+    // turn without ever calling the submit tool. If it stopped voluntarily with nothing submitted,
+    // prompt it once more. Bounded to a single extra turn, and only on a clean `stop`, so a model that
+    // genuinely refuses or already hit an error/limit still terminates.
+    if stage_error.is_none()
+        && run.finish_reason.as_deref() == Some("stop")
+        && !bench_mcp.has_submission(rollout_key).await
+    {
+        artifacts.append("submit_nudge", serde_json::json!({})).await;
+        let nudge = Stage {
+            text: SUBMIT_NUDGE.to_string(),
+            files: Vec::new(),
+        };
+        stage_error = drive_stage(
+            &client,
+            &conversation_id,
+            &nudge,
+            task,
+            &mut run,
+            artifacts,
+            &runtime,
+        )
+        .await?;
+    }
+
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
     metadata["tool_call_count"] = serde_json::Value::Number((run.tool_calls.len() as i64).into());
@@ -1388,7 +1439,10 @@ async fn drive_stage(
             data: std::fs::read(task.inputs_dir().join(&f.src)).unwrap_or_default(),
         })
         .collect();
-    let text = expand_runtime(&stage.text, runtime);
+    let text = format!(
+        "{}\n\n{SUBMIT_INSTRUCTION}",
+        expand_runtime(&stage.text, runtime)
+    );
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
@@ -1396,7 +1450,20 @@ async fn drive_stage(
     let mut stream = client
         .stream_chat_records(conversation_id, &text, &files)
         .await?;
-    while let Some(record) = stream.next().await {
+    loop {
+        let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
+            Ok(Some(record)) => record,
+            Ok(None) => break,
+            Err(_) => {
+                if stream_parse_error.is_none() {
+                    stream_parse_error = Some(format!(
+                        "chat stream idle for {}s",
+                        STREAM_IDLE_TIMEOUT.as_secs()
+                    ));
+                }
+                break;
+            }
+        };
         coalescer.feed(&record).await;
         match record.kind {
             ChatRecordKind::Event if record.event.is_some() => {

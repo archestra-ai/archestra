@@ -103,6 +103,7 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { createAbortiveTurnTracker } from "./abortive-turn";
 import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
@@ -118,6 +119,7 @@ import {
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
 import {
+  buildAbortiveTurnError,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
@@ -1041,13 +1043,47 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Inject data-tool-ui-start right after each tool-input-start
                 // chunk (see createToolUiStartTransform — kept out of onChunk so
                 // the empty-response probe can't emit it before its own tool).
+                // The abortive-turn tracker taps the same merged stream to spot a
+                // tool call the model started but never completed and, on stream
+                // end, appends the same retryable error a clean-but-empty turn
+                // would surface — instead of completing silently. The start-of-
+                // stream probe can't catch this: the turn opened with renderable
+                // content. Emitting from the tracker's flush keeps it in stream
+                // order and avoids an execute-side await on a not-yet-drained
+                // stream.
                 writer.merge(
-                  modelUiStream.pipeThrough(
-                    createToolUiStartTransform({
-                      prefetchedUiResources,
-                      toolUiResourceUris,
-                    }),
-                  ),
+                  modelUiStream
+                    .pipeThrough(
+                      createToolUiStartTransform({
+                        prefetchedUiResources,
+                        toolUiResourceUris,
+                      }),
+                    )
+                    .pipeThrough(
+                      createAbortiveTurnTracker({
+                        onUnresolvedToolCall: () => {
+                          if (
+                            chatAbortController.signal.aborted ||
+                            activeRunError ||
+                            !conversationId
+                          ) {
+                            return null;
+                          }
+                          const mappedError = buildAbortiveTurnError(provider);
+                          activeRunError = mappedError.message;
+                          return {
+                            type: "error",
+                            errorText: buildStreamErrorPayload({
+                              error: new Error(mappedError.message),
+                              mappedError,
+                              conversationId,
+                              slimChatErrorUi,
+                              stage: "via stream",
+                            }),
+                          };
+                        },
+                      }),
+                    ),
                 );
 
                 // Wait for the stream to complete and get usage data.

@@ -10,6 +10,8 @@ const html = "<!DOCTYPE html><html><head></head><body></body></html>";
 const out = appRuntime.prepareAppEnvelope(
   html,
   JSON.stringify({ user: { id: "u1", name: "Alice" }, tools: [] }),
+  "",
+  "",
 );
 assert.ok(
   out.includes(
@@ -24,6 +26,8 @@ assert.ok(out.includes('src="/_sandbox/archestra-app-sdk.js"'));
 const escaped = appRuntime.prepareAppEnvelope(
   html,
   JSON.stringify({ user: { id: "u1", name: "</script>" }, tools: [] }),
+  "",
+  "",
 );
 assert.ok(escaped.includes("\\u003c/script\\u003e"));
 assert.ok(!escaped.includes('"name":"</script>"'));

@@ -245,7 +245,11 @@ export async function calculateCost(
  *  - `cacheCost`: what the cache read+write tokens actually cost.
  *  - `cacheSavings`: net amount caching saved vs paying full input price for
  *    those tokens — cache reads save `(1 - readMult)`, cache writes cost an
- *    extra `(writeMult - 1)`, so net = readSavings - writeSurcharge.
+ *    extra `(writeMult - 1)`, so net = readSavings - writeSurcharge. May be
+ *    negative on cache-write-heavy requests.
+ *  - `cacheReadSavings`: gross amount saved by cache reads alone (always >= 0).
+ *    Exposed separately because Prometheus counters cannot take negative
+ *    increments, so the metrics layer reports this monotonic read-side savings.
  * Returns undefined when there are no cache tokens.
  */
 export async function calculateCacheCost(
@@ -255,7 +259,10 @@ export async function calculateCacheCost(
   writeTokens: number,
   /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
   write1hTokens = 0,
-): Promise<{ cacheCost: number; cacheSavings: number } | undefined> {
+): Promise<
+  | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
+  | undefined
+> {
   if (!readTokens && !writeTokens) {
     return undefined;
   }
@@ -282,10 +289,11 @@ export async function calculateCacheCost(
 
   const cacheCost =
     readFull * mult.read + write5mFull * mult.write + write1hFull * write1hMult;
+  const cacheReadSavings = readFull * (1 - mult.read);
   const cacheSavings =
-    readFull * (1 - mult.read) -
+    cacheReadSavings -
     write5mFull * (mult.write - 1) -
     write1hFull * (write1hMult - 1);
 
-  return { cacheCost, cacheSavings };
+  return { cacheCost, cacheSavings, cacheReadSavings };
 }

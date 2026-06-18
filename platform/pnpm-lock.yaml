@@ -55,7 +55,6 @@ overrides:
   d3-path: 3.1.0
   hono: 4.12.25
   kysely: 0.28.17
-  lodash: '>=4.18.0'
   lodash-es: 4.18.1
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'

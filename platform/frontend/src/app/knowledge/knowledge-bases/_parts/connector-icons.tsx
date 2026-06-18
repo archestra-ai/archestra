@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { FolderGit2, Github, Globe, Upload } from "lucide-react";
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
@@ -58,5 +59,11 @@ export function ConnectorTypeIcon({
     return <>{icon.render(className)}</>;
   }
 
-  return <img src={icon.src} alt={type} className={className} />;
+  return (
+    <img
+      src={icon.src}
+      alt={type}
+      className={cn("shrink-0 object-contain", className)}
+    />
+  );
 }

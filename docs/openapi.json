@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.66"
+    "version": "1.2.67"
   },
   "components": {
     "schemas": {
@@ -74638,6 +74638,7 @@
                                     "server_error",
                                     "network_error",
                                     "empty_response",
+                                    "incomplete_tool_call",
                                     "provider_auth_required",
                                     "unknown"
                                   ]
@@ -75383,6 +75384,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -76099,6 +76101,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -76856,6 +76859,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -79117,6 +79121,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -80200,6 +80205,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -81872,6 +81878,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -82612,6 +82619,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -83344,6 +83352,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -84086,6 +84095,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -104179,6 +104189,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -104255,6 +104271,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -104409,6 +104426,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -105078,6 +105096,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -105154,6 +105178,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -105308,6 +105333,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -105685,6 +105711,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -105761,6 +105793,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -105904,6 +105937,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -106156,6 +106190,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -106232,6 +106272,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -106386,6 +106427,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -106638,6 +106680,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -106714,6 +106762,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -106868,6 +106917,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -108943,6 +108993,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -109019,6 +109075,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -109173,6 +109230,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -109425,6 +109483,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -109501,6 +109565,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -109655,6 +109720,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -109907,6 +109973,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -109983,6 +110055,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -110137,6 +110210,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -110389,6 +110463,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -110465,6 +110545,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -110619,6 +110700,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -110871,6 +110953,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -110947,6 +111035,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -111101,6 +111190,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -111353,6 +111443,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -111429,6 +111525,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -111583,6 +111680,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -111835,6 +111933,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -111911,6 +112015,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -112065,6 +112170,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -112317,6 +112423,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -112393,6 +112505,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -112536,6 +112649,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -112788,6 +112902,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -112864,6 +112984,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113007,6 +113128,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -113259,6 +113381,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -113335,6 +113463,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113489,6 +113618,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -113741,6 +113871,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -113817,6 +113953,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113971,6 +114108,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -114223,6 +114361,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -114299,6 +114443,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -114453,6 +114598,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -116864,6 +117010,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -116940,6 +117092,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -117094,6 +117247,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -117346,6 +117500,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -117422,6 +117582,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -117576,6 +117737,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -118054,6 +118216,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -118130,6 +118298,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -118284,6 +118453,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -118953,6 +119123,12 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
@@ -119029,6 +119205,7 @@
                                             "server_error",
                                             "network_error",
                                             "empty_response",
+                                            "incomplete_tool_call",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -119183,6 +119360,7 @@
                               "outputTokens",
                               "cacheReadTokens",
                               "cacheWriteTokens",
+                              "cacheWrite1hTokens",
                               "baselineCost",
                               "cost",
                               "cacheCost",
@@ -120930,6 +121108,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -121006,6 +121190,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -121160,6 +121345,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -121829,6 +122015,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -121905,6 +122097,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -122059,6 +122252,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -122436,6 +122630,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -122512,6 +122712,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -122655,6 +122856,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -122907,6 +123109,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -122983,6 +123191,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -123137,6 +123346,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -123389,6 +123599,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -123465,6 +123681,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -123619,6 +123836,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -125694,6 +125912,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -125770,6 +125994,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -125924,6 +126149,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -126176,6 +126402,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -126252,6 +126484,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -126406,6 +126639,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -126658,6 +126892,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -126734,6 +126974,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -126888,6 +127129,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -127140,6 +127382,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -127216,6 +127464,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -127370,6 +127619,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -127622,6 +127872,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -127698,6 +127954,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -127852,6 +128109,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -128104,6 +128362,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -128180,6 +128444,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -128334,6 +128599,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -128586,6 +128852,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -128662,6 +128934,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -128816,6 +129089,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -129068,6 +129342,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -129144,6 +129424,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -129287,6 +129568,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -129539,6 +129821,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -129615,6 +129903,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -129758,6 +130047,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -130010,6 +130300,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -130086,6 +130382,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -130240,6 +130537,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -130492,6 +130790,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -130568,6 +130872,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -130722,6 +131027,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -130974,6 +131280,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -131050,6 +131362,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -131204,6 +131517,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -133615,6 +133929,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -133691,6 +134011,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -133845,6 +134166,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -134097,6 +134419,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -134173,6 +134501,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -134327,6 +134656,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -134805,6 +135135,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -134881,6 +135217,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -135035,6 +135372,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -135704,6 +136042,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
@@ -135780,6 +136124,7 @@
                                       "server_error",
                                       "network_error",
                                       "empty_response",
+                                      "incomplete_tool_call",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -135934,6 +136279,7 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "cacheWriteTokens",
+                        "cacheWrite1hTokens",
                         "baselineCost",
                         "cost",
                         "cacheCost",
@@ -211328,6 +211674,7 @@
                                   "server_error",
                                   "network_error",
                                   "empty_response",
+                                  "incomplete_tool_call",
                                   "provider_auth_required",
                                   "unknown"
                                 ]

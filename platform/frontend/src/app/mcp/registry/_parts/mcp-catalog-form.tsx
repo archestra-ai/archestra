@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage, E2eTestId } from "@archestra/shared";
+import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
@@ -31,6 +31,7 @@ import {
   type EnterpriseManagedConfigInput,
   EnterpriseManagedCredentialFields,
 } from "@/components/enterprise-managed-credential-fields";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
@@ -108,11 +109,6 @@ const ExternalSecretSelector = lazy(
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
-
-// Sentinel value for the default environment option (null assignment). The shadcn
-// Select cannot use an empty-string item value, so a sentinel maps to `null`
-// (no environment assigned).
-const ENVIRONMENT_DEFAULT_VALUE = "__default__";
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -547,22 +543,7 @@ export function McpCatalogForm({
   });
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
-  // Deploying to a restricted environment needs environment:deploy-to-restricted;
-  // environment:admin (full environment management) implies it.
-  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
-  const { data: hasDeployToRestricted } = useHasPermissions({
-    environment: ["deploy-to-restricted"],
-  });
-  const canDeployRestricted =
-    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
   const defaultEnvironment = useDefaultEnvironment();
-  // Environments the user can deploy to. Restricted environments the user can't
-  // deploy to are hidden entirely. The default is always available.
-  const accessibleEnvironments = (environments ?? []).filter(
-    (e) => !e.restricted || canDeployRestricted,
-  );
-  const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
-  const canManageEnvironments = hasEnvAdmin ?? false;
   // Validate static config values (env vars + headers) against the rule of the
   // environment this item is bound to (or the org default when unbound), so a
   // forbidden value is flagged inline and can't be saved. Passed to both
@@ -1020,81 +1001,12 @@ export function McpCatalogForm({
               <FormField
                 control={form.control}
                 name="environmentId"
-                render={({ field }) => {
-                  const environmentOptions = [
-                    {
-                      value: ENVIRONMENT_DEFAULT_VALUE,
-                      label: defaultEnvironment.name,
-                      description: defaultEnvironment.description ?? "",
-                    },
-                    ...accessibleEnvironments.map((environment) => ({
-                      value: environment.id,
-                      label: environment.name,
-                      description: environment.description ?? "",
-                    })),
-                  ];
-                  const selectedValue =
-                    field.value ?? ENVIRONMENT_DEFAULT_VALUE;
-                  const selectedDescription = environmentOptions.find(
-                    (option) => option.value === selectedValue,
-                  )?.description;
-
-                  return (
-                    <FormItem className="space-y-2">
-                      <Label>Environment</Label>
-                      <FormControl>
-                        <Select
-                          value={selectedValue}
-                          disabled={!hasCustomEnvironmentOptions}
-                          onValueChange={(value) =>
-                            field.onChange(
-                              value === ENVIRONMENT_DEFAULT_VALUE
-                                ? null
-                                : value,
-                            )
-                          }
-                        >
-                          <SelectTrigger
-                            className="w-full"
-                            data-testid={E2eTestId.SelectEnvironment}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            {environmentOptions.map((option) => (
-                              <SelectItem
-                                key={option.value}
-                                value={option.value}
-                                description={option.description || undefined}
-                              >
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      {selectedDescription ? (
-                        <p className="text-xs text-muted-foreground">
-                          {selectedDescription}
-                        </p>
-                      ) : null}
-                      {!hasCustomEnvironmentOptions ? (
-                        <FormDescription>
-                          Only the default environment is available.{" "}
-                          {canManageEnvironments ? (
-                            <Link
-                              href="/settings/environments"
-                              className="underline underline-offset-2"
-                            >
-                              Manage environments
-                            </Link>
-                          ) : null}
-                        </FormDescription>
-                      ) : null}
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                render={({ field }) => (
+                  <EnvironmentSelector
+                    value={field.value ?? null}
+                    onChange={field.onChange}
+                  />
+                )}
               />
               {hasEnvRuleViolations && (
                 <div

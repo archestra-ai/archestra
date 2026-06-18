@@ -533,6 +533,40 @@ export const getConnectionBaseUrlSources = (): string[] => {
   return sources;
 };
 
+/**
+ * Absolute origin the backend serves its `/_sandbox/*` assets on. Used to build
+ * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
+ * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
+ * base there). This URL is handed to the browser as a script source and CSP
+ * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
+ * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ * so a public `https://` entry is preferred over a cluster-internal one. Each
+ * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
+ * falling back to the local API origin. Never derived from request headers —
+ * those are spoofable (see request-origin.ts).
+ * @public — consumed by the owned-app SDK injection
+ */
+export const getAppAssetBaseOrigin = (): string => {
+  const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
+  const entries =
+    process.env.ARCHESTRA_API_BASE_URL?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean) ?? [];
+  const candidates = [
+    ...entries.filter((entry) => entry.startsWith("https://")),
+    ...entries,
+    localFallback,
+  ];
+  for (const candidate of candidates) {
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      // skip a malformed entry and try the next candidate
+    }
+  }
+  return new URL(localFallback).origin;
+};
+
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 

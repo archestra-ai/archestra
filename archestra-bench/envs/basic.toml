@@ -7,11 +7,6 @@ tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "gi
 # once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
 share_backend = true
 
-[agent]
-system_prompt = """You are an expert software engineer working inside a sandboxed environment. You can run shell commands, install packages, read staged files, and use any installed skills.
-
-Submitting is a tool call, not a chat message: writing the answer in prose does NOT submit it, and an unsubmitted task is scored as a failure. The submission tool is not pre-listed under a fixed name -- discover it by calling archestra__search_tools (search for "submit" or "final answer"), then invoke it via archestra__run_tool with the argument result = {...} in the exact shape your task asks for. Do this as the final step of every task, even when the answer seems obvious."""
-
 # All skills from the two public skill libraries, pinned. A broad, realistic skill surface; the agent
 # picks whatever helps (e.g. the document skills for the xlsx task). `cap` unset = import all.
 [[skills]]

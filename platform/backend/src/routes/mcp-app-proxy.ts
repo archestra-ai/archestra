@@ -10,17 +10,27 @@ import config from "@/config";
 import { AppModel } from "@/models";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type App, UuidIdSchema } from "@/types";
-import { createAppServer } from "./mcp-app-gateway.utils";
+import {
+  APP_LAUNCH_TOOL_NAME,
+  createAppServer,
+  validateAppGatewayToken,
+} from "./mcp-app-gateway.utils";
 import {
   createStatelessTransport,
   ensureRequestSocketDestroySoon,
+  extractBearerToken,
 } from "./mcp-gateway.utils";
 
 /**
  * App-bound MCP proxy: `POST /api/mcp/app/:appId`. Carries an app's runtime
- * (ui:// HTML read + every tool call) under the browser session, both in chat
- * and on the standalone run page. `appId` is derived from the route — never from
- * the request body — so an app can only ever act as itself.
+ * (ui:// HTML read + every tool call). `appId` is derived from the route — never
+ * from the request body — so an app can only ever act as itself.
+ *
+ * Two callers: Archestra's own frontend (browser session, in chat and on the
+ * standalone run page) and external MCP clients (a `Bearer` token, validated
+ * in-route — the auth middleware skips its session check for Bearer requests to
+ * this path). The Bearer path binds the viewer from the token; both paths bind
+ * `appId` from the route, so the per-app isolation invariant holds regardless.
  */
 const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.addHook("onClose", () => {
@@ -47,10 +57,54 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { appId } = request.params as { appId: string };
       const body = request.body as Record<string, unknown>;
-      const userId = request.user.id;
-      const { organizationId } = request;
 
-      // Verify the session user may view this app (short-lived cache keyed by
+      // External MCP clients present a Bearer token (validated here); Archestra's
+      // own frontend uses the browser session (request.user, populated upstream).
+      const bearer = extractBearerToken(request);
+      let userId: string;
+      let organizationId: string;
+      let tokenAuth: TokenAuthContext;
+      // A Bearer connection builds a fresh server per request: AppServerCache is
+      // keyed only by (app, user), so reusing across tokens would leak one
+      // token's credentials/context into another's calls. The session path keeps
+      // the cache (one auth context per browser user).
+      let useServerCache: boolean;
+      if (bearer) {
+        const appAuth = await validateAppGatewayToken(bearer);
+        if (!appAuth.ok) {
+          throw appAuth.reason === "no_viewer"
+            ? new ApiError(
+                403,
+                "App endpoints require a user-scoped token; organization/team tokens have no viewer.",
+              )
+            : new ApiError(401, "Unauthorized");
+        }
+        userId = appAuth.userId;
+        organizationId = appAuth.organizationId;
+        tokenAuth = {
+          tokenId: appAuth.tokenId,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId,
+          organizationId,
+        };
+        useServerCache = false;
+      } else {
+        userId = request.user.id;
+        organizationId = request.organizationId;
+        tokenAuth = {
+          tokenId: `session:${userId}`,
+          teamId: null,
+          isOrganizationToken: false,
+          isSessionAuth: true,
+          userId,
+          organizationId,
+        };
+        useServerCache = true;
+      }
+
+      // Verify the viewer may view this app (short-lived cache keyed by
       // app+user+org so entries can't leak across orgs).
       const appCacheKey = `${appId}:${userId}:${organizationId}`;
       let app = appAccessCache.get(appCacheKey);
@@ -76,15 +130,6 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Forbidden");
       }
 
-      const sessionTokenAuth: TokenAuthContext = {
-        tokenId: `session:${userId}`,
-        teamId: null,
-        isOrganizationToken: false,
-        isSessionAuth: true,
-        userId,
-        organizationId,
-      };
-
       // Gate tools/call on the per-app allowlist + the tool's app visibility.
       // Archestra tools (the App Data Store) are exempt — they are dispatched
       // in-process and authorized by RBAC inside executeArchestraTool.
@@ -104,14 +149,15 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let serverHealthy = false;
       try {
         server =
-          appServerCache.acquire(appId, userId) ??
-          (await createAppServer(appId, sessionTokenAuth)).server;
+          (useServerCache
+            ? appServerCache.acquire(appId, userId)
+            : undefined) ?? (await createAppServer(appId, tokenAuth)).server;
 
         const transport = createStatelessTransport(appId);
         try {
           await server.connect(transport);
         } catch {
-          ({ server } = await createAppServer(appId, sessionTokenAuth));
+          ({ server } = await createAppServer(appId, tokenAuth));
           await server.connect(transport);
         }
         serverHealthy = true;
@@ -146,7 +192,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } finally {
-        if (server)
+        if (server && useServerCache)
           appServerCache.release(appId, userId, server, serverHealthy);
       }
     },
@@ -199,6 +245,12 @@ async function rejectDisallowedToolCall(params: {
       -32602,
       "Invalid params: tools/call requires a string 'name' parameter",
     );
+  }
+  // The synthetic launch tool only hands back the app's own UI resource URI; it
+  // reaches no upstream tool or data store, so it bypasses the assignment gate
+  // (which would otherwise reject it as "not assigned to this app").
+  if (toolName === APP_LAUNCH_TOOL_NAME) {
+    return null;
   }
   const toolInput =
     callParams?.arguments && typeof callParams.arguments === "object"

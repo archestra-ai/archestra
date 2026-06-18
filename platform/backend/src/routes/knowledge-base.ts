@@ -1,6 +1,8 @@
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  knowledgeFileInlineContentType,
+  MAX_KNOWLEDGE_FILES_PER_UPLOAD,
   PaginationQuerySchema,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -53,10 +55,7 @@ import {
   SelectKnowledgeBaseSchema,
   UploadedFileProcessingStatusSchema,
 } from "@/types";
-import {
-  isSafeInlineMimeType,
-  sanitizeAttachmentContentType,
-} from "./chat/attachment-content-type";
+import { sanitizeAttachmentContentType } from "./chat/attachment-content-type";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -1372,7 +1371,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
         }),
       )
-      .max(20),
+      .max(MAX_KNOWLEDGE_FILES_PER_UPLOAD),
   });
 
   // ===== Knowledge File Routes =====
@@ -1557,13 +1556,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         key: file.blobStorageKey,
         dbData: file.fileData,
       });
-      const safeMime = sanitizeAttachmentContentType(file.mimeType);
-      const disposition =
-        download || !isSafeInlineMimeType(safeMime) ? "attachment" : "inline";
+      const inlineContentType = download
+        ? null
+        : knowledgeFileInlineContentType(file.originalName);
+      const contentType =
+        inlineContentType ?? sanitizeAttachmentContentType(file.mimeType);
+      const disposition = inlineContentType ? "inline" : "attachment";
 
       reply.hijack();
       reply.raw.writeHead(200, {
-        "Content-Type": safeMime,
+        "Content-Type": contentType,
         "Content-Disposition": `${disposition}; filename="${encodeURIComponent(file.originalName)}"`,
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",

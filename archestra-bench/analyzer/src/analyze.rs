@@ -15,6 +15,12 @@ use crate::runmeta::RolloutId;
 const MAP_MAX_TOKENS: u64 = 4096;
 /// Hard cap on each per-rollout analysis so a runaway summary cannot blow the reducer's context.
 const MAP_ANALYSIS_CAP_CHARS: usize = 6000;
+/// Compact the reduce agent's context before it overruns the reduce model's window. nitpicker
+/// defaults `compact_threshold` to None (compaction off); without this the agent's conversation
+/// grows unbounded as it reads analyses + raw trajectories + repo source until the provider rejects
+/// the request. Sized below the smallest reduce-model window we run (kimi-for-coding = 262144) with
+/// headroom for one turn's tool results plus the 8192 output cap.
+const REDUCE_COMPACT_THRESHOLD: u64 = 180_000;
 
 /// Map a lane's provider onto nitpicker's `LLMProvider`. `base_url` is unsupported for OpenRouter, so
 /// passing it there is a hard error rather than a silently ignored flag.
@@ -123,6 +129,12 @@ pub const REDUCE_SYSTEM_PROMPT: &str = "You analyze AI-agent trajectories from t
      show an issue (for breadth) and prefer fixes that generalize across models over patching one \
      model's quirk; never discount a struggle merely because the model is weak. Only set one aside \
      when it is pure raw model capability that no loop, tool, or system-prompt change could address.\n\n\
+     Calibrate each recommendation to the evidence behind it. The run metrics show how many rollouts \
+     and tasks this report rests on; when that set is small or a pattern appears only once or twice, \
+     present the finding as a prioritized hypothesis to review, not an implementation directive. \
+     Weigh the ongoing maintenance cost of any NEW surface you propose — a helper utility, an extra \
+     tool, a new abstraction — against how often the friction actually occurred; on thin evidence \
+     prefer tuning an existing tool, error message, or prompt over adding new machinery.\n\n\
      You have read-only file tools (read_file, glob, grep, git) over the whole repository: both the \
      benchmark fixtures under `archestra-bench/` and the Archestra product under `platform/`. For \
      every issue surfaced in the analyses, cross-check it against the real definition — read the \
@@ -282,6 +294,7 @@ pub async fn reduce(
     // `work` stays alive (and thus on disk) until this fn returns, then drops and is removed.
     let mut builder = AgentBuilder::new("trajectory-analyst", model, REDUCE_SYSTEM_PROMPT, client)
         .max_turns(max_turns)
+        .compact_threshold(REDUCE_COMPACT_THRESHOLD)
         .subagent_system_prompt(REDUCE_SUBAGENT_SYSTEM_PROMPT);
     if let Some(progress) = progress {
         builder = builder.progress(progress);

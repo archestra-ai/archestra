@@ -214,6 +214,17 @@ impl BenchmarkMcp {
         Submission::None
     }
 
+    /// Whether the active task has already captured a submission (accepted or format-rejected),
+    /// without consuming the context the way `take_submission` does. Lets the runner distinguish a
+    /// genuine "stopped without submitting" from a task that already reached the submit tool.
+    pub async fn has_submission(&self, task_key: &str) -> bool {
+        let guard = self.ctx.lock().await;
+        matches!(
+            guard.as_ref(),
+            Some(ctx) if ctx.task_key == task_key && (ctx.accepted.is_some() || ctx.failed)
+        )
+    }
+
     pub async fn stop(&self) {
         self.cancel.cancel();
     }

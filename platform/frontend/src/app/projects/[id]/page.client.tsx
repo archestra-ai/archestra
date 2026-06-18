@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  CalendarClock,
   Eye,
   File as FileIcon,
   FileText,
@@ -17,6 +18,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -142,6 +144,7 @@ function ProjectDetail() {
 
           <div className="space-y-6">
             <ProjectChatInput projectId={project.id} />
+            <ProjectSchedulesSection projectId={project.id} />
             <ChatsList conversations={conversations ?? []} />
           </div>
         </PageLayout>
@@ -185,6 +188,7 @@ function ChatsList({
     id: string;
     title: string | null;
     authorName: string | null;
+    origin: "user" | "schedule_trigger";
     lastMessageAt: string;
     readOnly: boolean;
   }>;
@@ -207,13 +211,23 @@ function ChatsList({
               className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
+                {conv.origin === "schedule_trigger" ? (
+                  <CalendarClock className="h-4 w-4 text-primary" aria-hidden />
+                ) : (
+                  <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">
                     {conv.title ?? "Untitled chat"}
                   </span>
+                  {conv.origin === "schedule_trigger" && (
+                    <Badge variant="outline" className="shrink-0 gap-1">
+                      <CalendarClock className="h-3 w-3" />
+                      scheduled
+                    </Badge>
+                  )}
                   {conv.readOnly && (
                     <Badge variant="outline" className="shrink-0 gap-1">
                       <Eye className="h-3 w-3" />

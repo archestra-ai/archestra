@@ -4,6 +4,7 @@ import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -148,5 +149,89 @@ describe("schedule trigger routes", () => {
     expect(response.json().error.message).toContain(
       "You do not have access to this scheduled task",
     );
+  });
+
+  test("POST create requires a project when the projects feature is on", async ({
+    makeInternalAgent,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "No project",
+        agentId: agent.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "A project is required for scheduled tasks",
+    );
+  });
+
+  test("POST create associates the trigger with its project", async ({
+    makeInternalAgent,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "scheduled-project",
+      description: null,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "With project",
+        agentId: agent.id,
+        projectId: project.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().projectId).toBe(project.id);
+  });
+
+  test("PUT cannot move a trigger to an inaccessible project", async ({
+    makeInternalAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "owned",
+      description: null,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: adminUser.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/schedule-triggers/${trigger.id}`,
+      payload: { projectId: "11111111-1111-4111-8111-111111111111" },
+    });
+    expect(response.statusCode).toBe(404);
   });
 });

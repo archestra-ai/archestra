@@ -647,14 +647,18 @@ export function AppSidebar() {
             item.subItems
               ? {
                   ...item,
-                  subItems: item.subItems.filter(
-                    (sub) => sub.url !== "/agents/skills" || skillsEnabled,
-                  ),
+                  subItems: item.subItems.filter((sub) => {
+                    if (sub.url === "/agents/skills") return skillsEnabled;
+                    // With projects on, schedules are managed per-project on the
+                    // project detail page, so the standalone entry is hidden.
+                    if (sub.url === "/scheduled-tasks") return !projectsEnabled;
+                    return true;
+                  }),
                 }
               : item,
           ),
       }));
-  }, [showConnect, skillsEnabled, appsEnabled]);
+  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled]);
 
   return (
     <Sidebar collapsible="icon">

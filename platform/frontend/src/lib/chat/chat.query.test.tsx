@@ -132,6 +132,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     todoList: null,
     artifact: null,
     projectId: null,
+    origin: "user",
     pinnedAt: null,
     lastMessageAt: "2026-03-17T00:00:00.000Z",
     createdAt: "2026-03-17T00:00:00.000Z",

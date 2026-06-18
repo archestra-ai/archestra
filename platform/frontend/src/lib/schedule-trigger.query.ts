@@ -26,6 +26,7 @@ export type ScheduleTrigger = {
   organizationId: string;
   name: string;
   agentId: string;
+  projectId?: string | null;
   messageTemplate: string;
   cronExpression: string;
   timezone: string;
@@ -68,6 +69,7 @@ type PaginatedResponse<T> = {
 type ScheduleTriggerRequestBody = {
   name: string;
   agentId: string;
+  projectId?: string;
   cronExpression: string;
   timezone: string;
   messageTemplate: string;
@@ -106,6 +108,7 @@ export function getScheduleTriggerListQueryParams(params?: {
   name?: string;
   actorUserIds?: string[];
   agentIds?: string[];
+  projectId?: string;
   showAll?: boolean;
   refetchInterval?: number | false;
 }) {
@@ -116,6 +119,7 @@ export function getScheduleTriggerListQueryParams(params?: {
     name: params?.name,
     actorUserIds: params?.actorUserIds,
     agentIds: params?.agentIds,
+    projectId: params?.projectId,
     showAll: params?.showAll,
   };
 }
@@ -141,6 +145,7 @@ export function useScheduleTriggers(params?: {
   name?: string;
   actorUserIds?: string[];
   agentIds?: string[];
+  projectId?: string;
   showAll?: boolean;
   refetchInterval?: number | false;
 }) {
@@ -166,6 +171,9 @@ export function useScheduleTriggers(params?: {
             : {}),
           ...(queryParams.agentIds?.length
             ? { agentIds: queryParams.agentIds.join(",") }
+            : {}),
+          ...(queryParams.projectId
+            ? { projectId: queryParams.projectId }
             : {}),
           ...(queryParams.showAll ? { showAll: queryParams.showAll } : {}),
         },

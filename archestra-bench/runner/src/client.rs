@@ -14,6 +14,10 @@ use tokio::time::{Duration, sleep, timeout};
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
 
+/// Sampling temperature pinned on every benchmark chat request. Greedy decoding (`0.0`) is the main
+/// lever against run-to-run variance — see the reproducibility notes in the repo README.
+pub(crate) const BENCH_TEMPERATURE: f32 = 0.0;
+
 #[derive(Debug, Clone)]
 pub struct ArchestraApiError {
     pub method: String,
@@ -659,22 +663,7 @@ impl EvalClient {
         text: &str,
         files: &[FilePart],
     ) -> Result<impl Stream<Item = ChatStreamRecord> + use<'_>, ClientError> {
-        let mut parts = vec![serde_json::json!({
-            "type": "text",
-            "text": text,
-        })];
-        for file in files {
-            parts.push(file.to_data_url_part());
-        }
-        let body = serde_json::json!({
-            "id": conversation_id,
-            "messages": [{
-                "id": uuid::Uuid::new_v4().to_string(),
-                "role": "user",
-                "parts": parts,
-            }],
-            "trigger": "submit-message",
-        });
+        let body = build_chat_body(conversation_id, text, files);
         let url = self.url("/api/chat", None);
         let mut req = self
             .http
@@ -1181,9 +1170,41 @@ fn github_token() -> Option<String> {
         })
 }
 
+/// Build the `POST /api/chat` request body. Pinned sampling lives here so reruns of the same config
+/// don't diverge on temperature alone — the backend forwards `temperature` to `streamText`, and a
+/// provider that can't honor it (e.g. a reasoning model) drops it with a warning rather than erroring.
+fn build_chat_body(conversation_id: &str, text: &str, files: &[FilePart]) -> JsonValue {
+    let mut parts = vec![serde_json::json!({
+        "type": "text",
+        "text": text,
+    })];
+    for file in files {
+        parts.push(file.to_data_url_part());
+    }
+    serde_json::json!({
+        "id": conversation_id,
+        "messages": [{
+            "id": uuid::Uuid::new_v4().to_string(),
+            "role": "user",
+            "parts": parts,
+        }],
+        "temperature": BENCH_TEMPERATURE,
+        "trigger": "submit-message",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_body_pins_temperature() {
+        let body = build_chat_body("conv-1", "hello", &[]);
+        assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
+        assert_eq!(body["id"], "conv-1");
+        assert_eq!(body["trigger"], "submit-message");
+        assert_eq!(body["messages"][0]["parts"][0]["text"], "hello");
+    }
 
     #[test]
     fn test_sse_data_payload() {

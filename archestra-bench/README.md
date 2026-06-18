@@ -129,6 +129,23 @@ second backend runs the already-built `dist/server.mjs` the main stack keeps fre
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
 
+## Reproducibility
+
+A rerun of the same config should grade the same way; two knobs cut variance at the source (rather than
+averaging it out over more rollouts):
+
+- **Sampling temperature is pinned** to `0.0` on every chat request — the harness sends `temperature` in
+  the `/api/chat` body and the backend forwards it to `streamText` (a provider that can't honor it, e.g. a
+  reasoning model, drops it with a warning rather than erroring). The value is recorded in `config.json`.
+  This is variance *reduction*, not bitwise determinism — MoE routing and parallel tool-call ordering keep
+  agent runs non-bitwise-stable.
+- **The remote-MCP tool surface can be pinned** per env. Remote servers add/rename/remove tools over time,
+  silently changing the agent's action space; a committed `envs/<id>.mcp.lock` (MCP name → sorted tool
+  short-names) snapshots it. On a run, a drift from the lock aborts that env's setup with a per-MCP diff;
+  `archestra-bench benchmark --env <id> --update-mcp-lock` (re)generates the lock from the live surface.
+  Pinning is opt-in — an env with no lock runs unchanged. The lock pins the tool *surface*, not MCP
+  response bodies (live data stays live by design).
+
 ## Outcomes
 
 Each (env, task, provider, model) cell resolves to exactly one outcome:

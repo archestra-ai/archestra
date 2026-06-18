@@ -20,11 +20,12 @@ use crate::client::{
 use crate::config::types::{EnvConfig, Stage, Task};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
+use crate::mcp_lock;
 use crate::mcp_server::{BenchmarkMcp, Submission};
 use crate::results::{Outcome, RunResult, render_markdown};
 use crate::seeding::{
     ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures,
-    seed_skill_ref,
+    seed_skill_ref, tool_name,
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
@@ -42,12 +43,10 @@ const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 // the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
 // solves the task still closes the loop by finding and calling its submit tool instead of replying in
 // prose.
-const SUBMIT_INSTRUCTION: &str =
-    "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
+const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
 // One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
 // SUBMIT_INSTRUCTION, so this only has to call out the omission.
-const SUBMIT_NUDGE: &str =
-    "You ended your turn without submitting a result. The task is not complete until you submit it.";
+const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -84,6 +83,10 @@ pub struct RunCtx {
     pub root_run_dir: PathBuf,
     pub run_id: String,
     pub api_keys: HashMap<String, String>,
+    /// Where `envs/<id>.toml` and their `*.mcp.lock` siblings live, for the MCP tool-surface pin.
+    pub envs_dir: PathBuf,
+    /// Rewrite each env's `*.mcp.lock` from the observed surface instead of enforcing it.
+    pub update_mcp_lock: bool,
 }
 
 /// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
@@ -124,8 +127,10 @@ pub async fn run(
     out: Option<&Path>,
     run_dir: Option<&Path>,
     max_workers: Option<usize>,
+    update_mcp_lock: bool,
 ) -> Result<RunOutcome, RunError> {
-    let envs = load_envs(&bench_dir.join("envs")).map_err(|e| RunError::Config(e.to_string()))?;
+    let envs_dir = bench_dir.join("envs");
+    let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
     let default_lanes_path = bench_dir.join("lanes.toml");
     let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
     let lane_list =
@@ -153,6 +158,8 @@ pub async fn run(
         root_run_dir,
         run_id,
         api_keys,
+        envs_dir,
+        update_mcp_lock,
     };
 
     let results = execute_plan(plan, ctx.clone(), workers).await;
@@ -557,10 +564,25 @@ async fn setup_shared_env(
 
     if !env.mcps.is_empty() {
         let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _)| id.clone()).collect();
-        if let Err(e) = seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await {
+        let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
+        {
+            Ok(registered) => registered,
+            Err(e) => {
+                stop_mcps(&setups).await;
+                let _ = instance.shutdown().await;
+                return Err(e.to_string());
+            }
+        };
+        if let Err(e) = mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        ) {
             stop_mcps(&setups).await;
             let _ = instance.shutdown().await;
-            return Err(e.to_string());
+            return Err(e);
         }
     }
 
@@ -659,18 +681,40 @@ async fn run_isolated_lane(
         }
     };
 
-    if !env.mcps.is_empty()
-        && let Err(e) = seed_mcp_fixtures(
+    if !env.mcps.is_empty() {
+        let registered = match seed_mcp_fixtures(
             &client,
             &env.mcps,
             "org",
             Some(std::slice::from_ref(&agent_id)),
         )
         .await
-    {
-        mcp.stop().await;
-        let _ = instance.shutdown().await;
-        return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+        {
+            Ok(registered) => registered,
+            Err(e) => {
+                mcp.stop().await;
+                let _ = instance.shutdown().await;
+                return infra_results_for_lane(
+                    &env,
+                    &tasks,
+                    &lane,
+                    &ctx,
+                    &progress,
+                    &e.to_string(),
+                );
+            }
+        };
+        if let Err(e) = mcp_lock::enforce(
+            &ctx.envs_dir,
+            &env.id,
+            &env.mcps,
+            &registered,
+            ctx.update_mcp_lock,
+        ) {
+            mcp.stop().await;
+            let _ = instance.shutdown().await;
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
+        }
     }
 
     let results = run_lane(
@@ -1025,7 +1069,7 @@ async fn assert_agent_tool_surface(
 
 fn find_submit_tool(tools: &[HashMap<String, serde_json::Value>]) -> Result<String, RunError> {
     for tool in tools {
-        if let Some(name) = tool.get("name").and_then(|v| v.as_str())
+        if let Some(name) = tool_name(tool)
             && name.ends_with(SUBMIT_TOOL_SUFFIX)
         {
             return Ok(name.to_string());
@@ -1235,7 +1279,9 @@ async fn grade_rollout(
         && run.finish_reason.as_deref() == Some("stop")
         && !bench_mcp.has_submission(rollout_key).await
     {
-        artifacts.append("submit_nudge", serde_json::json!({})).await;
+        artifacts
+            .append("submit_nudge", serde_json::json!({}))
+            .await;
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
             files: Vec::new(),
@@ -2172,6 +2218,7 @@ async fn write_run_config(
         "lanes": lanes,
         "max_workers": max_workers,
         "git_commit": git_commit,
+        "temperature": crate::client::BENCH_TEMPERATURE,
     });
     fs::write(
         run_dir.join("config.json"),

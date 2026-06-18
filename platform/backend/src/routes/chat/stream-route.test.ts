@@ -665,6 +665,49 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     ]);
   });
 
+  test("forwards a provided temperature to streamText", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+        temperature: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].temperature).toBe(0);
+  });
+
+  test("omits temperature from streamText when none is provided", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].temperature).toBeUndefined();
+  });
+
   test("prepends load-tools guidance when the agent loads tools when needed", async () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, {

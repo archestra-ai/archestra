@@ -3,6 +3,7 @@
 pub mod client;
 pub mod config;
 pub mod lifecycle;
+pub mod mcp_lock;
 pub mod mcp_server;
 pub mod results;
 pub mod run;

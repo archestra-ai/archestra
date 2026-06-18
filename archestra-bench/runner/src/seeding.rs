@@ -18,6 +18,13 @@ pub struct RegisteredMcp {
     pub tools: Vec<HashMap<String, serde_json::Value>>,
 }
 
+/// A tool's agent-facing short name — the `"name"` field the model sees and the benchmark matches
+/// against (e.g. `find_submit_tool`, `letter-count`). The MCP tool-surface lock stores exactly this
+/// string, so the pin and the runtime agree by construction.
+pub fn tool_name(tool: &HashMap<String, serde_json::Value>) -> Option<&str> {
+    tool.get("name").and_then(|v| v.as_str())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SeedingError {
     #[error("client error: {0}")]

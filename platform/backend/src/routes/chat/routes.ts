@@ -248,6 +248,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema, // Chat ID from useChat
           messages: z.array(z.unknown()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+          // Optional sampling override; when omitted the provider/model default applies (unchanged
+          // behavior). The benchmark harness sets this to pin runs against temperature variance.
+          temperature: z.number().min(0).max(2).optional(),
         }),
         // Streaming responses don't have a schema
         response: ErrorResponsesSchema,
@@ -255,7 +258,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const {
-        body: { id: conversationId, messages, trigger },
+        body: { id: conversationId, messages, trigger, temperature },
         user,
         organizationId,
       } = request;
@@ -860,6 +863,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.system = systemPrompt;
                 }
 
+                // Forward an explicit sampling override only when the caller set one, so default
+                // chat behavior is unchanged. A provider that can't honor it drops it with a warning
+                // (surfaced via result.warnings below) rather than erroring.
+                if (temperature !== undefined) {
+                  streamTextConfig.temperature = temperature;
+                }
+
                 if (isGeminiImageModel) {
                   streamTextConfig.providerOptions = {
                     google: {
@@ -891,6 +901,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }
                   },
                 });
+
+                // Surface provider warnings (e.g. a sampling param dropped for a reasoning model)
+                // without blocking the stream, so a silently-ignored `temperature` is diagnosable.
+                void Promise.resolve(result.warnings)
+                  .then((warnings) => {
+                    if (warnings && warnings.length > 0) {
+                      logger.info(
+                        { conversationId, warnings },
+                        "Chat stream provider warnings",
+                      );
+                    }
+                  })
+                  .catch(() => {});
 
                 // toUIMessageStream invokes onError twice for the same upstream
                 // error: first with the real error to build the chunk's

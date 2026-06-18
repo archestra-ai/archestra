@@ -344,9 +344,12 @@ describe("getMcpSandboxBaseUrl", () => {
     global.window = originalWindow;
   });
 
+  // Set hostname too (not just origin): the regression this guards was a branch
+  // on window.location.hostname, so a mock without it would let the old swap
+  // silently no-op and the negative assertions would pass vacuously.
   const setOrigin = (origin: string, protocol = "http:") => {
     Object.defineProperty(window, "location", {
-      value: { origin, protocol },
+      value: { origin, protocol, hostname: new URL(origin).hostname },
       writable: true,
     });
   };

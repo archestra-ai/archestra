@@ -280,8 +280,8 @@ async function getSearchableTools(params: {
   // discovery also spans third-party tools from every catalog the user can
   // access, the sandbox built-ins when the feature is on, and
   // query_knowledge_sources when the user can access a knowledge connector.
-  // run_tool executes such a tool directly with the user's credentials —
-  // nothing is assigned to the agent.
+  // run_tool executes such a tool directly without assigning it; the MCP
+  // server's connection policy decides which credential the call uses.
   const discoverableTools = await getUnassignedDiscoverableTools({
     assignedToolNames: assignedNames,
     agentId,

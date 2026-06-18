@@ -6,11 +6,7 @@ import {
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
-import {
-  KnowledgeBaseConnectorModel,
-  OrganizationModel,
-  ToolModel,
-} from "@/models";
+import { KnowledgeBaseConnectorModel, ToolModel } from "@/models";
 import {
   afterAll,
   beforeAll,
@@ -140,29 +136,6 @@ describe("resolveDynamicTool", () => {
     const tool = await resolveDynamicTool({
       toolName: "github__search_repositories",
       agentId: strictAgent.id,
-      userId,
-      organizationId,
-    });
-
-    expect(tool).toBeNull();
-  });
-
-  test("null when the org kill-switch is off", async ({
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({ organizationId });
-    await makeTool({
-      name: "github__search_repositories",
-      catalogId: catalog.id,
-    });
-    await OrganizationModel.patch(organizationId, {
-      allowToolAutoAssignment: false,
-    });
-
-    const tool = await resolveDynamicTool({
-      toolName: "github__search_repositories",
-      agentId: agent.id,
       userId,
       organizationId,
     });
@@ -327,21 +300,6 @@ describe("isDynamicallyAvailableArchestraTool", () => {
 
       expect(available).toBe(false);
     });
-
-    test("unavailable when the org kill-switch is off", async () => {
-      await OrganizationModel.patch(organizationId, {
-        allowToolAutoAssignment: false,
-      });
-
-      const available = await isDynamicallyAvailableArchestraTool({
-        toolName: TOOL_RUN_COMMAND_FULL_NAME,
-        agentId: agent.id,
-        userId,
-        organizationId,
-      });
-
-      expect(available).toBe(false);
-    });
   });
 
   test("sandbox built-in unavailable when the feature is off", async () => {
@@ -485,29 +443,6 @@ describe("getUnassignedDiscoverableTools", () => {
     const tools = await getUnassignedDiscoverableTools({
       assignedToolNames: new Set(),
       agentId: strictAgent.id,
-      userId,
-      organizationId,
-    });
-
-    expect(tools).toEqual([]);
-  });
-
-  test("empty when the org kill-switch is off", async ({
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({ organizationId });
-    await makeTool({
-      name: "github__search_repositories",
-      catalogId: catalog.id,
-    });
-    await OrganizationModel.patch(organizationId, {
-      allowToolAutoAssignment: false,
-    });
-
-    const tools = await getUnassignedDiscoverableTools({
-      assignedToolNames: new Set(),
-      agentId: agent.id,
       userId,
       organizationId,
     });

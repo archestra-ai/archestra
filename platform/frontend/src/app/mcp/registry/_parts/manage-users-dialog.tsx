@@ -1012,7 +1012,7 @@ function AgentConnectionsSection({
           <ExternalDocsLink
             href={getDocsUrl(
               DocsPage.McpAuthentication,
-              "dynamic-credential-resolution",
+              "resolve-at-call-time",
             )}
             className="underline"
             showIcon={false}

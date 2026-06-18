@@ -107,45 +107,6 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
-    test("keeps the agent-scoped error when the org disables dynamic tool access", async ({
-      makeAgent,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeMember,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const { OrganizationModel } = await import("@/models");
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const kb = await makeKnowledgeBase(org.id);
-      await makeKnowledgeBaseConnector(kb.id, org.id);
-      const dynamicAgent = await makeAgent({
-        name: "Dynamic Knowledge Agent",
-        organizationId: org.id,
-        accessAllTools: true,
-      });
-      await OrganizationModel.patch(org.id, {
-        allowToolAutoAssignment: false,
-      });
-
-      const result = await executeArchestraTool(
-        t("query_knowledge_sources"),
-        { query: "anything" },
-        {
-          agent: { id: dynamicAgent.id, name: dynamicAgent.name },
-          organizationId: org.id,
-          userId: user.id,
-        },
-      );
-
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "No knowledge base or connector assigned",
-      );
-    });
-
     test("calls queryService with correct params when KB is assigned", async ({
       makeAgent,
       makeOrganization,

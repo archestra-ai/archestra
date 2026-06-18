@@ -8,12 +8,7 @@ import {
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
-import {
-  AgentModel,
-  KnowledgeBaseConnectorModel,
-  OrganizationModel,
-  ToolModel,
-} from "@/models";
+import { AgentModel, KnowledgeBaseConnectorModel, ToolModel } from "@/models";
 import type { Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { filterToolNamesByPermission } from "./rbac";
@@ -22,13 +17,13 @@ import { filterToolNamesByPermission } from "./rbac";
 // dispatch surface (search_tools / run_tool) is relaxed from "tools assigned to
 // the agent" to "tools the user can access" — discovery spans every MCP catalog
 // the user can access plus the knowledge sources visible to them, and run_tool
-// executes such a tool directly with call-time (dynamic) credential resolution.
-// Nothing is written to the agent: access is per-call and scoped to the
-// authenticated user, so no agent-modify permission is involved. Tool RBAC,
-// invocation policies, and per-conversation tool selections still gate every
-// call. The org-level "allow tool auto-assignment" security setting is the
-// org-wide kill-switch for organizations where catalog tool names must not be
-// exposed beyond the agents' assigned toolsets.
+// executes such a tool directly without assigning it. Which credential the
+// call uses is decided by the MCP server's connection policy (on-behalf-of the
+// caller, or a pinned service account) — same as for an assigned tool; this
+// surface only widens access. Nothing is written to the agent: access is
+// per-call, so no agent-modify permission is involved. Tool RBAC, invocation
+// policies, and per-conversation tool selections still gate every call. The
+// per-agent "access all tools" setting is the sole gate.
 
 /**
  * Resolve a run_tool target name to its canonical form (Archestra short names
@@ -167,7 +162,6 @@ export async function getUnassignedDiscoverableTools(params: {
  * query_knowledge_sources fallback) so they cannot drift apart. Dynamic access
  * needs all of:
  * - the agent's "access all tools" setting on (per-agent opt-in),
- * - the org's "allow tool auto-assignment" security setting on (kill-switch),
  * - a real authenticated user (org/team-token sessions and the internal
  *   "system" user keep the strict assigned-tools-only behavior).
  * Returns the validated user/org pair, or null when the strict behavior
@@ -182,11 +176,7 @@ export async function dynamicAccessContext(params: {
   if (!userId || !organizationId || userId === "system") {
     return null;
   }
-  const [agentOptedIn, orgAllows] = await Promise.all([
-    AgentModel.getAccessAllTools(agentId),
-    OrganizationModel.getAllowToolAutoAssignment(organizationId),
-  ]);
-  if (!agentOptedIn || !orgAllows) {
+  if (!(await AgentModel.getAccessAllTools(agentId))) {
     return null;
   }
   return { userId, organizationId };

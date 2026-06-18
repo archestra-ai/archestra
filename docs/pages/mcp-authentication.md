@@ -179,11 +179,11 @@ When you pin a tool to a specific installed MCP server connection instead of usi
 
 - **Team-installed connection**: can only be assigned to a **team-scoped** Agent or MCP Gateway that includes that same team
 - **Personal connection**: can only be assigned to a resource the connection owner could access directly
-- **Dynamic / resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
+- **Resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
 
 This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
-#### Dynamic Credential Resolution
+#### Resolve at Call Time
 
 When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
 

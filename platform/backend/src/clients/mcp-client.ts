@@ -1495,7 +1495,7 @@ class McpClient {
             catalogId: tool.catalogId,
             serverId: pinnedServer.id,
           },
-          `Dynamic resolution: using the catalog's pinned service-account connection for tool ${toolCall.name}`,
+          `Connection resolution: using the catalog's pinned service-account connection for tool ${toolCall.name}`,
         );
         return {
           targetMcpServerId: pinnedServer.id,
@@ -1509,7 +1509,7 @@ class McpClient {
           dynamicConnectionMcpServerId:
             catalogItem.dynamicConnectionMcpServerId,
         },
-        "Dynamic resolution: the catalog's pinned connection no longer exists; resolving at call time",
+        "Connection resolution: the catalog's pinned connection no longer exists; resolving at call time",
       );
     }
 

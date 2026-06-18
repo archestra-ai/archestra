@@ -221,24 +221,6 @@ class OrganizationModel {
   }
 
   /**
-   * Whether the org allows search_tools/run_tool to discover and auto-assign
-   * catalog tools beyond the agent's assigned set. Lean read on the tool
-   * dispatch path; intentionally not cached so admin toggles affect the next
-   * discovery/dispatch call. Defaults to true when the organization is missing.
-   */
-  static async getAllowToolAutoAssignment(id: string): Promise<boolean> {
-    const [organization] = await db
-      .select({
-        allowToolAutoAssignment:
-          schema.organizationsTable.allowToolAutoAssignment,
-      })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, id))
-      .limit(1);
-    return organization?.allowToolAutoAssignment ?? true;
-  }
-
-  /**
    * Get the slim chat error UI setting with a short-lived cache.
    */
   static async getSlimChatErrorUi(id: string): Promise<boolean> {

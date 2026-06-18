@@ -135,9 +135,9 @@ const agentsTable = softDeletablePgTable(
     /**
      * Whether search_tools/run_tool may dynamically discover and run tools the
      * calling user can access (MCP catalog tools and knowledge sources) beyond
-     * the agent's assigned set. Nothing is assigned to the agent; access is
-     * resolved per call with the user's credentials. Also gated by the
-     * org-level allow_tool_auto_assignment security setting.
+     * the agent's assigned set. Nothing is assigned to the agent; the MCP
+     * server's connection policy decides which credential each call uses. This
+     * per-agent flag is the sole gate for dynamic tool access.
      */
     accessAllTools: boolean("access_all_tools").notNull().default(false),
 

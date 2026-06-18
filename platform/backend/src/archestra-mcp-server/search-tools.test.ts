@@ -13,11 +13,7 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import {
-  ConversationEnabledToolModel,
-  OrganizationModel,
-  ToolModel,
-} from "@/models";
+import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -212,57 +208,6 @@ describe("search_tools", () => {
       name: "github__search_repositories",
       description: "Search repositories by topic, language, or owner.",
       catalogId: catalog.id,
-    });
-
-    const context: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      agentId: agent.id,
-      organizationId: org.id,
-      userId: user.id,
-    };
-
-    const result = await executeArchestraTool(
-      TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "repository search" },
-      context,
-    );
-
-    expect(result.isError).toBe(false);
-    const structuredContent =
-      result.structuredContent as SearchToolsStructuredContent;
-    expect(structuredContent.tools.map((tool) => tool.toolName)).not.toContain(
-      "github__search_repositories",
-    );
-  });
-
-  test("hides unassigned tools when the org disables dynamic tool access", async ({
-    makeAgent,
-    makeInternalMcpCatalog,
-    makeMember,
-    makeOrganization,
-    makeTool,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      name: "Search Agent",
-      organizationId: org.id,
-      accessAllTools: true,
-    });
-
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      name: "GitHub MCP",
-    });
-    await makeTool({
-      name: "github__search_repositories",
-      description: "Search repositories by topic, language, or owner.",
-      catalogId: catalog.id,
-    });
-    await OrganizationModel.patch(org.id, {
-      allowToolAutoAssignment: false,
     });
 
     const context: ArchestraContext = {
@@ -544,43 +489,6 @@ describe("search_tools", () => {
           accessAllTools: true,
         });
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-
-        const names = await searchSandboxTools({
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId: org.id,
-          userId: user.id,
-        });
-
-        expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
-      } finally {
-        (config.skillsSandbox as { enabled: boolean }).enabled =
-          originalSandboxEnabled;
-      }
-    });
-
-    test("hides sandbox tools when the org disables dynamic tool access", async ({
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const config = (await import("@/config")).default;
-      const originalSandboxEnabled = config.skillsSandbox.enabled;
-      (config.skillsSandbox as { enabled: boolean }).enabled = true;
-      try {
-        const org = await makeOrganization();
-        const user = await makeUser();
-        await makeMember(user.id, org.id, { role: "admin" });
-        const agent = await makeAgent({
-          name: "Sandbox Discovery Agent",
-          organizationId: org.id,
-          accessAllTools: true,
-        });
-        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-        await OrganizationModel.patch(org.id, {
-          allowToolAutoAssignment: false,
-        });
 
         const names = await searchSandboxTools({
           agent: { id: agent.id, name: agent.name },

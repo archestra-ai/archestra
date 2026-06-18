@@ -32,7 +32,10 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     "trace",
     "logs",
     "http-proto",
-    "reqwest-client",
+    # blocking client: the OTLP batch processor exports from its own non-Tokio
+    # thread, where the async reqwest client panics ("no reactor running") and
+    # kills the export pipeline. the blocking client runs the request inline.
+    "reqwest-blocking-client",
     "reqwest-rustls-webpki-roots",
 ], optional = true }
 opentelemetry-appender-tracing = { version = "0.32", optional = true }

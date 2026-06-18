@@ -620,3 +620,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @kish-00
 - @PANTOK-cmyk
 - @eyraspree-coder
+- @Yanis-Bouchelaghem

@@ -127,6 +127,23 @@ describe("skill tool execution", () => {
     expect(textOf(result)).toContain("references/FORMS.md (reference)");
   });
 
+  test("load_skill with an empty-string path lists the skill, like omitting path", async () => {
+    await seedSkill({
+      files: [
+        { path: "references/FORMS.md", content: "# Forms", kind: "reference" },
+      ],
+    });
+    const result = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing", path: "" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain("# PDF Processing");
+    expect(textOf(result)).toContain("references/FORMS.md (reference)");
+  });
+
   test("load_skill surfaces the compatibility requirement", async () => {
     await seedSkill({ skill: { compatibility: "requires python3" } });
     const result = await executeArchestraTool(

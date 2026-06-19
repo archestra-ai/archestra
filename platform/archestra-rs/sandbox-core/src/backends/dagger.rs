@@ -54,6 +54,8 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     "build-essential",
     "nodejs",
     "npm",
+    "unzip",
+    "zip",
 ];
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every

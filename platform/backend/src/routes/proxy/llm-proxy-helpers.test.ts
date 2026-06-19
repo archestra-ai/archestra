@@ -94,6 +94,7 @@ import {
   calculateInteractionCosts,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
+  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -510,5 +511,23 @@ describe("withSessionContext", () => {
     expect(withSpy).not.toHaveBeenCalled();
 
     withSpy.mockRestore();
+  });
+});
+
+describe("shouldForwardAnthropicBeta", () => {
+  test("forwards to real Anthropic (no base-URL override)", () => {
+    expect(shouldForwardAnthropicBeta("claude-opus-4-8", false)).toBe(true);
+  });
+
+  test("forwards to Claude proxied behind a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("claude-3-5-sonnet", true)).toBe(true);
+  });
+
+  test("strips for a non-Claude model on a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", true)).toBe(false);
+  });
+
+  test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
   });
 });

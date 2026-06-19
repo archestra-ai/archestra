@@ -85,10 +85,10 @@ describe("formatSkillActivation", () => {
       canRunSandbox: true,
     });
 
-    expect(result).toContain("load_skill");
-    expect(result).toContain("run_command");
-    expect(result).toContain("download_file");
-    expect(result).toContain("upload_file");
+    expect(result).toContain("archestra__load_skill");
+    expect(result).toContain("archestra__run_command");
+    expect(result).toContain("archestra__download_file");
+    expect(result).toContain("archestra__upload_file");
     // nudge to use the skill's own modules instead of re-implementing them.
     expect(result).toContain("before re-implementing");
     expect(result).not.toMatch(/not executed/i);
@@ -107,7 +107,7 @@ describe("formatSkillActivation", () => {
       canRunSandbox: false,
     });
 
-    expect(result).toContain("load_skill");
+    expect(result).toContain("archestra__load_skill");
     expect(result).not.toContain("run_command");
     expect(result).not.toContain("download_file");
     expect(result).not.toContain("upload_file");

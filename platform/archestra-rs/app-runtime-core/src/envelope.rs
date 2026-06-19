@@ -191,15 +191,18 @@ fn escape_inline_script(json: &str) -> String {
         .replace('\u{2029}', "\\u2029")
 }
 
-/// Neutralise the only sequences that could terminate an inline `<script>` early
-/// — `</script` and `<!--` — inside a trusted, platform-built JS bundle. Unlike
-/// [`escape_inline_script`] (for the user-influenced context JSON), this cannot
-/// escape every `<`/`>`: those are operators in real code. It inserts a `\` that
-/// is inert in the string/regex literal contexts where such a sequence can
-/// appear in valid JS, preserving the original casing.
+/// Neutralise a `</script` end-tag inside a trusted, platform-built JS bundle so
+/// it can't terminate the inline `<script>` early. Unlike [`escape_inline_script`]
+/// (for the user-influenced context JSON), this cannot escape every `<`/`>` —
+/// those are operators in real code — so it inserts a `\` that is inert in the
+/// string/regex literal contexts where `</script` legitimately appears in valid
+/// JS, preserving the original casing. `<!--` is intentionally left alone: it does
+/// not terminate a `<script>` (only `</script` does), and a `<\!--` rewrite would
+/// be invalid JS wherever `<!--` is the `< ! --` operator sequence.
 fn escape_inline_script_body(js: &str) -> String {
-    let no_close = SCRIPT_CLOSE.replace_all(js, |c: &regex::Captures| format!("<\\{}", &c[0][1..]));
-    no_close.replace("<!--", "<\\!--")
+    SCRIPT_CLOSE
+        .replace_all(js, |c: &regex::Captures| format!("<\\{}", &c[0][1..]))
+        .into_owned()
 }
 
 /// Neutralise a `</style` close sequence inside a trusted, platform-built

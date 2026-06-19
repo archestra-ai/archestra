@@ -1520,6 +1520,16 @@ describe("owned-app inline rendering", () => {
     expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
   });
 
+  // refine_app/validate_app return an app id but are not rendering tools: they
+  // must not mount a canvas (would otherwise re-render the app on every refine).
+  it.each([
+    "refine_app",
+    "validate_app",
+  ])("does not mount for a branded %s result carrying the app id", (shortName) => {
+    renderAppToolPart({ type: `tool-sparky__${shortName}` });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
   it("does not mount when the id is not a UUID", () => {
     renderAppToolPart({
       output: { content: "ok", structuredContent: { id: "not-a-uuid" } },

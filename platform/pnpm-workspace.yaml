@@ -62,7 +62,10 @@ overrides:
   axios: '>=1.15.2'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  undici: 7.24.5
+  # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0.
+  # Pinned exact (not a `>=` floor) because undici is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  undici: 7.28.0
   '@xmldom/xmldom': '>=0.9.10'
   mammoth>@xmldom/xmldom: 0.8.13
   samlify>@xmldom/xmldom: 0.8.13
@@ -117,6 +120,10 @@ minimumReleaseAgeExclude:
   # 2026-06-12 and clear the 7-day window on 2026-06-19. Remove on/after that date
   # — the lockfile stays pinned at the fixed versions regardless.
   - form-data
+  # TEMPORARY: undici 7.28.0 (fix CVE-2026-9697, HIGH) was published 2026-06-15
+  # and clears the 7-day window on 2026-06-22. Remove on/after that date — the
+  # lockfile stays pinned at 7.28.0 regardless.
+  - undici
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

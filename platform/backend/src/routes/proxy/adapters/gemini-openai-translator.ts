@@ -88,18 +88,10 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
 
     if (message.role === "tool") {
-      // Gemini function responses carry only a JSON payload, so keep the text
-      // in the response object and append any images/files as sibling media
-      // parts in the same turn rather than dropping them.
-      const normalized = normalizeOpenAiContentParts(message.content);
-      const text = normalized
-        .filter((part) => part.kind === "text")
-        .map((part) => part.text)
-        .join("\n");
-      const mediaParts = normalized
-        .filter((part) => part.kind !== "text")
-        .map(normalizedPartToGeminiPart)
-        .filter((part): part is Gemini.Types.MessagePart => part !== null);
+      // Gemini carries tool results as a JSON functionResponse payload. Media in
+      // a tool result must be nested inside `functionResponse.parts` with
+      // displayName/$ref references (Gemini 3 only), which our schema does not
+      // model, so tool-result content is forwarded as text.
       contents.push({
         role: "user",
         parts: [
@@ -109,10 +101,9 @@ export function openaiToGemini(req: OpenAiRequest): {
               // OpenAI tool result messages only include tool_call_id, not the
               // original function name. Use a stable synthetic name for Gemini.
               name: "tool_result",
-              response: { content: text },
+              response: { content: stringifyTextContent(message.content) },
             },
           },
-          ...mediaParts,
         ],
       });
     }
@@ -287,9 +278,11 @@ function userContentToGeminiParts(
   return parts;
 }
 
-// Maps one normalized content part to a Gemini part. Inline base64 data URLs
-// become `inlineData`; http(s) image URLs become `fileData` references, which
-// Gemini fetches itself. Returns null for parts Gemini can't represent.
+// Maps one normalized content part to a Gemini part. Only inline base64 data
+// URLs are forwarded (as `inlineData`). Returns null for parts Gemini can't
+// represent — notably http(s) image URLs: Gemini's `fileData.fileUri` accepts
+// only Files API / gs:// URIs, not arbitrary web URLs, and we don't fetch and
+// re-encode external content server-side, so such images are dropped.
 function normalizedPartToGeminiPart(
   part: NormalizedContentPart,
 ): Gemini.Types.MessagePart | null {
@@ -300,9 +293,6 @@ function normalizedPartToGeminiPart(
       const inline = parseDataUrl(part.url);
       if (inline) {
         return { inlineData: { mimeType: inline.mimeType, data: inline.data } };
-      }
-      if (/^https?:\/\//i.test(part.url)) {
-        return { fileData: { fileUri: part.url } };
       }
       return null;
     }

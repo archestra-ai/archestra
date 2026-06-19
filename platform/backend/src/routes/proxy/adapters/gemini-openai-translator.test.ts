@@ -109,12 +109,13 @@ describe("openaiToGemini — multimodal user content", () => {
     ]);
   });
 
-  test("forwards an http image URL as a fileData reference", () => {
+  test("drops an http image URL Gemini cannot inline, keeping the text", () => {
     const request = req({
       messages: [
         {
           role: "user",
           content: [
+            { type: "text", text: "look at this" },
             {
               type: "image_url",
               image_url: { url: "https://example.com/cat.png" },
@@ -127,9 +128,9 @@ describe("openaiToGemini — multimodal user content", () => {
 
     const { geminiBody } = openaiToGemini(request);
 
-    expect(geminiBody.contents[0].parts).toEqual([
-      { fileData: { fileUri: "https://example.com/cat.png" } },
-    ]);
+    // Gemini's fileData accepts only Files API / gs:// URIs, so a plain web URL
+    // is dropped rather than forwarded as an invalid fileData reference.
+    expect(geminiBody.contents[0].parts).toEqual([{ text: "look at this" }]);
   });
 
   test("forwards base64 input_audio as inlineData", () => {
@@ -160,20 +161,14 @@ describe("openaiToGemini — multimodal user content", () => {
     expect(geminiBody.contents[0].parts).toEqual([{ text: "hello" }]);
   });
 
-  test("keeps tool-result text and appends images as sibling media parts", () => {
+  test("forwards tool-result text into the functionResponse payload", () => {
     const request = req({
       messages: [
         { role: "user", content: "go" },
         {
           role: "tool",
           tool_call_id: "call_1",
-          content: [
-            { type: "text", text: "here is the chart" },
-            {
-              type: "image_url",
-              image_url: { url: "data:image/png;base64,Q0hBUlQ=" },
-            },
-          ],
+          content: [{ type: "text", text: "the result" }],
         },
       ],
       // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
@@ -186,10 +181,9 @@ describe("openaiToGemini — multimodal user content", () => {
         functionResponse: {
           id: "call_1",
           name: "tool_result",
-          response: { content: "here is the chart" },
+          response: { content: "the result" },
         },
       },
-      { inlineData: { mimeType: "image/png", data: "Q0hBUlQ=" } },
     ]);
   });
 });

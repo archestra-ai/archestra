@@ -20,7 +20,6 @@ import {
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
-  TeamModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -30,6 +29,7 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
+  resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import {
@@ -579,26 +579,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * a cross-org team id can never become an access principal for an app. Throws
  * `ApiError(400)` on an unknown/foreign team. Returns the deduped list.
  */
-async function resolveOrgTeamIds(
-  teamIds: string[] | undefined,
-  organizationId: string,
-): Promise<string[]> {
-  const unique = [...new Set(teamIds ?? [])];
-  if (unique.length === 0) return [];
-  const teams = await TeamModel.findByIds(unique);
-  const inOrg = new Set(
-    teams.filter((t) => t.organizationId === organizationId).map((t) => t.id),
-  );
-  const invalid = unique.filter((id) => !inOrg.has(id));
-  if (invalid.length > 0) {
-    throw new ApiError(
-      400,
-      `Unknown team(s) for this organization: ${invalid.join(", ")}`,
-    );
-  }
-  return unique;
-}
-
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;

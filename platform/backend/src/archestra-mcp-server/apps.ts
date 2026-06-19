@@ -32,6 +32,7 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
+  resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
 import { buildAppCapabilityContext } from "@/services/apps/app-capability-context";
 import {
@@ -780,13 +781,15 @@ const registry = defineArchestraTools([
       });
 
       const ok = !staticHasError && live.status !== "errors";
+      const warns =
+        findings.length > 0 ? ` (${findings.length} warning(s))` : "";
       const headline = staticHasError
         ? `App "${safeName}" version ${app.latestVersion} has static validation errors that must be fixed with edit_app.`
         : live.status === "errors"
           ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
-          : findings.length === 0
-            ? `App "${safeName}" version ${app.latestVersion} passed validation with no static findings.`
-            : `App "${safeName}" version ${app.latestVersion} passed static validation with ${findings.length} warning(s).`;
+          : live.status === "no_render_observed"
+            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}, but no live render has been observed yet — confirm it renders (open it in the sidebar) before relying on this result.`
+            : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
       const findingLines = findings.length
         ? `\n${findings
             .map((finding) => `[${finding.severity}] ${finding.message}`)
@@ -815,6 +818,11 @@ const registry = defineArchestraTools([
           "Publishing to a team requires at least one team id in teamIds.",
         );
       }
+      if (args.scope === "org" && (args.teamIds?.length ?? 0) > 0) {
+        return errorResult(
+          "teamIds is only valid when publishing to a team; omit it for org scope.",
+        );
+      }
       const app = await AppModel.findByIdForCaller({
         id: args.appId,
         organizationId,
@@ -825,10 +833,26 @@ const registry = defineArchestraTools([
         return errorResult(`No app found with id ${args.appId}.`);
       }
 
-      const teamIds = args.scope === "team" ? (args.teamIds ?? []) : [];
+      let teamIds: string[];
       try {
-        // Authorize against the destination scope (admins for org, team admins
-        // who belong to the target teams for team), mirroring the REST edit path.
+        // Validate the requested teams exist in the caller's org before any auth
+        // or write, so a foreign-org or unknown team id can never reach app_team.
+        teamIds =
+          args.scope === "team"
+            ? await resolveOrgTeamIds(args.teamIds, organizationId)
+            : [];
+        // Authorize BOTH the app's current scope and the destination, exactly as
+        // the REST re-scope path does. The source check is what stops a team
+        // admin from demoting or hijacking an org-scoped app they can merely see
+        // into a team they administer; the destination check stops redirecting an
+        // app to teams they don't administer.
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
         await assertCallerMayModifyApp({
           userId,
           organizationId,

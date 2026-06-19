@@ -2,6 +2,7 @@
 
 import {
   ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
   getArchestraToolFullName,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
@@ -1466,5 +1467,97 @@ describe("publish_app", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
     expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  // The source-scope gate: a team admin (editor) can see every org app but must
+  // not be able to demote one into a team they administer.
+  test("a team admin cannot hijack an org app into their own team", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const agent = await makeAgent({ name: "Hijack" });
+    const orgId = agent.organizationId;
+    const attacker = await makeUser();
+    await makeMember(attacker.id, orgId, { role: EDITOR_ROLE_NAME });
+    const team = await makeTeam(orgId, attacker.id, { name: "Attacker Team" });
+    await makeTeamMember(team.id, attacker.id);
+    const app = await makeApp({ organizationId: orgId, scope: "org" });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: attacker.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teamIds: [team.id] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    // the org app is untouched — neither demoted nor reassigned
+    expect((await AppModel.findById(app.id))?.scope).toBe("org");
+    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([]);
+  });
+
+  test("rejects teamIds when publishing to org scope", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish OrgTeams" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(orgId, user.id, { name: "Stray Team" });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "org", teamIds: [team.id] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("rejects a team id that does not belong to the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish ForeignTeam" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teamIds: [crypto.randomUUID()] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team");
   });
 });

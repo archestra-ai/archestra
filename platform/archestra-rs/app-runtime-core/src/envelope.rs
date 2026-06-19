@@ -22,6 +22,41 @@ static HTML_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
 static DOCTYPE_ANCHOR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<!DOCTYPE[^>]*>").expect("static doctype anchor regex"));
 
+// A `</script`/`</style` anywhere in an inlined asset (only ever inside a JS/CSS
+// string or comment, since neither is valid syntax otherwise) would close the
+// element early; case-insensitive to match the HTML tokenizer.
+static SCRIPT_CLOSE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)</script").expect("static script-close regex"));
+static STYLE_CLOSE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)</style").expect("static style-close regex"));
+
+/// Trusted, platform-controlled assets the connector embeds directly into the
+/// resource for a strict foreign host (claude.ai) whose sandbox CSP refuses any
+/// cross-origin `<script src>`/`<link href>`. `None` keeps the linked form
+/// (Archestra's own render, where the host CSP allows the platform origin).
+pub struct InlineAssets<'a> {
+    /// The ext-apps guest bundle as an IIFE that publishes the View SDK on
+    /// `window.__ARCHESTRA_EXT_APPS__`; the injected Apps SDK reads that global.
+    pub ext_apps_global: &'a str,
+    /// The Apps SDK microframework (same bytes served at `APP_SDK_PATH`).
+    pub shim: &'a str,
+    /// The platform baseline stylesheet (same bytes served at `APP_BASE_CSS_PATH`).
+    pub base_css: &'a str,
+}
+
+/// Inject the platform CSP, baseline stylesheet, per-viewer bootstrap, and the
+/// Apps SDK into an owned app's HTML, at the start of `<head>`, in that order,
+/// linking the SDK/stylesheet from `base_origin`. See
+/// [`prepare_app_envelope_with_assets`] for the inline variant.
+pub fn prepare_app_envelope(
+    html: &str,
+    context_json: &str,
+    base_origin: &str,
+    csp_content: &str,
+) -> String {
+    prepare_app_envelope_with_assets(html, context_json, base_origin, csp_content, None)
+}
+
 /// Inject the platform CSP, baseline stylesheet, per-viewer bootstrap, and the
 /// Apps SDK into an owned app's HTML, at the start of `<head>`, in that order.
 ///
@@ -38,16 +73,22 @@ static DOCTYPE_ANCHOR: LazyLock<Regex> =
 /// `csp_content` is the pre-built Content-Security-Policy the caller pins for
 /// the app; an empty string omits the CSP `<meta>` (the host supplies one). Both
 /// are the caller's contract — this function never derives them.
-pub fn prepare_app_envelope(
+///
+/// `inline`, when `Some`, embeds the stylesheet and SDK in the document instead
+/// of linking them from `base_origin` — for a foreign host that blocks
+/// cross-origin subresources. `base_origin` is then unused for the assets.
+pub fn prepare_app_envelope_with_assets(
     html: &str,
     context_json: &str,
     base_origin: &str,
     csp_content: &str,
+    inline: Option<InlineAssets>,
 ) -> String {
     let injection = build_injection(
         &escape_inline_script(context_json),
         base_origin,
         csp_content,
+        inline.as_ref(),
     );
 
     // First matching anchor wins; injection is spliced in literally (no JS-style
@@ -64,11 +105,18 @@ pub fn prepare_app_envelope(
     format!("{injection}{html}")
 }
 
-fn build_injection(escaped_context: &str, base_origin: &str, csp_content: &str) -> String {
+fn build_injection(
+    escaped_context: &str,
+    base_origin: &str,
+    csp_content: &str,
+    inline: Option<&InlineAssets>,
+) -> String {
     // The CSP meta must precede the resources it governs (it only applies to
     // fetches after it in document order), then the baseline stylesheet leads
-    // the cascade (first `<link>`), the bootstrap must precede the SDK script
-    // (the SDK reads the context global at parse time), and the SDK runs last.
+    // the cascade (first `<link>`/`<style>`), the bootstrap must precede the SDK
+    // script (the SDK reads the context global at parse time), and the SDK runs
+    // last. In inline mode the ext-apps bundle sits between the bootstrap and the
+    // SDK — it publishes the guest-SDK global the SDK reads.
     let csp = if csp_content.is_empty() {
         String::new()
     } else {
@@ -77,23 +125,44 @@ fn build_injection(escaped_context: &str, base_origin: &str, csp_content: &str) 
             escape_attribute(csp_content),
         )
     };
-    let base_css = format!(
-        r#"<link rel="stylesheet" href="{base_origin}{}" {}>"#,
-        contract::APP_BASE_CSS_PATH,
-        contract::APP_BASE_CSS_MARKER,
-    );
     let bootstrap = format!(
         "<script {}>window.{}={};</script>",
         contract::APP_BOOTSTRAP_MARKER,
         contract::APP_CONTEXT_GLOBAL,
         escaped_context,
     );
-    let sdk = format!(
-        r#"<script {} src="{base_origin}{}"></script>"#,
-        contract::APP_SDK_MARKER,
-        contract::APP_SDK_PATH,
-    );
-    format!("{csp}{base_css}{bootstrap}{sdk}")
+    match inline {
+        None => {
+            let base_css = format!(
+                r#"<link rel="stylesheet" href="{base_origin}{}" {}>"#,
+                contract::APP_BASE_CSS_PATH,
+                contract::APP_BASE_CSS_MARKER,
+            );
+            let sdk = format!(
+                r#"<script {} src="{base_origin}{}"></script>"#,
+                contract::APP_SDK_MARKER,
+                contract::APP_SDK_PATH,
+            );
+            format!("{csp}{base_css}{bootstrap}{sdk}")
+        }
+        Some(assets) => {
+            let style = format!(
+                "<style {}>{}</style>",
+                contract::APP_BASE_CSS_MARKER,
+                escape_inline_style(assets.base_css),
+            );
+            let ext_apps = format!(
+                "<script>{}</script>",
+                escape_inline_script_body(assets.ext_apps_global),
+            );
+            let sdk = format!(
+                "<script {}>{}</script>",
+                contract::APP_SDK_MARKER,
+                escape_inline_script_body(assets.shim),
+            );
+            format!("{csp}{style}{bootstrap}{ext_apps}{sdk}")
+        }
+    }
 }
 
 fn splice(html: &str, at: usize, insert: &str) -> String {
@@ -120,6 +189,28 @@ fn escape_inline_script(json: &str) -> String {
         .replace('>', "\\u003e")
         .replace('\u{2028}', "\\u2028")
         .replace('\u{2029}', "\\u2029")
+}
+
+/// Neutralise a `</script` end-tag inside a trusted, platform-built JS bundle so
+/// it can't terminate the inline `<script>` early. Unlike [`escape_inline_script`]
+/// (for the user-influenced context JSON), this cannot escape every `<`/`>` —
+/// those are operators in real code — so it inserts a `\` that is inert in the
+/// string/regex literal contexts where `</script` legitimately appears in valid
+/// JS, preserving the original casing. `<!--` is intentionally left alone: it does
+/// not terminate a `<script>` (only `</script` does), and a `<\!--` rewrite would
+/// be invalid JS wherever `<!--` is the `< ! --` operator sequence.
+fn escape_inline_script_body(js: &str) -> String {
+    SCRIPT_CLOSE
+        .replace_all(js, |c: &regex::Captures| format!("<\\{}", &c[0][1..]))
+        .into_owned()
+}
+
+/// Neutralise a `</style` close sequence inside a trusted, platform-built
+/// stylesheet (the inserted `\` is an inert CSS escape of `/`).
+fn escape_inline_style(css: &str) -> String {
+    STYLE_CLOSE
+        .replace_all(css, |c: &regex::Captures| format!("<\\{}", &c[0][1..]))
+        .into_owned()
 }
 
 #[cfg(test)]
@@ -323,5 +414,83 @@ mod tests {
         // attribute value (inert) rather than closing it.
         assert!(!result.contains(r#""><script"#));
         assert!(result.contains("&quot;><script"));
+    }
+
+    fn inline_assets() -> InlineAssets<'static> {
+        InlineAssets {
+            ext_apps_global: "globalThis.__ARCHESTRA_EXT_APPS__={App:1};",
+            shim: "window.archestra={ready:1};",
+            base_css: "body{color:red}",
+        }
+    }
+
+    #[test]
+    fn inline_mode_embeds_assets_with_no_cross_origin_subresource() {
+        let result = prepare_app_envelope_with_assets(
+            COMPLETE_DOC,
+            CONTEXT_JSON,
+            "https://archestra.example.com",
+            "",
+            Some(inline_assets()),
+        );
+        // Asset bytes are in the document, not linked.
+        assert!(result.contains("<style data-archestra-app-base-css>body{color:red}</style>"));
+        assert!(result.contains("globalThis.__ARCHESTRA_EXT_APPS__={App:1};"));
+        assert!(
+            result.contains("<script data-archestra-app-sdk>window.archestra={ready:1};</script>")
+        );
+        // No external script/style fetch a strict host CSP would refuse — even
+        // though base_origin was supplied, inline mode ignores it for assets.
+        assert!(!result.contains("src=\"https://archestra.example.com"));
+        assert!(!result.contains("<link"));
+        assert!(!result.contains("/_sandbox/"));
+    }
+
+    #[test]
+    fn inline_mode_orders_style_bootstrap_extapps_then_shim() {
+        let result = prepare_app_envelope_with_assets(
+            COMPLETE_DOC,
+            CONTEXT_JSON,
+            "",
+            "",
+            Some(inline_assets()),
+        );
+        let style = result.find(BASE_CSS_MARKER).unwrap();
+        let boot = result.find(BOOTSTRAP_MARKER).unwrap();
+        let ext = result.find("__ARCHESTRA_EXT_APPS__").unwrap();
+        let shim = result.find(SDK_MARKER).unwrap();
+        // Bootstrap context and the ext-apps global must both precede the shim
+        // (which reads them); style leads the cascade.
+        assert!(style < boot);
+        assert!(boot < ext);
+        assert!(ext < shim);
+    }
+
+    #[test]
+    fn inline_mode_neutralises_a_script_close_in_an_asset() {
+        let assets = InlineAssets {
+            ext_apps_global: "var s=\"</SCRIPT><script>alert(1)</script>\";",
+            shim: "window.archestra={};",
+            base_css: "a{}",
+        };
+        let result =
+            prepare_app_envelope_with_assets(COMPLETE_DOC, CONTEXT_JSON, "", "", Some(assets));
+        // The close sequence is broken (case preserved) so it can't terminate the
+        // inline element; the verbatim attacker markup never appears.
+        assert!(!result.contains("</SCRIPT><script>alert(1)</script>"));
+        assert!(result.contains("<\\/SCRIPT><script>alert(1)<\\/script>"));
+    }
+
+    #[test]
+    fn inline_mode_neutralises_a_style_close_in_the_stylesheet() {
+        let assets = InlineAssets {
+            ext_apps_global: "var x=1;",
+            shim: "window.archestra={};",
+            base_css: "a{content:\"</style><script>alert(1)</script>\"}",
+        };
+        let result =
+            prepare_app_envelope_with_assets(COMPLETE_DOC, CONTEXT_JSON, "", "", Some(assets));
+        assert!(!result.contains("</style><script>alert(1)"));
+        assert!(result.contains("<\\/style>"));
     }
 }

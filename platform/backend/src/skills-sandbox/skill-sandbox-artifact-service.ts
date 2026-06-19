@@ -2,7 +2,13 @@ import { FileModel, ProjectModel, ProjectShareModel } from "@/models";
 import type { PersistedFile, SandboxFileListItem } from "@/types";
 import { FileBytesMissingError, getFileBytesStorage } from "./file-storage";
 
-type ResolvedMyFile = { data: Buffer; mimeType: string; originalName: string };
+type ResolvedMyFile = {
+  /** The resolved file's id — lets callers record a read touch. */
+  fileId: string;
+  data: Buffer;
+  mimeType: string;
+  originalName: string;
+};
 
 type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
@@ -145,6 +151,7 @@ class SkillSandboxArtifactService {
   ): Promise<ResolvedMyFile | MyFileResolutionError> {
     try {
       return {
+        fileId: file.id,
         data: await getFileBytesStorage().get(file),
         mimeType: file.mimeType,
         originalName: file.filename,

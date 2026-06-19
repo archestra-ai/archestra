@@ -77,6 +77,7 @@ export { default as conversationAttachmentsTable } from "./conversation-attachme
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
+export { default as conversationFileTouchesTable } from "./conversation-file-touch";
 export {
   conversationShareTeamsTable,
   conversationShareUsersTable,

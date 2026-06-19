@@ -162,6 +162,7 @@
     "@types/pg": "^8.18.0",
     "@types/ws": "^8.18.1",
     "@typescript/native-preview": "catalog:",
+    "esbuild": "^0.28.1",
     "knip": "^5.85.0",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",

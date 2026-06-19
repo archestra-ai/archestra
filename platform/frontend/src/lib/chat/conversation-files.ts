@@ -19,9 +19,9 @@ type FilesResponse =
 /**
  * Builds the Files-panel sections from the API payload plus the in-memory
  * markdown artifact. `artifact.md` is synthesized client-side and always sits
- * first in the Generated section. `myFiles` is everything the agent can
- * reach in persistent storage from this chat (project folder or personal
- * PFS), minus this conversation's own outputs.
+ * first in the Generated section. `referenced` is the pre-existing files the
+ * agent actually touched (read/edited) in this chat — not every file it could
+ * reach — minus this conversation's own outputs.
  */
 export function assembleFileSections(params: {
   files: FilesResponse;
@@ -29,9 +29,9 @@ export function assembleFileSections(params: {
 }): {
   generated: ConversationFileItem[];
   attachments: ConversationFileItem[];
-  myFiles: ConversationFileItem[];
-  /** Title for the myFiles section: the project's files in a project chat. */
-  myFilesTitle: string;
+  referenced: ConversationFileItem[];
+  /** Title for the referenced section: the project's files in a project chat. */
+  referencedTitle: string;
 } {
   const generated: ConversationFileItem[] = [];
 
@@ -65,20 +65,22 @@ export function assembleFileSections(params: {
     source: "attachment",
   }));
 
-  const myFiles: ConversationFileItem[] = (params.files?.myFiles ?? []).map(
-    (f) => ({
-      id: f.id,
-      name: f.name,
-      mimeType: f.mimeType,
-      contentUrl: f.contentUrl,
-      source: "my-file",
-    }),
-  );
+  const referenced: ConversationFileItem[] = (
+    params.files?.referenced ?? []
+  ).map((f) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    contentUrl: f.contentUrl,
+    source: "my-file",
+  }));
 
   return {
     generated,
     attachments,
-    myFiles,
-    myFilesTitle: params.files?.projectName ? "Project files" : "My Files",
+    referenced,
+    referencedTitle: params.files?.projectName
+      ? "Project files"
+      : "Referenced files",
   };
 }

@@ -591,6 +591,37 @@ describe("fileStore disk overlay (filesystem provider)", () => {
     expect(items.filter((i) => i.filename === "written.txt")).toHaveLength(1);
   });
 
+  test("update replaces a filesystem-backed file's bytes in place (edit_file)", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const file = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "edit.txt",
+      data: Buffer.from("v1"),
+    });
+    const onDisk = path.join(root, user.email, "edit.txt");
+    expect(await fs.readFile(onDisk, "utf8")).toBe("v1");
+
+    const updated = await fileStore.update({
+      file,
+      mimeType: "text/plain",
+      sizeBytes: 2,
+      data: Buffer.from("v2"),
+    });
+    expect(updated?.id).toBe(file.id); // same row id + filename, new bytes
+    expect(await fs.readFile(onDisk, "utf8")).toBe("v2");
+    const got = await fileStore.get({
+      ref: file.id,
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(got?.data.toString()).toBe("v2");
+  });
+
   test("a project rename does not move its files (folder is the immutable slug)", async ({
     makeUser,
     makeOrganization,

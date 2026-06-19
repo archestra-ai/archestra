@@ -93,6 +93,33 @@ describe("FilesystemObjectStore", () => {
     expect((await store.read("proj/a.txt")).toString()).toBe("first");
   });
 
+  test("write with overwrite replaces an existing object in place (edit)", async () => {
+    const scope = userScope("proj");
+    const { key } = await store.write({
+      scope,
+      name: "a.txt",
+      data: Buffer.from("first"),
+    });
+    const { key: key2 } = await store.write({
+      scope,
+      name: "a.txt",
+      data: Buffer.from("second"),
+      overwrite: true,
+    });
+    expect(key2).toBe(key); // same deterministic key, replaced in place
+    expect((await store.read(key)).toString()).toBe("second");
+  });
+
+  test("write with overwrite creates the object when absent", async () => {
+    const { key } = await store.write({
+      scope: userScope("proj"),
+      name: "new.txt",
+      data: Buffer.from("hi"),
+      overwrite: true,
+    });
+    expect((await store.read(key)).toString()).toBe("hi");
+  });
+
   test("read throws FileBytesMissingError for a missing object", async () => {
     await expect(store.read("proj/missing.txt")).rejects.toBeInstanceOf(
       FileBytesMissingError,

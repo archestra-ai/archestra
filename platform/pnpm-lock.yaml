@@ -458,8 +458,8 @@ importers:
         specifier: ^1.0.22
         version: 1.0.22
       undici:
-        specifier: 7.24.5
-        version: 7.24.5
+        specifier: 7.28.0
+        version: 7.28.0
       ws:
         specifier: '>=8.21.0'
         version: 8.21.0

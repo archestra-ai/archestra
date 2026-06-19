@@ -19,6 +19,10 @@ export const meta = {
   phases: [{ title: 'Map', detail: 'one Sonnet triage agent per rollout' }],
 }
 
+// The runtime may hand `args` to the script as a JSON string rather than a
+// parsed object; normalize so `input.rollouts` etc. always work.
+const input = typeof args === 'string' ? JSON.parse(args) : args
+
 const fill = (t, r) =>
   t
     .replaceAll('{ROLLOUT_ID}', r.id)
@@ -29,16 +33,16 @@ const pad = (i) => String(i).padStart(2, '0')
 
 phase('Map')
 const res = await parallel(
-  args.rollouts.map((r) => () =>
+  input.rollouts.map((r) => () =>
     agent(
-      fill(args.mapTemplate, r) +
+      fill(input.mapTemplate, r) +
         `\n\nDELIVERY OVERRIDE: Do NOT return the triage in your reply. Instead use the Write tool ` +
         `to save the triage verbatim (truncate to 6000 characters if longer) to ` +
-        `${args.triageDir}/${pad(r.idx)}.md, then reply only with "ok".`,
+        `${input.triageDir}/${pad(r.idx)}.md, then reply only with "ok".`,
       { label: r.id, model: 'sonnet', agentType: 'general-purpose', phase: 'Map' },
     ),
   ),
 )
 
-log(`map complete: ${res.filter(Boolean).length}/${args.rollouts.length} triage files written`)
-return { written: res.filter(Boolean).length, total: args.rollouts.length }
+log(`map complete: ${res.filter(Boolean).length}/${input.rollouts.length} triage files written`)
+return { written: res.filter(Boolean).length, total: input.rollouts.length }

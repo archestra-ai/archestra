@@ -2066,6 +2066,13 @@
       "when": 1781839440184,
       "tag": "0294_projects_and_scheduled_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1781872377363,
+      "tag": "0295_conversation_file_touches",
+      "breakpoints": true
     }
   ]
 }

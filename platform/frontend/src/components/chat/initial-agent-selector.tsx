@@ -276,14 +276,14 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             data-agent-selector
             className="max-w-[300px] min-w-0"
           >
-            <AgentIcon icon={currentAgent.icon} size={16} />
+            <AgentIcon icon={currentAgent?.icon} size={16} />
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
             {/* In "All tools" mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
-            {!currentAgent.accessAllTools && (
+            {!currentAgent?.accessAllTools && (
               <ToolServerAvatarGroup
                 catalogs={assignedCatalogs}
                 subagents={triggerSubagents}
@@ -1209,7 +1209,6 @@ function AddToolView({
       const tools = await fetchCatalogTools(catalog.id);
       if (tools.length === 0) return;
       const servers = allCredentials?.[catalog.id] ?? [];
-      const _isLocal = catalog.serverType === "local";
       const isBuiltin = catalog.serverType === "builtin";
       const credentialId = servers[0]?.id;
       await Promise.all(
@@ -1483,7 +1482,6 @@ function ConfigureToolView({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const _isLocal = catalog.serverType === "local";
       const toAdd = [...selectedToolIds].filter(
         (id) => !assignedToolIds.has(id),
       );

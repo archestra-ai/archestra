@@ -13,6 +13,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   ConversationAttachmentModel,
+  ConversationFileTouchModel,
   EnvironmentModel,
   FileModel,
   SkillSandboxConversationGoneError,
@@ -570,6 +571,26 @@ const registry = defineArchestraTools([
           "[Sandbox] file uploaded",
         );
 
+        // Pulling a persistent file into the sandbox is a "read" — record it so
+        // the chat Files panel shows the files the agent actually touched. The
+        // upload already succeeded, so this is best-effort: a failure is logged,
+        // not surfaced as a failed tool call.
+        if (loaded.sourceFileId && context.conversationId) {
+          const { conversationId } = context;
+          const { sourceFileId } = loaded;
+          void ConversationFileTouchModel.recordTouch({
+            organizationId: guard.userCtx.organizationId,
+            conversationId,
+            fileId: sourceFileId,
+            touchKind: "read",
+          }).catch((error) => {
+            logger.warn(
+              { error, conversationId, fileId: sourceFileId },
+              "[Sandbox] failed to record file touch",
+            );
+          });
+        }
+
         return structuredSuccessResult(
           { ...result },
           `Uploaded ${result.path} (${result.sizeBytes} bytes). It is now part of the sandbox and visible to every subsequent command.`,
@@ -1031,6 +1052,8 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
+  /** Set for my_file sources — the PFS file the agent pulled in, for touch tracking. */
+  sourceFileId?: string;
 }
 
 /**
@@ -1165,6 +1188,7 @@ async function loadUploadSource(params: {
         data: resolved.data,
         mimeType: resolved.mimeType,
         originalName: resolved.originalName,
+        sourceFileId: resolved.fileId,
       };
     }
   }

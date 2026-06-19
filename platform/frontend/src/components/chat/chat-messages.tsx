@@ -90,6 +90,7 @@ import {
   parsePolicyDenied,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
+  type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
 import {
@@ -105,8 +106,7 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
-import { AssignedCredentialUnavailableTool } from "./assigned-credential-unavailable-tool";
-import { AuthRequiredTool } from "./auth-required-tool";
+import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
   extractFileAttachments,
   extractOwnedAppRender,
@@ -121,7 +121,6 @@ import {
   EditableUserMessage,
   type FileAttachment,
 } from "./editable-user-message";
-import { ExpiredAuthTool } from "./expired-auth-tool";
 import { InlineChatError } from "./inline-chat-error";
 import { hasKnowledgeBaseToolCall } from "./knowledge-graph-citations";
 import { McpAppSection, type McpToolOutput } from "./mcp-app-container";
@@ -381,7 +380,11 @@ export function ChatMessages({
     () => filterOptimisticToolCalls(messages, optimisticToolCalls),
     [messages, optimisticToolCalls],
   );
-  const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
+  const [unsafeBoundaryEl, setUnsafeBoundaryEl] =
+    useState<HTMLDivElement | null>(null);
+  const unsafeBoundaryRef = useCallback((node: HTMLDivElement | null) => {
+    setUnsafeBoundaryEl(node);
+  }, []);
   const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
     useState(false);
 
@@ -397,7 +400,7 @@ export function ChatMessages({
   );
 
   useEffect(() => {
-    const boundaryElement = unsafeBoundaryRef.current;
+    const boundaryElement = unsafeBoundaryEl;
     if (!boundaryElement) {
       setShowStickyUnsafeIndicator(false);
       return;
@@ -431,7 +434,7 @@ export function ChatMessages({
       scrollContainer.removeEventListener("scroll", updateStickyState);
       window.removeEventListener("resize", updateStickyState);
     };
-  });
+  }, [unsafeBoundaryEl]);
 
   const assistantMessageCount = useMemo(
     () => messages.filter((m) => m.role === "assistant").length,
@@ -2628,6 +2631,103 @@ function isMessagePositionBefore(params: {
   return params.boundaryPartIndex < params.beforePartIndex;
 }
 
+function authCardProps(params: {
+  toolName: string;
+  authState: ToolAuthState | null;
+  onInstall?: () => void;
+  onReauth?: () => void;
+}): AuthErrorToolProps | null {
+  const { authState, toolName, onInstall, onReauth } = params;
+
+  switch (authState?.kind) {
+    case "auth-expired": {
+      const displayName = authState.catalogName || toolName || "this tool";
+      return {
+        title: "Expired / Invalid Authentication",
+        description: (
+          <>
+            Your credentials for &ldquo;{displayName}&rdquo; have expired or are
+            invalid. Re-authenticate to continue using this tool.
+          </>
+        ),
+        buttonText: onReauth ? "Re-authenticate" : "Manage credentials",
+        buttonUrl: authState.reauthUrl,
+        onAction: onReauth,
+        actionTooltipText: onReauth
+          ? `This will redirect you to ${displayName} to authorize access, then return you to this chat.`
+          : undefined,
+      };
+    }
+    case "assigned-credential-unavailable":
+      return {
+        title: "Expired / Invalid Authentication",
+        description: (
+          <>
+            credentials for &ldquo;{authState.catalogName}&rdquo; have expired
+            or are invalid. Re-authenticate to continue using this tool. Ask the
+            agent owner or an admin to re-authenticate.
+          </>
+        ),
+      };
+    case "auth-required": {
+      const isIdentityProviderConnect =
+        authState.action === "connect_identity_provider";
+      const providerName = authState.providerId ?? "identity provider";
+      return {
+        title: "Authentication Required",
+        description: isIdentityProviderConnect ? (
+          `Connect ${providerName}. This deployment can then request the downstream credential for "${authState.catalogName}".`
+        ) : (
+          <>
+            No credentials found for &ldquo;{authState.catalogName}&rdquo;. Set
+            up your credentials to use this tool.
+          </>
+        ),
+        buttonText: isIdentityProviderConnect
+          ? `Connect ${providerName}`
+          : "Set up credentials",
+        buttonUrl: authState.actionUrl,
+        onAction: isIdentityProviderConnect ? undefined : onInstall,
+        openInNewTab: !isIdentityProviderConnect,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+function resolveAuthActions(params: {
+  authState: ToolAuthState | null;
+  onInstallMcp?: (catalogId: string) => void;
+  onReauthMcp?: (catalogId: string, serverId: string) => void;
+}): { onInstall?: () => void; onReauth?: () => void } {
+  const { authState, onInstallMcp, onReauthMcp } = params;
+
+  if (authState?.kind === "auth-expired") {
+    const { catalogId, serverId } = authState;
+    return {
+      onReauth:
+        onReauthMcp && catalogId && serverId
+          ? () => onReauthMcp(catalogId, serverId)
+          : undefined,
+    };
+  }
+
+  if (authState?.kind === "auth-required") {
+    const { catalogId } = authState;
+    return {
+      onInstall:
+        authState.action === "install_mcp_credentials" &&
+        onInstallMcp &&
+        catalogId
+          ? () => onInstallMcp(catalogId)
+          : undefined,
+    };
+  }
+
+  return {};
+}
+
 function renderToolAuthPart(params: {
   toolName: string;
   authState: ReturnType<typeof resolveToolAuthState>;
@@ -2635,50 +2735,9 @@ function renderToolAuthPart(params: {
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
   const { authState, toolName, onInstallMcp, onReauthMcp } = params;
-
-  if (authState?.kind === "auth-expired") {
-    const { catalogId, serverId } = authState;
-    return (
-      <ExpiredAuthTool
-        toolName={toolName}
-        catalogName={authState.catalogName}
-        reauthUrl={authState.reauthUrl}
-        onReauth={
-          onReauthMcp && catalogId && serverId
-            ? () => onReauthMcp(catalogId, serverId)
-            : undefined
-        }
-      />
-    );
-  }
-
-  if (authState?.kind === "assigned-credential-unavailable") {
-    return (
-      <AssignedCredentialUnavailableTool catalogName={authState.catalogName} />
-    );
-  }
-
-  if (authState?.kind === "auth-required") {
-    const { catalogId } = authState;
-    return (
-      <AuthRequiredTool
-        toolName={toolName}
-        catalogName={authState.catalogName}
-        actionUrl={authState.actionUrl}
-        action={authState.action}
-        providerId={authState.providerId}
-        onInstall={
-          authState.action === "install_mcp_credentials" &&
-          onInstallMcp &&
-          catalogId
-            ? () => onInstallMcp(catalogId)
-            : undefined
-        }
-      />
-    );
-  }
-
-  return null;
+  const actions = resolveAuthActions({ authState, onInstallMcp, onReauthMcp });
+  const props = authCardProps({ toolName, authState, ...actions });
+  return props ? <AuthErrorTool {...props} /> : null;
 }
 
 function renderAssistantAuthPart(params: {
@@ -2687,45 +2746,7 @@ function renderAssistantAuthPart(params: {
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
-
-  if (authState?.kind === "auth-expired") {
-    const { catalogId, serverId } = authState;
-    return (
-      <ExpiredAuthTool
-        toolName={toolName}
-        catalogName={authState.catalogName}
-        reauthUrl={authState.reauthUrl}
-        onReauth={
-          onReauthMcp && catalogId && serverId
-            ? () => onReauthMcp(catalogId, serverId)
-            : undefined
-        }
-      />
-    );
-  }
-
-  if (authState?.kind === "auth-required") {
-    const { catalogId } = authState;
-    return (
-      <AuthRequiredTool
-        toolName={toolName}
-        catalogName={authState.catalogName}
-        actionUrl={authState.actionUrl}
-        action={authState.action}
-        providerId={authState.providerId}
-        onInstall={
-          authState.action === "install_mcp_credentials" &&
-          onInstallMcp &&
-          catalogId
-            ? () => onInstallMcp(catalogId)
-            : undefined
-        }
-      />
-    );
-  }
-
-  return null;
+  return renderToolAuthPart(params);
 }
 
 function hasMessageAuthToolError(message: UIMessage): boolean {

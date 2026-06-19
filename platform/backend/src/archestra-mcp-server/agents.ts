@@ -207,7 +207,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_AGENT_SHORT_NAME,
     title: "Create Agent",
-    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}, then pass them via toolAssignments / subAgentIds.`,
+    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
     schema: AgentCreateToolArgsSchema,
     async handler({ args, context }) {
       return handleCreateResource({
@@ -385,7 +385,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_AGENT_SHORT_NAME,
     title: "Edit Agent",
-    description: `Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}, then pass them via toolAssignments / subAgentIds.`,
+    description: `Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
     schema: EditAgentToolArgsSchema,
     async handler({ args, context }) {
       return handleEditResource({

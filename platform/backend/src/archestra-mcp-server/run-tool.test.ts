@@ -319,6 +319,194 @@ describe("run_tool", () => {
     ]);
   });
 
+  describe("short-name recovery", () => {
+    test("recovers a built-in short name and prepends a notice without altering the result", async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "whoami" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toEqual({
+        agentId: testAgent.id,
+        agentName: testAgent.name,
+      });
+      expect((result.content[0] as any).text).toContain("was interpreted as");
+      expect((result.content[0] as any).text).toContain(TOOL_WHOAMI_FULL_NAME);
+    });
+
+    test("recovers a bare third-party name to its full server__tool form", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "Third-party response" }],
+        isError: false,
+        structuredContent: { ok: true },
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search_repositories", tool_args: { query: "x" } },
+        mockContext,
+      );
+
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "github__search_repositories" }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toEqual({ ok: true });
+      expect((result.content[0] as any).text).toContain(
+        "github__search_repositories",
+      );
+      expect((result.content[1] as any).text).toBe("Third-party response");
+    });
+
+    test("refuses an ambiguous short name with the candidate list and does not dispatch", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const githubCatalog = await makeInternalMcpCatalog();
+      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubTool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: githubCatalog.id,
+      });
+      const gitlabTool = await makeTool({
+        name: "gitlab__search_repositories",
+        catalogId: gitlabCatalog.id,
+      });
+      await makeAgentTool(testAgent.id, githubTool.id);
+      await makeAgentTool(testAgent.id, gitlabTool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search_repositories" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ambiguous");
+      expect((result.content[0] as any).text).toContain(
+        "github__search_repositories",
+      );
+      expect((result.content[0] as any).text).toContain(
+        "gitlab__search_repositories",
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
+    test("narrows ambiguous matches to the conversation's enabled tools", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const githubCatalog = await makeInternalMcpCatalog();
+      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubTool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: githubCatalog.id,
+      });
+      const gitlabTool = await makeTool({
+        name: "gitlab__search_repositories",
+        catalogId: gitlabCatalog.id,
+      });
+      await makeAgentTool(testAgent.id, githubTool.id);
+      await makeAgentTool(testAgent.id, gitlabTool.id);
+      // Custom per-conversation selection enables only the github tool, so the
+      // bare name is no longer ambiguous — it recovers to the enabled one.
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        githubTool.id,
+      ]);
+
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "Third-party response" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search_repositories" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "github__search_repositories" }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect((result.content[0] as any).text).toContain(
+        "github__search_repositories",
+      );
+    });
+
+    test("a built-in short name wins over a colliding third-party tool", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+      const catalog = await makeInternalMcpCatalog();
+      const colliding = await makeTool({
+        name: "someserver__whoami",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, colliding.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "whoami" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toEqual({
+        agentId: testAgent.id,
+        agentName: testAgent.name,
+      });
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
+    test("leaves an unknown bare name to the unavailable recovery without a notice", async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "definitely_not_a_real_tool" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "definitely_not_a_real_tool",
+      );
+      expect((result.content[0] as any).text).not.toContain(
+        "was interpreted as",
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+  });
+
   describe("unassigned tool dispatch (dynamic tool access)", () => {
     let dynamicAgent: Agent;
     let dynamicContext: ArchestraContext;

@@ -10,17 +10,16 @@ import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
-import { agentOwner } from "@/types";
+import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
+import { resolveDynamicTool, resolveRunToolTargetName } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
 } from "./helpers";
-import { resolveRunToolTargetName, resolveToolGrant } from "./tool-auto-assign";
 import {
-  toolNotAssignedAskAdminMessage,
   toolNotEnabledForConversationMessage,
   unavailableThirdPartyToolMessage,
 } from "./tool-recovery-messages";
@@ -48,7 +47,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. If you call a tool the user can access but the agent does not have yet, the user is asked to confirm adding it (or told to ask an admin) before it runs — it is not assigned silently; target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, invocation policies, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -63,8 +62,6 @@ const registry = defineArchestraTools([
           ? "archestra"
           : "third-party";
 
-      // Shared with the grant check (isToolGrantApprovable) so dispatch and the
-      // chat grant approval resolve a target name the same way.
       const resolvedName = resolveRunToolTargetName(requestedName);
 
       logger.info(
@@ -134,16 +131,15 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Gate dispatch on the assigned-tool set. An unassigned tool is never run
-      // silently: discovery widens the search space to tools the user can access,
-      // but actually putting one on the agent goes through the grant flow (chat
-      // proposes it, the user confirms, the assign endpoint writes it, then this
-      // call resumes with the tool assigned). So a miss here means the tool was
-      // not granted (or there is no UI to propose it): steer the user. The set is
+      // Gate dispatch on the assigned-tool set, then fall back to dynamic
+      // access: when the agent's "access all tools" setting is on, a tool the
+      // user can access runs directly with call-time credential resolution —
+      // nothing is written to the agent. A miss on both means the tool does
+      // not exist for this user: steer the model at search_tools. The set is
       // reused by the policy gate below so it is fetched only once.
-      const assignedToolNames = await ToolModel.getAssignedToolNames(
-        context.agentId,
-      );
+      const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+      const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
+      let availableTool: Tool | null = null;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
         // agent's assigned tools, so an unassigned tool can never be enabled in
@@ -151,32 +147,34 @@ const registry = defineArchestraTools([
         if (await checkConversationGate(resolvedName)) {
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
-        const grant = await resolveToolGrant({
+        availableTool = await resolveDynamicTool({
           toolName: resolvedName,
           agentId: context.agentId,
           userId: context.userId,
           organizationId: context.organizationId,
         });
         logger.info(
-          { agentId: context.agentId, requestedName, resolvedName, grant },
+          {
+            agentId: context.agentId,
+            requestedName,
+            resolvedName,
+            dynamicallyResolved: availableTool != null,
+          },
           `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
         );
-        // "ask an admin" when the user cannot assign it; otherwise the generic
-        // recovery (the grant approval already handles the can-assign case
-        // before execution, so reaching here means it was not granted).
-        return errorResult(
-          grant === "forbidden"
-            ? toolNotAssignedAskAdminMessage(resolvedName)
-            : unavailableThirdPartyToolMessage(resolvedName),
-        );
+        if (!availableTool) {
+          return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
+      } else {
+        // The tool is assigned — enforce the per-conversation selection.
+        const gateError = await checkConversationGate(resolvedName);
+        if (gateError) return gateError;
       }
-
-      // The tool exists and is assigned — enforce the per-conversation selection.
-      const gateError = await checkConversationGate(resolvedName);
-      if (gateError) return gateError;
 
       const toolInput = args.tool_args ?? {};
       // Reuse the set computed above so the policy gate does not re-query it.
+      // A dynamically resolved tool is appended so the evaluator does not
+      // refuse it as "disabled" — invocation policies still evaluate it.
       const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
         agentId: context.agentId,
         toolName: resolvedName,
@@ -184,10 +182,42 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
         enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-        enabledToolNames: assignedToolNames,
+        enabledToolNames: availableTool
+          ? new Set([...assignedToolNames, resolvedName])
+          : assignedToolNames,
       });
       if (policyBlock) {
         return errorResult(policyBlock.refusalMessage);
+      }
+
+      // Cheap structural pre-check against the target's stored schema. Runs only
+      // after access + invocation policy passed, and never dispatches a call we
+      // can prove malformed (a "send"/"create" tool would still act on partial
+      // args). On failure the model gets the full schema — the targeted feedback
+      // the compact search_tools signature defers to. Deliberately shallow: only
+      // a literal top-level `required` and a closed `additionalProperties:false`
+      // are enforced, so refs/composed schemas fall through to the upstream
+      // server unchanged.
+      // Dynamic dispatch passes availableTool straight through, so its schema is
+      // exactly what runs. For the assigned path the gateway re-resolves by name
+      // at dispatch with no defined ordering, so when duplicate rows share the
+      // name we cannot know which schema will run — skip the pre-check rather
+      // than risk validating against the wrong row.
+      const assignedMatches = assignedTools.filter(
+        (tool) => tool.name === resolvedName,
+      );
+      const targetSchema = availableTool
+        ? availableTool.parameters
+        : assignedMatches.length === 1
+          ? assignedMatches[0].parameters
+          : undefined;
+      const schemaError = checkThirdPartyToolArgs({
+        toolName: resolvedName,
+        toolArgs: toolInput,
+        schema: targetSchema,
+      });
+      if (schemaError) {
+        return schemaError;
       }
 
       const { default: mcpClient } = await import("@/clients/mcp-client");
@@ -205,7 +235,14 @@ const registry = defineArchestraTools([
         // mcp-client scopes per-conversation sessions (e.g. browser contexts)
         // by this key; headless executions use their isolation key so
         // concurrent runs never share a session and cleanup can close it.
-        { conversationId: context.isolationKey ?? context.conversationId },
+        // availableTool lets a tool the agent has no assignment for execute in
+        // "All tools" mode; it is only ever set after the dynamic-access gates
+        // above passed, and the MCP server's connection policy still decides
+        // which credential the call uses.
+        {
+          conversationId: context.isolationKey ?? context.conversationId,
+          availableTool: availableTool ?? undefined,
+        },
       );
 
       const callToolResult: CallToolResult = {
@@ -225,3 +262,70 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+// ===== Internal helpers =====
+
+/**
+ * Shallow structural validation of a third-party tool's `tool_args` against its
+ * stored JSON schema. Returns a schema-bearing error result when the call is
+ * provably malformed, else null. Intentionally minimal — no JSON Schema engine:
+ *  - rejects a missing key named in a literal top-level `required: string[]`;
+ *  - rejects an unknown top-level key only when the schema literally sets
+ *    `additionalProperties: false` and exposes a literal top-level `properties`.
+ * Anything else (`$ref`, `allOf`, types, enums, nested constraints) is left to
+ * the upstream MCP server, so a schema shape we cannot read never blocks a call.
+ */
+function checkThirdPartyToolArgs(params: {
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+  schema: unknown;
+}): CallToolResult | null {
+  const { schema, toolArgs, toolName } = params;
+  if (!isRecord(schema)) {
+    return null;
+  }
+
+  const problems: string[] = [];
+
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === "string")
+    : [];
+  for (const key of required) {
+    if (!(key in toolArgs)) {
+      problems.push(`missing required parameter "${key}"`);
+    }
+  }
+
+  // Unknown-key check only when the schema is literally closed and names its
+  // keys via `properties`. `patternProperties` also admits keys, so its presence
+  // disables this branch to avoid rejecting a key it would have matched.
+  const properties = isRecord(schema.properties) ? schema.properties : null;
+  const hasPatternProperties =
+    isRecord(schema.patternProperties) &&
+    Object.keys(schema.patternProperties).length > 0;
+  if (
+    schema.additionalProperties === false &&
+    properties &&
+    !hasPatternProperties
+  ) {
+    for (const key of Object.keys(toolArgs)) {
+      if (!(key in properties)) {
+        problems.push(`unexpected parameter "${key}"`);
+      }
+    }
+  }
+
+  if (problems.length === 0) {
+    return null;
+  }
+
+  return errorResult(
+    `Invalid tool_args for "${toolName}": ${problems.join("; ")}. ` +
+      "Put each of the target tool's parameters inside tool_args. " +
+      `The tool's full input schema is:\n${JSON.stringify(schema, null, 2)}`,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

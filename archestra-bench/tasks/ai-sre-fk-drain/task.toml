@@ -1,7 +1,7 @@
 [[stages]]
 text = """You are on call. A backend service is intermittently **restarting under load**. Attached to this chat is the on-call dump for the incident: a zip of unsorted logs -- several interleaved JSON-line log files from different sources (backend, a background worker, the MCP gateway, and pod events), not sorted by time.
 
-Pinpoint the single root cause of the restarts. The logs contain unrelated errors and noise (red herrings); identify which one actually crashes the process. Then call submit_result with:
+Pinpoint the single root cause of the restarts -- which error actually crashes the process. Then call submit_result with:
 
 - `root_cause_component`: the component at fault, exactly one of:
   `chat-active-run-drain`, `mcp-gateway-auth-cache`, `user-token-model`, `llm-proxy-adapter`, `k8s-network-policy`, `context-compaction`.

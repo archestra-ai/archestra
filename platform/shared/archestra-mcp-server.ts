@@ -427,8 +427,8 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 /**
  * Code-execution sandbox tools. Gated by `sandbox:execute` and only seeded when
  * the sandbox feature is on; unlike other built-ins they participate in the
- * `search_tools`/`run_tool` first-use auto-assignment relaxation (see
- * `tool-auto-assign.ts`) so a user with `sandbox:execute` can reach them without
+ * `search_tools`/`run_tool` dynamic tool access relaxation (see
+ * `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them without
  * a manual assignment.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [

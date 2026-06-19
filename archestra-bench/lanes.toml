@@ -9,9 +9,9 @@
 #   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
 
 [[lane]]
-name = "or-poolside"
+name = "or-nex"
 provider = "openrouter"
-model = "poolside/laguna-m.1:free"
+model = "nex-agi/nex-n2-pro:free"
 
 [[lane]]
 name = "or-owl"
@@ -19,9 +19,14 @@ provider = "openrouter"
 model = "openrouter/owl-alpha"
 
 [[lane]]
-name = "minimax"
+name = "minimax-3"
 provider = "openrouter"
 model = "minimax/minimax-m3"
+
+[[lane]]
+name = "minimax-27"
+provider = "openrouter"
+model = "minimax/minimax-m2.7"
 
 [[lane]]
 name = "kimi"
@@ -33,6 +38,13 @@ api_key_env = "KIMI_API_KEY"
 [[lane]]
 name = "glm"
 provider = "anthropic"
-model = "glm-5.1"
+model = "glm-5.2"
+base_url = "https://api.z.ai/api/anthropic"
+api_key_env = "ZAI_API_KEY"
+
+[[lane]]
+name = "glm-flash"
+provider = "anthropic"
+model = "glm-4.5-air"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"

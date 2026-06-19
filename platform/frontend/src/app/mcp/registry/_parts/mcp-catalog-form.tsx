@@ -113,7 +113,10 @@ const ExternalSecretSelector = lazy(
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-  onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
+  onSubmit: (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => void | Promise<void>;
   footer?:
     | React.ReactNode
     | ((opts: {
@@ -264,7 +267,9 @@ export function McpCatalogForm({
   // Expose imperative submit to parent
   useEffect(() => {
     if (submitRef) {
-      submitRef.current = form.handleSubmit(onSubmit) as () => Promise<void>;
+      submitRef.current = form.handleSubmit((values) =>
+        onSubmit(values, form),
+      ) as () => Promise<void>;
     }
     return () => {
       if (submitRef) submitRef.current = null;
@@ -817,7 +822,7 @@ export function McpCatalogForm({
     // Save any unsaved label before submitting
     const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
     const submittedValues = { ...values, labels: updatedLabels };
-    await onSubmit(submittedValues);
+    await onSubmit(submittedValues, form);
     // Reset baselines to what was just submitted so isDirty becomes false.
     // initialValues from the parent may not change reference after save
     // (TanStack Query structural sharing), and secret values are stored

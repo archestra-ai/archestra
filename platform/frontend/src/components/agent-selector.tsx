@@ -29,6 +29,7 @@ export type AgentSelectorAgent = {
   scope?: "personal" | "team" | "org";
   authorName?: string | null;
   authorEmail?: string | null;
+  description?: string | null;
   teams?: Array<{ name: string }>;
 };
 
@@ -460,7 +461,7 @@ function AgentSelectorItem({
       onSelect={() => onSelect(agent.id)}
       className="justify-between"
     >
-      <AgentSelectorRow agent={agent} />
+      <AgentSelectorRow agent={agent} showDescription />
       <Check
         className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")}
       />
@@ -468,8 +469,19 @@ function AgentSelectorItem({
   );
 }
 
-function AgentSelectorRow({ agent }: { agent: AgentSelectorAgent }) {
+function AgentSelectorRow({
+  agent,
+  showDescription = false,
+}: {
+  agent: AgentSelectorAgent;
+  /**
+   * Render the agent description as a secondary line — used in the dropdown
+   * list, but not the (compact) trigger button so a selected value stays short.
+   */
+  showDescription?: boolean;
+}) {
   const owner = getOwnerLabel(agent);
+  const description = showDescription ? agent.description?.trim() : null;
 
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -480,8 +492,13 @@ function AgentSelectorRow({ agent }: { agent: AgentSelectorAgent }) {
       />
       <span className="min-w-0 flex-1">
         <span className="block truncate">{agent.name}</span>
-        {owner && (
+        {description && (
           <span className="block truncate text-xs text-muted-foreground">
+            {description}
+          </span>
+        )}
+        {owner && (
+          <span className="block truncate text-xs text-muted-foreground/70">
             {owner}
           </span>
         )}

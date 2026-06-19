@@ -36,6 +36,7 @@ export function SchedulePicker({ form, name }: SchedulePickerProps) {
                 onChange={field.onChange}
                 presets={DEFAULT_CRON_PRESET_OPTIONS}
                 descriptionFallback="Cron expression for sync schedule."
+                className="w-full"
               />
             </div>
           </FormControl>

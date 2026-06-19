@@ -10906,6 +10906,7 @@ export type GetAgentsResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -11015,6 +11016,7 @@ export type CreateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        accessAllTools?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11144,6 +11146,7 @@ export type CreateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11348,6 +11351,7 @@ export type GetAllAgentsResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11527,6 +11531,7 @@ export type GetDefaultMcpGatewayResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11706,6 +11711,7 @@ export type GetDefaultLlmProxyResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11813,6 +11819,7 @@ export type ImportAgentData = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools?: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -11963,6 +11970,7 @@ export type ImportAgentResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -12235,6 +12243,7 @@ export type GetAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12335,6 +12344,7 @@ export type UpdateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        accessAllTools?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12466,6 +12476,7 @@ export type UpdateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12647,6 +12658,7 @@ export type CloneAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12831,6 +12843,7 @@ export type ExportAgentResponses = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -12988,6 +13001,7 @@ export type RestoreAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -13806,93 +13820,6 @@ export type AssignToolToAgentResponses = {
 };
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
-
-export type GrantToolToAgentData = {
-    body: {
-        toolName: string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/tools/grant';
-};
-
-export type GrantToolToAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GrantToolToAgentError = GrantToolToAgentErrors[keyof GrantToolToAgentErrors];
-
-export type GrantToolToAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type GrantToolToAgentResponse = GrantToolToAgentResponses[keyof GrantToolToAgentResponses];
 
 export type BulkAssignToolsData = {
     body: {
@@ -21408,6 +21335,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -21425,6 +21353,7 @@ export type GetChatConversationsResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21568,6 +21497,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -21585,6 +21515,7 @@ export type CreateChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21809,6 +21740,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -21826,6 +21758,7 @@ export type GetChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21972,6 +21905,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -21989,6 +21923,7 @@ export type UpdateChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22488,6 +22423,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -22505,6 +22441,7 @@ export type ForkChatConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22748,6 +22685,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             projectId: string | null;
+            origin: 'user' | 'schedule_trigger';
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -22765,6 +22703,7 @@ export type CompactChatConversationResponses = {
                 visibility: 'organization' | 'team' | 'user';
             } | null;
             projectName?: string | null;
+            projectIcon?: string | null;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
@@ -23178,6 +23117,7 @@ export type GetSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23195,6 +23135,7 @@ export type GetSharedConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23337,6 +23278,7 @@ export type ForkSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23354,6 +23296,7 @@ export type ForkSharedConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23498,6 +23441,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23515,6 +23459,7 @@ export type GenerateChatConversationTitleResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -23658,6 +23603,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23675,6 +23621,7 @@ export type UpdateChatMessageResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -25513,6 +25460,7 @@ export type GetConfigResponses = {
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
             projectsEnabled: boolean;
+            dynamicToolAccessEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -36130,6 +36078,7 @@ export type GetInternalMcpCatalogResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36262,6 +36211,7 @@ export type CreateInternalMcpCatalogItemData = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant?: boolean;
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -36458,6 +36408,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36751,6 +36702,7 @@ export type GetInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36880,6 +36832,7 @@ export type UpdateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -37077,6 +37030,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -42854,12 +42808,14 @@ export type GetLlmOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -42871,11 +42827,13 @@ export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLl
 export type CreateLlmOauthClientData = {
     body: {
         name: string;
-        allowedLlmProxyIds: Array<string>;
-        providerApiKeys: Array<{
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedLlmProxyIds?: Array<string>;
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        redirectUris?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -42956,12 +42914,14 @@ export type CreateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -43059,11 +43019,13 @@ export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof D
 export type UpdateLlmOauthClientData = {
     body: {
         name: string;
-        allowedLlmProxyIds: Array<string>;
-        providerApiKeys: Array<{
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedLlmProxyIds?: Array<string>;
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        redirectUris?: Array<string>;
     };
     path: {
         id: string;
@@ -43146,12 +43108,14 @@ export type UpdateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -43243,12 +43207,14 @@ export type RotateLlmOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44066,7 +44032,9 @@ export type GetMcpOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44078,7 +44046,9 @@ export type GetMcpOauthClientsResponse = GetMcpOauthClientsResponses[keyof GetMc
 export type CreateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -44159,7 +44129,9 @@ export type CreateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44257,7 +44229,9 @@ export type DeleteMcpOauthClientResponse = DeleteMcpOauthClientResponses[keyof D
 export type UpdateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path: {
         id: string;
@@ -44340,7 +44314,9 @@ export type UpdateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44432,7 +44408,9 @@ export type RotateMcpOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -48808,7 +48786,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
         issuer: string;
         authorization_endpoint: string;
         token_endpoint: string;
-        registration_endpoint: string;
+        registration_endpoint?: string;
         jwks_uri: string;
         response_types_supported: Array<string>;
         grant_types_supported: Array<string>;
@@ -53852,6 +53830,7 @@ export type GetProjectsResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -53865,6 +53844,7 @@ export type CreateProjectData = {
     body: {
         name: string;
         description?: string | null;
+        icon?: string | null;
     };
     path?: never;
     query?: never;
@@ -53944,6 +53924,7 @@ export type CreateProjectResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -54120,6 +54101,7 @@ export type GetProjectResponses = {
         id: string;
         name: string;
         description: string | null;
+        icon: string | null;
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
@@ -54132,7 +54114,9 @@ export type GetProjectResponse = GetProjectResponses[keyof GetProjectResponses];
 
 export type UpdateProjectData = {
     body: {
-        description: string | null;
+        name?: string;
+        description?: string | null;
+        icon?: string | null;
     };
     path: {
         id: string;
@@ -54480,6 +54464,7 @@ export type GetProjectConversationsResponses = {
         title: string | null;
         authorUserId: string;
         authorName: string | null;
+        origin: 'user' | 'schedule_trigger';
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
@@ -54498,6 +54483,7 @@ export type GetScheduleTriggersData = {
         name?: string;
         actorUserIds?: string;
         agentIds?: string;
+        projectId?: string;
         showAll?: boolean;
     };
     url: '/api/schedule-triggers';
@@ -54578,6 +54564,7 @@ export type GetScheduleTriggersResponses = {
             organizationId: string;
             name: string;
             agentId: string;
+            projectId: string | null;
             messageTemplate: string;
             cronExpression: string;
             timezone: string;
@@ -54612,7 +54599,8 @@ export type GetScheduleTriggersResponse = GetScheduleTriggersResponses[keyof Get
 export type CreateScheduleTriggerData = {
     body: {
         name: string;
-        agentId: string;
+        agentId?: string;
+        projectId?: string;
         enabled?: boolean;
         cronExpression: string;
         timezone: string;
@@ -54697,6 +54685,7 @@ export type CreateScheduleTriggerResponses = {
         organizationId: string;
         name: string;
         agentId: string;
+        projectId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -54887,6 +54876,7 @@ export type GetScheduleTriggerResponses = {
         organizationId: string;
         name: string;
         agentId: string;
+        projectId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -54913,6 +54903,7 @@ export type UpdateScheduleTriggerData = {
     body: {
         name?: string;
         agentId?: string;
+        projectId?: string;
         enabled?: boolean;
         cronExpression?: string;
         timezone?: string;
@@ -54999,6 +54990,7 @@ export type UpdateScheduleTriggerResponses = {
         organizationId: string;
         name: string;
         agentId: string;
+        projectId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55104,6 +55096,7 @@ export type EnableScheduleTriggerResponses = {
         organizationId: string;
         name: string;
         agentId: string;
+        projectId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55209,6 +55202,7 @@ export type DisableScheduleTriggerResponses = {
         organizationId: string;
         name: string;
         agentId: string;
+        projectId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55630,6 +55624,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -55647,6 +55642,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             visibility: 'organization' | 'team' | 'user';
         } | null;
         projectName?: string | null;
+        projectIcon?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;

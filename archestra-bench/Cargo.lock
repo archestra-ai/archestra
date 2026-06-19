@@ -96,6 +96,7 @@ version = "0.1.0"
 dependencies = [
  "archestra_bench",
  "clap",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

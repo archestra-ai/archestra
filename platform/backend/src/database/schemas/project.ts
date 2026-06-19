@@ -26,9 +26,11 @@ const projectsTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    /** Validated display name; immutable in v1. */
+    /** Validated display name; editable by the owner (unique per user). */
     name: text("name").notNull(),
     description: text("description"),
+    /** Emoji character or base64-encoded image data URL, like agents/catalog. */
+    icon: text("icon"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },

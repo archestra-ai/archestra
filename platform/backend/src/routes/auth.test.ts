@@ -972,6 +972,58 @@ describe("auth routes", () => {
       expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
     });
   });
+
+  describe("dynamic client registration toggle", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    test("rejects dynamic client registration when DCR is disabled", async () => {
+      config.auth.dynamicClientRegistrationEnabled = false;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Self Registered",
+          redirect_uris: ["https://app.example.com/callback"],
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toBe("access_denied");
+      // The request must never reach better-auth's registration handler.
+      expect(vi.mocked(betterAuth.handler)).not.toHaveBeenCalled();
+    });
+
+    test("forwards dynamic client registration to better-auth when DCR is enabled", async () => {
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "mcp_dcr_generated" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Self Registered",
+          redirect_uris: ["https://app.example.com/callback"],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(vi.mocked(betterAuth.handler)).toHaveBeenCalled();
+    });
+  });
 });
 
 async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {

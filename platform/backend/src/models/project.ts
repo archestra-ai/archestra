@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertProject, Project } from "@/types";
+import type { ConversationOrigin, InsertProject, Project } from "@/types";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -51,14 +51,30 @@ class ProjectModel {
     return row ?? null;
   }
 
-  static async updateDescription(params: {
+  /**
+   * Update the owner-editable fields. Only the keys present in `fields` are
+   * written, so a caller can change name, description, and/or icon
+   * independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   */
+  static async update(params: {
     id: string;
-    description: string | null;
+    fields: {
+      name?: string;
+      description?: string | null;
+      icon?: string | null;
+    };
   }): Promise<void> {
-    await db
-      .update(schema.projectsTable)
-      .set({ description: params.description, updatedAt: new Date() })
-      .where(eq(schema.projectsTable.id, params.id));
+    try {
+      await db
+        .update(schema.projectsTable)
+        .set({ ...params.fields, updatedAt: new Date() })
+        .where(eq(schema.projectsTable.id, params.id));
+    } catch (error) {
+      if (isUniqueViolation(error) && params.fields.name !== undefined) {
+        throw new ProjectNameExistsError(params.fields.name);
+      }
+      throw error;
+    }
   }
 
   static async delete(id: string): Promise<void> {
@@ -94,6 +110,7 @@ class ProjectModel {
       title: string | null;
       authorUserId: string;
       authorName: string | null;
+      origin: ConversationOrigin;
       lastMessageAt: Date;
       createdAt: Date;
     }[]
@@ -104,6 +121,7 @@ class ProjectModel {
         title: schema.conversationsTable.title,
         authorUserId: schema.conversationsTable.userId,
         authorName: schema.usersTable.name,
+        origin: schema.conversationsTable.origin,
         lastMessageAt: schema.conversationsTable.lastMessageAt,
         createdAt: schema.conversationsTable.createdAt,
       })

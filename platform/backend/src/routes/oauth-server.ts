@@ -89,7 +89,8 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             issuer: z.string(),
             authorization_endpoint: z.string(),
             token_endpoint: z.string(),
-            registration_endpoint: z.string(),
+            // Omitted when dynamic client registration is disabled.
+            registration_endpoint: z.string().optional(),
             jwks_uri: z.string(),
             response_types_supported: z.array(z.string()),
             grant_types_supported: z.array(z.string()),
@@ -123,7 +124,12 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         issuer,
         authorization_endpoint: `${browserBaseUrl}${OAUTH_ENDPOINTS.authorize}`,
         token_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.token}`,
-        registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
+        // Only advertise DCR when it is enabled.
+        ...(config.auth.dynamicClientRegistrationEnabled
+          ? {
+              registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
+            }
+          : {}),
         jwks_uri: `${baseUrl}${OAUTH_ENDPOINTS.jwks}`,
         response_types_supported: ["code"],
         grant_types_supported: [
@@ -139,7 +145,9 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
         code_challenge_methods_supported: ["S256"],
         scopes_supported: [...OAUTH_SCOPES],
-        client_id_metadata_document_supported: true,
+        // CIMD auto-registration is gated behind the same DCR toggle.
+        client_id_metadata_document_supported:
+          config.auth.dynamicClientRegistrationEnabled,
       };
     },
   );

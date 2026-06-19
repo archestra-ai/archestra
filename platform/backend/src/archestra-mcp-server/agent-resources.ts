@@ -102,6 +102,12 @@ export const CreateBaseToolArgsSchema = z
     toolExposureMode: ToolExposureModeSchema.optional().describe(
       "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and app tools (create_app, update_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes.",
     ),
+    accessAllTools: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings.",
+      ),
   })
   .strict();
 
@@ -149,6 +155,11 @@ export const AgentDetailOutputSchema = z.object({
   toolExposureMode: ToolExposureModeSchema.describe(
     "How tools are loaded for MCP clients and models.",
   ),
+  accessAllTools: z
+    .boolean()
+    .describe(
+      "Whether search_tools/run_tool may dynamically access every tool the calling user can access.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -195,6 +206,7 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    accessAllTools?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -270,6 +282,9 @@ export async function handleCreateResource<
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.accessAllTools !== undefined) {
+      createParams.accessAllTools = args.accessAllTools;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -445,6 +460,7 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    accessAllTools?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -501,6 +517,9 @@ export async function handleEditResource<
     if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.accessAllTools !== undefined) {
+      updateData.accessAllTools = args.accessAllTools;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

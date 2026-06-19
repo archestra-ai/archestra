@@ -152,6 +152,12 @@ const EditAgentToolArgsSchema = z
         toolExposureMode: ToolExposureModeSchema.optional().describe(
           "How tools should be loaded for MCP clients and models.",
         ),
+        accessAllTools: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent.",
+          ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
           .optional()

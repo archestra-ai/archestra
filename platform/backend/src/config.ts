@@ -871,6 +871,15 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    /**
+     * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+     * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
+     * pre-registered OAuth clients (e.g. manually registered MCP OAuth clients) to
+     * run OAuth flows — runtime self-registration is then rejected. Instance-level
+     * because unauthenticated DCR has no org to scope a per-org toggle to.
+     */
+    dynamicClientRegistrationEnabled:
+      process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
   },
   analytics: getAnalyticsConfig(),
   database: {
@@ -1245,6 +1254,16 @@ const config = {
    */
   projects: {
     enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
+  },
+  /**
+   * Dynamic tool access UI. Ships dark: off by default until ready to surface.
+   * Gates the per-agent "All / Custom" tools selector and the per-server
+   * "Agent connections" (on-behalf-of vs pinned service account) selector. The
+   * backend still honors a stored access_all_tools flag and the per-server
+   * connection policy; this only controls whether those controls are exposed.
+   */
+  dynamicToolAccess: {
+    enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

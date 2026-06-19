@@ -1,5 +1,5 @@
 [[stages]]
-text = """scikit-image used to ship a classic "Lena" sample image in its data module, before removing it for licensing reasons. Find that exact file as scikit-image shipped it, and report its file size in kilobytes rounded down, where 1 KB = 1024 bytes -- i.e. floor(byte_size / 1024). Submit your answer with result = {"size_kb": <integer>}."""
+text = """scikit-image used to ship a classic "Lena" sample image in its data module, before removing it for licensing reasons. Find that exact file as scikit-image shipped it, and report its file size in kilobytes rounded down, where 1 KB = 1024 bytes (floor). Submit your answer with result = {"size_kb": <integer>}."""
 
 [result_schema]
 type = "object"

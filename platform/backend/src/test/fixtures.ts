@@ -646,6 +646,7 @@ async function makeInternalMcpCatalog(
       | "scope"
       | "teams"
       | "clonedFrom"
+      | "environmentId"
     >
   > & {
     organizationId?: string;

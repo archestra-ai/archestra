@@ -280,13 +280,18 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            <ToolServerAvatarGroup
-              catalogs={assignedCatalogs}
-              subagents={triggerSubagents}
-              connectorTypes={agentConnectorTypes}
-              showAddButton={canEditCurrentAgent}
-              onAdd={handleAddTool}
-            />
+            {/* In "All tools" mode the agent reaches everything dynamically,
+                so the per-server avatar group + its tool selector are
+                meaningless — hide them. */}
+            {!currentAgent.accessAllTools && (
+              <ToolServerAvatarGroup
+                catalogs={assignedCatalogs}
+                subagents={triggerSubagents}
+                connectorTypes={agentConnectorTypes}
+                showAddButton={canEditCurrentAgent}
+                onAdd={handleAddTool}
+              />
+            )}
           </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent
@@ -610,6 +615,7 @@ function AgentSettingsView({
     connectorIds?: string[];
     createdAt?: string;
     authorName?: string | null;
+    accessAllTools?: boolean;
   } | null;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
@@ -819,110 +825,126 @@ function AgentSettingsView({
           height="120px"
         />
 
-        <div>
-          <Label className="mb-1.5">Tools and subagents</Label>
-          <AssignedToolsGrid
-            agentId={agent.id}
-            onAddTool={onAddTool}
-            onEditTool={onEditTool}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <Label>Knowledge sources</Label>
+        {agent?.accessAllTools ? (
+          <div>
+            <Label className="mb-1.5">Tools &amp; Knowledge Sources</Label>
+            <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              This agent uses{" "}
+              <span className="font-medium text-foreground">All tools</span> —
+              every MCP tool and knowledge source the chatting user can access,
+              discovered on demand.
+            </p>
           </div>
-          {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
-            <button
-              type="button"
-              onClick={onEditKnowledgeSources}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
-            >
-              <Database className="size-4" />
-              <span className="text-xs font-medium">Add knowledge sources</span>
-            </button>
-          ) : (
-            <div className="space-y-2">
-              {matchedKbs.map((kb) => {
-                const connectors = kb.connectors ?? [];
-                const connectorTypes = [
-                  ...new Set(connectors.map((c) => c.connectorType)),
-                ];
-                return (
-                  <div
-                    key={kb.id}
-                    className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
-                  >
-                    <span className="text-sm font-medium truncate">
-                      {kb.name}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {connectorTypes.length > 0 && (
-                        <OverlappedIcons
-                          icons={connectorTypes.map((type) => ({
-                            key: type,
-                            icon: (
-                              <ConnectorTypeIcon
-                                type={type}
-                                className="h-full w-full"
-                              />
-                            ),
-                            tooltip: type,
-                          }))}
-                          maxVisible={3}
-                          size="sm"
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                        onClick={() => handleRemoveKnowledgeBase(kb.id)}
-                        title={`Remove ${kb.name}`}
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {matchedConnectors.map((connector) => (
-                <div
-                  key={connector.id}
-                  className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
-                >
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-4 w-4 shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="truncate block">{connector.name}</span>
-                    {connector.description && (
-                      <span className="truncate block text-xs text-muted-foreground">
-                        {connector.description}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                    onClick={() => handleRemoveConnector(connector.id)}
-                    title={`Remove ${connector.name}`}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </div>
-              ))}
+        ) : (
+          <div>
+            <Label className="mb-1.5">Tools and subagents</Label>
+            <AssignedToolsGrid
+              agentId={agent.id}
+              onAddTool={onAddTool}
+              onEditTool={onEditTool}
+            />
+          </div>
+        )}
+
+        {!agent?.accessAllTools && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label>Knowledge sources</Label>
+            </div>
+            {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
               <button
                 type="button"
                 onClick={onEditKnowledgeSources}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
               >
-                <Plus className="size-3.5" />
-                <span className="text-xs font-medium">Add</span>
+                <Database className="size-4" />
+                <span className="text-xs font-medium">
+                  Add knowledge sources
+                </span>
               </button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="space-y-2">
+                {matchedKbs.map((kb) => {
+                  const connectors = kb.connectors ?? [];
+                  const connectorTypes = [
+                    ...new Set(connectors.map((c) => c.connectorType)),
+                  ];
+                  return (
+                    <div
+                      key={kb.id}
+                      className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                    >
+                      <span className="text-sm font-medium truncate">
+                        {kb.name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {connectorTypes.length > 0 && (
+                          <OverlappedIcons
+                            icons={connectorTypes.map((type) => ({
+                              key: type,
+                              icon: (
+                                <ConnectorTypeIcon
+                                  type={type}
+                                  className="h-full w-full"
+                                />
+                              ),
+                              tooltip: type,
+                            }))}
+                            maxVisible={3}
+                            size="sm"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                          onClick={() => handleRemoveKnowledgeBase(kb.id)}
+                          title={`Remove ${kb.name}`}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {matchedConnectors.map((connector) => (
+                  <div
+                    key={connector.id}
+                    className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                  >
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate block">{connector.name}</span>
+                      {connector.description && (
+                        <span className="truncate block text-xs text-muted-foreground">
+                          {connector.description}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                      onClick={() => handleRemoveConnector(connector.id)}
+                      title={`Remove ${connector.name}`}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={onEditKnowledgeSources}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                >
+                  <Plus className="size-3.5" />
+                  <span className="text-xs font-medium">Add</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">

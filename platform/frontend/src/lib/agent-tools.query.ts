@@ -9,7 +9,6 @@ import { getApiErrorMessage, handleApiError } from "./utils";
 
 const {
   assignToolToAgent,
-  grantToolToAgent,
   autoConfigureAgentToolPolicies,
   bulkAssignTools,
   getAllAgentTools,
@@ -474,43 +473,6 @@ export function useRemoveAgentDelegation() {
       });
       // Invalidate agents list to update subagents count in table
       queryClient.invalidateQueries({ queryKey: ["agents"] });
-    },
-  });
-}
-
-/**
- * Grant a user-accessible tool to an agent by NAME. The backend resolves the
- * tool and enforces the same authorization as a manual assignment, so the chat
- * grant flow does not need (and must not guess) the toolId client-side — which
- * also covers Archestra built-ins the /api/agent-tools list omits.
- */
-export function useGrantTool() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      agentId,
-      toolName,
-    }: {
-      agentId: string;
-      toolName: string;
-    }) => {
-      const { data, error } = await grantToolToAgent({
-        path: { agentId },
-        body: { toolName },
-      });
-      if (error) {
-        throw new Error(getApiErrorMessage(error));
-      }
-      return { success: data?.success ?? false, agentId };
-    },
-    onSuccess: ({ agentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents", agentId, "mcp-tools"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
   });
 }

@@ -197,7 +197,7 @@ pub fn find_lane<'a>(lanes: &'a [Lane], name: &str) -> Result<&'a Lane, LaneErro
     })
 }
 
-fn split_names(value: Option<&str>) -> Option<Vec<String>> {
+pub fn split_names(value: Option<&str>) -> Option<Vec<String>> {
     let value = value?;
     let parts: Vec<String> = value
         .split(',')
@@ -242,6 +242,16 @@ model = "b"
     fn load(body: &str, select: Option<&str>) -> Result<Vec<Lane>, LaneError> {
         let dir = write(body);
         load_lanes(&dir.path().join("lanes.toml"), select)
+    }
+
+    #[test]
+    fn split_names_trims_and_drops_empties() {
+        assert_eq!(split_names(None), None);
+        assert_eq!(split_names(Some("")), None);
+        assert_eq!(
+            split_names(Some("a, b")),
+            Some(vec!["a".to_string(), "b".to_string()])
+        );
     }
 
     #[test]

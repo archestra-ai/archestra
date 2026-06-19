@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+pub mod chat_stream;
 pub mod client;
 pub mod config;
 pub mod lifecycle;

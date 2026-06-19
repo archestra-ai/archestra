@@ -1211,6 +1211,23 @@ class AgentModel {
     return result?.identityProviderId ?? null;
   }
 
+  /**
+   * Whether the agent's "access all tools" toggle is on — the per-agent opt-in
+   * for dynamic tool access via search_tools/run_tool. Lean read on the tool
+   * dispatch path; intentionally not cached so toggling the setting affects
+   * the next discovery/dispatch call. Defaults to false when the agent is
+   * missing or deleted.
+   */
+  static async getAccessAllTools(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ accessAllTools: schema.agentsTable.accessAllTools })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.accessAllTools ?? false;
+  }
+
   static async findIdsByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {
@@ -1571,6 +1588,34 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  /**
+   * The org's default agent of a given type (`isDefault = true`), if one exists.
+   * Used as the implicit fallback when a caller cannot pick an agent — e.g. a
+   * user without `agent:read` creating a scheduled task. Returns id-level
+   * metadata only; null when the org has no default of that type.
+   */
+  static async findDefaultByType(params: {
+    organizationId: string;
+    agentType: AgentType;
+  }): Promise<{ id: string; agentType: AgentType } | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, params.agentType),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   private static async getOrCreateDefaultByType(
@@ -2379,6 +2424,7 @@ class AgentModel {
           description: sourceAgent.description,
           icon: sourceAgent.icon,
           toolExposureMode: sourceAgent.toolExposureMode,
+          accessAllTools: sourceAgent.accessAllTools,
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
@@ -2503,6 +2549,7 @@ class AgentModel {
       isDefault: row.isDefault,
       llmModel: row.llmModel ?? null,
       toolExposureMode: row.toolExposureMode,
+      accessAllTools: row.accessAllTools,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),

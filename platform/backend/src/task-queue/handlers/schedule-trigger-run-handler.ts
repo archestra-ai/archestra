@@ -9,6 +9,7 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import { createAndLinkRunConversation } from "@/services/scheduled-run-conversation";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -83,12 +84,27 @@ export async function handleScheduleTriggerRunExecution(
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
+    // For a project-scoped trigger, materialize the run's chat conversation up
+    // front and execute against it, so the file tools resolve the project scope
+    // (results land in the project). Unscoped triggers keep the headless path.
+    let conversationId: string | undefined;
+    if (trigger.projectId) {
+      const conversation = await createAndLinkRunConversation({
+        run,
+        trigger,
+        ownerUserId: actor.id,
+        organizationId: trigger.organizationId,
+      });
+      conversationId = conversation.id;
+    }
+
     await executeA2AMessage({
       agentId: trigger.agentId,
       message: trigger.messageTemplate,
       organizationId: trigger.organizationId,
       userId: actor.id,
       sessionId: `scheduled-${run.id}`,
+      conversationId,
       source: "schedule-trigger",
       scheduleTriggerRunId: run.id,
     });

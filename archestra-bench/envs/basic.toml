@@ -26,12 +26,12 @@ repo = "github.com/openai/skills"
 path = "skills"
 ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
 
-# Benchmark-owned skills that gate decode-cipher and xlsx-live-formulas. Pinned to the merge SHA of
-# PR #5672 (where these skills landed on main) so the GitHub import resolves them.
+# Benchmark-owned skills that gate decode-cipher and xlsx-live-formulas, imported from GitHub by
+# commit SHA. cipher-decoder is pinned to its latest change on this branch; sales-ledger to PR #5672.
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/cipher-decoder"
-ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
+ref = "e5d980364ef0b2bb4e27a8895cb96170dc04e2f7"
 
 [[skills]]
 repo = "github.com/archestra-ai/archestra"

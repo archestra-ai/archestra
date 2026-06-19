@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.2.69](https://github.com/archestra-ai/archestra/compare/platform-v1.2.68...platform-v1.2.69) (2026-06-19)
+
+
+### Features
+
+* agent all tool access ([#5521](https://github.com/archestra-ai/archestra/issues/5521)) ([8f650c1](https://github.com/archestra-ai/archestra/commit/8f650c127d676cf49273561c19822e7c7502ed4f))
+* **environments:** enforce environment egress policy on remote MCP servers (create/edit + runtime) ([#5682](https://github.com/archestra-ai/archestra/issues/5682)) ([3ed6757](https://github.com/archestra-ai/archestra/commit/3ed6757e4725547045f2fa5666e56400d9fb992f))
+* **llm:** authorization_code grant for manually registered LLM OAuth clients ([#5685](https://github.com/archestra-ai/archestra/issues/5685)) ([4012776](https://github.com/archestra-ai/archestra/commit/4012776274b7de7f80b33761dbaa254d7211d434))
+* **mcp:** authorization_code grant for manually registered OAuth clients (+ disable-DCR toggle) ([#5683](https://github.com/archestra-ai/archestra/issues/5683)) ([a427a82](https://github.com/archestra-ai/archestra/commit/a427a82ac112d8b6982ae1ae8452962aa4def554))
+* **tool-search:** report query terms that match no tool text ([#5664](https://github.com/archestra-ai/archestra/issues/5664)) ([c6c741b](https://github.com/archestra-ai/archestra/commit/c6c741b19b78bdd7b5f391788dc0ba55a8a58c10))
+
+
+### Bug Fixes
+
+* **chat,bench:** retry abortive tool calls, coerce sandbox target, repair harmony tool names ([#5668](https://github.com/archestra-ai/archestra/issues/5668)) ([ca77337](https://github.com/archestra-ai/archestra/commit/ca77337231b29d4ca04ffbebf34a4fdc3d7cdb00))
+* **mcp-apps:** serve sandbox iframe from the frontend origin (reachable on remote/tunnelled localhost) ([#5656](https://github.com/archestra-ai/archestra/issues/5656)) ([4d9be29](https://github.com/archestra-ai/archestra/commit/4d9be2948855a3635b4203de66a2f3fa2ee13f2e))
+
+
+### Miscellaneous Chores
+
+* bump next to 16.3.0-canary.56 ([#5659](https://github.com/archestra-ai/archestra/issues/5659)) ([be0e0ac](https://github.com/archestra-ai/archestra/commit/be0e0ac927d894664a812faee7f7bc12b6d6051c))
+* **e2e:** remove test-mcp-servers fixtures (moved to examples repo) ([#5684](https://github.com/archestra-ai/archestra/issues/5684)) ([5367821](https://github.com/archestra-ai/archestra/commit/53678214a531e8c88c7a03e212137128a960ccac))
+
 ## [1.2.68](https://github.com/archestra-ai/archestra/compare/platform-v1.2.67...platform-v1.2.68) (2026-06-18)
 
 

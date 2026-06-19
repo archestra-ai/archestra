@@ -7,7 +7,7 @@ import { getLlmUpstreamDispatcher } from "./llm-upstream-dispatcher";
 describe("getLlmUpstreamDispatcher", () => {
   test("returns an Agent when a timeout is configured, undefined otherwise", () => {
     const result = getLlmUpstreamDispatcher();
-    if (config.llm.proxy.upstreamTimeoutMs === undefined) {
+    if (config.llmProxy.upstreamTimeoutMs === undefined) {
       expect(result).toBeUndefined();
     } else {
       expect(result).toBeInstanceOf(Agent);

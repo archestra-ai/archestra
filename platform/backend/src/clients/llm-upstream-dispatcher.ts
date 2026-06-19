@@ -17,7 +17,7 @@ import config from "@/config";
 let dispatcher: Agent | undefined;
 
 export function getLlmUpstreamDispatcher(): Agent | undefined {
-  const upstreamTimeoutMs = config.llm.proxy.upstreamTimeoutMs;
+  const upstreamTimeoutMs = config.llmProxy.upstreamTimeoutMs;
   if (!upstreamTimeoutMs) {
     return;
   }

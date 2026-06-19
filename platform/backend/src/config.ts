@@ -963,14 +963,6 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
     },
-    proxy: {
-      upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
-        ? parsePositiveInt(
-            process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
-            300000,
-          )
-        : undefined,
-    },
     zhipuai: {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
@@ -1350,6 +1342,12 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
+      ? parsePositiveInt(
+          process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
+          300000,
+        )
+      : undefined,
   },
   kb: {
     hybridSearchEnabled:

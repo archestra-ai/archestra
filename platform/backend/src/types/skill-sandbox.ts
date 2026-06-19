@@ -128,7 +128,14 @@ export type SandboxArtifactRow = {
  * wire schema for compatibility but is always set now (Postgres-only storage).
  */
 export const SandboxFileListItemSchema = z.object({
+  /** Row id for DB-backed files; null for files discovered on disk (no row). */
   id: z.string().uuid().nullable(),
+  /**
+   * Opaque handle for download/delete: the row id for DB-backed files, or an
+   * `fd_`-prefixed encoded path for disk-only files. Always present — use this
+   * (not `id`) to build the artifact URL and to delete.
+   */
+  downloadRef: z.string(),
   filename: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().nonnegative(),

@@ -1,5 +1,6 @@
 import ConversationFileTouchModel from "@/models/conversation-file-touch";
 import FileModel from "@/models/file";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { expect, test } from "@/test";
 
 async function makeFile(params: {
@@ -7,7 +8,7 @@ async function makeFile(params: {
   userId: string;
   filename: string;
 }) {
-  return FileModel.create({
+  return fileStore.put({
     organizationId: params.organizationId,
     userId: params.userId,
     projectId: null,

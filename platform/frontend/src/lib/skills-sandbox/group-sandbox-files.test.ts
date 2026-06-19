@@ -8,6 +8,7 @@ function file(over: {
 }) {
   return {
     id: "00000000-0000-0000-0000-000000000001",
+    downloadRef: "00000000-0000-0000-0000-000000000001",
     filename: over.filename,
     mimeType: "text/plain",
     sizeBytes: 1,

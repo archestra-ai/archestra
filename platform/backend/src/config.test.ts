@@ -25,6 +25,8 @@ import config, {
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
+  parseFileStorageFilesystemRoot,
+  parseFileStorageProvider,
   parseMetricsPort,
   parseProcessType,
   parseS3BlobStorageAuthMethod,
@@ -1249,6 +1251,56 @@ describe("parseS3BlobStorageBucket", () => {
       parseS3BlobStorageBucket({ provider: "s3", value: "" }),
     ).toThrow(
       "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+    );
+  });
+});
+
+describe("parseFileStorageProvider", () => {
+  test("defaults to db when unset", () => {
+    expect(parseFileStorageProvider(undefined)).toBe("db");
+  });
+
+  test("returns filesystem (case/space-insensitive)", () => {
+    expect(parseFileStorageProvider(" FileSystem ")).toBe("filesystem");
+  });
+
+  test("falls back to db for any unknown value", () => {
+    expect(parseFileStorageProvider("s3")).toBe("db");
+  });
+});
+
+describe("parseFileStorageFilesystemRoot", () => {
+  test("ignores the root when provider is db", () => {
+    expect(parseFileStorageFilesystemRoot({ provider: "db", value: "" })).toBe(
+      "",
+    );
+  });
+
+  test("trims a configured absolute root for the filesystem provider", () => {
+    expect(
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "  /data/archestra_results  ",
+      }),
+    ).toBe("/data/archestra_results");
+  });
+
+  test("requires a root when provider is filesystem", () => {
+    expect(() =>
+      parseFileStorageFilesystemRoot({ provider: "filesystem", value: " " }),
+    ).toThrow(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
+    );
+  });
+
+  test("rejects a relative root for the filesystem provider", () => {
+    expect(() =>
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "relative/dir",
+      }),
+    ).toThrow(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
     );
   });
 });

@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
@@ -76,6 +77,16 @@ const filesTable = pgTable(
     index("files_project_id_idx").on(table.projectId),
     index("files_conversation_id_idx").on(table.conversationId),
     index("files_sandbox_id_idx").on(table.sandboxId),
+    // Filename uniqueness per owner scope, so the human-readable filesystem
+    // layout (`<email|project>/<filename>`) is collision-free and a repeat
+    // write is rejected rather than overwriting. Personal files (no project)
+    // are unique per author; project files are unique within the project.
+    uniqueIndex("files_user_filename_uidx")
+      .on(table.userId, table.filename)
+      .where(sql`${table.projectId} IS NULL`),
+    uniqueIndex("files_project_filename_uidx")
+      .on(table.projectId, table.filename)
+      .where(sql`${table.projectId} IS NOT NULL`),
     // exactly one byte location per row; provider-agnostic so adding an
     // external backend later needs no CHECK migration.
     check(

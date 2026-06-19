@@ -296,12 +296,12 @@ function ProjectFilesSidebar({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const items: FileListItem[] = (files ?? [])
-    .filter((f) => f.id !== null)
+    .filter((f) => f.downloadable)
     .map((f) => ({
-      id: f.id as string,
+      id: f.downloadRef,
       name: f.filename,
       mimeType: f.mimeType,
-      contentUrl: sandboxArtifactUrl(f.id as string),
+      contentUrl: sandboxArtifactUrl(f.downloadRef),
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
 

@@ -54369,6 +54369,7 @@ export type GetProjectFilesResponses = {
      */
     200: Array<{
         id: string | null;
+        downloadRef: string;
         filename: string;
         mimeType: string;
         sizeBytes: number;
@@ -58858,6 +58859,7 @@ export type GetSkillSandboxConversationArtifactsResponses = {
      */
     200: Array<{
         id: string | null;
+        downloadRef: string;
         filename: string;
         mimeType: string;
         sizeBytes: number;
@@ -58949,6 +58951,7 @@ export type GetSkillSandboxFilesResponses = {
     200: {
         files: Array<{
             id: string | null;
+            downloadRef: string;
             filename: string;
             mimeType: string;
             sizeBytes: number;

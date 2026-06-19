@@ -2,10 +2,10 @@ import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationFileTouchModel from "@/models/conversation-file-touch";
-import FileModel from "@/models/file";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { expect, test } from "@/test";
 
 test("conversationFilesService.list groups generated + attachments with basenamed names and content URLs", async ({
@@ -29,7 +29,7 @@ test("conversationFilesService.list groups generated + attachments with basename
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const artifact = await FileModel.create({
+  const artifact = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -138,7 +138,7 @@ test("personal chat: referenced is the touched files (deduped vs generated), own
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const ownOutput = await FileModel.create({
+  const ownOutput = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -158,7 +158,7 @@ test("personal chat: referenced is the touched files (deduped vs generated), own
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const touched = await FileModel.create({
+  const touched = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -170,7 +170,7 @@ test("personal chat: referenced is the touched files (deduped vs generated), own
     data: Buffer.from("b"),
   });
   // another personal file the agent never touched in this chat
-  await FileModel.create({
+  await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -262,7 +262,7 @@ test("project chat: referenced is the touched project files, for any reader", as
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const projectFile = await FileModel.create({
+  const projectFile = await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -274,7 +274,7 @@ test("project chat: referenced is the touched project files, for any reader", as
     data: Buffer.from("in"),
   });
   // an untouched project file must stay out of the panel
-  await FileModel.create({
+  await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -333,7 +333,7 @@ test("project chat: a requester without project access sees no referenced files"
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const secret = await FileModel.create({
+  const secret = await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -394,7 +394,7 @@ test("projects off: referenced is empty and projectName null, generated still sh
       isDefault: true,
     });
     // this chat's own output — still surfaces under `generated`
-    const ownOutput = await FileModel.create({
+    const ownOutput = await fileStore.put({
       organizationId: org.id,
       userId: user.id,
       projectId: null,
@@ -412,7 +412,7 @@ test("projects off: referenced is empty and projectName null, generated still sh
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    const touched = await FileModel.create({
+    const touched = await fileStore.put({
       organizationId: org.id,
       userId: user.id,
       projectId: null,

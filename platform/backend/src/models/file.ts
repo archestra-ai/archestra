@@ -1,8 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { getFileBytesStorage } from "@/skills-sandbox/file-storage";
-import type { PersistedFile, SandboxArtifactRow } from "@/types";
+import type {
+  PersistedFile,
+  SandboxArtifactRow,
+  SkillSandboxFileStorageProvider,
+} from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 type PersistedFileMeta = {
@@ -25,38 +27,38 @@ const artifactColumns = {
 } as const;
 
 /**
- * Persistent user files (`files` table). A file is owned by its author
- * (`user_id`) unless `project_id` is set, in which case it belongs to the
- * project. Bytes go through the `FileBytesStorage` interface (Postgres-only
- * today).
+ * Row CRUD for persistent user files (`files` table). Bytes live behind the
+ * object-store seam; the orchestration that writes bytes then inserts the
+ * row (with rollback) lives in `FileStore`, so this model is pure data access.
  */
 class FileModel {
-  static async create(params: {
+  /**
+   * Insert one row whose bytes have already been persisted by `FileStore`. A
+   * duplicate filename in the owner scope (the partial unique indexes) surfaces
+   * as {@link FileNameExistsError}.
+   */
+  static async insertRow(params: {
     organizationId: string;
     /** Author — whoever produced the file. */
     userId: string;
     /** Owning project; null = the author's own file. */
     projectId: string | null;
     conversationId: string | null;
-    /** Producing sandbox — provenance only; omit when none (save_result). */
+    /** Producing sandbox — provenance only. */
     sandboxId?: string | null;
     filename: string;
     mimeType: string;
     sizeBytes: number;
-    data: Buffer;
+    storageProvider: SkillSandboxFileStorageProvider;
+    /** Bytes when storageProvider = 'db'; null when objectKey is set. */
+    data: Buffer | null;
+    objectKey: string | null;
   }): Promise<PersistedFile> {
-    const fileId = randomUUID();
-    const stored = await getFileBytesStorage().put({
-      fileId,
-      filename: params.filename,
-      data: params.data,
-    });
     let row: PersistedFile | undefined;
     try {
       [row] = await db
         .insert(schema.filesTable)
         .values({
-          id: fileId,
           organizationId: params.organizationId,
           userId: params.userId,
           projectId: params.projectId,
@@ -65,23 +67,18 @@ class FileModel {
           filename: params.filename,
           mimeType: params.mimeType,
           sizeBytes: params.sizeBytes,
-          data: stored.dbData,
-          storageProvider: stored.provider,
-          objectKey: stored.objectKey,
+          data: params.data,
+          storageProvider: params.storageProvider,
+          objectKey: params.objectKey,
         })
         .returning();
     } catch (error) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
+      if (isUniqueViolation(error)) {
+        throw new FileNameExistsError(params.filename);
+      }
       throw error;
     }
-    if (!row) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
-      throw new Error("failed to insert file");
-    }
+    if (!row) throw new Error("failed to insert file");
     return normalizeByteaField(row, "data");
   }
 
@@ -257,3 +254,21 @@ class FileModel {
 }
 
 export default FileModel;
+
+/** A file with this name already exists in the owner scope (user or project). */
+export class FileNameExistsError extends Error {
+  constructor(filename: string) {
+    super(`a file named "${filename}" already exists`);
+    this.name = "FileNameExistsError";
+  }
+}
+
+// === internal ===
+
+/** Postgres unique_violation, as surfaced by the pg and PGlite drivers. */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { code?: string }).code;
+  const cause = (error as { cause?: { code?: string } }).cause;
+  return code === "23505" || cause?.code === "23505";
+}

@@ -24,6 +24,7 @@ import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
 type BlobStorageProviderType = "db" | "s3";
+type FileStorageProviderType = "db" | "filesystem";
 type S3BlobStorageAuthMethod = "irsa" | "static";
 
 /**
@@ -661,6 +662,34 @@ export function parseS3BlobStorageBucket(params: {
 }
 
 /** @public — exported for testability */
+export function parseFileStorageProvider(
+  value: string | undefined,
+): FileStorageProviderType {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "filesystem" ? "filesystem" : "db";
+}
+
+/** @public — exported for testability */
+export function parseFileStorageFilesystemRoot(params: {
+  provider: FileStorageProviderType;
+  value: string | undefined;
+}): string {
+  const root = params.value?.trim() ?? "";
+  if (params.provider !== "filesystem") return root;
+  if (!root) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
+    );
+  }
+  if (!path.isAbsolute(root)) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
+    );
+  }
+  return root;
+}
+
+/** @public — exported for testability */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -784,6 +813,16 @@ const skillsSandboxEnabled =
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+
+// persistent "My Files" byte storage backend; the root is validated (required +
+// absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
+const fileStorageProvider = parseFileStorageProvider(
+  process.env.ARCHESTRA_FILE_STORAGE_PROVIDER,
+);
+const fileStorageFilesystemRoot = parseFileStorageFilesystemRoot({
+  provider: fileStorageProvider,
+  value: process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT,
+});
 
 const config = {
   frontendBaseUrl,
@@ -1264,6 +1303,17 @@ const config = {
    */
   dynamicToolAccess: {
     enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
+  },
+  /**
+   * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
+   * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
+   * provider is used for new writes while reads dispatch per row, so a
+   * deployment can hold a mix. `filesystemRoot` is the absolute mount path,
+   * required + validated when `provider === "filesystem"`.
+   */
+  fileStorage: {
+    provider: fileStorageProvider,
+    filesystemRoot: fileStorageFilesystemRoot,
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

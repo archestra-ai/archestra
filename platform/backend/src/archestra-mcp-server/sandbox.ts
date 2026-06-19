@@ -17,11 +17,14 @@ import {
   ConversationAttachmentModel,
   ConversationFileTouchModel,
   EnvironmentModel,
-  FileModel,
+  FileNameExistsError,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import { UnsafePathError } from "@/skills-sandbox/file-path";
+import type { MyFileResolutionError } from "@/skills-sandbox/file-store";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
 import {
   type ProjectFileScope,
@@ -31,10 +34,6 @@ import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
 } from "@/skills-sandbox/runtime-image";
-import {
-  type MyFileResolutionError,
-  skillSandboxArtifactService,
-} from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -713,20 +712,18 @@ const registry = defineArchestraTools([
         throw error;
       }
 
-      const rows = scope
-        ? await FileModel.listByProject({
-            organizationId: guard.userCtx.organizationId,
-            projectId: scope.projectId,
-          })
-        : await FileModel.listForUser({
-            organizationId: guard.userCtx.organizationId,
-            userId: guard.userCtx.userId,
-          });
-
-      const query = args.query?.toLowerCase() ?? null;
-      const matches = rows.filter(
-        (f) => !query || f.filename.toLowerCase().includes(query),
-      );
+      const matches = await fileStore.search({
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+        scope: scope
+          ? {
+              kind: "project",
+              projectId: scope.projectId,
+              projectName: scope.projectName,
+            }
+          : { kind: "personal" },
+        query: args.query,
+      });
 
       const result = {
         files: matches.map((f) => ({
@@ -814,7 +811,7 @@ const registry = defineArchestraTools([
         claimed: args.mimeType,
       });
       try {
-        const row = await FileModel.create({
+        const row = await fileStore.put({
           organizationId: guard.userCtx.organizationId,
           userId: guard.userCtx.userId,
           projectId: scope?.projectId ?? null,
@@ -850,6 +847,14 @@ const registry = defineArchestraTools([
           ].join("\n"),
         );
       } catch (error) {
+        if (error instanceof FileNameExistsError) {
+          return errorResult(
+            `A file named "${filename}" already exists${scope ? ` in ${scope.projectName}` : ""}. Choose a different name or delete the existing file first.`,
+          );
+        }
+        if (error instanceof UnsafePathError) {
+          return errorResult(`"${filename}" is not a usable file name.`);
+        }
         if (error instanceof SkillSandboxError) {
           return errorResult(error.message);
         }
@@ -1418,7 +1423,7 @@ async function loadUploadSource(params: {
       };
     }
     case "my_file": {
-      const resolved = await skillSandboxArtifactService.resolveMyFileSource({
+      const resolved = await fileStore.resolveMyFileSource({
         organizationId: userCtx.organizationId,
         userId: userCtx.userId,
         id: source.id,
@@ -1443,7 +1448,9 @@ async function loadUploadSource(params: {
         data: resolved.data,
         mimeType: resolved.mimeType,
         originalName: resolved.originalName,
-        sourceFileId: resolved.fileId,
+        // null (an untracked, hand-placed object with no row) → undefined: there
+        // is no files row to record a conversation touch against.
+        sourceFileId: resolved.fileId ?? undefined,
       };
     }
   }

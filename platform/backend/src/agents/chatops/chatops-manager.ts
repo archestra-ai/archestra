@@ -38,8 +38,8 @@ import type {
   A2AProtocolSendMessageResponse,
 } from "../a2a/a2a-protocol";
 import {
-  autoProvisionUser,
   buildWelcomeMessage,
+  ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
 import {
@@ -370,32 +370,31 @@ export class ChatOpsManager {
       return;
     }
 
-    let user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
-    if (!user) {
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: message.senderEmail,
       // Resolve display name from provider (e.g., Slack real_name)
-      const displayName =
-        (await provider.getUserName?.(message.senderId)) || message.senderName;
-
-      // Auto-provision: create user + member from chat platform identity
-      const { invitationId } = await autoProvisionUser({
-        email: message.senderEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(message.senderEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { email: message.senderEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return;
-      }
-
+      resolveDisplayName: async () => {
+        displayName =
+          (await provider.getUserName?.(message.senderId)) ||
+          message.senderName;
+        return displayName;
+      },
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { email: message.senderEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
+    }
+    if (provisioned.invitationId !== null) {
       // Send ephemeral welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
         message,
-        invitationId,
+        invitationId: provisioned.invitationId,
         displayName,
       }).catch(() => {});
     }
@@ -523,24 +522,19 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve interactive user email");
       return;
     }
-    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
-    if (!user) {
-      // Auto-provision: create user + member from interactive payload
-      const displayName =
-        (await provider.getUserName?.(selection.userId)) || selection.userName;
-      await autoProvisionUser({
-        email: senderEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(senderEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { senderEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return;
-      }
+    // Auto-provision: create user + member from interactive payload
+    const provisioned = await ensureProvisionedUser({
+      email: senderEmail,
+      resolveDisplayName: async () =>
+        (await provider.getUserName?.(selection.userId)) || selection.userName,
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { senderEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return;
     }
 
     // Verify agent exists
@@ -1155,33 +1149,34 @@ export class ChatOpsManager {
     }
 
     // Look up Archestra user by email — auto-provision if not found
-    let user = await UserModel.findByEmail(userEmail.toLowerCase());
-
-    if (!user) {
-      const displayName =
-        (await provider.getUserName?.(message.senderId)) || message.senderName;
-      const { invitationId } = await autoProvisionUser({
-        email: userEmail,
-        name: displayName,
-        provider: provider.providerId,
-      });
-      user = await UserModel.findByEmail(userEmail.toLowerCase());
-      if (!user) {
-        logger.error(
-          { senderEmail: userEmail },
-          "[ChatOps] Auto-provisioned user not found after creation",
-        );
-        return {
-          success: false,
-          error: "Failed to auto-provision user",
-        };
-      }
-
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: userEmail,
+      resolveDisplayName: async () => {
+        displayName =
+          (await provider.getUserName?.(message.senderId)) ||
+          message.senderName;
+        return displayName;
+      },
+      provider: provider.providerId,
+    });
+    if (!provisioned) {
+      logger.error(
+        { senderEmail: userEmail },
+        "[ChatOps] Auto-provisioned user not found after creation",
+      );
+      return {
+        success: false,
+        error: "Failed to auto-provision user",
+      };
+    }
+    const user = provisioned.user;
+    if (provisioned.invitationId !== null) {
       // Send welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
         message,
-        invitationId,
+        invitationId: provisioned.invitationId,
         displayName,
       }).catch(() => {});
     }
@@ -1737,7 +1732,10 @@ export class ChatOpsManager {
         return;
       }
 
-      if (email !== decision.originalMessage.senderEmail) {
+      if (
+        email?.toLowerCase() !==
+        decision.originalMessage.senderEmail?.toLowerCase()
+      ) {
         // Only initial requester can approve/decline
         return;
       }
@@ -1939,55 +1937,4 @@ export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
   const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
   return normalizedInput === normalizedName;
-}
-
-/**
- * Find length of agent name match at start of text.
- * Handles "AgentPeter", "Agent Peter", "agent peter" for "Agent Peter".
- * Returns matched length or null if no match.
- *
- * @public — exported for testability
- */
-export function findTolerantMatchLength(
-  text: string,
-  agentName: string,
-): number | null {
-  const lowerText = text.toLowerCase();
-  const lowerName = agentName.toLowerCase();
-
-  // Strategy 1: Exact match (with spaces)
-  if (lowerText.startsWith(lowerName)) {
-    const charAfter = text[agentName.length];
-    if (!charAfter || charAfter === " " || charAfter === "\n") {
-      return agentName.length;
-    }
-  }
-
-  // Strategy 2: Match without spaces (e.g., "agentpeter" matches "Agent Peter")
-  const nameWithoutSpaces = lowerName.replace(/\s+/g, "");
-  let textIdx = 0;
-  let nameIdx = 0;
-
-  while (nameIdx < nameWithoutSpaces.length && textIdx < text.length) {
-    const textChar = lowerText[textIdx];
-    const nameChar = nameWithoutSpaces[nameIdx];
-
-    if (textChar === nameChar) {
-      textIdx++;
-      nameIdx++;
-    } else if (textChar === " ") {
-      textIdx++;
-    } else {
-      return null;
-    }
-  }
-
-  if (nameIdx === nameWithoutSpaces.length) {
-    const charAfter = text[textIdx];
-    if (!charAfter || charAfter === " " || charAfter === "\n") {
-      return textIdx;
-    }
-  }
-
-  return null;
 }

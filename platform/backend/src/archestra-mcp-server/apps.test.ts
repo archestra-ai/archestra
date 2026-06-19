@@ -16,6 +16,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -1212,6 +1213,83 @@ describe("refine_app", () => {
         { id: "d", prompt: "4" },
       ],
     });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("validate_app", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Validating Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function validate(appId: string) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+  }
+
+  test("a clean scaffolded app passes with no findings", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Clean App" },
+      context,
+    );
+    const result = await validate(structured(created).id as string);
+    expect(result.isError).toBe(false);
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).findings).toEqual([]);
+  });
+
+  // makeApp persists html directly (the save gate would reject SDK bootstrap),
+  // so this exercises validate_app surfacing an error on already-stored html.
+  test("reports SDK self-bootstrap as an error and ok:false", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      organizationId,
+      scope: "org",
+      html: "<html><head><script>const x = window.__ARCHESTRA_APP_SDK_URL__;</script></head><body/></html>",
+    });
+    const result = await validate(app.id);
+    expect(result.isError).toBe(false);
+    expect(structured(result).ok).toBe(false);
+    expect(structured(result).findings).toContainEqual({
+      severity: "error",
+      message: expect.stringContaining("must not bootstrap"),
+    });
+  });
+
+  test("warns on an off-allowlist resource host but still passes", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      organizationId,
+      scope: "org",
+      html: '<html><head><script src="https://evil.example.com/a.js"></script></head><body/></html>',
+    });
+    const result = await validate(app.id);
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("evil.example.com"),
+    });
+  });
+
+  test("errors on an unknown app id", async () => {
+    const result = await validate(crypto.randomUUID());
     expect(result.isError).toBe(true);
   });
 });

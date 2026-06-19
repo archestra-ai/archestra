@@ -8,6 +8,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -41,7 +42,10 @@ import {
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
-import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import {
+  buildValidatedVersionPayload,
+  validateAppHtmlStatic,
+} from "@/services/apps/app-ui-policy";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
 import {
   type App,
@@ -185,6 +189,22 @@ const ReadAppOutputSchema = z.object({
   html: z
     .string()
     .describe("The stored HTML, pre-injection (no SDK/base CSS)."),
+});
+
+const ValidateAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to validate."),
+});
+
+const ValidateAppOutputSchema = z.object({
+  id: z.string(),
+  version: z.number().describe("The head version that was validated."),
+  ok: z.boolean().describe("True when there are no error-severity findings."),
+  findings: z.array(
+    z.object({
+      severity: z.enum(["error", "warning"]),
+      message: z.string(),
+    }),
+  ),
 });
 
 // scaffold_app additionally echoes the assignment set when `tools` was given
@@ -673,6 +693,57 @@ const registry = defineArchestraTools([
           ...(warnings.length > 0 ? { warnings } : {}),
         },
         `${summary} Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${warningsNote}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_VALIDATE_APP_SHORT_NAME,
+    title: "Validate App",
+    description:
+      "Statically check an app's current HTML, headless. It flags hard problems (bootstrapping the SDK yourself, loading the platform script/stylesheet, unparseable markup) as errors and softer issues (a missing document root, <script>/<link> hosts outside the CDN allowlist that the sandbox CSP will block) as warnings. It cannot run the app — visual and behavioral correctness still come from rendering it — so a clean result means only that the structure is sound. Fix any error-severity findings with edit_app before publishing.",
+    schema: ValidateAppSchema,
+    outputSchema: ValidateAppOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId: context.organizationId,
+        userId: context.userId,
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      const head = await AppVersionModel.findByAppAndVersion(
+        app.id,
+        app.latestVersion,
+      );
+      if (!head) {
+        return errorResult(
+          `App ${args.appId} has no version ${app.latestVersion}.`,
+        );
+      }
+
+      const findings = await validateAppHtmlStatic(head.html);
+      const ok = !findings.some((finding) => finding.severity === "error");
+      const summary = ok
+        ? findings.length === 0
+          ? `App "${app.name}" version ${head.version} passed static validation with no findings.`
+          : `App "${app.name}" version ${head.version} passed static validation with ${findings.length} warning(s):`
+        : `App "${app.name}" version ${head.version} has validation errors that must be fixed with edit_app:`;
+      const detail = findings.length
+        ? `\n${findings
+            .map((finding) => `[${finding.severity}] ${finding.message}`)
+            .join("\n")}`
+        : "";
+      return structuredSuccessResult(
+        { id: app.id, version: head.version, ok, findings },
+        `${summary}${detail}`,
       );
     },
   }),

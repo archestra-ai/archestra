@@ -156,6 +156,8 @@ export const TOOL_PERMISSIONS: Record<
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
   edit_app: { resource: "app", action: "update" },
+  // validate_app only reads the head html and reports static findings.
+  validate_app: { resource: "app", action: "read" },
   delete_app: { resource: "app", action: "delete" },
   // Authoring intent: the preview is exercised while building/fixing an app.
   preview_app_tool: { resource: "app", action: "update" },

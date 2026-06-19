@@ -2,13 +2,13 @@ import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-t
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
 import { ToolModel } from "@/models";
 
-export interface AppCapabilityTool {
+interface AppCapabilityTool {
   /** Full MCP tool name as used by archestra.tools.call(...). */
   name: string;
   description: string;
 }
 
-export interface AppCapabilityContext {
+interface AppCapabilityContext {
   /** MCP tools the user can access/assign to an app, RBAC-filtered. */
   tools: AppCapabilityTool[];
   /** Compact human-readable summary of the window.archestra SDK surface. */

@@ -604,8 +604,9 @@ impl EvalClient {
         prior_messages: &[JsonValue],
         text: &str,
         files: &[FilePart],
+        turn_id: &str,
     ) -> Result<impl Stream<Item = chat_stream::ChatStreamRecord> + use<'_>, ClientError> {
-        let body = build_chat_body(conversation_id, prior_messages, text, files);
+        let body = build_chat_body(conversation_id, prior_messages, text, files, turn_id);
         let url = self.url("/api/chat", None);
         let mut req = self
             .http
@@ -973,6 +974,7 @@ fn build_chat_body(
     prior_messages: &[JsonValue],
     text: &str,
     files: &[FilePart],
+    turn_id: &str,
 ) -> JsonValue {
     let mut parts = vec![serde_json::json!({
         "type": "text",
@@ -982,10 +984,12 @@ fn build_chat_body(
         parts.push(file.to_data_url_part());
     }
     // Resend the persisted history verbatim (keeping each message's backend id, so
-    // persistNewMessages dedupes them) and append only the new user turn with a fresh id.
+    // persistNewMessages dedupes them) and append the new user turn. `turn_id` is
+    // stable across a stage's attempts so a retried turn reuses the same id and is
+    // deduped backend-side rather than persisted twice.
     let mut messages = prior_messages.to_vec();
     messages.push(serde_json::json!({
-        "id": uuid::Uuid::new_v4().to_string(),
+        "id": turn_id,
         "role": "user",
         "parts": parts,
     }));
@@ -1003,11 +1007,12 @@ mod tests {
 
     #[test]
     fn test_chat_body_pins_temperature() {
-        let body = build_chat_body("conv-1", &[], "hello", &[]);
+        let body = build_chat_body("conv-1", &[], "hello", &[], "turn-1");
         assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
         assert_eq!(body["id"], "conv-1");
         assert_eq!(body["trigger"], "submit-message");
         assert_eq!(body["messages"][0]["parts"][0]["text"], "hello");
+        assert_eq!(body["messages"][0]["id"], "turn-1");
     }
 
     // The backend rejects snake_case keys; every multi-word field must serialize as camelCase.

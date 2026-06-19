@@ -146,9 +146,7 @@ const RunCommandOutputSchema = z.object({
   binaryStripped: z
     .boolean()
     .describe(
-      "True when stdout/stderr held binary (NUL) bytes that were removed " +
-        "before storage. Redirect binary output to a file and use " +
-        "download_file instead of reading it inline.",
+      "True when NUL bytes were stripped from stdout/stderr before storage.",
     ),
   stagingNotices: z
     .array(z.string())

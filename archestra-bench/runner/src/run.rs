@@ -1485,10 +1485,16 @@ async fn grade_rollout(
 /// Drive a stage, retrying it once when the backend reports a retryable error
 /// (e.g. an incomplete tool call). Such a failure on a single turn would
 /// otherwise end the whole rollout; one clean re-attempt recovers the common
-/// transient cases. The retry keeps the original `expect_prior_history` so a
-/// stage-0 failure resends the opening turn fresh rather than depending on a
-/// turn that may not have persisted. Parse/idle errors are not backend-
-/// classified and are never retried.
+/// transient cases. Parse/idle errors are not backend-classified and are never
+/// retried.
+///
+/// The retry must look exactly like the first attempt, never an accumulation of
+/// it: (1) prior history is fetched once and reused, so the retry does not pick
+/// up the failed attempt's own just-persisted user turn; (2) the user turn id is
+/// fixed, so a re-sent turn is deduped backend-side instead of duplicated; and
+/// (3) `run` is snapshotted and restored before retrying, so the failed
+/// attempt's partial text / tool calls / turn count / tokens never leak into the
+/// rollout metrics.
 async fn drive_stage_with_retry(
     client: &EvalClient,
     conversation_id: &str,
@@ -1499,6 +1505,26 @@ async fn drive_stage_with_retry(
     runtime: &HashMap<String, String>,
     expect_prior_history: bool,
 ) -> Result<Option<String>, RunError> {
+    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
+    // platform builds LLM context from the request body only. The first turn has no history yet;
+    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
+    // the rollout loudly rather than silently run the agent on contextless history.
+    let prior_messages = if expect_prior_history {
+        let messages = client.get_conversation_messages(conversation_id).await?;
+        if messages.is_empty() {
+            return Ok(Some(
+                "conversation history empty on a follow-up turn; the prior turn likely failed to \
+                 persist — refusing to continue on contextless history"
+                    .to_string(),
+            ));
+        }
+        messages
+    } else {
+        Vec::new()
+    };
+    let turn_id = uuid::Uuid::new_v4().to_string();
+
+    let snapshot = run.clone();
     let first = drive_stage(
         client,
         conversation_id,
@@ -1507,7 +1533,8 @@ async fn drive_stage_with_retry(
         run,
         artifacts,
         runtime,
-        expect_prior_history,
+        &prior_messages,
+        &turn_id,
     )
     .await?;
     let Some(error) = first else {
@@ -1519,6 +1546,7 @@ async fn drive_stage_with_retry(
     artifacts
         .append("stage_retry", serde_json::json!({ "error": error }))
         .await;
+    *run = snapshot;
     drive_stage(
         client,
         conversation_id,
@@ -1527,7 +1555,8 @@ async fn drive_stage_with_retry(
         run,
         artifacts,
         runtime,
-        expect_prior_history,
+        &prior_messages,
+        &turn_id,
     )
     .await
 }
@@ -1551,7 +1580,8 @@ async fn drive_stage(
     run: &mut ChatRunResult,
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
-    expect_prior_history: bool,
+    prior_messages: &[serde_json::Value],
+    turn_id: &str,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1573,30 +1603,9 @@ async fn drive_stage(
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
-    // Per-stage reset: apply_chat_event only ever *sets* stream_error, so a
-    // retry that streams cleanly must start from None — otherwise it would
-    // report the previous attempt's error as if the retry had also failed.
-    run.stream_error = None;
 
-    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
-    // platform builds LLM context from the request body only. The first turn has no history yet;
-    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
-    // the rollout loudly rather than silently run the agent on contextless history.
-    let prior_messages = if expect_prior_history {
-        let messages = client.get_conversation_messages(conversation_id).await?;
-        if messages.is_empty() {
-            return Ok(Some(
-                "conversation history empty on a follow-up turn; the prior turn likely failed to \
-                 persist — refusing to continue on contextless history"
-                    .to_string(),
-            ));
-        }
-        messages
-    } else {
-        Vec::new()
-    };
     let mut stream = client
-        .stream_chat_records(conversation_id, &prior_messages, &text, &files)
+        .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
         .await?;
     loop {
         let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {

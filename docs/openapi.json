@@ -163409,6 +163409,13 @@
                       "organizationId": {
                         "type": "string"
                       },
+                      "grantType": {
+                        "type": "string",
+                        "enum": [
+                          "client_credentials",
+                          "authorization_code"
+                        ]
+                      },
                       "allowedLlmProxyIds": {
                         "type": "array",
                         "items": {
@@ -163460,6 +163467,12 @@
                           "additionalProperties": false
                         }
                       },
+                      "redirectUris": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "disabled": {
                         "type": "boolean"
                       },
@@ -163477,8 +163490,10 @@
                       "clientId",
                       "name",
                       "organizationId",
+                      "grantType",
                       "allowedLlmProxyIds",
                       "providerApiKeys",
+                      "redirectUris",
                       "disabled",
                       "createdAt",
                       "updatedAt"
@@ -163743,8 +163758,15 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedLlmProxyIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -163753,7 +163775,6 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -163792,12 +163813,17 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedLlmProxyIds",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -163822,6 +163848,13 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
                     },
                     "allowedLlmProxyIds": {
                       "type": "array",
@@ -163874,6 +163907,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -163894,8 +163933,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -164162,8 +164203,15 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedLlmProxyIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -164172,7 +164220,6 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -164211,12 +164258,17 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedLlmProxyIds",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -164251,6 +164303,13 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
                     },
                     "allowedLlmProxyIds": {
                       "type": "array",
@@ -164303,6 +164362,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -164320,8 +164385,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt"
@@ -164877,6 +164944,13 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedLlmProxyIds": {
                       "type": "array",
                       "items": {
@@ -164928,6 +165002,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -164948,8 +165028,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",

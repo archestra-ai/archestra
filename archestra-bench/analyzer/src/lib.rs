@@ -360,7 +360,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         .into_iter()
         .map(|(id, meta, analysis)| (id, meta.outcome, analysis))
         .collect();
-    let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses);
+    let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses, run_dir_rel.as_deref());
     if !excluded.is_empty() {
         let names = excluded
             .iter()

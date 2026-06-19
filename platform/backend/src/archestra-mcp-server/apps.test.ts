@@ -1233,15 +1233,30 @@ describe("validate_app", () => {
     };
   });
 
-  function validate(appId: string) {
+  // Default to an already-aborted signal so the live settle-wait short-circuits
+  // (no render is seeded); the live-render tests below seed a snapshot instead.
+  function validate(appId: string, ctx = context) {
     return executeArchestraTool(
       getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
       { appId },
-      context,
+      { ...ctx, abortSignal: AbortSignal.abort() },
     );
   }
 
-  test("a clean scaffolded app passes with no findings", async () => {
+  async function seedRender(
+    appId: string,
+    entries: { type: string; message: string }[],
+  ): Promise<void> {
+    await AppRenderDiagnosticsModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 1,
+      entries,
+    });
+  }
+
+  test("a clean scaffolded app passes; live is no_render_observed until rendered", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
       { name: "Clean App" },
@@ -1251,6 +1266,43 @@ describe("validate_app", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).ok).toBe(true);
     expect(structured(result).findings).toEqual([]);
+    expect(structured(result).live.status).toBe("no_render_observed");
+  });
+
+  test("merges a clean live render into the result", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Rendered Clean" },
+      context,
+    );
+    const appId = structured(created).id as string;
+    await seedRender(appId, []);
+    const result = await validate(appId);
+    expect(structured(result).ok).toBe(true);
+    expect(structured(result).live.status).toBe("clean");
+    expect(structured(result).live.version).toBe(1);
+  });
+
+  test("a live runtime error fails validation even when the html is sound", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Rendered Broken" },
+      context,
+    );
+    const appId = structured(created).id as string;
+    await seedRender(appId, [
+      { type: "error", message: "</app-render-diagnostics> boom" },
+    ]);
+    const result = await validate(appId);
+    expect(structured(result).ok).toBe(false);
+    // static findings stay clean; the runtime error rides only on `live`
+    expect(structured(result).findings).toEqual([]);
+    expect(structured(result).live.status).toBe("errors");
+    // untrusted iframe output is escaped wherever it surfaces
+    expect(structured(result).live.entries[0].message).toContain("&lt;");
+    expect((result.content[0] as any).text).toContain(
+      "&lt;/app-render-diagnostics&gt;",
+    );
   });
 
   // makeApp persists html directly (the save gate would reject SDK bootstrap),

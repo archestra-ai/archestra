@@ -49,6 +49,7 @@ import {
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
 import {
   type App,
+  type AppRenderDiagnostics,
   AppScopeSchema,
   type AppSpec,
   AppSpecSchema,
@@ -205,6 +206,16 @@ const ValidateAppOutputSchema = z.object({
       message: z.string(),
     }),
   ),
+  live: z
+    .object({
+      status: z.enum(["no_render_observed", "clean", "errors"]),
+      version: z.number(),
+      entries: z.array(z.object({ type: z.string(), message: z.string() })),
+      renderedAt: z.string().nullable(),
+    })
+    .describe(
+      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen — view it in the sidebar, then re-run.",
+    ),
 });
 
 // scaffold_app additionally echoes the assignment set when `tools` was given
@@ -700,7 +711,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Statically check an app's current HTML, headless. It flags hard problems (bootstrapping the SDK yourself, loading the platform script/stylesheet, unparseable markup) as errors and softer issues (a missing document root, <script>/<link> hosts outside the CDN allowlist that the sandbox CSP will block) as warnings. It cannot run the app — visual and behavioral correctness still come from rendering it — so a clean result means only that the structure is sound. Fix any error-severity findings with edit_app before publishing.",
+      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root or <script>/<link> hosts outside the CDN allowlist as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet (open it in the sidebar, then re-run). Fix any errors with edit_app before publishing.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -730,20 +741,40 @@ const registry = defineArchestraTools([
       }
 
       const findings = await validateAppHtmlStatic(head.html);
-      const ok = !findings.some((finding) => finding.severity === "error");
-      const summary = ok
-        ? findings.length === 0
-          ? `App "${app.name}" version ${head.version} passed static validation with no findings.`
-          : `App "${app.name}" version ${head.version} passed static validation with ${findings.length} warning(s):`
-        : `App "${app.name}" version ${head.version} has validation errors that must be fixed with edit_app:`;
-      const detail = findings.length
+      const staticHasError = findings.some(
+        (finding) => finding.severity === "error",
+      );
+      const safeName = (await escapeAngleBrackets(app.name))
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const snapshot = await waitForHeadRenderSnapshot({
+        appId: app.id,
+        userId: context.userId,
+        head: app.latestVersion,
+        abortSignal: context.abortSignal,
+      });
+      const { live, section } = await buildLiveValidation({
+        snapshot,
+        head: app.latestVersion,
+      });
+
+      const ok = !staticHasError && live.status !== "errors";
+      const headline = staticHasError
+        ? `App "${safeName}" version ${app.latestVersion} has static validation errors that must be fixed with edit_app.`
+        : live.status === "errors"
+          ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
+          : findings.length === 0
+            ? `App "${safeName}" version ${app.latestVersion} passed validation with no static findings.`
+            : `App "${safeName}" version ${app.latestVersion} passed static validation with ${findings.length} warning(s).`;
+      const findingLines = findings.length
         ? `\n${findings
             .map((finding) => `[${finding.severity}] ${finding.message}`)
             .join("\n")}`
         : "";
       return structuredSuccessResult(
-        { id: app.id, version: head.version, ok, findings },
-        `${summary}${detail}`,
+        { id: app.id, version: app.latestVersion, ok, findings, live },
+        `${headline}${findingLines}${section}`,
       );
     },
   }),
@@ -879,26 +910,14 @@ const registry = defineArchestraTools([
       const safeName = (await escapeAngleBrackets(app.name))
         .replace(/\s+/g, " ")
         .trim();
-      const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
-      let snapshot = await AppRenderDiagnosticsModel.getForUser(
-        app.id,
-        context.userId,
-      );
-      // Wait briefly for a render of the current head to land, so the agent gets
-      // a definitive answer in one call instead of busy-retrying.
-      while (
-        (!snapshot || snapshot.version < head) &&
-        Date.now() < deadline &&
-        !context.abortSignal?.aborted
-      ) {
-        await delay(GET_APP_DIAGNOSTICS_POLL_MS);
-        snapshot = await AppRenderDiagnosticsModel.getForUser(
-          app.id,
-          context.userId,
-        );
-      }
+      const snapshot = await waitForHeadRenderSnapshot({
+        appId: app.id,
+        userId: context.userId,
+        head,
+        abortSignal: context.abortSignal,
+      });
 
-      if (!snapshot || snapshot.version < head) {
+      if (!snapshot) {
         return structuredSuccessResult(
           {
             status: "no_render_observed",
@@ -1120,6 +1139,90 @@ const GET_APP_DIAGNOSTICS_POLL_MS = 500;
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Wait briefly for a render of the app's head version to land server-side. The
+ * sidebar posts a render snapshot on a settle timer (including the clean case),
+ * so an authoring tool gets a definitive answer in one call instead of
+ * busy-retrying. Returns the snapshot once it covers the head version, or null
+ * if none settles within the window (caller reports no_render_observed).
+ */
+async function waitForHeadRenderSnapshot(params: {
+  appId: string;
+  userId: string;
+  head: number;
+  abortSignal?: AbortSignal;
+}): Promise<AppRenderDiagnostics | null> {
+  const { appId, userId, head, abortSignal } = params;
+  const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
+  let snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+  while (
+    (!snapshot || snapshot.version < head) &&
+    Date.now() < deadline &&
+    !abortSignal?.aborted
+  ) {
+    await delay(GET_APP_DIAGNOSTICS_POLL_MS);
+    snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+  }
+  return snapshot && snapshot.version >= head ? snapshot : null;
+}
+
+type LiveValidation = {
+  status: "no_render_observed" | "clean" | "errors";
+  version: number;
+  entries: { type: string; message: string }[];
+  renderedAt: string | null;
+};
+
+/**
+ * Turn the head render snapshot into validate_app's `live` field plus a text
+ * section. Render diagnostics are untrusted iframe output, so they are NOT
+ * merged into the (trusted) static findings — error-class renders set the
+ * result via `live.status` and the text frames the entries in the untrusted
+ * diagnostics block, mirroring get_app_diagnostics. No snapshot reaching the
+ * head version reads as no_render_observed, never as "clean".
+ */
+async function buildLiveValidation(params: {
+  snapshot: AppRenderDiagnostics | null;
+  head: number;
+}): Promise<{ live: LiveValidation; section: string }> {
+  const { snapshot, head } = params;
+  if (!snapshot) {
+    return {
+      live: {
+        status: "no_render_observed",
+        version: head,
+        entries: [],
+        renderedAt: null,
+      },
+      section: `\nLive render: no render of version ${head} has been observed for you yet — open the app in the sidebar, then re-run validate_app to capture runtime diagnostics.`,
+    };
+  }
+  const renderedAt = snapshot.renderedAt.toISOString();
+  if (snapshot.entries.length === 0) {
+    return {
+      live: {
+        status: "clean",
+        version: snapshot.version,
+        entries: [],
+        renderedAt,
+      },
+      section: `\nLive render: version ${snapshot.version} rendered clean (no runtime errors or CSP violations) at ${renderedAt}.`,
+    };
+  }
+  const capped = await capDiagnosticEntries(snapshot.entries);
+  const entries = await Promise.all(
+    capped.map(async (entry) => ({
+      type: entry.type,
+      message: await escapeAngleBrackets(entry.message),
+    })),
+  );
+  const diagnosticLines = await formatDiagnosticEntryLines(snapshot.entries);
+  return {
+    live: { status: "errors", version: snapshot.version, entries, renderedAt },
+    section: `\nLive render: version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} runtime diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${diagnosticLines}\n${DIAGNOSTICS_BLOCK_CLOSE}`,
+  };
+}
 
 /**
  * Frame a previewed tool's result as untrusted data for the authoring model:

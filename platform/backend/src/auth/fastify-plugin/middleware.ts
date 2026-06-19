@@ -143,7 +143,7 @@ export class Authnz {
       // down here. A session request carries no Bearer and falls through to the
       // normal session auth below (unchanged); a credential-less request also
       // falls through and is answered with the RFC 9728 challenge in handle().
-      (url.startsWith("/api/mcp/app/") &&
+      (appIdFromConnectorPath(url) !== null &&
         typeof headers.authorization === "string" &&
         /^Bearer\s+/i.test(headers.authorization)) ||
       // Public skill marketplace git endpoint: token in URL, no session

@@ -4,6 +4,7 @@ import {
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
@@ -194,6 +195,25 @@ const ReadAppOutputSchema = z.object({
 
 const ValidateAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id to validate."),
+});
+
+const PublishAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to publish."),
+  scope: z
+    .enum(["team", "org"])
+    .describe(
+      "Publish to specific teams or to the whole organization. Promotes the app out of personal scope.",
+    ),
+  teamIds: z
+    .array(z.string().uuid())
+    .optional()
+    .describe("Target team ids — required when scope is team."),
+});
+
+const PublishAppOutputSchema = z.object({
+  id: z.string(),
+  scope: AppScopeSchema,
+  runUrl: z.string().describe("Standalone run page for the published app."),
 });
 
 const ValidateAppOutputSchema = z.object({
@@ -775,6 +795,69 @@ const registry = defineArchestraTools([
       return structuredSuccessResult(
         { id: app.id, version: app.latestVersion, ok, findings, live },
         `${headline}${findingLines}${section}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_PUBLISH_APP_SHORT_NAME,
+    title: "Publish App",
+    description:
+      "Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+    schema: PublishAppSchema,
+    outputSchema: PublishAppOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required to publish an app.");
+      }
+      const { userId, organizationId } = context;
+      if (args.scope === "team" && (args.teamIds?.length ?? 0) === 0) {
+        return errorResult(
+          "Publishing to a team requires at least one team id in teamIds.",
+        );
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId,
+        userId,
+        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+
+      const teamIds = args.scope === "team" ? (args.teamIds ?? []) : [];
+      try {
+        // Authorize against the destination scope (admins for org, team admins
+        // who belong to the target teams for team), mirroring the REST edit path.
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: args.scope,
+          authorId: app.authorId,
+          resourceTeamIds: teamIds,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      const updated = await AppModel.update({
+        id: args.appId,
+        patch: { scope: args.scope },
+        teamIds,
+      });
+      if (!updated) {
+        return errorResult(`Failed to publish app ${args.appId}.`);
+      }
+
+      const runUrl = `/apps/${updated.id}/run`;
+      const audience =
+        updated.scope === "org"
+          ? "the whole organization"
+          : "the selected team(s)";
+      return structuredSuccessResult(
+        { id: updated.id, scope: updated.scope, runUrl },
+        `Published "${updated.name}" to ${audience}. Standalone run page: ${runUrl}`,
       );
     },
   }),

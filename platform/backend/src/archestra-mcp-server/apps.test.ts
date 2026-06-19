@@ -12,6 +12,7 @@ import {
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
@@ -29,6 +30,7 @@ import {
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
+  AppTeamModel,
   AppToolModel,
   AppVersionModel,
 } from "@/models";
@@ -1343,5 +1345,126 @@ describe("validate_app", () => {
   test("errors on an unknown app id", async () => {
     const result = await validate(crypto.randomUUID());
     expect(result.isError).toBe(true);
+  });
+});
+
+describe("publish_app", () => {
+  function publish(args: Record<string, unknown>, ctx: ArchestraContext) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      args,
+      ctx,
+    );
+  }
+
+  test("an admin publishes a personal app to the org and gets its run url", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish Admin" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish({ appId: app.id, scope: "org" }, context);
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("org");
+    expect(structured(result).runUrl).toBe(`/apps/${app.id}/run`);
+    expect((await AppModel.findById(app.id))?.scope).toBe("org");
+  });
+
+  test("a non-admin author cannot publish their personal app to the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish Member" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: "member" });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish({ appId: app.id, scope: "org" }, context);
+    expect(result.isError).toBe(true);
+    // scope is unchanged — the gate rejected the promotion
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+  });
+
+  test("publishing to a team requires teamIds", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish NoTeam" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish({ appId: app.id, scope: "team" }, context);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("team id");
+  });
+
+  test("an admin publishes to a team and assigns it", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish Team" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Publish Target Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teamIds: [team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("team");
+    expect(await AppTeamModel.getTeamsForApp(app.id)).toEqual([team.id]);
   });
 });

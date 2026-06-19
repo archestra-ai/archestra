@@ -807,6 +807,38 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  test("rejects an audience-bound OAuth token lacking the mcp scope", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    // Correctly audience-bound to this connector, but consented only to a lesser
+    // scope — audience binding is not consent, so the connector must reject it.
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["openid", "profile"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain("resource_metadata");
+  });
+
   test("rejects an expired audience-bound OAuth token", async ({
     makeApp,
     makeUser,

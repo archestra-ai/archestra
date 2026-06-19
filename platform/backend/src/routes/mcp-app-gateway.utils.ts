@@ -1,6 +1,7 @@
 import {
   getArchestraAppResourceUri,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_GATEWAY_OAUTH_SCOPE,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 } from "@archestra/shared";
@@ -311,6 +312,13 @@ export async function validateAppConnectorOAuthToken(params: {
     accessToken.refreshTokenRevoked ||
     accessToken.expiresAt < new Date()
   ) {
+    return { ok: false, reason: "invalid" };
+  }
+  // Audience binding alone is not authorization: a client can bind any token to
+  // the connector by passing the resource, so a token consented to a lesser
+  // scope (e.g. `openid profile`) must not reach the connector without the mcp
+  // scope the user actually consented to. Parallels the gateway scope check.
+  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
     return { ok: false, reason: "invalid" };
   }
   // The token's audience must equal this connector's own canonical URI: an

@@ -51,6 +51,25 @@ export function toolNotEnabledForConversationMessage(toolName: string): string {
 }
 
 /**
+ * Recovery message for the LLM-proxy guardrail path, where one or more tools the
+ * model tried to call were filtered out because they are disabled for the
+ * conversation. Distinct from the run_tool dispatcher's per-call recovery: here
+ * the calls were already emitted and dropped, so the steer also says not to
+ * retry them.
+ */
+export function disabledToolsNotRunMessage(toolNames: string[]): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const toolList = toolNames.join(", ");
+  return (
+    `The tools "${toolList}" are not enabled for this conversation and were ` +
+    `not run. Do not call them again here. Use a tool that is available to ` +
+    `you, or call ${searchToolsName} to discover the tools you can use.`
+  );
+}
+
+/**
  * Generic discovery steer appended after an "unknown tool"/"not assigned"
  * preamble. Single source of truth for the dispatch-surface recovery hint used
  * by `executeArchestraTool` (`index.ts`).

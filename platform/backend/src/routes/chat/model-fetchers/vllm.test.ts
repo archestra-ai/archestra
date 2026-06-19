@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
+import { PLACEHOLDER_BEARER_TOKEN } from "./types";
 import { fetchVllmModels } from "./vllm";
 
 describe("fetchVllmModels", () => {
@@ -70,5 +71,31 @@ describe("fetchVllmModels", () => {
     await expect(fetchVllmModels("k")).rejects.toThrow(
       "Failed to fetch vLLM models: 403",
     );
+  });
+
+  test("sends placeholder bearer token when no API key is present", async () => {
+    await fetchVllmModels("");
+    const [, init] = lastFetchCall();
+    expect((init as RequestInit).headers).toMatchObject({
+      Authorization: PLACEHOLDER_BEARER_TOKEN,
+    });
+  });
+
+  test("createdAt is undefined when created is missing", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 }),
+    );
+    const models = await fetchVllmModels("k");
+    expect(models[0].createdAt).toBeUndefined();
+  });
+
+  test("createdAt is undefined when created is 0", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "m", created: 0 }] }), {
+        status: 200,
+      }),
+    );
+    const models = await fetchVllmModels("k");
+    expect(models[0].createdAt).toBeUndefined();
   });
 });

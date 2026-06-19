@@ -190,7 +190,7 @@ export class Authnz {
     reply: FastifyReply,
   ): void => {
     // Dark when the feature is off: no OAuth challenge that would advertise the
-    // connector mechanism exists (FR-1).
+    // connector mechanism exists.
     if (!config.apps.enabled) {
       return;
     }

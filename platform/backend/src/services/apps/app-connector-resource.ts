@@ -17,7 +17,7 @@ export const APP_CONNECTOR_PATH_PREFIX = "/api/mcp/app/";
 const CONNECTOR_PATH_RE = /^\/api\/mcp\/app\/([^/]+)$/;
 
 /**
- * Canonicalize a connector resource URI per RFC 8707 / LIM-2: lowercased host,
+ * Canonicalize a connector resource URI per RFC 8707: lowercased host,
  * no trailing slash, no query, no fragment. Returns null when the input is not
  * a well-formed `http(s)` connector URL — so a token can never be bound to an
  * arbitrary URL. The scheme is preserved (https in production, http in local
@@ -92,8 +92,8 @@ export function isAppConnectorAudienceRef(
 /**
  * The RFC 9728 `WWW-Authenticate: Bearer` challenge for a connector, pointing a
  * client at the connector's protected-resource metadata and the scope to
- * request (FR-2). Emitted by both the auth middleware (a credential-less
- * discovery request) and the route (an invalid token).
+ * request. Emitted by both the auth middleware (a credential-less discovery
+ * request) and the route (an invalid token).
  */
 export function connectorWwwAuthenticate(
   origin: string,

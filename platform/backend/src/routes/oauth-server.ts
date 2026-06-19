@@ -55,7 +55,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // An MCP App connector's discovery is dark when the feature is off, so it
-      // does not reveal that an app exists (FR-1).
+      // does not reveal that an app exists.
       if (
         resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX) &&
         !config.apps.enabled

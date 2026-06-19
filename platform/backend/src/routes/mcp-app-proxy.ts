@@ -83,7 +83,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!auth.ok) {
           if (auth.kind === "challenge") {
             // No valid token → re-issue the RFC 9728 challenge so the client can
-            // (re)discover the authorization server (FR-2).
+            // (re)discover the authorization server.
             setConnectorChallenge(request, reply, appId);
             return reply.status(401).send({
               error: { message: "Unauthorized", type: "unauthorized" },
@@ -112,8 +112,8 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the viewer may view this app. The OAuth path bypasses the cache so
-      // a revoked token or lost view access is denied on the next request (FR-10);
-      // the session and personal-token paths keep the short-lived cache (keyed by
+      // a revoked token or lost view access is denied on the next request; the
+      // session and personal-token paths keep the short-lived cache (keyed by
       // app+user+org so entries can't leak across orgs).
       const appCacheKey = `${appId}:${userId}:${organizationId}`;
       let app = bypassAccessCache ? undefined : appAccessCache.get(appCacheKey);
@@ -228,10 +228,10 @@ const NO_VIEWER_MESSAGE =
 
 /**
  * Resolve a connector Bearer token to its viewer, or signal that the request
- * must be challenged (no valid token, FR-2) or refused (a token resolving no
- * viewer, LIM-3). The token is tried as a personal token first, then as a native
- * audience-bound OAuth token. The OAuth path bypasses the app-access cache so a
- * revoked token or lost view access is denied on the next request (FR-10).
+ * must be challenged (no valid token) or refused (a token resolving no viewer).
+ * The token is tried as a personal token first, then as a native audience-bound
+ * OAuth token. The OAuth path bypasses the app-access cache so a revoked token or
+ * lost view access is denied on the next request.
  */
 async function resolveBearerAuth(
   request: FastifyRequest,
@@ -298,7 +298,7 @@ function userTokenAuthContext(auth: {
 /**
  * Attach the RFC 9728 `WWW-Authenticate` challenge pointing at this connector's
  * protected-resource metadata, so a client discovers the authorization server
- * and the scope to request (FR-2).
+ * and the scope to request.
  */
 function setConnectorChallenge(
   request: FastifyRequest,

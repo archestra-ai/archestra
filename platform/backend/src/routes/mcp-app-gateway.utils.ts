@@ -292,11 +292,11 @@ export async function validateAppGatewayToken(
 /**
  * Resolve a shareable-App connector OAuth access token to its viewer. The native
  * connector flow mints an audience-bound token (see the token endpoint), and the
- * connector accepts it only when bound to its own canonical URI (LIM-1) and
- * resolving a single viewer (LIM-3). Unlike the personal-token path, an OAuth
- * token is not organization-scoped, so the viewer is confirmed a member of the
- * app's organization here — `userHasAppAccess` trusts the caller's org for an
- * org-scoped app, so the membership check is what holds the org boundary (CON-7).
+ * connector accepts it only when bound to its own canonical URI and resolving a
+ * single viewer. Unlike the personal-token path, an OAuth token is not
+ * organization-scoped, so the viewer is confirmed a member of the app's
+ * organization here — `userHasAppAccess` trusts the caller's org for an
+ * org-scoped app, so the membership check is what holds the org boundary.
  */
 export async function validateAppConnectorOAuthToken(params: {
   token: string;
@@ -314,14 +314,14 @@ export async function validateAppConnectorOAuthToken(params: {
     return { ok: false, reason: "invalid" };
   }
   // The token's audience must equal this connector's own canonical URI: an
-  // unbound token, a gateway token, or another app's token is rejected (LIM-1).
+  // unbound token, a gateway token, or another app's token is rejected.
   if (
     accessToken.referenceId !==
     appConnectorAudienceRef(params.connectorResourceUri)
   ) {
     return { ok: false, reason: "invalid" };
   }
-  // A token with no acting user (client credentials) carries no viewer (LIM-3).
+  // A token with no acting user (client credentials) carries no viewer.
   if (!accessToken.userId) {
     return { ok: false, reason: "no_viewer" };
   }
@@ -427,8 +427,7 @@ async function buildAppToolList(appId: string): Promise<McpListTool[]> {
       // The runtime LLM completion stays in tools/list (so an app's own
       // tools/call is still relayed by a foreign host) but is marked app-only,
       // so the host's model can't invoke it to spend the viewer's metered LLM
-      // budget directly (FR-7). Other built-ins (the data store) stay
-      // model-visible per FR-5.
+      // budget directly. Other built-ins (the data store) stay model-visible.
       if (
         archestraMcpBranding.getToolShortName(tool.name) ===
         TOOL_APP_LLM_COMPLETE_SHORT_NAME

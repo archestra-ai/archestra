@@ -9,6 +9,7 @@ import {
   Globe,
   Lock,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Trash2,
   Users,
@@ -34,6 +35,12 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -70,6 +77,7 @@ function ProjectDetail() {
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -112,17 +120,30 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             project.isOwner ? (
-              <div className="flex items-center gap-1">
-                <EditProjectButton project={project} />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Delete project"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Project actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <Badge variant="secondary">Shared with you</Badge>
             )
@@ -141,6 +162,13 @@ function ProjectDetail() {
             confirmLabel="Delete"
             pendingLabel="Deleting..."
           />
+          {editOpen && (
+            <EditProjectDialog
+              project={project}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+            />
+          )}
 
           <div className="space-y-6">
             <ProjectChatInput projectId={project.id} />
@@ -354,33 +382,6 @@ type EditProjectForm = {
  * shared visibility control (replacing the old separate description dialog and
  * share popover).
  */
-function EditProjectButton({
-  project,
-}: {
-  project: archestraApiTypes.GetProjectResponses["200"];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Edit project"
-        onClick={() => setOpen(true)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      {open && (
-        <EditProjectDialog
-          project={project}
-          open={open}
-          onOpenChange={setOpen}
-        />
-      )}
-    </>
-  );
-}
-
 function EditProjectDialog({
   project,
   open,

@@ -11,6 +11,7 @@ themselves. Look up the row for the scheme your blob uses and pass the values on
 | chained-hex  | decode.pl   | `--mult 73 --add 41`  |
 | rot13        | rot13.pl    | (none)                |
 
-The archestra benchmark blobs use the **chained-hex** scheme. `legacy-hex` is a retired variant of
-the same script with different rotor constants — it runs without error but yields garbage on a
-current blob, so use the `chained-hex` row.
+If you don't know which scheme a blob uses, try the candidates: the correct one decodes to readable
+text, while the wrong script or the wrong row runs without error but yields garbage. Watch the two
+hex rows in particular — `legacy-hex` and `chained-hex` share `decode.pl` with different rotor
+constants, so the wrong one of the two still "decodes", just into garbage.

@@ -9,6 +9,9 @@ file layout, lifecycle) live in `../README.md` -- this file is the discipline, n
   `search_tools`, `/home/sandbox` paths, or "the verifier". The only tool a prompt names is
   `submit_result` (the protocol requires it).
 - Don't spoon-feed the approach or name the skill/tool that solves it -- discovering it is the task.
+- Never reveal the agent is inside a benchmark/eval/harness. No "benchmark", "eval", "test", "graded",
+  or "fixture" language on any agent-facing surface -- the prompt **and** the skills/files it loads. A
+  real user would never say "the benchmark blobs"; they have a blob and want it decoded.
 - No trap warnings ("be careful to…", "make sure exactly N"). No bold/emphasis on the checked
   quantity: emphasis telegraphs the oracle and hands the model the answer shape.
 - State the deliverable as a preference ("I'd like a 60-frame GIF…"), not a contract to satisfy.

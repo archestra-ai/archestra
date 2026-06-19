@@ -195,10 +195,10 @@ describe("app tool execution", () => {
     expect(head?.uiPermissions).toEqual({ camera: {} });
   });
 
-  test("create seeds from a template when html is omitted", async () => {
+  test("create seeds the default template when html is omitted", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "From Template", templateId: "form" },
+      { name: "From Template" },
       context,
     );
     expect(created.isError).toBe(false);
@@ -212,10 +212,10 @@ describe("app tool execution", () => {
       "window.archestra.storage.user.set",
     );
 
-    // Explicit html wins over templateId (provenance only) and returns no seed.
+    // Explicit html wins; the result carries no seed note.
     const explicit = await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Explicit", html: "<h1>mine</h1>", templateId: "form" },
+      { name: "Explicit", html: "<h1>mine</h1>" },
       context,
     );
     expect(explicit.isError).toBe(false);
@@ -225,26 +225,6 @@ describe("app tool execution", () => {
     );
     expect(explicitHead?.html).toBe("<h1>mine</h1>");
     expect((explicit.content[0] as any).text).not.toContain("Seeded from");
-  });
-
-  test("create rejects unknown templateId and missing html+templateId", async () => {
-    const unknown = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Nope", templateId: "no-such-template" },
-      context,
-    );
-    expect(unknown.isError).toBe(true);
-    expect((unknown.content[0] as any).text).toContain("Unknown templateId");
-
-    const neither = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Empty" },
-      context,
-    );
-    expect(neither.isError).toBe(true);
-    expect((neither.content[0] as any).text).toContain(
-      "Either html or templateId",
-    );
   });
 
   test("create rejects SDK self-bootstrap html; update surfaces warnings", async () => {

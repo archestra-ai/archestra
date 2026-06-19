@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
+import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -48,7 +48,6 @@ import {
   APP_DESCRIPTION_MAX_LENGTH,
   APP_HTML_MAX_BYTES,
   APP_NAME_MAX_LENGTH,
-  APP_TEMPLATE_ID_MAX_LENGTH,
   AppScopeSchema,
   AppUiPermissionsSchema,
 } from "@/types/app";
@@ -79,10 +78,6 @@ const toolsField = z
     "Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged.",
   );
 
-const templateIds = getAppTemplates()
-  .map((t) => t.id)
-  .join(", ");
-
 // Single source of truth for the authoring guidance shared by create_app and
 // update_app — the tool descriptions are the only channel the authoring model
 // has for the SDK/CSP/stylesheet contract, and previously each tool restated it
@@ -111,18 +106,11 @@ const CreateAppSchema = z.strictObject({
   html: htmlField
     .optional()
     .describe(
-      "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead.",
+      "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from the default starter template instead, then refine the returned HTML.",
     ),
   scope: AppScopeSchema.optional().describe(
     "Visibility scope. Defaults to personal (owned by the calling user).",
   ),
-  templateId: z
-    .string()
-    .max(APP_TEMPLATE_ID_MAX_LENGTH)
-    .optional()
-    .describe(
-      `Template to scaffold from when html is omitted (one of: ${templateIds}); the result returns the seeded HTML for editing. With html present it is recorded as provenance only.`,
-    ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
   ),
@@ -280,7 +268,7 @@ const registry = defineArchestraTools([
 
 ${APP_BUILD_LOOP_GUIDANCE}
 
-Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When viewed in chat the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
+Alternatively omit html to scaffold from the default starter template; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When viewed in chat the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -310,10 +298,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           authorId: context.userId,
           resourceTeamIds: [],
         });
-        const resolved = resolveCreateAppHtml({
-          html: args.html,
-          templateId: args.templateId,
-        });
+        const resolved = resolveCreateAppHtml({ html: args.html });
         seededFromTemplate = resolved.seededFromTemplate;
         const validated = await buildValidatedVersionPayload({
           html: resolved.html,
@@ -342,7 +327,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           scope,
           name: args.name,
           description: args.description ?? null,
-          templateId: args.templateId ?? null,
+          templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
         },
         payload,
       });
@@ -372,7 +357,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
       // Scaffold-then-edit: when the template seeded the html, return it so
       // the model can immediately update_app without a read-back round-trip.
       const seededHtmlNote = seededFromTemplate
-        ? `\nSeeded from template "${args.templateId}"; current HTML (edit via update_app):\n${payload.html}`
+        ? `\nSeeded from the default starter template; current HTML (edit via update_app):\n${payload.html}`
         : "";
       const warningsNote =
         warnings.length > 0

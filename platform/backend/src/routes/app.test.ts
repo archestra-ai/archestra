@@ -7,6 +7,7 @@ import {
 } from "fastify-type-provider-zod";
 import config from "@/config";
 import { AppRenderDiagnosticsModel, AppVersionModel } from "@/models";
+import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import appRoutes from "./app";
@@ -169,7 +170,7 @@ describe("appRoutes /api/apps", () => {
     expect(futureVersion.statusCode).toBe(400);
   });
 
-  test("create resolves templateId server-side when html is omitted", async ({
+  test("create seeds the default template server-side when html is omitted", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -183,7 +184,7 @@ describe("appRoutes /api/apps", () => {
       method: "POST",
       url: "/api/apps",
       headers: JSON_HEADERS,
-      payload: { name: "Seeded", templateId: "form" },
+      payload: { name: "Seeded" },
     });
     expect(created.statusCode).toBe(200);
     const versions = await app.inject({
@@ -193,22 +194,7 @@ describe("appRoutes /api/apps", () => {
     expect(versions.json()[0].html).toContain(
       "window.archestra.storage.user.set",
     );
-
-    const unknown = await app.inject({
-      method: "POST",
-      url: "/api/apps",
-      headers: JSON_HEADERS,
-      payload: { name: "Unknown", templateId: "no-such-template" },
-    });
-    expect(unknown.statusCode).toBe(400);
-
-    const neither = await app.inject({
-      method: "POST",
-      url: "/api/apps",
-      headers: JSON_HEADERS,
-      payload: { name: "Neither" },
-    });
-    expect(neither.statusCode).toBe(400);
+    expect(versions.json()[0].html).toContain("window.archestra.tools.call");
   });
 
   test("create rejects SDK self-bootstrap html and surfaces soft warnings", async ({
@@ -562,15 +548,18 @@ describe("appRoutes /api/apps", () => {
     });
     expect(listed.statusCode).toBe(200);
     const templates = listed.json() as Array<{ id: string; html: string }>;
-    const ids = templates.map((t) => t.id);
-    expect(ids).toContain("blank");
-    expect(ids).toContain("form");
-    // Templates are pure UI: they use the injected window.archestra runtime
-    // and never carry SDK bootstrap glue themselves.
-    const form = templates.find((t) => t.id === "form");
-    expect(form?.html).toContain("window.archestra.storage.user.set");
-    expect(form?.html).not.toContain("__ARCHESTRA_APP_SDK_URL__");
-    expect(form?.html).not.toContain("PostMessageTransport");
+    expect(templates.map((t) => t.id)).toEqual(["default"]);
+    // The single starter is pure UI: it uses the injected window.archestra
+    // runtime, demonstrates storage + tool calls, and carries no SDK bootstrap
+    // glue itself — so it passes the save-time validator unchanged.
+    const [starter] = templates;
+    expect(starter.html).toContain("window.archestra.storage.user.set");
+    expect(starter.html).toContain("window.archestra.tools.call");
+    expect(starter.html).not.toContain("__ARCHESTRA_APP_SDK_URL__");
+    expect(starter.html).not.toContain("PostMessageTransport");
+    await expect(
+      buildValidatedVersionPayload({ html: starter.html }),
+    ).resolves.toMatchObject({ warnings: [] });
 
     (config.apps as { enabled: boolean }).enabled = false;
     const off = await app.inject({ method: "GET", url: "/api/app-templates" });

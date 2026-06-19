@@ -14,7 +14,6 @@ export type AppScope = z.infer<typeof AppScopeSchema>;
 // stored size is bounded regardless of multi-byte content.
 export const APP_NAME_MAX_LENGTH = 100;
 export const APP_DESCRIPTION_MAX_LENGTH = 500;
-export const APP_TEMPLATE_ID_MAX_LENGTH = 100;
 export const APP_HTML_MAX_BYTES = 512 * 1024;
 /** Per-document size cap for the App Data Store. */
 export const APP_DATA_MAX_VALUE_BYTES = 256 * 1024;
@@ -122,10 +121,9 @@ const htmlField = z
 export const CreateAppSchema = z.object({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
-  templateId: z.string().max(APP_TEMPLATE_ID_MAX_LENGTH).optional(),
   scope: AppScopeSchema.optional(),
-  // One of html/templateId is required (resolveCreateAppHtml enforces it):
-  // explicit html wins, otherwise the template seeds the first version.
+  // html is optional: supply it to seed explicitly, otherwise the single
+  // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
 });

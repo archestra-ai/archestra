@@ -39,6 +39,7 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  const isSettingsPage = pathname.startsWith("/settings");
   // Chat and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their
@@ -100,7 +101,7 @@ export function AppShell({ children }: AppShellProps) {
     <NavigationStatusProvider>
       <SidebarProvider defaultOpen={!shouldCollapse}>
         <AppSidebar />
-        <NavAwareSidebarCircleToggle />
+        {!isSettingsPage && <NavAwareSidebarCircleToggle />}
         <MaintenanceModeOverlay />
         <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
           {notification && (

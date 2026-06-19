@@ -29,11 +29,16 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { SettingsSidebarContent } from "@/app/_parts/settings-sidebar";
+import { SidebarPrefetchLink } from "@/app/_parts/sidebar-prefetch-link";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
+import {
+  useSettingsNavGroups,
+  useSettingsReturnPath,
+} from "@/app/settings/settings-tabs";
 import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
@@ -42,6 +47,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -589,9 +595,47 @@ const NavSecondary = ({
   );
 };
 
+// Shared sidebar footer (warnings + user menu). Identical across the default
+// and settings sidebar variants.
+const SidebarUserFooter = ({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean;
+}) => (
+  <SidebarFooter>
+    <SidebarWarningsAccordion />
+    {isAuthenticated && (
+      <SidebarGroup className="mt-auto p-0">
+        <SidebarGroupContent>
+          <div
+            data-testid={E2eTestId.SidebarUserProfile}
+            className={cn(
+              "overflow-hidden",
+              // Collapsed: hide text/chevron, show only avatar circle
+              "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
+              "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
+              "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
+              "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
+              "group-data-[collapsible=icon]:[&_button>div]:gap-0",
+              "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
+              "group-data-[collapsible=icon]:[&_button>svg]:hidden",
+            )}
+          >
+            <SidebarUserMenu />
+          </div>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )}
+  </SidebarFooter>
+);
+
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { open, setOpen, isMobile } = useSidebar();
+  const isSettingsRoute = pathname.startsWith("/settings");
+  const settingsReturnPath = useSettingsReturnPath();
+  const settingsNavGroups = useSettingsNavGroups();
   const isAuthenticated = useIsAuthenticated();
   const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
   // GitHub stars are cosmetic and external, so defer them until after the
@@ -660,43 +704,83 @@ export function AppSidebar() {
       }));
   }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled]);
 
+  React.useLayoutEffect(() => {
+    if (isSettingsRoute && !isMobile && !open) {
+      setOpen(true);
+    }
+  }, [isSettingsRoute, isMobile, open, setOpen]);
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
-        <div className="group-data-[collapsible=icon]:hidden">
-          <SidebarPrefetchLink href="/chat" className="block min-w-0">
-            <AppLogo />
-          </SidebarPrefetchLink>
-        </div>
-        <SidebarPrefetchLink
-          href="/chat"
-          className="hidden group-data-[collapsible=icon]:flex"
-        >
-          <img src={appIconLogo} alt="Logo" className="size-7" />
-        </SidebarPrefetchLink>
-        {isAuthenticated && permissionMap && (
-          <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
-        )}
-      </SidebarHeader>
-      <SidebarContent>
-        {isAuthenticated &&
-          permissionMap &&
-          (sidebarMode === "chats" ? (
-            <>
-              <NavPrimary
-                items={filteredChatsNavItems}
-                groups={[]}
-                pathname={pathname}
-                searchParams={searchParams}
-                permissionMap={permissionMap}
-              />
-              {/* The chat list (Pinned + Recents, labeled inside
+      {isSettingsRoute ? (
+        <SettingsSidebarContent
+          returnPath={settingsReturnPath}
+          groups={settingsNavGroups}
+          pathname={pathname}
+          isAuthenticated={Boolean(isAuthenticated && permissionMap)}
+        />
+      ) : (
+        <>
+          <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
+            <div className="group-data-[collapsible=icon]:hidden">
+              <SidebarPrefetchLink href="/chat" className="block min-w-0">
+                <AppLogo />
+              </SidebarPrefetchLink>
+            </div>
+            <SidebarPrefetchLink
+              href="/chat"
+              className="hidden group-data-[collapsible=icon]:flex"
+            >
+              <img src={appIconLogo} alt="Logo" className="size-7" />
+            </SidebarPrefetchLink>
+            {isAuthenticated && permissionMap && (
+              <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+            )}
+          </SidebarHeader>
+          <SidebarContent>
+            {isAuthenticated &&
+              permissionMap &&
+              (sidebarMode === "chats" ? (
+                <>
+                  <NavPrimary
+                    items={filteredChatsNavItems}
+                    groups={[]}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                    permissionMap={permissionMap}
+                  />
+                  {/* The chat list (Pinned + Recents, labeled inside
                     ChatSidebarSection) and the community links below it scroll
                     together within this region, while the nav above stays
                     pinned. The fade hints there is more content below. */}
-              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
-                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
-                  <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
+                  <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+                    <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                      <ChatSidebarSection
+                        slots={15}
+                        flat
+                        fadeIn={chatListFadeIn}
+                      />
+                      <NavSecondary
+                        items={[]}
+                        pathname={pathname}
+                        searchParams={searchParams}
+                        permissionMap={permissionMap}
+                        showCommunityLinks={showCommunityLinks}
+                        starCount={formattedStarCount}
+                        className="mt-2.5"
+                      />
+                    </SidebarGroupContent>
+                  </SidebarGroup>
+                </>
+              ) : (
+                <>
+                  <NavPrimary
+                    items={[]}
+                    groups={filteredNavGroups}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                    permissionMap={permissionMap}
+                  />
                   <NavSecondary
                     items={[]}
                     pathname={pathname}
@@ -704,124 +788,32 @@ export function AppSidebar() {
                     permissionMap={permissionMap}
                     showCommunityLinks={showCommunityLinks}
                     starCount={formattedStarCount}
-                    className="mt-2.5"
+                    className="mt-auto"
                   />
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </>
-          ) : (
-            <>
-              <NavPrimary
-                items={[]}
-                groups={filteredNavGroups}
-                pathname={pathname}
-                searchParams={searchParams}
-                permissionMap={permissionMap}
-              />
+                </>
+              ))}
+            {!isAuthenticated && showCommunityLinks && (
               <NavSecondary
                 items={[]}
                 pathname={pathname}
                 searchParams={searchParams}
-                permissionMap={permissionMap}
+                permissionMap={{}}
                 showCommunityLinks={showCommunityLinks}
                 starCount={formattedStarCount}
-                className="mt-auto"
               />
-            </>
-          ))}
-        {!isAuthenticated && showCommunityLinks && (
-          <NavSecondary
-            items={[]}
-            pathname={pathname}
-            searchParams={searchParams}
-            permissionMap={{}}
-            showCommunityLinks={showCommunityLinks}
-            starCount={formattedStarCount}
-          />
-        )}
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarWarningsAccordion />
-        {isAuthenticated && (
-          <SidebarGroup className="mt-auto p-0">
-            <SidebarGroupContent>
-              <div
-                data-testid={E2eTestId.SidebarUserProfile}
-                className={cn(
-                  "overflow-hidden",
-                  // Collapsed: hide text/chevron, show only avatar circle
-                  "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center",
-                  "group-data-[collapsible=icon]:[&_button]:size-7 group-data-[collapsible=icon]:[&_button]:min-w-0 group-data-[collapsible=icon]:[&_button]:rounded-full group-data-[collapsible=icon]:[&_button]:p-0",
-                  "group-data-[collapsible=icon]:[&_[data-slot=avatar]]:size-7",
-                  "group-data-[collapsible=icon]:[&_[data-slot=avatar-fallback]]:text-[9px]",
-                  "group-data-[collapsible=icon]:[&_button>div]:gap-0",
-                  "group-data-[collapsible=icon]:[&_button>div>div:not([data-slot=avatar])]:hidden",
-                  "group-data-[collapsible=icon]:[&_button>svg]:hidden",
-                )}
-              >
-                <SidebarUserMenu />
-              </div>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-      </SidebarFooter>
+            )}
+          </SidebarContent>
+        </>
+      )}
+      {/* Shared across both variants; kept outside the ternary so it never
+          remounts (and never flashes) when switching settings ⇄ chats/studio. */}
+      <SidebarUserFooter
+        isAuthenticated={
+          isSettingsRoute
+            ? Boolean(isAuthenticated && permissionMap)
+            : isAuthenticated
+        }
+      />
     </Sidebar>
   );
-}
-
-/**
- * Sidebar links opt out of Next.js viewport prefetch to avoid fetching every
- * visible sidebar route's RSC payload when the app shell mounts. Hover/focus
- * prefetch keeps intentional navigation fast without competing with initial
- * page API requests.
- */
-function SidebarPrefetchLink({
-  href,
-  onFocus,
-  onMouseEnter,
-  ...props
-}: React.ComponentProps<typeof Link>) {
-  const router = useRouter();
-
-  return (
-    <Link
-      href={href}
-      prefetch={false}
-      onFocus={(event) => {
-        const prefetchHref = getPrefetchHref(href);
-        if (prefetchHref) router.prefetch(prefetchHref);
-        onFocus?.(event);
-      }}
-      onMouseEnter={(event) => {
-        const prefetchHref = getPrefetchHref(href);
-        if (prefetchHref) router.prefetch(prefetchHref);
-        onMouseEnter?.(event);
-      }}
-      {...props}
-    />
-  );
-}
-
-/**
- * Converts a Next.js Link href into the string URL required by router.prefetch.
- * Sidebar links currently pass strings, but this keeps manual prefetch safe if
- * a future item uses a UrlObject with query or hash fields.
- */
-function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
-  if (typeof href === "string") return href;
-  if (!href.pathname) return null;
-
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(href.query ?? {})) {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item != null) searchParams.append(key, String(item));
-      }
-      continue;
-    }
-    if (value != null) searchParams.set(key, String(value));
-  }
-
-  const query = searchParams.toString();
-  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }

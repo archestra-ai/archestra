@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/settings/account": {
@@ -93,7 +92,6 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const tabs = useSettingsTabs();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
   const config = pathname.startsWith("/settings/service-accounts/")
@@ -110,7 +108,6 @@ export default function SettingsLayout({
       <PageLayout
         title={config.title}
         description={config.description}
-        tabs={tabs}
         actionButton={actionButton}
       >
         {children}

@@ -99,8 +99,9 @@ Macros are not a product architecture tool.
 - Prefer domain-specific error enums over generic strings.
 - Preserve useful error context.
 - Avoid `unwrap`, `expect`, and `panic!` in library code. Pragmatic `unwrap`/`expect` is acceptable only in CLI entrypoints, build scripts, and tests.
+- `expect` is acceptable on provably-infallible static initializers (e.g. `LazyLock<Regex>` over a literal pattern), where the message documents the invariant. This carve-out applies everywhere, including NAPI-reachable code.
 - No `unsafe` unless isolated, documented, and clearly justified.
-- **(NAPI only)** No `unwrap`, `expect`, or `panic!` in code reachable from the NAPI boundary. Convert Rust errors into JS/NAPI errors only at the boundary. Assume dependencies can still panic despite that rule: wrap every future that enters the core from the NAPI boundary in `catch_unwind` and convert the payload into a domain error. The host process must never abort on a Rust panic.
+- **(NAPI only)** No `unwrap`, `expect`, or `panic!` in code reachable from the NAPI boundary, except the static-initializer carve-out above. Convert Rust errors into JS/NAPI errors only at the boundary. Assume dependencies can still panic despite that rule: wrap every future that enters the core from the NAPI boundary in `catch_unwind` and convert the payload into a domain error. The host process must never abort on a Rust panic.
 
 ## Rust footprint discipline
 

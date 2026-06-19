@@ -46,7 +46,7 @@ The prefix before `:` is the provider. The value after `:` is the provider's nat
 
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
-Model Router translation is text-first. Anthropic, Gemini, and Cohere routes currently drop non-text content parts such as OpenAI `image_url` message parts; Bedrock supports base64 data URL images.
+Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (base64 data URL images). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
 
 ## OpenAI
 

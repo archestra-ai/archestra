@@ -145,6 +145,8 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   upload_file: ToolGroup.SkillSandbox,
   search_files: ToolGroup.SkillSandbox,
   save_result: ToolGroup.SkillSandbox,
+  edit_file: ToolGroup.SkillSandbox,
+  delete_file: ToolGroup.SkillSandbox,
 
   create_app: ToolGroup.Apps,
   list_apps: ToolGroup.Apps,

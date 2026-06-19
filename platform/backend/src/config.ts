@@ -1342,6 +1342,12 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
+      ? parsePositiveInt(
+          process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
+          300000,
+        )
+      : undefined,
   },
   kb: {
     hybridSearchEnabled:

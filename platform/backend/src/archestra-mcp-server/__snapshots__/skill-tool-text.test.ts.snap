@@ -55,6 +55,32 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
+{
+  "description": "Permanently delete a persistent file (My Files), identified by \`id\` (from search_files / save_result) or by \`filename\`. In a project chat only the project's files can be deleted. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Permanently delete a persistent file (My Files). In a project chat only the project's files can be deleted.",
+    "properties": {
+      "filename": {
+        "description": "Filename to delete instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id of the file to delete (from search_files / save_result).",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__delete_file",
+  "title": "Delete File",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
   "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
@@ -96,6 +122,46 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
   },
   "name": "archestra__download_file",
   "title": "Download File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
+{
+  "description": "Replace the contents of an existing persistent file (My Files) in place, keeping its id and filename — use it to revise a file you saved earlier (e.g. trim a list down to the one item you want to keep). Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Replace the contents of an existing persistent file (My Files) in place, keeping its id and name. In a project chat only the project's files can be edited.",
+    "properties": {
+      "content": {
+        "description": "New UTF-8 text content; fully replaces the file.",
+        "type": "string",
+      },
+      "contentBase64": {
+        "description": "New base64 binary content; fully replaces the file.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "filename": {
+        "description": "Filename to edit instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id of the file to edit (from search_files / save_result).",
+        "minLength": 1,
+        "type": "string",
+      },
+      "mimeType": {
+        "description": "Optional new MIME type. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__edit_file",
+  "title": "Edit File",
 }
 `;
 

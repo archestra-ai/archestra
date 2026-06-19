@@ -10,7 +10,7 @@ type ResolvedMyFile = {
   originalName: string;
 };
 
-type MyFileResolutionError = {
+export type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
 };
 
@@ -110,6 +110,40 @@ class SkillSandboxArtifactService {
     filename?: string;
     scope?: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
+    const file = await this.resolveMyFileRow(params);
+    if ("error" in file) return file;
+    return this.readBytes(file);
+  }
+
+  /**
+   * Resolve a `my_file` reference (by id, or by `filename` within scope) to its
+   * row WITHOUT reading bytes — for edit/delete, which mutate the file rather
+   * than copy it into a sandbox. Same scoping and ambiguity rules as
+   * `resolveMyFileSource`.
+   */
+  async resolveMyFileRef(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope?: { projectId: string } | null;
+  }): Promise<PersistedFile | MyFileResolutionError> {
+    return this.resolveMyFileRow(params);
+  }
+
+  /**
+   * Resolve a file by id, or by `filename` within the chat's flat scope. A
+   * duplicated filename is reported as ambiguous rather than picking one
+   * silently. Project scope confines resolution to the project's files;
+   * otherwise to the caller's own personal files.
+   */
+  private async resolveMyFileRow(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope?: { projectId: string } | null;
+  }): Promise<PersistedFile | MyFileResolutionError> {
     const scope = params.scope ?? null;
 
     if (params.id) {
@@ -124,7 +158,7 @@ class SkillSandboxArtifactService {
       } else if (file.userId !== params.userId || file.projectId != null) {
         return { error: "not_found" };
       }
-      return this.readBytes(file);
+      return file;
     }
 
     const filename = params.filename ?? "";
@@ -143,7 +177,7 @@ class SkillSandboxArtifactService {
 
     const file = await FileModel.findById(matches[0].id);
     if (!file) return { error: "not_found" };
-    return this.readBytes(file);
+    return file;
   }
 
   private async readBytes(

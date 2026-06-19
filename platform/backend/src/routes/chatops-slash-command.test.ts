@@ -76,6 +76,23 @@ const autoProvisionUserMock = vi.fn().mockResolvedValue({
 
 vi.mock("@/agents/chatops/auto-provision", () => ({
   autoProvisionUser: (...args: unknown[]) => autoProvisionUserMock(...args),
+  ensureProvisionedUser: async (params: {
+    email: string;
+    resolveDisplayName: () => Promise<string>;
+    provider: string;
+  }) => {
+    const existing = await findByEmailMock(params.email.toLowerCase());
+    if (existing) {
+      return { user: existing, invitationId: null };
+    }
+    const { invitationId } = await autoProvisionUserMock({
+      email: params.email,
+      name: await params.resolveDisplayName(),
+      provider: params.provider,
+    });
+    const user = await findByEmailMock(params.email.toLowerCase());
+    return user ? { user, invitationId } : null;
+  },
   isSsoConfigured: vi.fn().mockResolvedValue(false),
   buildWelcomeMessage: vi.fn().mockReturnValue({
     text: "Hey there 👋 We created an Archestra account for you.",

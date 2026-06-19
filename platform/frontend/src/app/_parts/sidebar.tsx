@@ -42,6 +42,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -505,6 +506,9 @@ const NavSecondary = ({
 
   return (
     <SidebarGroup className={className}>
+      {(permittedItems.length > 0 || showCommunityLinks) && (
+        <SidebarGroupLabel>Help</SidebarGroupLabel>
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
           {permittedItems.map((item) => (
@@ -687,34 +691,43 @@ export function AppSidebar() {
                   permissionMap={permissionMap}
                 />
                 {/* The chat list (Pinned + Recents, labeled inside
-                    ChatSidebarSection) scrolls within its own region so the
-                    community links below (NavSecondary, mt-auto) stay pinned to
-                    the bottom on the chats tab instead of being pushed
-                    off-screen. The fade hints there are more chats below. */}
+                    ChatSidebarSection) and the community links below it scroll
+                    together within this region, while the nav above stays
+                    pinned. The fade hints there is more content below. */}
                 <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
-                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
+                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8">
                     <ChatSidebarSection slots={15} flat />
+                    <NavSecondary
+                      items={[]}
+                      pathname={pathname}
+                      searchParams={searchParams}
+                      permissionMap={permissionMap}
+                      showCommunityLinks={showCommunityLinks}
+                      starCount={formattedStarCount}
+                    />
                   </SidebarGroupContent>
                 </SidebarGroup>
               </>
             ) : (
-              <NavPrimary
-                items={[]}
-                groups={filteredNavGroups}
-                pathname={pathname}
-                searchParams={searchParams}
-                permissionMap={permissionMap}
-              />
+              <>
+                <NavPrimary
+                  items={[]}
+                  groups={filteredNavGroups}
+                  pathname={pathname}
+                  searchParams={searchParams}
+                  permissionMap={permissionMap}
+                />
+                <NavSecondary
+                  items={[]}
+                  pathname={pathname}
+                  searchParams={searchParams}
+                  permissionMap={permissionMap}
+                  showCommunityLinks={showCommunityLinks}
+                  starCount={formattedStarCount}
+                  className="mt-auto"
+                />
+              </>
             )}
-            <NavSecondary
-              items={[]}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              showCommunityLinks={showCommunityLinks}
-              starCount={formattedStarCount}
-              className="mt-auto"
-            />
           </>
         )}
         {!isAuthenticated && showCommunityLinks && (

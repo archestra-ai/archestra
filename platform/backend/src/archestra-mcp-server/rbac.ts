@@ -149,11 +149,10 @@ export const TOOL_PERMISSIONS: Record<
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check
   // plus that binding together confine a caller to apps it may use.
-  create_app: { resource: "app", action: "create" },
+  scaffold_app: { resource: "app", action: "create" },
   list_apps: { resource: "app", action: "read" },
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
-  update_app: { resource: "app", action: "update" },
   edit_app: { resource: "app", action: "update" },
   delete_app: { resource: "app", action: "delete" },
   // Authoring intent: the preview is exercised while building/fixing an app.

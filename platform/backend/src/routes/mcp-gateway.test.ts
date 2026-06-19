@@ -4,7 +4,6 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -17,9 +16,9 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -1030,8 +1029,7 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
-          getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),

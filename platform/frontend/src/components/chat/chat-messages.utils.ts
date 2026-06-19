@@ -78,7 +78,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Detect an owned-app render: a successful `create_app`/`update_app`/`render_app`
+ * Detect an owned-app render: a successful `scaffold_app`/`edit_app`/`render_app`
  * result identifies an Archestra-authored MCP App via `structuredContent.id`,
  * and chat mounts the app-bound runtime from that id. Only archestra-branded
  * tool names match — a foreign server exposing a tool with the same short name

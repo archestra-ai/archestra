@@ -5,7 +5,7 @@ import {
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -297,7 +297,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
   });
 
   // An app runtime has no agentId, so the agent-assignment check is skipped;
-  // dispatch must still refuse Archestra management tools (create_app, …) even
+  // dispatch must still refuse Archestra management tools (scaffold_app, …) even
   // when the session user has RBAC for them.
   test("refuses a non-data Archestra management tool from the app runtime", async ({
     makeApp,
@@ -317,8 +317,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         jsonrpc: "2.0",
         method: "tools/call",
         params: {
-          name: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-          arguments: { name: "Sneaky", html: "<p/>", scope: "org" },
+          name: getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+          arguments: { name: "Sneaky", scope: "org" },
         },
         id: 1,
       },

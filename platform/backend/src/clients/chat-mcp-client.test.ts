@@ -1696,8 +1696,8 @@ describe("buildArchestraToolOutput", () => {
   });
 
   test.for([
-    "create_app",
-    "update_app",
+    "scaffold_app",
+    "edit_app",
     "render_app",
   ] as const)("returns the rich shape for a direct %s result so chat can mount the app runtime", async (shortName, {
     makeAgent,
@@ -1723,7 +1723,7 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
-  test("returns the rich shape for a run_tool dispatch with a bare create_app target", async ({
+  test("returns the rich shape for a run_tool dispatch with a bare scaffold_app target", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -1736,7 +1736,7 @@ describe("buildArchestraToolOutput", () => {
     const result = await buildArchestraToolOutput({
       response: appResponse,
       toolName: "archestra__run_tool",
-      toolArguments: { tool_name: "create_app", tool_args: {} },
+      toolArguments: { tool_name: "scaffold_app", tool_args: {} },
       agentId: agent.id,
     });
 
@@ -1757,7 +1757,7 @@ describe("buildArchestraToolOutput", () => {
         ],
         isError: true,
       },
-      toolName: "archestra__create_app",
+      toolName: "archestra__scaffold_app",
       toolArguments: {},
       agentId: agent.id,
     });

@@ -148,11 +148,10 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   edit_file: ToolGroup.SkillSandbox,
   delete_file: ToolGroup.SkillSandbox,
 
-  create_app: ToolGroup.Apps,
+  scaffold_app: ToolGroup.Apps,
   list_apps: ToolGroup.Apps,
   render_app: ToolGroup.Apps,
   read_app: ToolGroup.Apps,
-  update_app: ToolGroup.Apps,
   edit_app: ToolGroup.Apps,
   delete_app: ToolGroup.Apps,
   preview_app_tool: ToolGroup.Apps,

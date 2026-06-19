@@ -6,7 +6,6 @@ import {
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
@@ -14,7 +13,7 @@ import {
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
 import {
@@ -66,16 +65,22 @@ describe("app tool execution", () => {
     };
   });
 
-  test("create → list → get → update (forks version) → delete", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Dashboard", html: "<h1>v1</h1>" },
-      context,
+  function scaffold(args: Record<string, unknown>, ctx = context) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args,
+      ctx,
     );
+  }
+
+  test("scaffold → list → render → edit (forks version) → delete", async () => {
+    const created = await scaffold({ name: "Dashboard" });
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
     expect(structured(created).latestVersion).toBe(1);
-    // The model hands this link to the user; the chat UI renders inline from structuredContent.id.
+    // The model hands this link to the user; the chat UI renders inline from
+    // structuredContent.id (scaffold is in the rendering set).
+    expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
     expect((created.content[0] as any).text).toContain(`/apps/${appId}/run`);
 
     const listed = await executeArchestraTool(
@@ -92,9 +97,16 @@ describe("app tool execution", () => {
     );
     expect(structured(got).name).toBe("Dashboard");
 
+    // A single edit forks a new version off the scaffolded head.
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
     const updated = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId, html: "<h1>v2</h1>" },
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: "<h1>v2</h1>" }],
+      },
       context,
     );
     expect(structured(updated).latestVersion).toBe(2);
@@ -122,29 +134,20 @@ describe("app tool execution", () => {
       userId: member.id,
     };
 
-    // Member may create a personal app...
-    const personal = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Mine", html: "<p/>" },
-      memberCtx,
-    );
+    // Member may scaffold a personal app...
+    const personal = await scaffold({ name: "Mine" }, memberCtx);
     expect(personal.isError).toBe(false);
 
     // ...but not an org-scoped one.
-    const orgCreate = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Shared", html: "<p/>", scope: "org" },
+    const orgCreate = await scaffold(
+      { name: "Shared", scope: "org" },
       memberCtx,
     );
     expect(orgCreate.isError).toBe(true);
 
-    // An org app created by an admin (the suite context) cannot be deleted or
-    // re-scoped by a plain member, even though it is visible to them.
-    const orgApp = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "AdminApp", html: "<p/>", scope: "org" },
-      context,
-    );
+    // An org app scaffolded by an admin (the suite context) cannot be deleted
+    // by a plain member, even though it is visible to them.
+    const orgApp = await scaffold({ name: "AdminApp", scope: "org" });
     const orgAppId = structured(orgApp).id as string;
 
     const delAttempt = await executeArchestraTool(
@@ -156,34 +159,32 @@ describe("app tool execution", () => {
     expect(await AppModel.findById(orgAppId)).not.toBeNull();
   });
 
-  test("create rejects the removed uiCsp param (apps carry no author CSP)", async () => {
-    const result = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      {
-        name: "BadCsp",
-        html: "<p/>",
-        uiCsp: { connectDomains: ["https://evil.example.com"] },
-      },
-      context,
-    );
+  test("scaffold rejects unknown params (strict schema; no html/uiCsp)", async () => {
+    const result = await scaffold({
+      name: "BadCsp",
+      uiCsp: { connectDomains: ["https://evil.example.com"] },
+    });
     expect(result.isError).toBe(true);
   });
 
-  test("an html-only update preserves the existing permissions", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      {
-        name: "Keeps Permissions",
-        html: "<h1>v1</h1>",
-        uiPermissions: { camera: {} },
-      },
-      context,
-    );
+  test("an html edit preserves the scaffolded permissions", async () => {
+    const created = await scaffold({
+      name: "Keeps Permissions",
+      uiPermissions: { camera: {} },
+    });
     const appId = structured(created).id as string;
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+    expect(seeded!.uiPermissions).toEqual({ camera: {} });
 
     const updated = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId, html: "<h1>v2</h1>" },
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: "<h1>v2</h1>" }],
+      },
       context,
     );
     expect(updated.isError).toBe(false);
@@ -192,63 +193,58 @@ describe("app tool execution", () => {
       appId,
       structured(updated).latestVersion as number,
     );
+    // edit_app inherits the base version's permissions.
     expect(head?.uiPermissions).toEqual({ camera: {} });
   });
 
-  test("create seeds the default template when html is omitted", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "From Template" },
-      context,
-    );
+  test("scaffold seeds the default template and returns its HTML", async () => {
+    const created = await scaffold({ name: "From Template" });
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
 
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
     expect(head?.html).toContain("window.archestra.storage.user.set");
     // Scaffold-then-edit: the seeded html rides the result text so the model
-    // can update_app without a read-back.
+    // can edit_app without a read-back.
     expect((created.content[0] as any).text).toContain(
       "window.archestra.storage.user.set",
     );
-
-    // Explicit html wins; the result carries no seed note.
-    const explicit = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Explicit", html: "<h1>mine</h1>" },
-      context,
-    );
-    expect(explicit.isError).toBe(false);
-    const explicitHead = await AppVersionModel.findByAppAndVersion(
-      structured(explicit).id as string,
-      1,
-    );
-    expect(explicitHead?.html).toBe("<h1>mine</h1>");
-    expect((explicit.content[0] as any).text).not.toContain("Seeded from");
   });
 
-  test("create rejects SDK self-bootstrap html; update surfaces warnings", async () => {
+  test("edit rejects SDK self-bootstrap html and surfaces fragment warnings", async () => {
+    const created = await scaffold({ name: "Editable" });
+    const appId = structured(created).id as string;
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+
+    // Injecting the SDK bootstrap glue is rejected at edit time.
     const bootstrap = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
       {
-        name: "Bootstrapper",
-        html: "<html><head><script>const t = new PostMessageTransport(window.parent, window.parent);</script></head><body/></html>",
+        appId,
+        baseVersion: 1,
+        edits: [
+          {
+            // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+            old_str: seeded!.html,
+            new_str:
+              "<html><head><script>const t = new PostMessageTransport(window.parent, window.parent);</script></head><body/></html>",
+          },
+        ],
       },
       context,
     );
     expect(bootstrap.isError).toBe(true);
     expect((bootstrap.content[0] as any).text).toContain("window.archestra");
 
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Warned", html: "<html><head></head><body/></html>" },
-      context,
-    );
-    expect(structured(created).warnings).toBeUndefined();
-
+    // A bare-fragment rewrite saves but surfaces a soft validation warning.
     const updated = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId: structured(created).id, html: "<h1>fragment</h1>" },
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: "<h1>fragment</h1>" }],
+      },
       context,
     );
     expect(updated.isError).toBe(false);
@@ -256,19 +252,17 @@ describe("app tool execution", () => {
     expect((updated.content[0] as any).text).toContain("Validation warnings");
   });
 
-  test("create reports a name conflict cleanly", async () => {
-    await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Dup", html: "<p/>", scope: "org" },
-      context,
-    );
-    const second = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Dup", html: "<p/>", scope: "org" },
-      context,
-    );
+  test("scaffold reports a name conflict cleanly", async () => {
+    await scaffold({ name: "Dup", scope: "org" });
+    const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
     expect((second.content[0] as any).text).toContain("already exists");
+  });
+
+  test("scaffold rejects team scope", async () => {
+    const result = await scaffold({ name: "TeamApp", scope: "team" });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Team-scoped");
   });
 });
 
@@ -288,14 +282,33 @@ describe("read_app / edit_app", () => {
     };
   });
 
-  async function createApp(html: string): Promise<string> {
+  // Scaffold a new app, then rewrite its seeded HTML to `html` with one
+  // full-document edit. Returns the app id and the head version after that
+  // rewrite (2), so callers base subsequent edits off it.
+  async function scaffoldWithHtml(
+    html: string,
+    ctx: ArchestraContext = context,
+  ): Promise<{ appId: string; version: number }> {
     const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: `App ${crypto.randomUUID().slice(0, 8)}`, html },
-      context,
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `App ${crypto.randomUUID().slice(0, 8)}` },
+      ctx,
     );
     expect(created.isError).toBe(false);
-    return structured(created).id as string;
+    const appId = structured(created).id as string;
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    const rewrite = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        edits: [{ old_str: seeded!.html, new_str: html }],
+      },
+      ctx,
+    );
+    expect(rewrite.isError).toBe(false);
+    return { appId, version: structured(rewrite).latestVersion as number };
   }
 
   function readApp(appId: string, version?: number) {
@@ -320,12 +333,12 @@ describe("read_app / edit_app", () => {
   }
 
   test("read_app returns the stored html and metadata for head and a pinned version", async () => {
-    const appId = await createApp("<h1>v1</h1>");
-    await editApp(appId, 1, [{ old_str: "v1", new_str: "v2" }]);
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
 
     const head = await readApp(appId);
     expect(head.isError).toBe(false);
-    expect(structured(head).version).toBe(2);
+    expect(structured(head).version).toBe(version + 1);
     expect(structured(head).html).toBe("<h1>v2</h1>");
     expect(structured(head).byteSize).toBe(
       Buffer.byteLength("<h1>v2</h1>", "utf8"),
@@ -333,8 +346,8 @@ describe("read_app / edit_app", () => {
     // raw html rides the text content so the model can edit against it directly
     expect((head.content[0] as any).text).toContain("<h1>v2</h1>");
 
-    const v1 = await readApp(appId, 1);
-    expect(structured(v1).html).toBe("<h1>v1</h1>");
+    const pinned = await readApp(appId, version);
+    expect(structured(pinned).html).toBe("<h1>v1</h1>");
   });
 
   test("read_app errors on a missing app or version", async () => {
@@ -342,7 +355,7 @@ describe("read_app / edit_app", () => {
     expect(missing.isError).toBe(true);
     expect((missing.content[0] as any).text).toContain("No app found");
 
-    const appId = await createApp("<h1>v1</h1>");
+    const { appId } = await scaffoldWithHtml("<h1>v1</h1>");
     const noVersion = await readApp(appId, 99);
     expect(noVersion.isError).toBe(true);
     expect((noVersion.content[0] as any).text).toContain("no version 99");
@@ -353,7 +366,7 @@ describe("read_app / edit_app", () => {
     makeMember,
   }) => {
     // a personal app owned by `context`'s admin is invisible to another member
-    const appId = await createApp("<h1>secret</h1>");
+    const { appId, version } = await scaffoldWithHtml("<h1>secret</h1>");
     const other = await makeUser();
     await makeMember(other.id, organizationId, { role: "member" });
     const otherCtx: ArchestraContext = { ...context, userId: other.id };
@@ -368,7 +381,7 @@ describe("read_app / edit_app", () => {
 
     const edit = await editApp(
       appId,
-      1,
+      version,
       [{ old_str: "secret", new_str: "leaked" }],
       otherCtx,
     );
@@ -380,8 +393,8 @@ describe("read_app / edit_app", () => {
     makeMember,
   }) => {
     const orgApp = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Org App", html: "<h1>v1</h1>", scope: "org" },
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Org App", scope: "org" },
       context,
     );
     const appId = structured(orgApp).id as string;
@@ -398,73 +411,80 @@ describe("read_app / edit_app", () => {
     );
     expect(read.isError).toBe(false);
     // ... but not modifiable by a plain member
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
     const edit = await editApp(
       appId,
       1,
-      [{ old_str: "v1", new_str: "v2" }],
+      // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+      [{ old_str: seeded!.html, new_str: "<h1>v2</h1>" }],
       memberCtx,
     );
     expect(edit.isError).toBe(true);
   });
 
   test("a single edit forks exactly one version", async () => {
-    const appId = await createApp("<h1>Hello</h1>");
-    const result = await editApp(appId, 1, [
+    const { appId, version } = await scaffoldWithHtml("<h1>Hello</h1>");
+    const result = await editApp(appId, version, [
       { old_str: "Hello", new_str: "Goodbye" },
     ]);
     expect(result.isError).toBe(false);
-    expect(structured(result).latestVersion).toBe(2);
+    expect(structured(result).latestVersion).toBe(version + 1);
     expect((result.content[0] as any).text).toContain("Applied 1 edit");
 
-    const head = await AppVersionModel.findByAppAndVersion(appId, 2);
+    const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
     expect(head?.html).toBe("<h1>Goodbye</h1>");
-    expect(await AppVersionModel.listForApp(appId)).toHaveLength(2);
   });
 
   test("multiple edits apply in order and fork exactly one version", async () => {
-    const appId = await createApp("<div>alpha beta gamma</div>");
-    const result = await editApp(appId, 1, [
+    const { appId, version } = await scaffoldWithHtml(
+      "<div>alpha beta gamma</div>",
+    );
+    const result = await editApp(appId, version, [
       { old_str: "alpha", new_str: "ALPHA" },
       { old_str: "gamma", new_str: "GAMMA" },
     ]);
     expect(result.isError).toBe(false);
-    expect(structured(result).latestVersion).toBe(2);
+    expect(structured(result).latestVersion).toBe(version + 1);
     expect((result.content[0] as any).text).toContain("Applied 2 edits");
 
-    const head = await AppVersionModel.findByAppAndVersion(appId, 2);
+    const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
     expect(head?.html).toBe("<div>ALPHA beta GAMMA</div>");
     // exactly one fork, no intermediate version per edit
-    expect(await AppVersionModel.listForApp(appId)).toHaveLength(2);
+    expect(
+      await AppVersionModel.findByAppAndVersion(appId, version + 2),
+    ).toBeNull();
   });
 
   test("a non-matching edit leaves the app untouched (atomic)", async () => {
-    const appId = await createApp("<h1>once</h1>");
+    const { appId, version } = await scaffoldWithHtml("<h1>once</h1>");
 
-    const zero = await editApp(appId, 1, [
+    const zero = await editApp(appId, version, [
       { old_str: "once", new_str: "twice" },
       { old_str: "absent", new_str: "x" },
     ]);
     expect(zero.isError).toBe(true);
     expect((zero.content[0] as any).text).toContain("edit 2");
     expect((zero.content[0] as any).text).toContain("0 matches");
-    // first edit must not have landed: still at v1 with original html
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
-    expect((await AppVersionModel.findByAppAndVersion(appId, 1))?.html).toBe(
-      "<h1>once</h1>",
-    );
+    // first edit must not have landed: still at the rewrite head with its html
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<h1>once</h1>");
   });
 
   test("an ambiguous (multi-match) edit is rejected with the match count", async () => {
-    const appId = await createApp("<p>x</p><p>x</p>");
-    const result = await editApp(appId, 1, [{ old_str: "x", new_str: "y" }]);
+    const { appId, version } = await scaffoldWithHtml("<p>x</p><p>x</p>");
+    const result = await editApp(appId, version, [
+      { old_str: "x", new_str: "y" },
+    ]);
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("matched 2 times");
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("a no-op edit (old_str === new_str) is rejected", async () => {
-    const appId = await createApp("<h1>same</h1>");
-    const result = await editApp(appId, 1, [
+    const { appId, version } = await scaffoldWithHtml("<h1>same</h1>");
+    const result = await editApp(appId, version, [
       { old_str: "same", new_str: "same" },
     ]);
     expect(result.isError).toBe(true);
@@ -472,8 +492,10 @@ describe("read_app / edit_app", () => {
   });
 
   test("an edit that injects SDK bootstrap markers is rejected", async () => {
-    const appId = await createApp("<html><head></head><body>hi</body></html>");
-    const result = await editApp(appId, 1, [
+    const { appId, version } = await scaffoldWithHtml(
+      "<html><head></head><body>hi</body></html>",
+    );
+    const result = await editApp(appId, version, [
       {
         old_str: "<body>hi</body>",
         new_str:
@@ -482,49 +504,53 @@ describe("read_app / edit_app", () => {
     ]);
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("window.archestra");
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("an edit that breaches the byte cap is rejected", async () => {
-    const appId = await createApp("<h1>tiny</h1>");
+    const { appId, version } = await scaffoldWithHtml("<h1>tiny</h1>");
     const huge = "z".repeat(APP_HTML_MAX_BYTES + 1);
-    const result = await editApp(appId, 1, [
+    const result = await editApp(appId, version, [
       { old_str: "tiny", new_str: huge },
     ]);
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("byte limit");
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("edits that net back to the head create no new version and say so", async () => {
-    const appId = await createApp("<h1>v1</h1>");
-    const result = await editApp(appId, 1, [
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    const result = await editApp(appId, version, [
       { old_str: "v1", new_str: "v2" },
       { old_str: "v2", new_str: "v1" },
     ]);
     expect(result.isError).toBe(false);
-    expect(structured(result).latestVersion).toBe(1);
+    expect(structured(result).latestVersion).toBe(version);
     expect((result.content[0] as any).text).toContain("no new version");
-    expect(await AppVersionModel.listForApp(appId)).toHaveLength(1);
+    expect(
+      await AppVersionModel.findByAppAndVersion(appId, version + 1),
+    ).toBeNull();
   });
 
   test("a stale baseVersion is rejected after the head moves", async () => {
-    const appId = await createApp("<h1>v1</h1>");
-    const first = await editApp(appId, 1, [{ old_str: "v1", new_str: "v2" }]);
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    const first = await editApp(appId, version, [
+      { old_str: "v1", new_str: "v2" },
+    ]);
     expect(first.isError).toBe(false);
-    expect(structured(first).latestVersion).toBe(2);
+    expect(structured(first).latestVersion).toBe(version + 1);
 
-    // a second edit still based on v1 must be refused, naming the current head
-    const stale = await editApp(appId, 1, [
+    // a second edit still based on the old head must be refused, naming the head
+    const stale = await editApp(appId, version, [
       { old_str: "v1", new_str: "other" },
     ]);
     expect(stale.isError).toBe(true);
-    expect((stale.content[0] as any).text).toContain("version 2");
-    expect((await AppModel.findById(appId))?.latestVersion).toBe(2);
+    expect((stale.content[0] as any).text).toContain(`version ${version + 1}`);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
   });
 
   test("AppModel.update CAS rejects a stale expectedLatestVersion at the model layer", async () => {
-    const appId = await createApp("<h1>v1</h1>");
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     const payloadA = (
       await buildValidatedVersionPayload({
         html: "<h1>a</h1>",
@@ -536,23 +562,25 @@ describe("read_app / edit_app", () => {
       })
     ).payload;
 
-    // first writer (based on v1) wins, forking v2
+    // first writer (based on the current head) wins, forking the next version
     const bumped = await AppModel.update({
       id: appId,
       version: payloadA,
-      expectedLatestVersion: 1,
+      expectedLatestVersion: version,
     });
-    expect(bumped?.latestVersion).toBe(2);
+    expect(bumped?.latestVersion).toBe(version + 1);
 
-    // second writer, still racing on v1, is rejected — no third version
+    // second writer, still racing on the old head, is rejected — no new version
     await expect(
       AppModel.update({
         id: appId,
         version: payloadB,
-        expectedLatestVersion: 1,
+        expectedLatestVersion: version,
       }),
-    ).rejects.toThrow(/moved to version 2/);
-    expect(await AppVersionModel.listForApp(appId)).toHaveLength(2);
+    ).rejects.toThrow(new RegExp(`moved to version ${version + 1}`));
+    expect(
+      await AppVersionModel.findByAppAndVersion(appId, version + 2),
+    ).toBeNull();
   });
 });
 
@@ -587,8 +615,8 @@ describe("preview_app_tool", () => {
       await makeTool({ name: toolName, catalogId: catalog.id });
 
       const created = await executeArchestraTool(
-        getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-        { name: "Preview App", html: "<p/>", tools: [toolName] },
+        getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+        { name: "Preview App", tools: [toolName] },
         context,
       );
       expect(created.isError).toBe(false);
@@ -673,8 +701,8 @@ describe("get_app_diagnostics", () => {
 
   async function createApp(): Promise<string> {
     const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: `Diag ${crypto.randomUUID().slice(0, 8)}`, html: "<h1>v1</h1>" },
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `Diag ${crypto.randomUUID().slice(0, 8)}` },
       context,
     );
     return structured(created).id as string;
@@ -893,11 +921,10 @@ describe("app data store tools", () => {
   });
 });
 
-describe("create_app/update_app tools param", () => {
+describe("scaffold_app tools param", () => {
   let context: ArchestraContext;
   let organizationId: string;
   let paperSearchName: string;
-  let statsName: string;
 
   beforeEach(
     async ({
@@ -919,18 +946,23 @@ describe("create_app/update_app tools param", () => {
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
       paperSearchName = `hf__paper_search_${crypto.randomUUID().slice(0, 8)}`;
-      statsName = `hf__stats_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: paperSearchName, catalogId: catalog.id });
-      await makeTool({ name: statsName, catalogId: catalog.id });
     },
   );
 
-  test("create assigns the tools with dynamic credential resolution", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Papers", html: "<p/>", tools: [paperSearchName] },
+  function scaffold(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args,
       context,
     );
+  }
+
+  test("scaffold assigns the tools with dynamic credential resolution", async () => {
+    const created = await scaffold({
+      name: "Papers",
+      tools: [paperSearchName],
+    });
     expect(created.isError).toBe(false);
     expect(structured(created).tools).toEqual([paperSearchName]);
 
@@ -944,12 +976,8 @@ describe("create_app/update_app tools param", () => {
     expect(assignments[0].mcpServerId).toBeNull();
   });
 
-  test("create with an unknown tool name fails and leaves no app behind", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Ghost", html: "<p/>", tools: ["nope__missing"] },
-      context,
-    );
+  test("scaffold with an unknown tool name fails and leaves no app behind", async () => {
+    const created = await scaffold({ name: "Ghost", tools: ["nope__missing"] });
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("nope__missing");
 
@@ -962,15 +990,10 @@ describe("create_app/update_app tools param", () => {
   });
 
   test("built-in tool names are rejected", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      {
-        name: "Builtin",
-        html: "<p/>",
-        tools: [getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME)],
-      },
-      context,
-    );
+    const created = await scaffold({
+      name: "Builtin",
+      tools: [getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME)],
+    });
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Built-in");
   });
@@ -983,50 +1006,8 @@ describe("create_app/update_app tools param", () => {
     const foreignName = `foreign__tool_${crypto.randomUUID().slice(0, 8)}`;
     await makeTool({ name: foreignName, catalogId: foreignCatalog.id });
 
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "CrossOrg", html: "<p/>", tools: [foreignName] },
-      context,
-    );
+    const created = await scaffold({ name: "CrossOrg", tools: [foreignName] });
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
-  });
-
-  test("update replaces the assignment set declaratively; [] clears it", async () => {
-    const created = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-      { name: "Replace", html: "<p/>", tools: [paperSearchName] },
-      context,
-    );
-    const appId = structured(created).id as string;
-
-    const swapped = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId, tools: [statsName] },
-      context,
-    );
-    expect(swapped.isError).toBe(false);
-    expect(structured(swapped).tools).toEqual([statsName]);
-    let names = (await AppToolModel.getToolsForApp(appId)).map((t) => t.name);
-    expect(names).toEqual([statsName]);
-
-    // an unknown name fails the whole replace — the old set stays intact
-    const failed = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId, tools: [statsName, "nope__missing"] },
-      context,
-    );
-    expect(failed.isError).toBe(true);
-    names = (await AppToolModel.getToolsForApp(appId)).map((t) => t.name);
-    expect(names).toEqual([statsName]);
-
-    const cleared = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
-      { appId, tools: [] },
-      context,
-    );
-    expect(cleared.isError).toBe(false);
-    expect(structured(cleared).tools).toEqual([]);
-    expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
   });
 });

@@ -108,7 +108,7 @@ export const SelectAppRenderScreenshotSchema = createSelectSchema(
   schema.appRenderScreenshotTable,
 );
 
-// Public payloads (create_app/update_app tools + REST CRUD). HTML and its
+// Public payloads (REST CRUD + the scaffold_app MCP tool). HTML and its
 // security envelope live in app_versions, so these are hand-authored composites
 // rather than table inserts.
 const htmlField = z
@@ -126,6 +126,24 @@ export const CreateAppSchema = z.object({
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
+});
+
+// Input for the `scaffold_app` MCP tool: it always seeds the single default
+// template (no html), so the staged authoring flow is scaffold → edit_app.
+// strictObject so apps.ts can extend it with the tool-assignment `tools` param.
+export const ScaffoldAppSchema = z.strictObject({
+  name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
+  description: z
+    .string()
+    .max(APP_DESCRIPTION_MAX_LENGTH)
+    .optional()
+    .describe("Optional description."),
+  scope: AppScopeSchema.optional().describe(
+    "Visibility scope. Defaults to personal (owned by the calling user).",
+  ),
+  uiPermissions: AppUiPermissionsSchema.optional().describe(
+    "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
+  ),
 });
 
 // A curated starter an app can be seeded from. Shipped as static backend

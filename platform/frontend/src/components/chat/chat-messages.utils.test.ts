@@ -342,14 +342,14 @@ describe("deriveCanvasesFromMessages", () => {
     });
   });
 
-  it("returns a canvas labeled with the app name for an owned-app create_app result", () => {
+  it("returns a canvas labeled with the app name for an owned-app scaffold_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-archestra__create_app",
+            type: "tool-archestra__scaffold_app",
             toolCallId: "call_app",
             state: "output-available",
             output: {
@@ -374,14 +374,14 @@ describe("deriveCanvasesFromMessages", () => {
     ]);
   });
 
-  it("ignores a foreign server's create_app result", () => {
+  it("ignores a foreign server's scaffold_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-other__create_app",
+            type: "tool-other__scaffold_app",
             toolCallId: "call_foreign",
             state: "output-available",
             output: {
@@ -410,8 +410,7 @@ describe("extractOwnedAppRender", () => {
   };
 
   it.each([
-    "create_app",
-    "update_app",
+    "scaffold_app",
     "edit_app",
     "render_app",
   ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
@@ -429,7 +428,7 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    "create_app",
+    "scaffold_app",
     "edit_app",
   ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
     expect(
@@ -446,17 +445,17 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    ["foreign server prefix", "other__create_app", output],
+    ["foreign server prefix", "other__scaffold_app", output],
     ["non-rendering app tool", "archestra__list_apps", output],
     ["non-rendering delete tool", "archestra__delete_app", output],
     ["non-rendering read tool", "archestra__read_app", output],
     [
       "non-UUID id",
-      "archestra__create_app",
+      "archestra__scaffold_app",
       { structuredContent: { id: "not-a-uuid" } },
     ],
-    ["missing structuredContent", "archestra__create_app", { content: "ok" }],
-    ["plain string output", "archestra__create_app", "Created app"],
+    ["missing structuredContent", "archestra__scaffold_app", { content: "ok" }],
+    ["plain string output", "archestra__scaffold_app", "Created app"],
   ])("returns null for %s", (_label, toolName, toolOutput) => {
     expect(
       extractOwnedAppRender({

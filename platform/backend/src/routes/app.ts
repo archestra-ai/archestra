@@ -48,9 +48,8 @@ import {
   UuidIdSchema,
 } from "@/types";
 
-// REST bodies extend the shared create/update schemas (kept in sync with the
-// create_app/update_app MCP tools) with team assignments, which only the REST
-// surface needs for team-scoped apps.
+// REST bodies extend the shared create/update schemas with team assignments,
+// which only the REST surface needs for team-scoped apps.
 const CreateAppBodySchema = CreateAppSchema.extend({
   teamIds: z.array(UuidIdSchema).optional(),
 });
@@ -220,7 +219,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { appId }, body, user, organizationId }, reply) => {
       // Permissions live in the version envelope, so they can only change
-      // alongside new html (mirrors the update_app MCP tool — no silent no-op).
+      // alongside new html (no silent no-op).
       if (body.html === undefined && body.uiPermissions !== undefined) {
         throw new ApiError(
           400,

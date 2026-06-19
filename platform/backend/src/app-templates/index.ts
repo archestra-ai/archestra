@@ -15,8 +15,8 @@ export function getAppTemplates(): AppTemplate[] {
 /**
  * Resolve the initial HTML for a new app. Explicit `html` always wins
  * (`templateId` is then provenance only); otherwise the single default template
- * seeds the first version. Shared by REST `POST /api/apps` and the `create_app`
- * tool. Update paths never re-template an existing app.
+ * seeds the first version. Shared by REST `POST /api/apps` and the `scaffold_app`
+ * tool (which always omits html). Update paths never re-template an existing app.
  */
 export function resolveCreateAppHtml(input: { html?: string }): {
   html: string;

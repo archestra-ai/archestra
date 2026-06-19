@@ -4,7 +4,7 @@ import {
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
@@ -132,7 +132,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     appId,
     organizationId,
     userId,
-    toolName: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+    toolName: getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
     toolInput: {},
     ...BASE,
   });

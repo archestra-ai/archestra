@@ -541,7 +541,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Render-loop diagnostics from owned MCP App renders ride the last
             // user message's metadata; inject them (delimited, framed as
-            // untrusted) so the model can fix the app via update_app. No-op
+            // untrusted) so the model can fix the app via edit_app. No-op
             // when absent or when the apps feature is off.
             const messagesForLLM =
               await injectAppDiagnostics(messagesWithSkill);

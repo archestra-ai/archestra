@@ -53319,6 +53319,41 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "spec": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "summary": {
+                                "type": "string"
+                              },
+                              "features": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "data": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "ui": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "tools": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "summary",
+                              "features",
+                              "tools"
+                            ],
+                            "additionalProperties": false
+                          },
                           "latestVersion": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -53346,6 +53381,7 @@
                           "name",
                           "description",
                           "templateId",
+                          "spec",
                           "latestVersion",
                           "createdAt",
                           "updatedAt",
@@ -53662,10 +53698,6 @@
                     "type": "string",
                     "maxLength": 500
                   },
-                  "templateId": {
-                    "type": "string",
-                    "maxLength": 100
-                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -53755,6 +53787,41 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string"
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "data": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -53788,6 +53855,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
@@ -54372,6 +54440,41 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string"
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "data": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -54399,6 +54502,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
@@ -54766,6 +54870,41 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string"
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "data": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -54799,6 +54938,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
@@ -55398,6 +55538,41 @@
                       "contentHash": {
                         "type": "string"
                       },
+                      "spec": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "summary": {
+                            "type": "string"
+                          },
+                          "features": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "data": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "ui": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "summary",
+                          "features",
+                          "tools"
+                        ],
+                        "additionalProperties": false
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -55410,6 +55585,7 @@
                       "html",
                       "uiPermissions",
                       "contentHash",
+                      "spec",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -55741,6 +55917,41 @@
                     "contentHash": {
                       "type": "string"
                     },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string"
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "data": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -55753,6 +55964,7 @@
                     "html",
                     "uiPermissions",
                     "contentHash",
+                    "spec",
                     "createdAt"
                   ],
                   "additionalProperties": false

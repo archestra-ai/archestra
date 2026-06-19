@@ -68,7 +68,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and app tools (create_app, update_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
@@ -217,7 +217,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and app tools (create_app, update_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings. |
 
 
@@ -1634,12 +1634,14 @@ Required RBAC permission: `skill:update`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `create_app` | Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. | `app:create` |
+| `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
+| `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
-| `update_app` | Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. | `app:update` |
-| `edit_app` | Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. | `app:update` |
+| `edit_app` | Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). | `app:update` |
+| `validate_app` | Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. | `app:read` |
+| `publish_app` | Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
 | `get_app_diagnostics` | Check how the app's current version rendered for you. | `app:read` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
@@ -1649,7 +1651,7 @@ Required RBAC permission: `skill:update`
 | `app_data_delete` | Delete a key from the calling app's data store (per-user or shared partition). | `app:update` |
 | `llm_complete` | Run a single LLM completion for the calling app (backs archestra.llm.complete). | `app:read` |
 
-#### create_app
+#### scaffold_app
 
 Required RBAC permission: `app:create`
 
@@ -1659,15 +1661,13 @@ Required RBAC permission: `app:create`
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | App name. |
 | `description` | `string` | No | Optional description. |
-| `html` | `string` | No | The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal (owned by the calling user). |
-| `templateId` | `string` | No | Template to scaffold from when html is omitted (one of: blank, form); the result returns the seeded HTML for editing. With html present it is recorded as provenance only. |
 | `uiPermissions` | `object` | No | Optional iframe permissions (camera/microphone/geolocation/clipboardWrite). |
 | `uiPermissions.camera` | `object` | No |  |
 | `uiPermissions.microphone` | `object` | No |  |
 | `uiPermissions.geolocation` | `object` | No |  |
 | `uiPermissions.clipboardWrite` | `object` | No |  |
-| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
+| `tools` | `string[]` | No | Upstream MCP tool names to assign to the new app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Omitted leaves the app with no assigned tools. |
 
 ##### Output
 
@@ -1678,8 +1678,47 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### refine_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id to refine. |
+| `questions` | `object[]` | No | Up to 3 clarifying questions to ask the user before consolidating the spec. |
+| `questions[].id` | `string` | Yes | Stable key the answer is returned under. |
+| `questions[].prompt` | `string` | Yes | The question shown to the user. |
+| `questions[].options` | `string[]` | No | When present, the question is single-select over these options; otherwise it is free-text. |
+| `spec` | `object` | No | The consolidated product requirements to persist on the app (features/data/ui/tools — no implementation stack). |
+| `spec.summary` | `string` | Yes |  |
+| `spec.features` | `string[]` | Yes |  |
+| `spec.data` | `string \| null` | No |  |
+| `spec.ui` | `string \| null` | No |  |
+| `spec.tools` | `string[]` | Yes |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `spec` | `object` | Yes | The persisted spec when one was given, else the base spec seeded for the model. |
+| `spec.summary` | `string` | Yes |  |
+| `spec.features` | `string[]` | Yes |  |
+| `spec.data` | `string \| null` | No |  |
+| `spec.ui` | `string \| null` | No |  |
+| `spec.tools` | `string[]` | Yes |  |
+| `capability` | `object` | Yes |  |
+| `capability.tools` | `object[]` | Yes |  |
+| `capability.tools[].name` | `string` | Yes |  |
+| `capability.tools[].description` | `string` | Yes |  |
+| `capability.sdkSummary` | `string` | Yes |  |
+| `answers` | `object` | No | The user's answers to the clarifying questions, if any. |
+| `persisted` | `boolean` | Yes | Whether a spec was persisted on the app head by this call. |
 
 #### list_apps
 
@@ -1702,7 +1741,7 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
-| `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### render_app
 
@@ -1723,7 +1762,7 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### read_app
 
@@ -1746,38 +1785,6 @@ Required RBAC permission: `app:read`
 | `version` | `number` | Yes |  |
 | `byteSize` | `number` | Yes |  |
 | `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS). |
-
-#### update_app
-
-Required RBAC permission: `app:update`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `appId` | `string` | Yes | The app id. |
-| `name` | `string` | No |  |
-| `description` | `string \| null` | No |  |
-| `scope` | `"personal" \| "team" \| "org"` | No |  |
-| `html` | `string` | No | New HTML; supplying it forks a new immutable version (no-op if unchanged). |
-| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
-| `uiPermissions` | `object` | No | New iframe permissions; part of the version envelope, so it requires html too. |
-| `uiPermissions.camera` | `object` | No |  |
-| `uiPermissions.microphone` | `object` | No |  |
-| `uiPermissions.geolocation` | `object` | No |  |
-| `uiPermissions.clipboardWrite` | `object` | No |  |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | `string` | Yes |  |
-| `name` | `string` | Yes |  |
-| `description` | `string \| null` | Yes |  |
-| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
-| `latestVersion` | `number` | Yes |  |
-| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
-| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 
 #### edit_app
 
@@ -1802,8 +1809,56 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### validate_app
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id to validate. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `version` | `number` | Yes | The head version that was validated. |
+| `ok` | `boolean` | Yes | True when there are no error-severity findings. |
+| `findings` | `object[]` | Yes |  |
+| `findings[].severity` | `"error" \| "warning"` | Yes |  |
+| `findings[].message` | `string` | Yes |  |
+| `live` | `object` | Yes | Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen — view it in the sidebar, then re-run. |
+| `live.status` | `"no_render_observed" \| "clean" \| "errors"` | Yes |  |
+| `live.version` | `number` | Yes |  |
+| `live.entries` | `object[]` | Yes |  |
+| `live.entries[].type` | `string` | Yes |  |
+| `live.entries[].message` | `string` | Yes |  |
+| `live.renderedAt` | `string \| null` | Yes |  |
+
+#### publish_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id to publish. |
+| `scope` | `"team" \| "org"` | Yes | Publish to specific teams or to the whole organization. Promotes the app out of personal scope. |
+| `teamIds` | `string[]` | No | Target team ids — required when scope is team. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `runUrl` | `string` | Yes | Standalone run page for the published app. |
 
 #### preview_app_tool
 

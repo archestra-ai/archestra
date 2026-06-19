@@ -15450,6 +15450,13 @@ export type GetAppsResponses = {
             name: string;
             description: string | null;
             templateId: string | null;
+            spec: {
+                summary: string;
+                features: Array<string>;
+                data?: string | null;
+                ui?: string | null;
+                tools: Array<string>;
+            } | null;
             latestVersion: number;
             createdAt: string;
             updatedAt: string;
@@ -15472,7 +15479,6 @@ export type CreateAppData = {
     body: {
         name: string;
         description?: string;
-        templateId?: string;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
         uiPermissions?: {
@@ -15573,6 +15579,13 @@ export type CreateAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        spec: {
+            summary: string;
+            features: Array<string>;
+            data?: string | null;
+            ui?: string | null;
+            tools: Array<string>;
+        } | null;
         latestVersion: number;
         createdAt: string;
         updatedAt: string;
@@ -15840,6 +15853,13 @@ export type GetAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        spec: {
+            summary: string;
+            features: Array<string>;
+            data?: string | null;
+            ui?: string | null;
+            tools: Array<string>;
+        } | null;
         latestVersion: number;
         createdAt: string;
         updatedAt: string;
@@ -15955,6 +15975,13 @@ export type UpdateAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        spec: {
+            summary: string;
+            features: Array<string>;
+            data?: string | null;
+            ui?: string | null;
+            tools: Array<string>;
+        } | null;
         latestVersion: number;
         createdAt: string;
         updatedAt: string;
@@ -16063,6 +16090,13 @@ export type GetAppVersionsResponses = {
             };
         } | null;
         contentHash: string;
+        spec: {
+            summary: string;
+            features: Array<string>;
+            data?: string | null;
+            ui?: string | null;
+            tools: Array<string>;
+        } | null;
         createdAt: string;
     }>;
 };
@@ -16168,6 +16202,13 @@ export type GetAppVersionResponses = {
             };
         } | null;
         contentHash: string;
+        spec: {
+            summary: string;
+            features: Array<string>;
+            data?: string | null;
+            ui?: string | null;
+            tools: Array<string>;
+        } | null;
         createdAt: string;
     };
 };

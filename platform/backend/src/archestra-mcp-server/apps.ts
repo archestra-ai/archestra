@@ -5,6 +5,7 @@ import {
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -18,6 +19,7 @@ import {
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
   AppTeamModel,
+  AppToolModel,
   AppVersionModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
@@ -29,6 +31,7 @@ import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
 } from "@/services/apps/app-authorization";
+import { buildAppCapabilityContext } from "@/services/apps/app-capability-context";
 import {
   capDiagnosticEntries,
   DIAGNOSTICS_BLOCK_CLOSE,
@@ -40,7 +43,14 @@ import {
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
-import { AppScopeSchema, ScaffoldAppSchema } from "@/types/app";
+import {
+  type App,
+  AppScopeSchema,
+  type AppSpec,
+  AppSpecSchema,
+  RefineAppToolSchema,
+  ScaffoldAppSchema,
+} from "@/types/app";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -187,6 +197,27 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
     ),
 });
 
+const RefineAppOutputSchema = z.object({
+  id: z.string(),
+  spec: AppSpecSchema.describe(
+    "The persisted spec when one was given, else the base spec seeded for the model.",
+  ),
+  capability: z.object({
+    tools: z.array(z.object({ name: z.string(), description: z.string() })),
+    sdkSummary: z.string(),
+  }),
+  answers: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+    )
+    .optional()
+    .describe("The user's answers to the clarifying questions, if any."),
+  persisted: z
+    .boolean()
+    .describe("Whether a spec was persisted on the app head by this call."),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
@@ -296,6 +327,134 @@ const registry = defineArchestraTools([
           ...(warnings.length > 0 ? { warnings } : {}),
         },
         `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${toolsParts.note}${warningsNote}${seededHtmlNote}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_REFINE_APP_SHORT_NAME,
+    title: "Refine App",
+    description:
+      "Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user's real assignable MCP tools to ground the spec in; once a spec is persisted, build the HTML with edit_app.",
+    schema: RefineAppToolSchema,
+    outputSchema: RefineAppOutputSchema,
+    async handler({ args, context, toolName }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required to refine an app.");
+      }
+      if (args.questions && args.questions.length > 3) {
+        return errorResult("refine_app accepts at most 3 questions.");
+      }
+
+      const { userId, organizationId } = context;
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId,
+        userId,
+        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      try {
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      const capability = await buildAppCapabilityContext({
+        userId,
+        organizationId,
+        agentId: context.agentId ?? context.agent.id,
+      });
+
+      // Seed the model from the app's current spec, or derive a minimal one from
+      // source so a legacy app (no spec yet) still has a starting point.
+      const baseSpec = app.spec ?? (await deriveAppSpec(app));
+
+      // Ask the user, when questions were given and a viewer is present.
+      let answers:
+        | Record<string, string | number | boolean | string[]>
+        | undefined;
+      let noViewer = false;
+      if (args.questions && args.questions.length > 0) {
+        const outcome = context.elicitation
+          ? await context.elicitation.elicit({
+              toolName,
+              message: "A few questions to refine your app:",
+              requestedSchema: buildQuestionsSchema(args.questions),
+            })
+          : ({ status: "no_viewer" } as const);
+
+        switch (outcome.status) {
+          case "no_viewer":
+            noViewer = true;
+            break;
+          case "answered":
+            switch (outcome.result.action) {
+              case "accept":
+                answers = outcome.result.content;
+                break;
+              default:
+                return structuredSuccessResult(
+                  {
+                    id: app.id,
+                    spec: baseSpec,
+                    capability: {
+                      tools: capability.tools,
+                      sdkSummary: capability.sdkSummary,
+                    },
+                    persisted: false,
+                  },
+                  `The user declined to answer the refine questions. Ask them directly in chat instead, then call refine_app again with a spec.`,
+                );
+            }
+            break;
+        }
+      }
+
+      let persisted = false;
+      if (args.spec) {
+        const updated = await AppModel.update({
+          id: args.appId,
+          patch: { spec: args.spec },
+        });
+        if (!updated) {
+          return errorResult(
+            `Failed to persist the spec for app ${args.appId}.`,
+          );
+        }
+        persisted = true;
+      }
+
+      const spec = args.spec ?? baseSpec;
+      const answersNote = answers
+        ? `\nUser answers:\n${JSON.stringify(answers, null, 2)}`
+        : "";
+      const noViewerNote = noViewer
+        ? "\nNo interactive viewer was available, so the questions could not be asked."
+        : "";
+      const guidance = persisted
+        ? "Spec persisted on the app head. Build the HTML with edit_app."
+        : "Consolidate the answers and the listed capability tools into an AppSpec, then call refine_app again with `spec` to persist it.";
+      return structuredSuccessResult(
+        {
+          id: app.id,
+          spec,
+          capability: {
+            tools: capability.tools,
+            sdkSummary: capability.sdkSummary,
+          },
+          ...(answers ? { answers } : {}),
+          persisted,
+        },
+        `${guidance}${answersNote}${noViewerNote}`,
       );
     },
   }),
@@ -820,6 +979,64 @@ function applyStrReplaceEdits(
       working.slice(at + edit.old_str.length);
   });
   return working;
+}
+
+/**
+ * Derive a minimal, deterministic AppSpec from an app's source for the refine
+ * step to seed the model from when the app has no spec yet (legacy apps). No
+ * model calls: `summary` is the head `<title>` text (else the app name),
+ * `tools` are the app's currently assigned tool names; the rest is left empty.
+ */
+async function deriveAppSpec(app: App): Promise<AppSpec> {
+  const head = await AppVersionModel.findByAppAndVersion(
+    app.id,
+    app.latestVersion,
+  );
+  const title = head ? extractTitle(head.html) : null;
+  const assignedTools = await AppToolModel.getToolsForApp(app.id);
+  return {
+    summary: title ?? app.name,
+    features: [],
+    tools: assignedTools.map((tool) => tool.name).sort(),
+  };
+}
+
+function extractTitle(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const text = match?.[1]?.trim();
+  return text ? text : null;
+}
+
+/**
+ * Build the JSON Schema the elicitation viewer renders the refine questions
+ * from. A question with `options` is a single-select enum; without, free text.
+ */
+function buildQuestionsSchema(
+  questions: NonNullable<z.infer<typeof RefineAppToolSchema>["questions"]>,
+): {
+  type: "object";
+  properties: Record<
+    string,
+    { type: "string"; description: string; enum?: string[] }
+  >;
+  required: string[];
+} {
+  const properties: Record<
+    string,
+    { type: "string"; description: string; enum?: string[] }
+  > = {};
+  for (const question of questions) {
+    properties[question.id] = {
+      type: "string",
+      description: question.prompt,
+      ...(question.options ? { enum: question.options } : {}),
+    };
+  }
+  return {
+    type: "object",
+    properties,
+    required: questions.map((question) => question.id),
+  };
 }
 
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;

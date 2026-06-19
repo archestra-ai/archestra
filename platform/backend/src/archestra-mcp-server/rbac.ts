@@ -150,6 +150,8 @@ export const TOOL_PERMISSIONS: Record<
   // appId is route-bound (set by the app MCP proxy), so the permission check
   // plus that binding together confine a caller to apps it may use.
   scaffold_app: { resource: "app", action: "create" },
+  // refine mutates the app head (persists its spec), mirroring edit_app.
+  refine_app: { resource: "app", action: "update" },
   list_apps: { resource: "app", action: "read" },
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },

@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+
 import {
   ADMIN_ROLE_NAME,
   getArchestraToolFullName,
@@ -12,9 +13,16 @@ import {
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
+import {
+  type ChatMcpElicitationWriter,
+  createChatMcpElicitationBridge,
+  resolveChatMcpElicitation,
+} from "@/clients/chat-mcp-elicitation";
 import config from "@/config";
 import {
   AppModel,
@@ -34,6 +42,27 @@ import {
 } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import { type ArchestraContext, executeArchestraTool } from ".";
+
+// The elicitation bridge polls cacheManager for the user's answer; cacheManager
+// is the Postgres-backed singleton (not started in PGlite tests), so back it
+// with an in-memory map. The bridge and refine_app (the SUT) are real.
+const elicitationStore = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/cache-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/cache-manager")>();
+  return {
+    ...actual,
+    cacheManager: {
+      set: async (key: string, value: unknown) => {
+        elicitationStore.set(key, value);
+      },
+      getAndDelete: async (key: string) => {
+        const value = elicitationStore.get(key);
+        elicitationStore.delete(key);
+        return value;
+      },
+    },
+  };
+});
 
 // App tools are only dispatchable when the feature is enabled.
 const originalAppsEnabled = config.apps.enabled;
@@ -1009,5 +1038,180 @@ describe("scaffold_app tools param", () => {
     const created = await scaffold({ name: "CrossOrg", tools: [foreignName] });
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
+});
+
+describe("refine_app", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+  const conversationId = "00000000-0000-4000-8000-0000000000aa";
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Refine Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function refine(args: Record<string, unknown>, ctx = context) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_REFINE_APP_SHORT_NAME),
+      args,
+      ctx,
+    );
+  }
+
+  async function scaffoldApp(name: string): Promise<string> {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    return structured(created).id as string;
+  }
+
+  // An elicitation bridge whose writer auto-resolves each streamed request with
+  // the given action/content, so the bridge's real poll loop completes.
+  function autoAnsweringContext(answer: {
+    action: "accept" | "decline" | "cancel";
+    content?: Record<string, string | number | boolean | string[]>;
+  }): ArchestraContext {
+    const bridge = createChatMcpElicitationBridge({ conversationId });
+    const writer: ChatMcpElicitationWriter = {
+      write: (chunk) => {
+        const data = (chunk as { data?: { id?: string } }).data;
+        if (!data?.id) return;
+        void resolveChatMcpElicitation({
+          id: data.id,
+          response: {
+            conversationId,
+            action: answer.action,
+            content: answer.content,
+          },
+        });
+      },
+    };
+    bridge.setWriter(writer);
+    return { ...context, conversationId, elicitation: bridge };
+  }
+
+  test("questions + accepted answers return the answers and do not persist", async () => {
+    const appId = await scaffoldApp("Refine Q");
+    const result = await refine(
+      {
+        appId,
+        questions: [
+          { id: "audience", prompt: "Who is it for?" },
+          {
+            id: "style",
+            prompt: "Light or dark?",
+            options: ["light", "dark"],
+          },
+        ],
+      },
+      autoAnsweringContext({
+        action: "accept",
+        content: { audience: "the team", style: "dark" },
+      }),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).answers).toEqual({
+      audience: "the team",
+      style: "dark",
+    });
+    expect(structured(result).persisted).toBe(false);
+    // no spec given → app head spec stays unset
+    expect((await AppModel.findById(appId))?.spec).toBeNull();
+  });
+
+  test("spec provided is persisted on the app head without forking a version", async () => {
+    const appId = await scaffoldApp("Refine Spec");
+    const before = await AppModel.findById(appId);
+    expect(before?.latestVersion).toBe(1);
+
+    const spec = {
+      summary: "A standup tracker",
+      features: ["log blockers"],
+      tools: [],
+    };
+    const result = await refine({ appId, spec });
+    expect(result.isError).toBe(false);
+    expect(structured(result).persisted).toBe(true);
+    expect(structured(result).spec).toEqual(spec);
+
+    const after = await AppModel.findById(appId);
+    expect(after?.spec).toEqual(spec);
+    // spec-only edit: no new version forked
+    expect(after?.latestVersion).toBe(1);
+  });
+
+  test("a declined elicitation does not persist and steers back to the user", async () => {
+    const appId = await scaffoldApp("Refine Decline");
+    const spec = { summary: "x", features: [], tools: [] };
+    const result = await refine(
+      { appId, questions: [{ id: "q", prompt: "Why?" }], spec },
+      autoAnsweringContext({ action: "decline" }),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).persisted).toBe(false);
+    expect((result.content[0] as any).text).toContain("declined");
+    // declined → the spec is NOT persisted even though one was supplied
+    expect((await AppModel.findById(appId))?.spec).toBeNull();
+  });
+
+  test("headless (no elicitation in context) + spec persists and notes no viewer", async () => {
+    const appId = await scaffoldApp("Refine Headless");
+    const spec = { summary: "headless", features: [], tools: [] };
+    const result = await refine({
+      appId,
+      questions: [{ id: "q", prompt: "Anything?" }],
+      spec,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).persisted).toBe(true);
+    expect((result.content[0] as any).text).toContain("No interactive viewer");
+    expect((await AppModel.findById(appId))?.spec).toEqual(spec);
+  });
+
+  test("a legacy app with no spec returns a derived base spec", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      organizationId,
+      scope: "org",
+      html: "<!doctype html><title>Legacy Title</title>",
+    });
+    const result = await refine({ appId: app.id });
+    expect(result.isError).toBe(false);
+    expect(structured(result).persisted).toBe(false);
+    // summary derived from the <title>; no features/tools yet
+    expect(structured(result).spec).toEqual({
+      summary: "Legacy Title",
+      features: [],
+      tools: [],
+    });
+  });
+
+  test("rejects more than 3 questions", async () => {
+    const appId = await scaffoldApp("Refine TooMany");
+    const result = await refine({
+      appId,
+      questions: [
+        { id: "a", prompt: "1" },
+        { id: "b", prompt: "2" },
+        { id: "c", prompt: "3" },
+        { id: "d", prompt: "4" },
+      ],
+    });
+    expect(result.isError).toBe(true);
   });
 });

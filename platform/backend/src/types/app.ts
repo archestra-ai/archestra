@@ -146,6 +146,38 @@ export const ScaffoldAppSchema = z.strictObject({
   ),
 });
 
+// Input for the `refine_app` MCP tool: the step between scaffold and edit. It
+// clarifies what an app should be — optionally asking the user model-authored
+// questions, and/or persisting a consolidated product spec on the app head.
+export const RefineAppToolSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to refine."),
+  questions: z
+    .array(
+      z.strictObject({
+        id: z
+          .string()
+          .min(1)
+          .describe("Stable key the answer is returned under."),
+        prompt: z.string().min(1).describe("The question shown to the user."),
+        options: z
+          .array(z.string().min(1))
+          .min(1)
+          .optional()
+          .describe(
+            "When present, the question is single-select over these options; otherwise it is free-text.",
+          ),
+      }),
+    )
+    .max(3)
+    .optional()
+    .describe(
+      "Up to 3 clarifying questions to ask the user before consolidating the spec.",
+    ),
+  spec: AppSpecSchema.optional().describe(
+    "The consolidated product requirements to persist on the app (features/data/ui/tools — no implementation stack).",
+  ),
+});
+
 // A curated starter an app can be seeded from. Shipped as static backend
 // modules (see app-templates/); html is the full MCP App document.
 export const AppTemplateSchema = z.object({

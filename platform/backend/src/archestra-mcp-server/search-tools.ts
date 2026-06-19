@@ -80,6 +80,11 @@ const InputParameterSchema = z.object({
     .describe(
       "One-level summary of nested properties for object (or array-of-object) parameters.",
     ),
+  hasHiddenDetail: z
+    .boolean()
+    .describe(
+      "True when the compact summary elides object content — a freeform/extensible object, or nesting deeper than the one level shown. Rendered as a trailing '…' so the model knows to consult the full schema.",
+    ),
 });
 
 type InputParameterSummary = z.infer<typeof InputParameterSchema>;
@@ -130,11 +135,15 @@ const SearchToolsOutputSchema = z.object({
       params: z
         .string()
         .describe(
-          "Compact one-line input signature. Parameters are joined by '; ', each rendered as " +
-            "`name<!|?>:<type>` where `!` marks required and `?` optional. Object parameters are " +
-            "expanded one level as `{child<!|?>:type, …}`, enums as `enum(<json-values>)`, and a " +
-            "trailing ` — description` is added when available. Empty string when the tool takes " +
-            `no input. Pass matching values inside tool_args when calling ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+          "Compact one-line input signature — a summary, not the full schema. Parameters are " +
+            "joined by '; ', each rendered as `name<!|?>:<type>` where `!` marks required and `?` " +
+            "optional. Object parameters are expanded one level as `{child<!|?>:type, …}`, enums as " +
+            "`enum(<json-values>)`, and a trailing ` — description` is added when available. A " +
+            "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
+            "more deeply nested) — consult the task instructions or the full schema for its shape. " +
+            "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
+            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error returns ` +
+            "the target tool's full input schema.",
         ),
     }),
   ),
@@ -473,6 +482,7 @@ function summarizeInputParameters(
             ? paramSchema.description
             : null,
         properties: summarizeNestedProperties(paramSchema),
+        hasHiddenDetail: objectHasHiddenDetail(paramSchema),
       };
     })
     .sort(
@@ -543,6 +553,33 @@ function nestedObjectSchema(
   return null;
 }
 
+// Does the compact one-line rendering hide object content the model would need?
+// True for a freeform/extensible object (additionalProperties), an object whose
+// shape isn't shown at all (type object with no listed properties), or nesting
+// deeper than the one level summarizeNestedProperties emits. Scalars and
+// fully-shown one-level objects return false (no marker). Conservative: an object
+// that merely omits `additionalProperties` is not flagged, to avoid marking every
+// object.
+function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
+  const objectSchema = nestedObjectSchema(paramSchema);
+  const additionalProperties =
+    objectSchema?.additionalProperties ?? paramSchema.additionalProperties;
+  if (
+    additionalProperties === true ||
+    (additionalProperties != null && typeof additionalProperties === "object")
+  ) {
+    return true;
+  }
+  if (!objectSchema) {
+    const type = extractSchemaType(paramSchema);
+    return type?.includes("object") ?? false;
+  }
+  const properties = asRecord(objectSchema.properties);
+  return Object.values(properties).some(
+    (value) => nestedObjectSchema(asRecord(value)) != null,
+  );
+}
+
 type PreparedSearchQuery = {
   normalizedQuery: string;
   // unique query terms — deduped so a repeated query word does not multiply its
@@ -601,6 +638,11 @@ function formatParamType(param: InputParameterSummary): string {
   if (param.enum && param.enum.length > 0) {
     const enumClause = formatEnumValues(param.enum);
     type = type ? `${type} ${enumClause}` : enumClause;
+  }
+  // mark objects whose content the compact summary could not fully show, so the
+  // model knows to consult the full schema (returned on an invalid run_tool call).
+  if (param.hasHiddenDetail) {
+    type += "…";
   }
   return type;
 }

@@ -137,9 +137,8 @@ const registry = defineArchestraTools([
       // nothing is written to the agent. A miss on both means the tool does
       // not exist for this user: steer the model at search_tools. The set is
       // reused by the policy gate below so it is fetched only once.
-      const assignedToolNames = await ToolModel.getAssignedToolNames(
-        context.agentId,
-      );
+      const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+      const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
       let availableTool: Tool | null = null;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
@@ -191,6 +190,26 @@ const registry = defineArchestraTools([
         return errorResult(policyBlock.refusalMessage);
       }
 
+      // Cheap structural pre-check against the target's stored schema. Runs only
+      // after access + invocation policy passed, and never dispatches a call we
+      // can prove malformed (a "send"/"create" tool would still act on partial
+      // args). On failure the model gets the full schema — the targeted feedback
+      // the compact search_tools signature defers to. Deliberately shallow: only
+      // a literal top-level `required` and a closed `additionalProperties:false`
+      // are enforced, so refs/composed schemas fall through to the upstream
+      // server unchanged.
+      const targetSchema = availableTool
+        ? availableTool.parameters
+        : assignedTools.find((tool) => tool.name === resolvedName)?.parameters;
+      const schemaError = checkThirdPartyToolArgs({
+        toolName: resolvedName,
+        toolArgs: toolInput,
+        schema: targetSchema,
+      });
+      if (schemaError) {
+        return schemaError;
+      }
+
       const { default: mcpClient } = await import("@/clients/mcp-client");
       const toolCallId = `run-tool-${Date.now()}-${Math.random()
         .toString(36)
@@ -233,3 +252,60 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+// ===== Internal helpers =====
+
+/**
+ * Shallow structural validation of a third-party tool's `tool_args` against its
+ * stored JSON schema. Returns a schema-bearing error result when the call is
+ * provably malformed, else null. Intentionally minimal — no JSON Schema engine:
+ *  - rejects a missing key named in a literal top-level `required: string[]`;
+ *  - rejects an unknown top-level key only when the schema literally sets
+ *    `additionalProperties: false` and exposes a literal top-level `properties`.
+ * Anything else (`$ref`, `allOf`, types, enums, nested constraints) is left to
+ * the upstream MCP server, so a schema shape we cannot read never blocks a call.
+ */
+function checkThirdPartyToolArgs(params: {
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+  schema: unknown;
+}): CallToolResult | null {
+  const { schema, toolArgs, toolName } = params;
+  if (!isRecord(schema)) {
+    return null;
+  }
+
+  const problems: string[] = [];
+
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === "string")
+    : [];
+  for (const key of required) {
+    if (!(key in toolArgs)) {
+      problems.push(`missing required parameter "${key}"`);
+    }
+  }
+
+  const properties = isRecord(schema.properties) ? schema.properties : null;
+  if (schema.additionalProperties === false && properties) {
+    for (const key of Object.keys(toolArgs)) {
+      if (!(key in properties)) {
+        problems.push(`unexpected parameter "${key}"`);
+      }
+    }
+  }
+
+  if (problems.length === 0) {
+    return null;
+  }
+
+  return errorResult(
+    `Invalid tool_args for "${toolName}": ${problems.join("; ")}. ` +
+      "Put each of the target tool's parameters inside tool_args. " +
+      `The tool's full input schema is:\n${JSON.stringify(schema, null, 2)}`,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

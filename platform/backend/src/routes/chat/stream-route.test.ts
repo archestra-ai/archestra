@@ -748,6 +748,15 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt?.indexOf("Some available tools")).toBeLessThan(
       systemPrompt?.indexOf("You are a careful analyst.") ?? -1,
     );
+    // states the nesting contract and shows a worked example so weaker models
+    // get the {tool_name, tool_args:{…}} envelope right
+    expect(systemPrompt).toContain("takes exactly two arguments");
+    expect(systemPrompt).toContain(
+      '{"tool_name": "acme__send_message", "tool_args": {"channel": "#general", "text": "hi"}}',
+    );
+    expect(systemPrompt).toContain(
+      "the error returns the target tool's full input schema",
+    );
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {

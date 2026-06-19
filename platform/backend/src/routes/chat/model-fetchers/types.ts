@@ -24,6 +24,11 @@ export interface ModelInfo {
   capabilities?: FetchedModelCapabilities;
 }
 
+export interface StaticModel {
+  id: string;
+  displayName: string;
+}
+
 export type ModelFetcher = (
   apiKey: string,
   baseUrl?: string | null,

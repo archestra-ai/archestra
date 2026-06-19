@@ -12,7 +12,7 @@ the retries stopped and the entry finally aged out one TTL later. The underlying
 almost immediately.
 
 The refresh-on-read bug is provable from the logs alone, not just the configured TTL: every cached
-null carries a `negCacheExpiresAt` that advances by exactly the read cadence (it is always readTime +
+null carries an `expiresAt` that advances by exactly the read cadence (it is always readTime +
 TTL), so the entry's expiry visibly marches forward on each hit -- a fixed TTL would log a constant
 expiry. Recovery lands at last-retry (+3000ms) + TTL (5000ms) = +8000ms, far past a single 5s TTL
 measured from the +50ms binding, so the outage outlived the upstream fault: the cache, not the
@@ -21,8 +21,8 @@ credential, kept the 401s alive.
 The zip holds four interleaved, time-shuffled JSON-line log files padded with hundreds of benign
 filler lines. The red herrings are designed to defeat shortcuts:
   - A genuinely EXPIRED token for a *different* profile -- a single failure that never self-heals.
-  - A DECOY profile with the identical "auth check returned cached null" symptom, but whose
-    negCacheExpiresAt is FIXED (counts down): it recovers one TTL after its first miss (~5s), a
+  - A DECOY profile with the identical "authorization denied" symptom, but whose
+    expiresAt is FIXED (counts down): it recovers one TTL after its first miss (~5s), a
     shorter outage than the treadmill. Telling them apart needs comparing the expiry trajectories
     (sliding vs constant) / recovery latency, not just spotting "cached null then recovery".
   - rate-limit warnings and a flood of normal positive cache hits for unrelated profiles.
@@ -138,7 +138,7 @@ def noise(stream: str, count: int) -> list[dict[str, object]]:
 gateway: list[dict[str, object]] = []
 
 # The smoking gun: a run of cached-null auth checks for one profile whose negative-cache expiry is
-# re-`set` on every hit (negCacheExpiresAt = readTime + TTL), so the entry never ages out while the
+# re-`set` on every hit (expiresAt = readTime + TTL), so the entry never ages out while the
 # retries keep coming -- then the client backs off and it finally expires one TTL after the last hit.
 for k in range(TREADMILL_COUNT):
     offset = TREADMILL_STEP_MS * (k + 1)
@@ -146,15 +146,14 @@ for k in range(TREADMILL_COUNT):
     gateway.append(
         line(
             40,
-            "auth check returned cached null",
+            "authorization denied",
             offset,
             profileId=STUCK_PROFILE,
             tokenHash=STUCK_TOKEN_HASH,
             cached=True,
             result=None,
-            cacheTtlMs=CACHE_TTL_MS,
-            negCacheExpiresAt=expires_at,
-            negCacheExpiresAtIso=_iso(expires_at),
+            expiresAt=expires_at,
+            expiresAtIso=_iso(expires_at),
             status=401,
         )
     )
@@ -187,7 +186,7 @@ gateway.append(
 )
 
 # Red herring: a different profile that ALSO hits the negative cache repeatedly, but whose entry
-# expires CORRECTLY -- negCacheExpiresAt is fixed (set once at first population, counting down), so it
+# expires CORRECTLY -- expiresAt is fixed (set once at first population, counting down), so it
 # recovers one TTL after the FIRST miss (~5s), a shorter outage than the treadmill. The message and
 # status are identical to the real incident; distinguishing it requires comparing the expiry
 # trajectories (sliding vs constant) / the recovery latency, not just spotting "cached null -> recover".
@@ -196,15 +195,14 @@ for k in range(DECOY_COUNT):
     gateway.append(
         line(
             40,
-            "auth check returned cached null",
+            "authorization denied",
             DECOY_FIRST_MS + DECOY_STEP_MS * k,
             profileId=DECOY_PROFILE,
             tokenHash=DECOY_TOKEN_HASH,
             cached=True,
             result=None,
-            cacheTtlMs=CACHE_TTL_MS,
-            negCacheExpiresAt=decoy_expires_at,
-            negCacheExpiresAtIso=_iso(decoy_expires_at),
+            expiresAt=decoy_expires_at,
+            expiresAtIso=_iso(decoy_expires_at),
             status=401,
         )
     )

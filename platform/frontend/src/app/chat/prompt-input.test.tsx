@@ -16,7 +16,7 @@ const {
   mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
-  mockControllerState: { value: "" },
+  mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: { chatSecretScanEnabled: false },
 }));
 
@@ -50,7 +50,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   }: {
     children: React.ReactNode;
     onSubmit?: (
-      message: { text: string; files: [] },
+      message: { text: string; files: typeof mockControllerState.files },
       event: React.FormEvent<HTMLFormElement>,
     ) => void | Promise<void>;
   }) => (
@@ -58,12 +58,21 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       data-testid="prompt-input"
       onSubmit={(event) => {
         event.preventDefault();
-        const result = onSubmit?.(
-          { text: mockControllerState.value, files: [] },
-          event,
-        );
-        if (result instanceof Promise) {
-          result.catch(() => {});
+        // Mirror ai-elements: a sync throw / rejected promise is swallowed
+        // here (the textarea is not cleared on rejection).
+        try {
+          const result = onSubmit?.(
+            {
+              text: mockControllerState.value,
+              files: mockControllerState.files,
+            },
+            event,
+          );
+          if (result instanceof Promise) {
+            result.catch(() => {});
+          }
+        } catch {
+          // rejected submit — keep the input
         }
       }}
     >
@@ -291,7 +300,9 @@ describe("ArchestraPromptInput", () => {
       isLoading: false,
     });
     mockControllerState.value = "";
+    mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
+    localStorage.clear();
   });
 
   describe("File Upload Button", () => {
@@ -651,6 +662,81 @@ describe("ArchestraPromptInput", () => {
       expect(message.text).toBe(text);
     });
 
+    it("flag on: Send anyway with a throwing consumer keeps the draft and does not hang", () => {
+      mockFeatureState.chatSecretScanEnabled = true;
+      const agentId = "agent-1";
+      const draftKey = `archestra_chat_draft_new_${agentId}`;
+      const text = `please rotate ${fakeGithubToken}`;
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+
+      // Mirrors NewChatComposer rejecting a submit (e.g. attachment toast) by
+      // throwing synchronously after the user confirms "Send anyway".
+      const onSubmit = vi.fn(() => {
+        throw new Error("rejected");
+      });
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      // Confirm the dialog; the throw must be caught and routed to the pending
+      // promise's reject (which the form swallows), not falsely resolved.
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      // The throwing consumer refused the submit: the draft survives and the
+      // dialog closes (composer is not stuck) instead of being cleared.
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: Send anyway with an async-rejecting consumer keeps the draft and does not hang", async () => {
+      mockFeatureState.chatSecretScanEnabled = true;
+      const agentId = "agent-1";
+      const draftKey = `archestra_chat_draft_new_${agentId}`;
+      const text = `please rotate ${fakeGithubToken}`;
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+
+      const onSubmit = vi.fn(() => Promise.reject(new Error("rejected")));
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      // Let the rejected dispatch settle; it must route to reject (no draft
+      // clear) and be swallowed by the form (no unhandled rejection).
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
     it("flag on: clicking Cancel does not call onSubmit", () => {
       const onSubmit = vi.fn();
       mockFeatureState.chatSecretScanEnabled = true;
@@ -712,6 +798,55 @@ describe("ArchestraPromptInput", () => {
       const [message, , options] = onSubmit.mock.calls[0];
       expect(message.text).toBe("summarize the repo");
       expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+  });
+
+  describe("draft retention on submit", () => {
+    const agentId = "agent-1";
+    const draftKey = `archestra_chat_draft_new_${agentId}`;
+
+    it("keeps the saved draft when the consumer rejects the submit", () => {
+      const text = "draft text the user typed";
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+      // A consumer that refuses the submit (e.g. text + unsupported attachment)
+      // by throwing — the draft (and the typed text) must survive.
+      const onSubmit = vi.fn(() => {
+        throw new Error("rejected");
+      });
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      // ai-elements only clears the textarea on a non-throwing return.
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+    });
+
+    it("clears the saved draft exactly once on an accepted submit", () => {
+      const text = "a normal accepted message";
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBeNull();
     });
   });
 });

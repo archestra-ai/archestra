@@ -44,6 +44,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { archestraMcpBranding } from "./branding";
+import { dynamicAccessContext } from "./dynamic-tools";
 import {
   catchError,
   defineArchestraTool,
@@ -488,19 +489,6 @@ async function handleQueryKnowledgeSources(params: {
       return errorResult("Organization context not available.");
     }
 
-    const agent = await AgentModel.findById(contextAgent.id);
-
-    const hasKbs = agent?.knowledgeBaseIds?.length;
-    const connectorAssignments =
-      await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-    const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
-
-    if (!hasKbs && directConnectorIds.length === 0) {
-      return errorResult(
-        "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
-      );
-    }
-
     const access =
       context.userId && organizationId
         ? await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -509,57 +497,97 @@ async function handleQueryKnowledgeSources(params: {
           })
         : null;
 
-    const validKbs = hasKbs
-      ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
-      : [];
-    const visibleKbs = access
-      ? knowledgeSourceAccessControlService.filterKnowledgeBases(
-          access,
-          validKbs,
-        )
-      : validKbs;
+    // Dynamic tool access: when the agent's "access all tools" setting is on,
+    // the query spans every connector visible to the user — a superset of the
+    // visible agent-assigned set — so the agent can search whatever the user
+    // could search themselves. Otherwise the query keeps the curated agent
+    // scoping (assigned knowledge bases / connectors, visibility-filtered).
+    const dynamicCtx = await dynamicAccessContext({
+      agentId: contextAgent.id,
+      userId: context.userId,
+      organizationId,
+    });
 
-    const directConnectors = directConnectorIds.length
-      ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
-      : [];
-    const visibleDirectConnectors = access
-      ? knowledgeSourceAccessControlService.filterConnectors(
-          access,
-          directConnectors,
-        )
-      : directConnectors;
+    let connectorIds: string[];
+    if (dynamicCtx && access) {
+      const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId,
+        canReadAll: access.canReadAll,
+        viewerTeamIds: access.teamIds,
+      });
+      connectorIds = connectors.map((connector) => connector.id);
 
-    const connectorIdsFromVisibleKbs = visibleKbs.length
-      ? (
-          await Promise.all(
-            visibleKbs.map((kb) =>
-              KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
-                canReadAll: access?.canReadAll,
-                viewerTeamIds: access?.teamIds,
-              }),
-            ),
+      if (connectorIds.length === 0) {
+        return errorResult(
+          "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
+        );
+      }
+    } else {
+      const agent = await AgentModel.findById(contextAgent.id);
+
+      const hasKbs = agent?.knowledgeBaseIds?.length;
+      const connectorAssignments =
+        await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
+      const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
+
+      if (!hasKbs && directConnectorIds.length === 0) {
+        return errorResult(
+          "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
+        );
+      }
+
+      const validKbs = hasKbs
+        ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
+        : [];
+      const visibleKbs = access
+        ? knowledgeSourceAccessControlService.filterKnowledgeBases(
+            access,
+            validKbs,
           )
-        )
-          .flat()
-          .map((connector) => connector.id)
-      : [];
-    const connectorIds = [
-      ...new Set([
-        ...connectorIdsFromVisibleKbs,
-        ...visibleDirectConnectors.map((connector) => connector.id),
-      ]),
-    ];
+        : validKbs;
 
-    if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {
-      return errorResult(
-        "No visible knowledge sources found for the current user.",
-      );
-    }
+      const directConnectors = directConnectorIds.length
+        ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
+        : [];
+      const visibleDirectConnectors = access
+        ? knowledgeSourceAccessControlService.filterConnectors(
+            access,
+            directConnectors,
+          )
+        : directConnectors;
 
-    if (connectorIds.length === 0) {
-      return errorResult(
-        "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
-      );
+      const connectorIdsFromVisibleKbs = visibleKbs.length
+        ? (
+            await Promise.all(
+              visibleKbs.map((kb) =>
+                KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
+                  canReadAll: access?.canReadAll,
+                  viewerTeamIds: access?.teamIds,
+                }),
+              ),
+            )
+          )
+            .flat()
+            .map((connector) => connector.id)
+        : [];
+      connectorIds = [
+        ...new Set([
+          ...connectorIdsFromVisibleKbs,
+          ...visibleDirectConnectors.map((connector) => connector.id),
+        ]),
+      ];
+
+      if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {
+        return errorResult(
+          "No visible knowledge sources found for the current user.",
+        );
+      }
+
+      if (connectorIds.length === 0) {
+        return errorResult(
+          "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+        );
+      }
     }
 
     let userAcl: AclEntry[] = ["org:*"];

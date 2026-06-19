@@ -97,6 +97,28 @@ describe("skillSandboxRuntimeService", () => {
     ).rejects.toThrow("command must be a non-empty string");
   });
 
+  test("runCommand rejects NUL bytes in command or cwd before executing", async () => {
+    const enabled = await importEnabledService();
+    const NUL = String.fromCharCode(0);
+
+    await expect(
+      enabled.runCommand({
+        sandboxId: asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
+        command: `echo${NUL} hi`,
+      }),
+    ).rejects.toThrow("must not contain NUL bytes");
+
+    await expect(
+      enabled.runCommand({
+        sandboxId: asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+        cwd: `/home/sandbox${NUL}`,
+      }),
+    ).rejects.toThrow("must not contain NUL bytes");
+  });
+
   test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
     const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");

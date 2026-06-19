@@ -32,6 +32,10 @@ import type {
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import {
+  estimateFileTokens,
+  isTextLikeMediaType,
+} from "./normalization/estimate-message-tokens";
+import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./normalization/extract-inline-attachments";
@@ -45,12 +49,6 @@ const CONTEXT_COMPACTION_RECENT_USER_REFERENCE_MAX_CHARS = 6_000;
 const CONTEXT_COMPACTION_SUMMARY_TAG = "summary";
 const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
-const PDF_BYTES_PER_TOKEN_ESTIMATE = 12;
-const BINARY_BYTES_PER_TOKEN_ESTIMATE = 4;
-// images are billed by dimensions, not byte size; without this ceiling a few-MB
-// image estimates at ~1M tokens (byteLength/4) and spuriously trips the
-// auto-compaction threshold every turn.
-const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
 const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
 const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
 const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
@@ -352,7 +350,6 @@ export const __test = {
   resolveCompactionBoundaryMessageId,
   decodeDataUrl,
   getDataUrlMediaType,
-  estimateBinaryFileTokens,
 };
 
 function resolveContextCompactionPolicy(
@@ -1254,7 +1251,7 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
       return { text: header, extraTokens: 0 };
     }
     const mediaType = fallbackMediaType || "application/octet-stream";
-    const extraTokens = estimateBinaryFileTokens({
+    const extraTokens = estimateFileTokens({
       mediaType,
       byteLength: byteSize,
     });
@@ -1282,7 +1279,7 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
     };
   }
 
-  const estimatedTokens = estimateBinaryFileTokens({
+  const estimatedTokens = estimateFileTokens({
     mediaType,
     byteLength: decoded.buffer.length,
   });
@@ -1290,22 +1287,6 @@ function getFilePartTextForTokenEstimate(part: ChatMessagePart): {
     text: `${mediaHeader}\n[binary file payload: ${decoded.buffer.length} bytes]`,
     extraTokens: estimatedTokens,
   };
-}
-
-function estimateBinaryFileTokens(params: {
-  mediaType: string;
-  byteLength: number;
-}): number {
-  // todo: estimate PDFs from locally extracted text first, then use this byte fallback for scanned/failed parses.
-  const bytesPerToken =
-    params.mediaType === "application/pdf"
-      ? PDF_BYTES_PER_TOKEN_ESTIMATE
-      : BINARY_BYTES_PER_TOKEN_ESTIMATE;
-  const estimate = Math.ceil(params.byteLength / bytesPerToken);
-  if (params.mediaType.startsWith("image/")) {
-    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
-  }
-  return estimate;
 }
 
 async function getMessageTextForSummary(
@@ -1485,15 +1466,6 @@ function parseDataUrlMetaString(raw: string): {
   }
   const mediaType = meta.split(";", 1)[0] || "application/octet-stream";
   return { mediaType, isBase64 };
-}
-
-function isTextLikeMediaType(mediaType: string): boolean {
-  return (
-    mediaType.startsWith("text/") ||
-    mediaType === "application/json" ||
-    mediaType === "application/xml" ||
-    mediaType === "application/csv"
-  );
 }
 
 function findMessageIndexByIds(messages: ChatMessage[], ids: string[]) {

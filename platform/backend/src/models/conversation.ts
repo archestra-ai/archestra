@@ -125,6 +125,7 @@ class ConversationModel {
             visibility: schema.conversationSharesTable.visibility,
           },
           projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -196,6 +197,7 @@ class ConversationModel {
             ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
             projectName: row.projectName ?? null,
+            projectIcon: listProjectIcon(row.projectIcon),
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -233,6 +235,7 @@ class ConversationModel {
             visibility: schema.conversationSharesTable.visibility,
           },
           projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -266,6 +269,7 @@ class ConversationModel {
         ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
         projectName: row.projectName ?? null,
+        projectIcon: listProjectIcon(row.projectIcon),
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],
@@ -662,6 +666,16 @@ type JoinedConversationAgent = {
   llmApiKeyId: string | null;
   deletedAt: Date | null;
 } | null;
+
+/**
+ * Project icon for a conversation-list row. Only emoji icons are passed through;
+ * base64 image data URLs are dropped (the pill falls back to the folder glyph)
+ * so a large icon isn't duplicated across every conversation in the list.
+ */
+function listProjectIcon(icon: string | null | undefined): string | null {
+  if (!icon || icon.startsWith("data:")) return null;
+  return icon;
+}
 
 function withVisibleAgent(
   conversation: typeof schema.conversationsTable.$inferSelect,

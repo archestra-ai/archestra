@@ -77,7 +77,7 @@ export class EmptyModelResponseError extends Error {
 // =============================================================================
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
-  "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
+  "The requested tool is not available in this chat. Available tools are listed in the details below. Tool names carry their server as a prefix in the form `server__tool`; the bare short name without that prefix will not match. Copy an exact name from the list for the next tool call.";
 
 type UnavailableToolErrorDetails = {
   type: "unavailable_tool";

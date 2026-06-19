@@ -472,7 +472,7 @@ describe("getChatMcpTools approval gating", () => {
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
-  test("run_tool proposes a grant approval only for an accessible-but-unassigned target", async () => {
+  test("run_tool needsApproval reflects only invocation policy, never proposes a grant", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv({
       gatewayTools: [
         {
@@ -505,12 +505,16 @@ describe("getChatMcpTools approval gating", () => {
     const needsApproval = callableNeedsApproval(
       tools[getArchestraToolFullName("run_tool")],
     );
+    // Dynamic tool access replaced the grant-on-first-use flow: an
+    // accessible-but-unassigned target no longer triggers an approval
+    // proposal — needsApproval is driven solely by the invocation policy,
+    // which neither tool here requires.
     await expect(
       needsApproval(
         { tool_name: unassignedTool.name, tool_args: {} },
         execOptions(),
       ),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     await expect(
       needsApproval(
         { tool_name: assignedTool.name, tool_args: {} },

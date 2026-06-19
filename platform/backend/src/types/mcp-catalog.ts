@@ -142,6 +142,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     id: z.string().uuid().optional(),
     name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
+    dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
       .record(z.string(), UserConfigFieldSchema)
@@ -174,6 +175,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   .extend({
     name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
+    dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
       .record(z.string(), UserConfigFieldSchema)

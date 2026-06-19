@@ -13,6 +13,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -22,6 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -36,6 +39,43 @@ import { useSetCredentialsAction } from "../layout";
 
 type McpOauthClient =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number];
+type GrantType = McpOauthClient["grantType"];
+type CreatedCredentials = {
+  clientId: string;
+  clientSecret: string;
+  grantType: GrantType;
+};
+
+const GRANT_TYPE_OPTIONS: {
+  value: GrantType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "client_credentials",
+    label: "Application (client credentials)",
+    description:
+      "A backend service or bot calls gateways as itself, with no acting user. Scope it to specific gateways.",
+  },
+  {
+    value: "authorization_code",
+    label: "On behalf of users (authorization code)",
+    description:
+      "A pre-registered app obtains user-scoped tokens, so gateway tools resolve each user's own identity and connections.",
+  },
+];
+
+const GRANT_TYPE_LABEL: Record<GrantType, string> = {
+  client_credentials: "Application",
+  authorization_code: "User-delegated",
+};
+
+function parseRedirectUris(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 export default function OAuthClientsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
@@ -53,18 +93,14 @@ export default function OAuthClientsPage() {
   const deleteMutation = useDeleteMcpOauthClient();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [createdCredentials, setCreatedCredentials] = useState<{
-    clientId: string;
-    clientSecret: string;
-  } | null>(null);
+  const [createdCredentials, setCreatedCredentials] =
+    useState<CreatedCredentials | null>(null);
   const [deletingOAuthClient, setDeletingOAuthClient] =
     useState<McpOauthClient | null>(null);
   const [editingOAuthClient, setEditingOAuthClient] =
     useState<McpOauthClient | null>(null);
-  const [rotatedCredentials, setRotatedCredentials] = useState<{
-    clientId: string;
-    clientSecret: string;
-  } | null>(null);
+  const [rotatedCredentials, setRotatedCredentials] =
+    useState<CreatedCredentials | null>(null);
   const [rotatingOAuthClient, setRotatingOAuthClient] =
     useState<McpOauthClient | null>(null);
 
@@ -98,11 +134,22 @@ export default function OAuthClientsPage() {
         ),
       },
       {
-        id: "gateways",
-        header: "Gateways",
+        id: "grantType",
+        header: "Type",
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {GRANT_TYPE_LABEL[row.original.grantType]}
+          </Badge>
+        ),
+      },
+      {
+        id: "scope",
+        header: "Gateways / Redirects",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {row.original.allowedGatewayIds.length}
+            {row.original.grantType === "authorization_code"
+              ? `${row.original.redirectUris.length} redirect URI(s)`
+              : `${row.original.allowedGatewayIds.length} gateway(s)`}
           </span>
         ),
       },
@@ -180,6 +227,7 @@ export default function OAuthClientsPage() {
             setCreatedCredentials({
               clientId: result.clientId,
               clientSecret: result.clientSecret,
+              grantType: result.grantType,
             });
             setIsCreateDialogOpen(false);
           }
@@ -243,6 +291,7 @@ export default function OAuthClientsPage() {
             setRotatedCredentials({
               clientId: result.clientId,
               clientSecret: result.clientSecret,
+              grantType: result.grantType,
             });
           }
           setRotatingOAuthClient(null);
@@ -290,33 +339,46 @@ function CreateOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
+  const [redirectUrisText, setRedirectUrisText] = useState("");
 
   useEffect(() => {
     if (open) {
       setName("");
+      setGrantType("client_credentials");
       setSelectedGatewayIds([]);
+      setRedirectUrisText("");
     }
   }, [open]);
 
-  const canSubmit = name.trim().length > 0 && selectedGatewayIds.length > 0;
+  const redirectUris = parseRedirectUris(redirectUrisText);
+  const isAuthorizationCode = grantType === "authorization_code";
+  const canSubmit =
+    name.trim().length > 0 &&
+    (isAuthorizationCode
+      ? redirectUris.length > 0
+      : selectedGatewayIds.length > 0);
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register an application (a backend service, automation job, or bot) that can call MCP gateways with OAuth client credentials."
+      description="Register an application that authenticates to MCP gateways with OAuth."
     >
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
-          await onSubmit({
-            name: name.trim(),
-            allowedGatewayIds: selectedGatewayIds,
-          });
-          setName("");
-          setSelectedGatewayIds([]);
+          await onSubmit(
+            isAuthorizationCode
+              ? { name: name.trim(), grantType, redirectUris }
+              : {
+                  name: name.trim(),
+                  grantType,
+                  allowedGatewayIds: selectedGatewayIds,
+                },
+          );
         }}
       >
         <DialogBody className="space-y-4">
@@ -330,19 +392,28 @@ function CreateOAuthClientDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Allowed gateways</Label>
-            <AgentSelector
-              mode="multiple"
-              flat
-              agents={gateways}
-              value={selectedGatewayIds}
-              onValueChange={setSelectedGatewayIds}
-              placeholder="Select gateways"
-              searchPlaceholder="Search gateways"
-              emptyMessage="No gateways found"
+          <GrantTypeField value={grantType} onChange={setGrantType} />
+
+          {isAuthorizationCode ? (
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
             />
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Allowed gateways</Label>
+              <AgentSelector
+                mode="multiple"
+                flat
+                agents={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+                placeholder="Select gateways"
+                searchPlaceholder="Search gateways"
+                emptyMessage="No gateways found"
+              />
+            </div>
+          )}
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -379,31 +450,54 @@ function EditOAuthClientDialog({
 }) {
   const [name, setName] = useState("");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
+  const [redirectUrisText, setRedirectUrisText] = useState("");
 
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
+    setRedirectUrisText(oauthClient.redirectUris.join("\n"));
   }, [oauthClient]);
 
+  // The grant type is fixed at creation, so only its own configuration is editable.
+  const isAuthorizationCode = oauthClient?.grantType === "authorization_code";
+  const redirectUris = parseRedirectUris(redirectUrisText);
   const canSubmit =
-    !!oauthClient && name.trim().length > 0 && selectedGatewayIds.length > 0;
+    !!oauthClient &&
+    name.trim().length > 0 &&
+    (isAuthorizationCode
+      ? redirectUris.length > 0
+      : selectedGatewayIds.length > 0);
 
   return (
     <FormDialog
       open={!!oauthClient}
       onOpenChange={onOpenChange}
       title="Edit OAuth Client"
-      description="Update the gateways this OAuth client can access."
+      description={
+        isAuthorizationCode
+          ? "Update the redirect URIs this OAuth client can use."
+          : "Update the gateways this OAuth client can access."
+      }
     >
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
           if (!oauthClient) return;
-          await onSubmit(oauthClient.id, {
-            name: name.trim(),
-            allowedGatewayIds: selectedGatewayIds,
-          });
+          await onSubmit(
+            oauthClient.id,
+            isAuthorizationCode
+              ? {
+                  name: name.trim(),
+                  grantType: oauthClient.grantType,
+                  redirectUris,
+                }
+              : {
+                  name: name.trim(),
+                  grantType: oauthClient.grantType,
+                  allowedGatewayIds: selectedGatewayIds,
+                },
+          );
         }}
       >
         <DialogBody className="space-y-4">
@@ -417,19 +511,26 @@ function EditOAuthClientDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Allowed gateways</Label>
-            <AgentSelector
-              mode="multiple"
-              flat
-              agents={gateways}
-              value={selectedGatewayIds}
-              onValueChange={setSelectedGatewayIds}
-              placeholder="Select gateways"
-              searchPlaceholder="Search gateways"
-              emptyMessage="No gateways found"
+          {isAuthorizationCode ? (
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
             />
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Allowed gateways</Label>
+              <AgentSelector
+                mode="multiple"
+                flat
+                agents={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+                placeholder="Select gateways"
+                searchPlaceholder="Search gateways"
+                emptyMessage="No gateways found"
+              />
+            </div>
+          )}
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -448,6 +549,71 @@ function EditOAuthClientDialog({
   );
 }
 
+function GrantTypeField({
+  value,
+  onChange,
+}: {
+  value: GrantType;
+  onChange: (value: GrantType) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Grant type</Label>
+      <RadioGroup
+        value={value}
+        onValueChange={(next) => onChange(next as GrantType)}
+        className="gap-2"
+      >
+        {GRANT_TYPE_OPTIONS.map((option) => (
+          <Label
+            key={option.value}
+            htmlFor={`grant-type-${option.value}`}
+            className="flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal has-[:checked]:border-primary"
+          >
+            <RadioGroupItem
+              id={`grant-type-${option.value}`}
+              value={option.value}
+              className="mt-0.5"
+            />
+            <div className="space-y-1">
+              <div className="font-medium">{option.label}</div>
+              <p className="text-sm text-muted-foreground">
+                {option.description}
+              </p>
+            </div>
+          </Label>
+        ))}
+      </RadioGroup>
+    </div>
+  );
+}
+
+function RedirectUrisField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="oauth-client-redirect-uris">Redirect URIs</Label>
+      <Textarea
+        id="oauth-client-redirect-uris"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={"https://your-app.example.com/oauth/callback"}
+        rows={3}
+      />
+      <p className="text-sm text-muted-foreground">
+        The registering application's own callback URL(s) — where users are sent
+        after they authorize, not an address on this server. Must match the
+        <code className="mx-1">redirect_uri</code>the app sends. One per line.
+      </p>
+    </div>
+  );
+}
+
 function CredentialsDialog({
   open,
   onOpenChange,
@@ -457,12 +623,13 @@ function CredentialsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  credentials: { clientId: string; clientSecret: string } | null;
+  credentials: CreatedCredentials | null;
 }) {
-  const tokenEndpoint =
+  const endpoint = (path: string) =>
     typeof window === "undefined"
-      ? "/api/auth/oauth2/token"
-      : new URL("/api/auth/oauth2/token", window.location.origin).toString();
+      ? path
+      : new URL(path, window.location.origin).toString();
+  const isAuthorizationCode = credentials?.grantType === "authorization_code";
 
   return (
     <FormDialog
@@ -482,12 +649,25 @@ function CredentialsDialog({
               <Label>Client Secret</Label>
               <CopyableCode value={credentials.clientSecret} />
             </div>
+            {isAuthorizationCode && (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <div className="mb-2 flex items-center gap-2 font-medium">
+                  <KeyRound className="h-4 w-4" />
+                  Authorization endpoint
+                </div>
+                <CopyableCode value={endpoint("/api/auth/oauth2/authorize")} />
+                <p className="mt-2 text-muted-foreground">
+                  Use the authorization code flow with PKCE and the{" "}
+                  <code>mcp</code> scope.
+                </p>
+              </div>
+            )}
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
               <div className="mb-2 flex items-center gap-2 font-medium">
                 <KeyRound className="h-4 w-4" />
                 Token endpoint
               </div>
-              <CopyableCode value={tokenEndpoint} />
+              <CopyableCode value={endpoint("/api/auth/oauth2/token")} />
             </div>
           </>
         )}

@@ -17,16 +17,41 @@ def _result() -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _fixture_salaries() -> list[float]:
+def _parse_salary(raw: str | None) -> int | None:
+    """Normalize a messy salary cell to a plain dollar amount, or None if not a number.
+
+    Mirrors the surface formats emitted by expected/generate.py: plain integers, a `$` prefix,
+    thousands separators, a trailing `k`/`K` meaning thousands, and scientific notation.
+    """
+    if raw is None:
+        return None
+    text = raw.strip().replace("$", "").replace(",", "")
+    if not text:
+        return None
+    multiplier = 1
+    if text[-1:].lower() == "k":
+        multiplier = 1000
+        text = text[:-1]
+    try:
+        return round(float(text) * multiplier)
+    except ValueError:
+        return None
+
+
+def _fixture_salaries() -> list[int]:
+    # Some rows are structurally malformed (a stray comma shifts the salary out of its column), so
+    # truth is defined by scanning every field of each row rather than trusting the `salary` column:
+    # the salary is the lone number-parseable field. Numeric rows yield exactly one; junk rows none.
     base = os.environ.get("BENCH_FIXTURES")
     assert base, "BENCH_FIXTURES is not set"
-    salaries: list[float] = []
+    salaries: list[int] = []
     with Path(base, "inputs", "salaries.csv").open(encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            try:
-                salaries.append(float(row["salary"]))
-            except (ValueError, TypeError):
-                continue
+        reader = csv.reader(handle)
+        next(reader, None)  # header
+        for row in reader:
+            parsed = [v for v in (_parse_salary(cell) for cell in row) if v is not None]
+            assert len(parsed) <= 1, f"row has {len(parsed)} number-parseable fields, expected <=1: {row!r}"
+            salaries.extend(parsed)
     return salaries
 
 

@@ -137,9 +137,8 @@ import {
 import {
   agentRequiresPerUserConnect,
   deriveModelSource,
-  getSavedAgent,
-  saveAgent,
 } from "@/lib/chat/use-chat-preferences";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -156,10 +155,7 @@ import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
   resolveChatModelState,
-  resolveInitialAgentSelection,
-  resolveInitialAgentState,
   resolvePreferredModelForProvider,
-  shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
@@ -310,145 +306,35 @@ export function ChatPageContent({
   // for a new chat ("member" level).
   const { data: memberDefault } = useMemberDefaultModel();
 
-  // State for initial chat (when no conversation exists yet)
-  const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
-  const [initialModel, setInitialModel] = useState<string>("");
-  const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  const previousRouteConversationIdRef = useRef<string | undefined>(
-    routeConversationId,
-  );
-  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
-  // but do apply a new one when navigating from a different agent page)
-  const urlParamsConsumedRef = useRef<string | null>(null);
-
-  // Resolve which agent to use on page load (URL param > localStorage > first available).
-  // Stores the resolved agent in a ref so the model init effect can read it synchronously.
-  const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
-
-  const applyInitialAgentSelection = useCallback(
-    (agent: (typeof internalAgents)[number]) => {
-      setInitialAgentId(agent.id);
-      resolvedAgentRef.current = agent;
-
-      const resolved = resolveInitialAgentState({
-        agent,
-        modelsByProvider,
-        chatApiKeys,
-        organization: organization
-          ? {
-              defaultModelId: organization.defaultModelId,
-              defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-            }
-          : null,
-        memberDefault: memberDefault ?? null,
-      });
-
-      if (resolved) {
-        setInitialModel(resolved.modelId);
-        setInitialApiKeyId(resolved.apiKeyId);
-      } else {
-        setInitialModel("");
-        setInitialApiKeyId(null);
-      }
-    },
-    [modelsByProvider, chatApiKeys, organization, memberDefault],
-  );
-
-  useEffect(() => {
-    if (internalAgents.length === 0) return;
-    // Wait for organization data to avoid race condition where agents load
-    // before org, causing the org default to be skipped
-    if (isOrgLoading) return;
-
-    // Process URL agentId param, but only if it's a new value (not one we already consumed).
-    // This allows navigating from different agent pages while preventing re-application
-    // after the user manually changes the agent.
-    const urlAgentId = searchParams.get("agentId");
-    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
-      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-      if (matchingAgent) {
-        applyInitialAgentSelection(matchingAgent);
-        urlParamsConsumedRef.current = urlAgentId;
-        return;
-      }
-    }
-
-    // Priority: org default > localStorage > member default > first available.
-    // Org default always wins when set (admin-configured for the whole org).
-    // localStorage only overrides when no org default is configured and the
-    // user can change agents; otherwise a stale hidden picker value can trap
-    // restricted users on a previously swapped agent.
-    // Also skip if a URL param was consumed but state hasn't flushed yet.
-    if (!initialAgentId && !urlParamsConsumedRef.current) {
-      if (isAgentPickerPermissionLoading) return;
-
-      const selectedAgent = resolveInitialAgentSelection({
-        agents: internalAgents,
-        organizationDefaultAgentId: organization?.defaultAgentId,
-        savedAgentId: getSavedAgent(),
-        memberDefaultAgentId: defaultAgentId,
-        canUseSavedAgent: canSeeAgentPicker === true,
-      });
-      if (!selectedAgent) return;
-
-      applyInitialAgentSelection(selectedAgent);
-      saveAgent(selectedAgent.id);
-    }
-  }, [
-    applyInitialAgentSelection,
-    initialAgentId,
-    searchParams,
-    internalAgents,
+  // Shared new-chat initialization (agent/model/key resolution + persistence).
+  const {
+    agentId: initialAgentId,
+    modelId: initialModel,
+    apiKeyId: initialApiKeyId,
+    provider: initialProvider,
+    modelSource: initialModelSource,
+    setApiKeyId: setInitialApiKeyId,
+    onAgentChange: handleInitialAgentChange,
+    onModelChange: handleInitialModelChange,
+    onProviderChange: handleInitialProviderChange,
+    onResetModelOverride: handleResetModelOverride,
+  } = useInitialChatModelState({
+    agents: internalAgents,
+    organization: organization ?? null,
     defaultAgentId,
-    organization?.defaultAgentId,
-    isOrgLoading,
-    canSeeAgentPicker,
-    isAgentPickerPermissionLoading,
-  ]);
-
-  // Initialize model and API key once agent is resolved.
-  // Priority: agent config > org default > first available.
-  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
-  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
-  // cause an early return and skip the proper priority chain (org default, etc.).
-  const modelInitializedRef = useRef(false);
-  useEffect(() => {
-    if (!initialAgentId) return;
-    if (modelInitializedRef.current) return;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: memberDefault ?? null,
-    });
-
-    if (!resolved) return; // No models available yet
-
-    setInitialModel(resolved.modelId);
-    if (resolved.apiKeyId) {
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-  }, [
-    initialAgentId,
     modelsByProvider,
     chatApiKeys,
-    organization?.defaultModelId,
-    organization?.defaultLlmApiKeyId,
-    organization,
-    memberDefault,
-  ]);
+    memberDefault: memberDefault ?? null,
+    urlAgentId: searchParams.get("agentId"),
+    canUseSavedAgent: canSeeAgentPicker === true,
+    isPermissionResolving: isAgentPickerPermissionLoading,
+    isOrgLoading,
+    routeConversationId,
+  });
 
-  // Persist the user's (model, key) pick as their member default so the next
-  // new chat reuses it — the "member" level of the resolution chain. No-ops on
-  // an incomplete pair.
+  // Persist the user's (model, key) pick as their member default for the
+  // existing-conversation handlers below (the initial handlers persist via the
+  // hook). No-ops on an incomplete pair.
   const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
   const updateMemberDefaultModelMutateRef = useRef(
     updateMemberDefaultModelMutation.mutate,
@@ -466,76 +352,6 @@ export function ChatPageContent({
     [],
   );
 
-  // Model change for the initial (no conversation) state. The picked model is
-  // scoped to the selected key, so the pair is persisted as the member default.
-  const initialApiKeyIdRef = useRef(initialApiKeyId);
-  initialApiKeyIdRef.current = initialApiKeyId;
-  const handleInitialModelChange = useCallback(
-    (modelId: string) => {
-      setInitialModel(modelId);
-      persistMemberDefaultModel(modelId, initialApiKeyIdRef.current);
-    },
-    [persistMemberDefaultModel],
-  );
-
-  // Handle API key change - preselect best model for the new key's provider
-  const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, apiKeyId: string) => {
-      const preferredModel = resolvePreferredModelForProvider({
-        provider: newProvider,
-        modelsByProvider,
-      });
-      if (preferredModel) {
-        setInitialModel(preferredModel.modelId);
-        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
-      }
-    },
-    [modelsByProvider, persistMemberDefaultModel],
-  );
-
-  // Reset to the agent/org default model (shown when on a custom model).
-  // Resolves without the member default — reset deliberately drops the user's
-  // personal override to fall back to the agent/org default.
-  const handleResetModelOverride = useCallback(() => {
-    modelInitializedRef.current = false;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: null,
-    });
-
-    if (resolved) {
-      setInitialModel(resolved.modelId);
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-
-    // Clear the saved member default so the reset sticks for future new chats.
-    updateMemberDefaultModelMutateRef.current({
-      modelId: null,
-      chatApiKeyId: null,
-    });
-  }, [modelsByProvider, chatApiKeys, organization]);
-
-  // Derive provider from initial model for API key filtering
-  const initialProvider = useMemo((): SupportedProvider | undefined => {
-    if (!initialModel) return undefined;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === initialModel)) {
-        return provider as SupportedProvider;
-      }
-    }
-    return undefined;
-  }, [initialModel, modelsByProvider]);
-
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
@@ -545,21 +361,6 @@ export function ChatPageContent({
 
   useEffect(() => {
     setConversationId(routeConversationId);
-
-    const previousRouteConversationId = previousRouteConversationIdRef.current;
-    previousRouteConversationIdRef.current = routeConversationId;
-
-    if (
-      shouldResetInitialChatState({
-        previousRouteConversationId,
-        routeConversationId,
-      })
-    ) {
-      setInitialAgentId(null);
-      setInitialModel("");
-      setInitialApiKeyId(null);
-      modelInitializedRef.current = false;
-    }
 
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
@@ -696,23 +497,6 @@ export function ChatPageContent({
   }, [
     conversation?.modelId,
     conversation?.agentId,
-    internalAgents,
-    organization?.defaultModelId,
-  ]);
-
-  // Same derivation for the initial (no conversation) chat.
-  const initialModelSource = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === initialAgentId) as
-      | (Record<string, unknown> & { modelId?: string | null })
-      | undefined;
-    return deriveModelSource({
-      selectedModelId: initialModel,
-      agentModelId: agent?.modelId,
-      orgModelId: organization?.defaultModelId,
-    });
-  }, [
-    initialModel,
-    initialAgentId,
     internalAgents,
     organization?.defaultModelId,
   ]);
@@ -881,7 +665,6 @@ export function ChatPageContent({
         : null,
       // Reset deliberately drops the user's personal override.
       memberDefault: null,
-      chatModels,
     });
 
     if (resolved) {
@@ -904,7 +687,6 @@ export function ChatPageContent({
     modelsByProvider,
     chatApiKeys,
     organization,
-    chatModels,
   ]);
 
   // Create conversation mutation (requires agentId)
@@ -1771,21 +1553,6 @@ export function ChatPageContent({
     conversation?.title,
     conversation?.agent?.name,
   ]);
-
-  // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback(
-    (agentId: string) => {
-      setInitialAgentId(agentId);
-      saveAgent(agentId);
-
-      // Resolve model/key for the new agent using the same priority chain
-      const selectedAgent = internalAgents.find((a) => a.id === agentId);
-      if (selectedAgent) {
-        applyInitialAgentSelection(selectedAgent);
-      }
-    },
-    [applyInitialAgentSelection, internalAgents],
-  );
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(

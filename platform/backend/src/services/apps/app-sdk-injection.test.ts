@@ -103,4 +103,20 @@ describe("buildPlatformCspContent", () => {
     // The CDN allowlist feeds the resource directives.
     expect(csp).toContain("cdn.jsdelivr.net");
   });
+
+  test("drops the platform asset URLs in self-contained mode", () => {
+    const csp = buildPlatformCspContent(
+      "https://app.example.com",
+      APP_PLATFORM_CSP,
+      { selfContained: true },
+    );
+    // The SDK and stylesheet are inline ('unsafe-inline' covers them), so the
+    // resource makes no cross-origin subresource request a strict host refuses.
+    expect(csp).not.toContain("/_sandbox/ext-apps-app.js");
+    expect(csp).not.toContain("/_sandbox/archestra-app-sdk.js");
+    // The hardening directives still hold.
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+  });
 });

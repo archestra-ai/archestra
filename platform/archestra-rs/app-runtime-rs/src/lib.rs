@@ -9,22 +9,45 @@ use std::any::Any;
 use app_runtime_core as core;
 use napi_derive::napi;
 
+/// Trusted, platform-built assets the connector embeds directly into the
+/// resource when serving a strict foreign host (claude.ai) whose sandbox CSP
+/// refuses cross-origin `<script src>`/`<link href>`. Omitted keeps the linked
+/// form (Archestra's own render).
+#[napi(object)]
+pub struct InlineAssets {
+    /// ext-apps guest bundle as an IIFE publishing the View SDK on
+    /// `window.__ARCHESTRA_EXT_APPS__`.
+    pub ext_apps_global: String,
+    /// The Apps SDK microframework (same bytes served at the SDK path).
+    pub shim: String,
+    /// The platform baseline stylesheet (same bytes served at the CSS path).
+    pub base_css: String,
+}
+
 /// Inject the platform CSP, baseline stylesheet, per-viewer bootstrap, and Apps
 /// SDK into an owned app's HTML. `contextJson` is the caller-serialized
 /// per-viewer context (identity + assigned-tool descriptors). `baseOrigin`
 /// prefixes the served asset URLs so they resolve in a foreign host's
 /// opaque-origin iframe (empty keeps them path-relative); `csp` is the pinned
-/// Content-Security-Policy injected as a `<meta>` (empty omits it). See the core
-/// crate for the trust boundary on these inputs.
+/// Content-Security-Policy injected as a `<meta>` (empty omits it). When
+/// `inlineAssets` is provided the stylesheet and SDK are embedded in the
+/// document instead of linked (`baseOrigin` is then unused for assets). See the
+/// core crate for the trust boundary on these inputs.
 #[napi(js_name = "prepareAppEnvelope")]
 pub fn prepare_app_envelope(
     html: String,
     context_json: String,
     base_origin: String,
     csp: String,
+    inline_assets: Option<InlineAssets>,
 ) -> napi::Result<String> {
     std::panic::catch_unwind(|| {
-        core::prepare_app_envelope(&html, &context_json, &base_origin, &csp)
+        let inline = inline_assets.as_ref().map(|a| core::InlineAssets {
+            ext_apps_global: &a.ext_apps_global,
+            shim: &a.shim,
+            base_css: &a.base_css,
+        });
+        core::prepare_app_envelope_with_assets(&html, &context_json, &base_origin, &csp, inline)
     })
     .map_err(panic_to_napi_error)
 }

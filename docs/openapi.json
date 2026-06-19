@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.68"
+    "version": "1.2.69"
   },
   "components": {
     "schemas": {
@@ -35741,6 +35741,9 @@
                               "search_and_run_only"
                             ]
                           },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -36141,6 +36144,7 @@
                           "environmentId",
                           "passthroughHeaders",
                           "toolExposureMode",
+                          "accessAllTools",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -36557,6 +36561,9 @@
                       "search_and_run_only"
                     ]
                   },
+                  "accessAllTools": {
+                    "type": "boolean"
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -36864,6 +36871,9 @@
                         "full",
                         "search_and_run_only"
                       ]
+                    },
+                    "accessAllTools": {
+                      "type": "boolean"
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -37265,6 +37275,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -37731,6 +37742,9 @@
                           "search_and_run_only"
                         ]
                       },
+                      "accessAllTools": {
+                        "type": "boolean"
+                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -38131,6 +38145,7 @@
                       "environmentId",
                       "passthroughHeaders",
                       "toolExposureMode",
+                      "accessAllTools",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -38515,6 +38530,9 @@
                         "search_and_run_only"
                       ]
                     },
+                    "accessAllTools": {
+                      "type": "boolean"
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38915,6 +38933,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39299,6 +39318,9 @@
                         "search_and_run_only"
                       ]
                     },
+                    "accessAllTools": {
+                      "type": "boolean"
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -39699,6 +39721,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -40026,6 +40049,10 @@
                           "full",
                           "search_and_run_only"
                         ]
+                      },
+                      "accessAllTools": {
+                        "default": false,
+                        "type": "boolean"
                       },
                       "incomingEmailEnabled": {
                         "type": "boolean"
@@ -40429,6 +40456,9 @@
                             "search_and_run_only"
                           ]
                         },
+                        "accessAllTools": {
+                          "type": "boolean"
+                        },
                         "builtInAgentConfig": {
                           "nullable": true,
                           "oneOf": [
@@ -40829,6 +40859,7 @@
                         "environmentId",
                         "passthroughHeaders",
                         "toolExposureMode",
+                        "accessAllTools",
                         "builtInAgentConfig",
                         "builtIn",
                         "createdAt",
@@ -41260,6 +41291,9 @@
                         "search_and_run_only"
                       ]
                     },
+                    "accessAllTools": {
+                      "type": "boolean"
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -41660,6 +41694,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -42028,6 +42063,9 @@
                       "search_and_run_only"
                     ]
                   },
+                  "accessAllTools": {
+                    "type": "boolean"
+                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -42340,6 +42378,9 @@
                         "full",
                         "search_and_run_only"
                       ]
+                    },
+                    "accessAllTools": {
+                      "type": "boolean"
                     },
                     "builtInAgentConfig": {
                       "nullable": true,
@@ -42741,6 +42782,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -43409,6 +43451,9 @@
                         "search_and_run_only"
                       ]
                     },
+                    "accessAllTools": {
+                      "type": "boolean"
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -43809,6 +43854,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -44149,6 +44195,10 @@
                             "search_and_run_only"
                           ]
                         },
+                        "accessAllTools": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "incomingEmailEnabled": {
                           "type": "boolean"
                         },
@@ -44180,6 +44230,7 @@
                         "scope",
                         "considerContextUntrusted",
                         "toolExposureMode",
+                        "accessAllTools",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
                         "incomingEmailAllowedDomain"
@@ -44806,6 +44857,9 @@
                         "search_and_run_only"
                       ]
                     },
+                    "accessAllTools": {
+                      "type": "boolean"
+                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -45206,6 +45260,7 @@
                     "environmentId",
                     "passthroughHeaders",
                     "toolExposureMode",
+                    "accessAllTools",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -47673,300 +47728,6 @@
             },
             "in": "path",
             "name": "toolId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
-    "/api/agents/{agentId}/tools/grant": {
-      "post": {
-        "operationId": "grantToolToAgent",
-        "tags": [
-          "Agent Tools"
-        ],
-        "description": "Grant a user-accessible tool to an agent by name (chat grant flow). Resolves the tool and enforces the same authorization as a manual assignment server-side.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "toolName": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "toolName"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "agentId",
             "required": true
           }
         ],
@@ -74518,6 +74279,13 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "schedule_trigger"
+                        ]
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -74605,6 +74373,10 @@
                         "additionalProperties": false
                       },
                       "projectName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "projectIcon": {
                         "nullable": true,
                         "type": "string"
                       },
@@ -74847,6 +74619,7 @@
                       "todoList",
                       "artifact",
                       "projectId",
+                      "origin",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -75264,6 +75037,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -75351,6 +75131,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -75593,6 +75377,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -75981,6 +75766,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -76068,6 +75860,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -76310,6 +76106,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -76739,6 +76536,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -76826,6 +76630,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -77068,6 +76876,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -79001,6 +78810,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -79088,6 +78904,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -79330,6 +79150,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -80085,6 +79906,13 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "schedule_trigger"
+                          ]
+                        },
                         "pinnedAt": {
                           "nullable": true,
                           "type": "string",
@@ -80172,6 +80000,10 @@
                           "additionalProperties": false
                         },
                         "projectName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "projectIcon": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -80414,6 +80246,7 @@
                         "todoList",
                         "artifact",
                         "projectId",
+                        "origin",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -81758,6 +81591,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -81845,6 +81685,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -82090,6 +81934,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -82499,6 +82344,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -82586,6 +82438,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -82828,6 +82684,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -83232,6 +83089,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -83319,6 +83183,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -83561,6 +83429,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -83975,6 +83844,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -84062,6 +83938,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -84304,6 +84184,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -90510,6 +90391,9 @@
                         "projectsEnabled": {
                           "type": "boolean"
                         },
+                        "dynamicToolAccessEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -90604,6 +90488,7 @@
                         "agentEnvironmentsEnabled",
                         "appsEnabled",
                         "projectsEnabled",
+                        "dynamicToolAccessEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -136633,6 +136518,12 @@
                       "multitenant": {
                         "type": "boolean"
                       },
+                      "dynamicConnectionMcpServerId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "serverUrl": {
                         "nullable": true,
                         "type": "string"
@@ -137143,6 +137034,7 @@
                       "authFields",
                       "serverType",
                       "multitenant",
+                      "dynamicConnectionMcpServerId",
                       "serverUrl",
                       "docsUrl",
                       "clientSecretId",
@@ -137496,6 +137388,12 @@
                   },
                   "multitenant": {
                     "type": "boolean"
+                  },
+                  "dynamicConnectionMcpServerId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -138048,6 +137946,12 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "dynamicConnectionMcpServerId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -138552,6 +138456,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -138920,6 +138825,12 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "dynamicConnectionMcpServerId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -139424,6 +139335,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -139767,6 +139679,12 @@
                       "remote",
                       "builtin"
                     ]
+                  },
+                  "dynamicConnectionMcpServerId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "serverUrl": {
                     "nullable": true,
@@ -140321,6 +140239,12 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "dynamicConnectionMcpServerId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "serverUrl": {
                       "nullable": true,
                       "type": "string"
@@ -140825,6 +140749,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
                     "clientSecretId",
@@ -163604,6 +163529,13 @@
                       "organizationId": {
                         "type": "string"
                       },
+                      "grantType": {
+                        "type": "string",
+                        "enum": [
+                          "client_credentials",
+                          "authorization_code"
+                        ]
+                      },
                       "allowedLlmProxyIds": {
                         "type": "array",
                         "items": {
@@ -163655,6 +163587,12 @@
                           "additionalProperties": false
                         }
                       },
+                      "redirectUris": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "disabled": {
                         "type": "boolean"
                       },
@@ -163672,8 +163610,10 @@
                       "clientId",
                       "name",
                       "organizationId",
+                      "grantType",
                       "allowedLlmProxyIds",
                       "providerApiKeys",
+                      "redirectUris",
                       "disabled",
                       "createdAt",
                       "updatedAt"
@@ -163938,8 +163878,15 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedLlmProxyIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -163948,7 +163895,6 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -163987,12 +163933,17 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedLlmProxyIds",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -164017,6 +163968,13 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
                     },
                     "allowedLlmProxyIds": {
                       "type": "array",
@@ -164069,6 +164027,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -164089,8 +164053,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -164357,8 +164323,15 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedLlmProxyIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -164367,7 +164340,6 @@
                     }
                   },
                   "providerApiKeys": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -164406,12 +164378,17 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedLlmProxyIds",
-                  "providerApiKeys"
+                  "name"
                 ]
               }
             }
@@ -164446,6 +164423,13 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
                     },
                     "allowedLlmProxyIds": {
                       "type": "array",
@@ -164498,6 +164482,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -164515,8 +164505,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt"
@@ -165072,6 +165064,13 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedLlmProxyIds": {
                       "type": "array",
                       "items": {
@@ -165123,6 +165122,12 @@
                         "additionalProperties": false
                       }
                     },
+                    "redirectUris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -165143,8 +165148,10 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedLlmProxyIds",
                     "providerApiKeys",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -168069,7 +168076,20 @@
                       "organizationId": {
                         "type": "string"
                       },
+                      "grantType": {
+                        "type": "string",
+                        "enum": [
+                          "client_credentials",
+                          "authorization_code"
+                        ]
+                      },
                       "allowedGatewayIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "redirectUris": {
                         "type": "array",
                         "items": {
                           "type": "string"
@@ -168092,7 +168112,9 @@
                       "clientId",
                       "name",
                       "organizationId",
+                      "grantType",
                       "allowedGatewayIds",
+                      "redirectUris",
                       "disabled",
                       "createdAt",
                       "updatedAt"
@@ -168357,19 +168379,32 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedGatewayIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedGatewayIds"
+                  "name"
                 ]
               }
             }
@@ -168395,7 +168430,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -168421,7 +168469,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -168688,19 +168738,32 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "grantType": {
+                    "default": "client_credentials",
+                    "type": "string",
+                    "enum": [
+                      "client_credentials",
+                      "authorization_code"
+                    ]
+                  },
                   "allowedGatewayIds": {
-                    "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
                   }
                 },
                 "required": [
-                  "name",
-                  "allowedGatewayIds"
+                  "name"
                 ]
               }
             }
@@ -168736,7 +168799,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -168759,7 +168835,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt"
@@ -169315,7 +169393,20 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "grantType": {
+                      "type": "string",
+                      "enum": [
+                        "client_credentials",
+                        "authorization_code"
+                      ]
+                    },
                     "allowedGatewayIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "redirectUris": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -169341,7 +169432,9 @@
                     "clientId",
                     "name",
                     "organizationId",
+                    "grantType",
                     "allowedGatewayIds",
+                    "redirectUris",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -185606,7 +185699,6 @@
                     "issuer",
                     "authorization_endpoint",
                     "token_endpoint",
-                    "registration_endpoint",
                     "jwks_uri",
                     "response_types_supported",
                     "grant_types_supported",
@@ -205181,6 +205273,11 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 4096
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000000
                   }
                 },
                 "required": [
@@ -205210,6 +205307,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isOwner": {
                       "type": "boolean"
                     },
@@ -205235,6 +205336,7 @@
                     "id",
                     "name",
                     "description",
+                    "icon",
                     "isOwner",
                     "conversationCount",
                     "visibility",
@@ -205509,6 +205611,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "isOwner": {
                         "type": "boolean"
                       },
@@ -205534,6 +205640,7 @@
                       "id",
                       "name",
                       "description",
+                      "icon",
                       "isOwner",
                       "conversationCount",
                       "visibility",
@@ -205821,6 +205928,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "isOwner": {
                       "type": "boolean"
                     },
@@ -205853,6 +205964,7 @@
                     "id",
                     "name",
                     "description",
+                    "icon",
                     "isOwner",
                     "conversationCount",
                     "visibility",
@@ -206105,7 +206217,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's description (owner only). The name is immutable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Update a project's name, description, and/or icon (owner only). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -206113,15 +206225,22 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "description": {
                     "nullable": true,
                     "type": "string",
                     "maxLength": 4096
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000000
                   }
-                },
-                "required": [
-                  "description"
-                ]
+                }
               }
             }
           }
@@ -207356,6 +207475,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "schedule_trigger"
+                        ]
+                      },
                       "lastMessageAt": {
                         "type": "string",
                         "format": "date-time"
@@ -207373,6 +207499,7 @@
                       "title",
                       "authorUserId",
                       "authorName",
+                      "origin",
                       "lastMessageAt",
                       "createdAt",
                       "readOnly"
@@ -207684,6 +207811,16 @@
           },
           {
             "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "projectId",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "boolean"
             },
             "in": "query",
@@ -207716,6 +207853,12 @@
                             "type": "string"
                           },
                           "agentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "projectId": {
+                            "nullable": true,
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -207796,6 +207939,7 @@
                           "organizationId",
                           "name",
                           "agentId",
+                          "projectId",
                           "messageTemplate",
                           "cronExpression",
                           "timezone",
@@ -208115,6 +208259,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                   },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -208134,7 +208283,6 @@
                 },
                 "required": [
                   "name",
-                  "agentId",
                   "cronExpression",
                   "timezone",
                   "messageTemplate"
@@ -208163,6 +208311,12 @@
                       "type": "string"
                     },
                     "agentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "projectId": {
+                      "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -208243,6 +208397,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -208536,6 +208691,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -208612,6 +208773,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -208883,6 +209045,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                   },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -208936,6 +209103,12 @@
                       "type": "string"
                     },
                     "agentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "projectId": {
+                      "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -209016,6 +209189,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -209583,6 +209757,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -209659,6 +209839,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -209952,6 +210133,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -210028,6 +210215,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -211554,6 +211742,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -211641,6 +211836,10 @@
                       "additionalProperties": false
                     },
                     "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -211883,6 +212082,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

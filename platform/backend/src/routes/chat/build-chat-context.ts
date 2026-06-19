@@ -1,24 +1,12 @@
-import {
-  buildUserSystemPromptContext,
-  TOOL_LOAD_SKILL_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@archestra/shared";
 import type { Tool } from "ai";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import {
   getChatMcpTools,
   getChatMcpToolUiResourceUris,
 } from "@/clients/chat-mcp-client";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
-import { ConversationEnabledToolModel, TeamModel } from "@/models";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
-import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
+import { ConversationEnabledToolModel } from "@/models";
 import type { ToolExposureMode } from "@/types";
 
 /**
@@ -88,60 +76,15 @@ export async function buildChatContext(params: {
     getChatMcpToolUiResourceUris(agentId),
   ]);
 
-  // Build template context only when prompts use Handlebars syntax
-  let promptContext: UserSystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt)) {
-    const userTeams = await TeamModel.getUserTeamsForOrganization({
-      userId: user.id,
-      organizationId,
-    });
-    promptContext = buildUserSystemPromptContext({
-      userName: user.name,
-      userEmail: user.email,
-      userTeams: userTeams.map((t) => t.name),
-    });
-  }
-
-  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
-
-  let toolResultInstructions: string = "";
-  // Add MCP UI instruction when tools are available
-  if (Object.keys(mcpTools).length > 0) {
-    toolResultInstructions =
-      "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
-  }
-
-  const toolDenialInstruction =
-    "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
-
-  const toolLoadingInstructions =
-    agent.toolExposureMode === "search_and_run_only"
-      ? buildLoadToolsWhenNeededSystemPrompt()
-      : "";
-
-  // eagerly list the agent's skills in the prompt (like Claude Code /
-  // opencode), but only when the agent can actually load them.
-  const skillCatalogPrompt =
-    archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in mcpTools
-      ? await buildSkillCatalogPrompt({
-          organizationId,
-          userId: user.id,
-          agentId,
-        })
-      : null;
-
-  const systemPrompt =
-    [
-      toolLoadingInstructions,
-      renderedPrompt,
-      skillCatalogPrompt,
-      toolDenialInstruction,
-      toolResultInstructions,
-      // Context returned by SessionStart hooks.
-      hookSessionContext,
-    ]
-      .filter(Boolean)
-      .join("\n\n") || undefined;
+  const systemPrompt = await buildAgentSystemPrompt({
+    agent,
+    mcpTools,
+    organizationId,
+    userId: user.id,
+    agentId,
+    user: { name: user.name, email: user.email },
+    hookSessionContext,
+  });
 
   return {
     mcpTools,
@@ -152,17 +95,4 @@ export async function buildChatContext(params: {
       enabledToolCount: enabledToolIds.length,
     },
   };
-}
-
-// ===== Internal helpers =====
-
-function buildLoadToolsWhenNeededSystemPrompt(): string {
-  const searchToolsName = archestraMcpBranding.getToolName(
-    TOOL_SEARCH_TOOLS_SHORT_NAME,
-  );
-  const runToolName = archestraMcpBranding.getToolName(
-    TOOL_RUN_TOOL_SHORT_NAME,
-  );
-
-  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.`;
 }

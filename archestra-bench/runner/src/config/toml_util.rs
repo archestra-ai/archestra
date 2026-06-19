@@ -1,5 +1,3 @@
-use serde::de::DeserializeOwned;
-
 pub type TomlTable = toml::map::Map<String, toml::Value>;
 
 #[derive(Debug, thiserror::Error)]
@@ -38,18 +36,6 @@ pub fn parse_toml_text(text: &str, path: &std::path::Path) -> TomlResult<TomlTab
             format!("cannot parse TOML: {e}"),
         )),
     }
-}
-
-pub fn is_slug(value: &str) -> bool {
-    if value.is_empty() {
-        return false;
-    }
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphanumeric() => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 pub fn req_str(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<String> {
@@ -248,11 +234,4 @@ fn type_name(value: &toml::Value) -> &'static str {
         toml::Value::Array(_) => "array",
         toml::Value::Table(_) => "table",
     }
-}
-
-pub fn deserialize_table<T: DeserializeOwned>(table: &TomlTable) -> TomlResult<T> {
-    let value = toml::Value::Table(table.clone());
-    value
-        .try_into()
-        .map_err(|e: toml::de::Error| TomlError::new("deserialize", e.to_string()))
 }

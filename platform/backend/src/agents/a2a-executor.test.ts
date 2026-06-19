@@ -7,6 +7,7 @@ import {
   buildUserContent,
   executeA2AMessage,
 } from "./a2a-executor";
+import { TOOL_DENIAL_INSTRUCTION } from "./agent-system-prompt";
 
 const {
   mockStreamText,
@@ -731,7 +732,7 @@ describe("executeA2AMessage skill catalog", () => {
     expect(system).toContain("<available_skills>");
   });
 
-  test("leaves the system prompt unchanged when no skill tools are available", async () => {
+  test("omits the skill catalog but keeps the shared tool instructions when no skill tools are available", async () => {
     primeMocks({});
     mockBuildSkillCatalogPrompt.mockResolvedValue("<available_skills>...");
 
@@ -745,6 +746,8 @@ describe("executeA2AMessage skill catalog", () => {
 
     expect(mockBuildSkillCatalogPrompt).not.toHaveBeenCalled();
     const system = mockStreamText.mock.calls[0]?.[0].system;
-    expect(system).toBe("Handle the task.");
+    expect(system).toContain("Handle the task.");
+    expect(system).not.toContain("<available_skills>");
+    expect(system).toContain(TOOL_DENIAL_INSTRUCTION);
   });
 });

@@ -27,7 +27,6 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
-import { isToolGrantApprovable } from "@/archestra-mcp-server/tool-auto-assign";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
@@ -107,7 +106,6 @@ export function buildMcpGatewayTool(params: {
     ...needsApprovalProps({
       toolName: mcpTool.name,
       ctx,
-      allowRunToolGrant: true,
     }),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
@@ -290,7 +288,6 @@ export function buildAgentDelegationTool(params: {
     ...needsApprovalProps({
       toolName: agentTool.name,
       ctx,
-      allowRunToolGrant: false,
     }),
     execute: async (args: Record<string, unknown>, options) =>
       executeWithToolSpan({
@@ -544,47 +541,23 @@ function getChatExternalAgentId(): string {
 function needsApprovalProps(params: {
   toolName: string;
   ctx: ChatToolContext;
-  /** Only run_tool can propose granting an accessible-but-unassigned target. */
-  allowRunToolGrant: boolean;
 }): Pick<Tool, "needsApproval"> | Record<string, never> {
-  const { toolName, ctx, allowRunToolGrant } = params;
+  const { toolName, ctx } = params;
   if (ctx.blockOnApprovalRequired) {
     return {};
   }
   return {
     needsApproval: async (args: unknown) => {
       const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-      if (
-        await ToolInvocationPolicyModel.checkApprovalRequired(
-          approvalTarget.toolName,
-          approvalTarget.toolInput,
-          {
-            teamIds: [],
-            externalAgentId: getChatExternalAgentId(),
-          },
-          ctx.globalToolPolicy,
-        )
-      ) {
-        return true;
-      }
-      // Grant approval: only run_tool can target a tool the agent
-      // does not yet have. Propose granting an accessible-but-
-      // unassigned target so the user confirms (and the tool is added
-      // to the agent) before it runs. The frontend assigns the tool,
-      // then resumes this same call — by which point it is assigned.
-      if (
-        !allowRunToolGrant ||
-        archestraMcpBranding.getToolShortName(toolName) !==
-          TOOL_RUN_TOOL_SHORT_NAME
-      ) {
-        return false;
-      }
-      return isToolGrantApprovable({
-        toolName: approvalTarget.toolName,
-        agentId: ctx.agentId,
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      });
+      return ToolInvocationPolicyModel.checkApprovalRequired(
+        approvalTarget.toolName,
+        approvalTarget.toolInput,
+        {
+          teamIds: [],
+          externalAgentId: getChatExternalAgentId(),
+        },
+        ctx.globalToolPolicy,
+      );
     },
   };
 }

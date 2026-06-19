@@ -8,6 +8,7 @@ vi.mock("next-runtime-env", () => ({
 import {
   getBackendBaseUrl,
   getExternalProxyUrls,
+  getMcpSandboxBaseUrl,
   getWebSocketUrl,
 } from "./config";
 
@@ -333,5 +334,78 @@ describe("getWebSocketUrl", () => {
 
       expect(result).toBe("ws://localhost:9000/ws");
     });
+  });
+});
+
+describe("getMcpSandboxBaseUrl", () => {
+  const originalEnv = process.env;
+  const originalWindow = global.window;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    global.window = originalWindow;
+  });
+
+  // hostname mirrors origin: the swap branches on window.location.hostname, so a
+  // mock without it would no-op the swap and let assertions pass vacuously.
+  const setOrigin = (origin: string, protocol = "http:") => {
+    Object.defineProperty(window, "location", {
+      value: { origin, protocol, hostname: new URL(origin).hostname },
+      writable: true,
+    });
+  };
+
+  it("swaps a localhost page origin to 127.0.0.1 for a zero-config cross-origin sandbox", () => {
+    setOrigin("http://localhost:3000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://127.0.0.1:3000",
+      hasCrossOrigin: true,
+    });
+  });
+
+  it("swaps the page's actual port, not the backend port — so it works behind a tunnel", () => {
+    // Pin the backend to a different port than the page so the assertion proves
+    // the swap targets the page origin, not the backend URL.
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+      "http://localhost:9000";
+    setOrigin("http://localhost:13000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://127.0.0.1:13000",
+      hasCrossOrigin: true,
+    });
+  });
+
+  it("swaps a 127.0.0.1 page origin back to localhost", () => {
+    setOrigin("http://127.0.0.1:3000");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "http://localhost:3000",
+      hasCrossOrigin: true,
+    });
+  });
+
+  it("uses the page origin as an opaque same-origin sandbox for a non-loopback host", () => {
+    setOrigin("https://app.example.com", "https:");
+
+    expect(getMcpSandboxBaseUrl()).toEqual({
+      baseUrl: "https://app.example.com",
+      hasCrossOrigin: false,
+    });
+  });
+
+  it("uses a per-server subdomain (real cross-origin) when a sandbox domain is configured", () => {
+    setOrigin("https://app.example.com", "https:");
+
+    const result = getMcpSandboxBaseUrl("mcp.example.com", "server-prefix");
+
+    expect(result.hasCrossOrigin).toBe(true);
+    expect(result.baseUrl).toMatch(/^https:\/\/[a-z0-9]+\.mcp\.example\.com$/);
   });
 });

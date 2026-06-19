@@ -39,6 +39,7 @@ import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
+import { hashOauthClientSecret } from "./oauth-client-secret";
 
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
@@ -203,8 +204,17 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,
-      allowDynamicClientRegistration: true,
-      allowUnauthenticatedClientRegistration: true,
+      allowDynamicClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      allowUnauthenticatedClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      // Confidential MCP OAuth clients (authorization_code grant) are verified by
+      // better-auth at the token endpoint. It hashes the presented secret and
+      // compares it to the stored value, so the value the McpOauthClient model
+      // stores must be exactly this hash.
+      storeClientSecret: {
+        hash: (clientSecret) => hashOauthClientSecret(clientSecret),
+      },
       scopes: [...OAUTH_SCOPES],
       silenceWarnings: {
         oauthAuthServerConfig: true,

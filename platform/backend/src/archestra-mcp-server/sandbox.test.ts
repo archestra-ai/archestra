@@ -173,6 +173,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 12,
         timedOut: false,
         truncated: false,
+        binaryStripped: false,
         stagingNotices: [],
       });
   }
@@ -193,6 +194,7 @@ describe("sandbox tools (runtime enabled)", () => {
           durationMs: 1,
           timedOut: false,
           truncated: false,
+          binaryStripped: false,
           stagingNotices: [],
         });
 
@@ -234,6 +236,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 5,
         timedOut: false,
         truncated: true,
+        binaryStripped: false,
         stagingNotices: [],
       });
 
@@ -250,6 +253,63 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       // the old trailing marker is gone — no duplicate warning at the end.
       expect(text).not.toContain("(output was truncated)");
+    });
+
+    test("surfaces a binary-output warning before stdout, but not on clean text", async () => {
+      const ctx = await makeConversationCtx();
+      const spy = vi.spyOn(skillSandboxRuntimeService, "runCommand");
+      spy.mockResolvedValue({
+        commandId: "cmd-1",
+        sandboxId: "x" as any,
+        command: "cat image.png",
+        cwd: null,
+        stdout: "PNGdata\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: true,
+        stagingNotices: [],
+      });
+
+      const dirty = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "cat image.png" },
+          ctx,
+        ),
+      );
+      expect(dirty).toContain("binary (NUL) bytes");
+      expect(dirty).toContain("download_file");
+      // the model must see the warning before it starts reading the blob.
+      expect(dirty.indexOf("binary (NUL) bytes")).toBeLessThan(
+        dirty.indexOf("stdout:"),
+      );
+
+      // happy path: no binary stripped → no warning leaks into the summary.
+      spy.mockResolvedValue({
+        commandId: "cmd-2",
+        sandboxId: "x" as any,
+        command: "echo hi",
+        cwd: null,
+        stdout: "hi\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: false,
+        stagingNotices: [],
+      });
+      const clean = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo hi" },
+          ctx,
+        ),
+      );
+      expect(clean).not.toContain("binary (NUL) bytes");
     });
 
     test("omits the truncation warning when output is complete", async () => {
@@ -344,6 +404,62 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ sandboxId: sandboxes[0].id }),
       );
+    });
+
+    test("target {fresh:false} resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { fresh: false } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: sandboxes[0].id }),
+      );
+    });
+
+    test("target with an empty id resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "" } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalled();
+    });
+
+    test("target with a non-empty but malformed id returns a clear error", async () => {
+      const ctx = await makeConversationCtx();
+      stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "not-a-uuid" } },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("UUID");
     });
 
     test("target {id} from a different conversation is rejected", async () => {

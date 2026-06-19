@@ -647,14 +647,18 @@ export function AppSidebar() {
             item.subItems
               ? {
                   ...item,
-                  subItems: item.subItems.filter(
-                    (sub) => sub.url !== "/agents/skills" || skillsEnabled,
-                  ),
+                  subItems: item.subItems.filter((sub) => {
+                    if (sub.url === "/agents/skills") return skillsEnabled;
+                    // With projects on, schedules are managed per-project on the
+                    // project detail page, so the standalone entry is hidden.
+                    if (sub.url === "/scheduled-tasks") return !projectsEnabled;
+                    return true;
+                  }),
                 }
               : item,
           ),
       }));
-  }, [showConnect, skillsEnabled, appsEnabled]);
+  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled]);
 
   return (
     <Sidebar collapsible="icon">
@@ -684,9 +688,12 @@ export function AppSidebar() {
                   searchParams={searchParams}
                   permissionMap={permissionMap}
                 />
-                <SidebarGroup className="pt-0">
+                {/* Recents scrolls within its own region so the community
+                    links below (NavSecondary, mt-auto) stay pinned to the
+                    bottom on the chats tab instead of being pushed off-screen. */}
+                <SidebarGroup className="min-h-0 flex-1 overflow-hidden pt-0">
                   <SidebarGroupLabel>Recents</SidebarGroupLabel>
-                  <SidebarGroupContent>
+                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
                     <SidebarMenu>
                       <SidebarMenuItem>
                         <ChatSidebarSection slots={15} flat />

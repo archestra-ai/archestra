@@ -372,6 +372,13 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
+# CVE-2026-12151: corepack's cached pnpm bundles undici 6.26.0 (<6.27.0) at
+# /root/.cache/node/corepack/.../dist/node_modules/undici — pnpm overrides cannot
+# reach it. pnpm is only needed at build time (the prod install above); runtime DB
+# migrations call drizzle-kit directly (see docker/supervisord/supervisord.conf),
+# so drop corepack/pnpm from the final image entirely.
+RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
+
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/scripts ./backend/scripts

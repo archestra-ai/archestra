@@ -68,7 +68,9 @@ type PaginatedResponse<T> = {
 
 type ScheduleTriggerRequestBody = {
   name: string;
-  agentId: string;
+  // Optional: omitted when the caller can't pick an agent (no `agent:read`),
+  // and the backend falls back to the org default agent.
+  agentId?: string;
   projectId?: string;
   cronExpression: string;
   timezone: string;

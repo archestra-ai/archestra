@@ -54641,7 +54641,7 @@ export type GetScheduleTriggersResponse = GetScheduleTriggersResponses[keyof Get
 export type CreateScheduleTriggerData = {
     body: {
         name: string;
-        agentId: string;
+        agentId?: string;
         projectId?: string;
         enabled?: boolean;
         cronExpression: string;

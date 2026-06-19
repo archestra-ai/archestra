@@ -206,6 +206,63 @@ describe("schedule trigger routes", () => {
     expect(response.json().projectId).toBe(project.id);
   });
 
+  test("POST create without an agentId falls back to the org default agent", async ({
+    makeInternalAgent,
+  }) => {
+    // The "basic user" path: a caller without `agent:read` omits the agent, and
+    // the schedule implicitly runs the org's default agent — no agent-access
+    // check is performed against a picked agent.
+    const defaultAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+      isDefault: true,
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "default-agent-project",
+      description: null,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "No agent chosen",
+        projectId: project.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agentId).toBe(defaultAgent.id);
+  });
+
+  test("POST create without an agentId and no default agent returns 400", async () => {
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "no-default-project",
+      description: null,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "No agent, no default",
+        projectId: project.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "No default agent is configured",
+    );
+  });
+
   test("PUT cannot move a trigger to an inaccessible project", async ({
     makeInternalAgent,
     makeScheduleTrigger,

@@ -38,7 +38,9 @@ import {
 
 const ScheduleTriggerBodyFieldsSchema = z.object({
   name: z.string().min(1),
-  agentId: UuidIdSchema,
+  // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
+  // the handler falls back to the org's default agent.
+  agentId: UuidIdSchema.optional(),
   // Required at the handler when the projects feature is on; ignored otherwise.
   projectId: UuidIdSchema.optional(),
   enabled: z.boolean().optional().default(true),
@@ -229,20 +231,44 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      const agent = await AgentModel.findById(
-        body.agentId,
-        user.id,
-        isAgentAdmin,
-      );
-      if (!agent) {
-        throw new ApiError(403, "You do not have access to the selected agent");
-      }
-
-      if (
-        agent.organizationId !== organizationId ||
-        agent.agentType !== "agent"
-      ) {
-        throw new ApiError(400, "Scheduled triggers require an internal agent");
+      // A caller who can pick an agent (`agent:read`) passes one and we verify
+      // access; a caller who can't (e.g. a basic-user role) omits it and we fall
+      // back to the org's default agent.
+      let agentId: string;
+      if (body.agentId) {
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(
+            403,
+            "You do not have access to the selected agent",
+          );
+        }
+        if (
+          agent.organizationId !== organizationId ||
+          agent.agentType !== "agent"
+        ) {
+          throw new ApiError(
+            400,
+            "Scheduled triggers require an internal agent",
+          );
+        }
+        agentId = agent.id;
+      } else {
+        const defaultAgent = await AgentModel.findDefaultByType({
+          organizationId,
+          agentType: "agent",
+        });
+        if (!defaultAgent) {
+          throw new ApiError(
+            400,
+            "No default agent is configured for scheduled tasks",
+          );
+        }
+        agentId = defaultAgent.id;
       }
 
       // With the projects feature on, schedules belong to a project; verify the
@@ -263,7 +289,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const trigger = await ScheduleTriggerModel.create({
         organizationId,
         name: body.name,
-        agentId: body.agentId,
+        agentId,
         projectId,
         messageTemplate: body.messageTemplate,
         cronExpression: body.cronExpression,
@@ -323,32 +349,40 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      const agentId = body.agentId ?? existing.agentId;
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-      if (!agent) {
-        throw new ApiError(403, "You do not have access to the selected agent");
-      }
+      // Only validate the agent when the caller is actually changing it. A
+      // caller without `agent:read` editing other fields omits agentId and must
+      // not be access-checked against the trigger's existing (default) agent.
+      if (body.agentId !== undefined && body.agentId !== existing.agentId) {
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(
+            403,
+            "You do not have access to the selected agent",
+          );
+        }
+        if (
+          agent.organizationId !== organizationId ||
+          agent.agentType !== "agent"
+        ) {
+          throw new ApiError(
+            400,
+            "Scheduled triggers require an internal agent",
+          );
+        }
 
-      if (
-        agent.organizationId !== organizationId ||
-        agent.agentType !== "agent"
-      ) {
-        throw new ApiError(400, "Scheduled triggers require an internal agent");
-      }
-
-      const isChangingAgent =
-        body.agentId !== undefined && body.agentId !== existing.agentId;
-      if (isChangingAgent) {
         const actorIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
           userId: existing.actorUserId,
           organizationId,
         });
         const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess(
           existing.actorUserId,
-          agentId,
+          body.agentId,
           actorIsAgentAdmin,
         );
-
         if (!actorHasAgentAccess) {
           throw new ApiError(
             400,

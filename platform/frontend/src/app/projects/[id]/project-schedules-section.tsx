@@ -1,26 +1,26 @@
 "use client";
 
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  buildScheduleTriggerPayload,
   DEFAULT_FORM_STATE,
+  isValidCronExpression,
   type ScheduleTriggerFormState,
 } from "@/app/scheduled-tasks/schedule-trigger.utils";
+import { AgentIcon } from "@/components/agent-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  CronExpressionPicker,
+  DEFAULT_CRON_PRESET_OPTIONS,
+} from "@/components/ui/cron-expression-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type ScheduleTrigger,
   useCreateScheduleTrigger,
@@ -29,7 +29,6 @@ import {
   useEnableScheduleTrigger,
   useScheduleTriggers,
 } from "@/lib/schedule-trigger.query";
-import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 /**
  * Schedules that belong to a project: recurring agent runs whose chats land in
@@ -94,8 +93,7 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
           {schedule.name}
         </span>
         <span className="block truncate text-xs text-muted-foreground">
-          {formatCronSchedule(schedule.cronExpression)}
-          {schedule.agent?.name ? ` · ${schedule.agent.name}` : ""}
+          {schedule.agent?.name ?? "Default agent"}
         </span>
       </span>
       <Switch
@@ -128,20 +126,67 @@ function CreateScheduleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: agents } = useInternalAgents();
+  // The agent picker is a management capability; without `agent:read` the
+  // dropdown is hidden and the run implicitly uses the org's default agent.
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  const { data: agents = [] } = useProfiles({
+    filters: { agentType: "agent" },
+    enabled: canReadAgents === true,
+  });
   const createSchedule = useCreateScheduleTrigger();
   const [form, setForm] = useState<ScheduleTriggerFormState>(
     DEFAULT_FORM_STATE(),
   );
 
-  const payload = buildScheduleTriggerPayload(form);
+  const agentOptions = useMemo(
+    () =>
+      agents
+        .filter(
+          (agent) =>
+            agent.scope !== "personal" || agent.authorId === currentUserId,
+        )
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name || "Untitled agent",
+          description:
+            agent.scope === "personal"
+              ? "Personal agent"
+              : `${agent.scope} agent`,
+          content: (
+            <span className="flex items-center gap-2">
+              <AgentIcon icon={agent.icon} size={16} />
+              {agent.name || "Untitled agent"}
+            </span>
+          ),
+        })),
+    [agents, currentUserId],
+  );
+
   const update = (patch: Partial<ScheduleTriggerFormState>) =>
     setForm((current) => ({ ...current, ...patch }));
 
+  const isValid =
+    form.name.trim().length > 0 &&
+    form.messageTemplate.trim().length > 0 &&
+    isValidCronExpression(form.cronExpression) &&
+    (canReadAgents !== true || form.agentId.length > 0);
+
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!payload) return;
-    const created = await createSchedule.mutateAsync({ ...payload, projectId });
+    if (!isValid) return;
+    const created = await createSchedule.mutateAsync({
+      name: form.name.trim(),
+      messageTemplate: form.messageTemplate.trim(),
+      cronExpression: form.cronExpression.trim(),
+      timezone: form.timezone.trim(),
+      projectId,
+      // Omit when the user can't pick — the backend uses the org default agent.
+      ...(canReadAgents === true && form.agentId
+        ? { agentId: form.agentId }
+        : {}),
+    });
     if (created) {
       setForm(DEFAULT_FORM_STATE());
       onOpenChange(false);
@@ -166,10 +211,7 @@ function CreateScheduleDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            disabled={createSchedule.isPending || payload === null}
-          >
+          <Button type="submit" disabled={createSchedule.isPending || !isValid}>
             Create
           </Button>
         </>
@@ -186,29 +228,23 @@ function CreateScheduleDialog({
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Agent</Label>
-        <Select
-          value={form.agentId}
-          onValueChange={(value) => update({ agentId: value })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select an agent" />
-          </SelectTrigger>
-          <SelectContent>
-            {(agents ?? []).map((agent) => (
-              <SelectItem key={agent.id} value={agent.id}>
-                {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {canReadAgents === true && (
+        <div className="space-y-1.5">
+          <Label>Agent</Label>
+          <SearchableSelect
+            value={form.agentId}
+            onValueChange={(value) => update({ agentId: value })}
+            items={agentOptions}
+            placeholder="Select an agent"
+            className="w-full"
+          />
+        </div>
+      )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="schedule-message">Message</Label>
+        <Label htmlFor="schedule-prompt">Task prompt</Label>
         <Textarea
-          id="schedule-message"
+          id="schedule-prompt"
           value={form.messageTemplate}
           onChange={(e) => update({ messageTemplate: e.target.value })}
           placeholder="What should the agent do on each run?"
@@ -216,28 +252,14 @@ function CreateScheduleDialog({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="schedule-cron">Schedule (cron)</Label>
-          <Input
-            id="schedule-cron"
-            value={form.cronExpression}
-            onChange={(e) => update({ cronExpression: e.target.value })}
-            placeholder="0 9 * * 1-5"
-          />
-          <p className="text-xs text-muted-foreground">
-            {formatCronSchedule(form.cronExpression)}
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="schedule-timezone">Timezone</Label>
-          <Input
-            id="schedule-timezone"
-            value={form.timezone}
-            onChange={(e) => update({ timezone: e.target.value })}
-            placeholder="UTC"
-          />
-        </div>
+      <div className="space-y-1.5">
+        <Label>Schedule</Label>
+        <CronExpressionPicker
+          value={form.cronExpression}
+          onChange={(value) => update({ cronExpression: value })}
+          presets={DEFAULT_CRON_PRESET_OPTIONS}
+          className="w-full"
+        />
       </div>
     </StandardFormDialog>
   );

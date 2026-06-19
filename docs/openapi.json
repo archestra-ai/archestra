@@ -208311,7 +208311,6 @@
                 },
                 "required": [
                   "name",
-                  "agentId",
                   "cronExpression",
                   "timezone",
                   "messageTemplate"

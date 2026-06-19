@@ -31,7 +31,7 @@ ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/cipher-decoder"
-ref = "e5d980364ef0b2bb4e27a8895cb96170dc04e2f7"
+ref = "5ae74172add0f2e3beb0d783dc132e1d8803b6e2"
 
 [[skills]]
 repo = "github.com/archestra-ai/archestra"

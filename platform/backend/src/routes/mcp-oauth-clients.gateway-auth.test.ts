@@ -292,7 +292,7 @@ describe("MCP OAuth client gateway authorization", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "member" });
     // A team-scoped gateway tied to a team the user is not a member of must stay
-    // inaccessible — a pre-registered client does not widen the user's own access.
+    // inaccessible when the client carries NO gateway grant.
     const owningTeam = await makeTeam(org.id, user.id, { name: "Owners" });
     const gateway = await makeAgent({
       organizationId: org.id,
@@ -318,5 +318,108 @@ describe("MCP OAuth client gateway authorization", () => {
     });
 
     expect(await validateMCPGatewayToken(gateway.id, accessToken)).toBeNull();
+  });
+
+  /**
+   * Additive client grant: an authorization_code client's allowedGatewayIds
+   * grants its users access to a gateway they could NOT reach through their own
+   * RBAC. This is the "gateway reachable only through a specific trusted app"
+   * use case — admin-controlled and additive (it never removes access).
+   */
+  test("grants gateway access via the client's allowedGatewayIds even when the user has no RBAC access", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    // A restricted (team-scoped) gateway the user is NOT a member of — no RBAC
+    // access on their own.
+    const owningTeam = await makeTeam(org.id, user.id, { name: "Owners" });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [owningTeam.id],
+    });
+    // The client is scoped to that gateway, so authenticating through it grants
+    // access.
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      name: "Chat Interface",
+      grantType: "authorization_code",
+      redirectUris: ["https://chat.example.com/oauth/callback"],
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const accessToken = `${randomBytes(32).toString("base64url")}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+      referenceId: null,
+    });
+
+    const result = await validateMCPGatewayToken(gateway.id, accessToken);
+
+    expect(result).not.toBeNull();
+    expect(result?.isUserToken).toBe(true);
+    expect(result?.userId).toBe(user.id);
+    expect(result?.organizationId).toBe(org.id);
+  });
+
+  test("does not grant access for a gateway outside the client's allowedGatewayIds", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const owningTeam = await makeTeam(org.id, user.id, { name: "Owners" });
+    const grantedGateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [owningTeam.id],
+    });
+    const otherGateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [owningTeam.id],
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      name: "Chat Interface",
+      grantType: "authorization_code",
+      redirectUris: ["https://chat.example.com/oauth/callback"],
+      allowedGatewayIds: [grantedGateway.id],
+    });
+
+    const accessToken = `${randomBytes(32).toString("base64url")}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+      referenceId: null,
+    });
+
+    // Granted gateway is reachable; a different gateway is not.
+    expect(
+      await validateMCPGatewayToken(grantedGateway.id, accessToken),
+    ).not.toBeNull();
+    expect(
+      await validateMCPGatewayToken(otherGateway.id, accessToken),
+    ).toBeNull();
   });
 });

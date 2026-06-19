@@ -987,18 +987,31 @@ async function validateOAuthTokenByHash(params: {
       };
     }
 
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (
-      !(await AgentTeamModel.userHasAgentAccess(
-        userId,
-        params.profileId,
-        false,
-        agent,
-      ))
-    ) {
+    // Non-admin access has two additive sources:
+    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+    //      that minted this token — its allowedGatewayIds may grant access to
+    //      gateways the user could not otherwise reach (e.g. a gateway reachable
+    //      only through a specific pre-registered app).
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+      userId,
+      params.profileId,
+      false,
+      agent,
+    );
+    const hasClientGrant =
+      hasRbacAccess || !accessToken.clientId
+        ? false
+        : await mcpOauthClientGrantsGatewayAccess({
+            clientId: accessToken.clientId,
+            profileId: params.profileId,
+            organizationId,
+          });
+
+    if (!hasRbacAccess && !hasClientGrant) {
       logger.warn(
         { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
+        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
       return null;
     }
@@ -1094,6 +1107,29 @@ async function validateMcpOauthClientToken(params: {
     isOrganizationToken: false,
     organizationId,
   };
+}
+
+/**
+ * Whether the authorization_code MCP OAuth client that minted a user-bound token
+ * grants access to a gateway beyond the user's own RBAC. This is an additive,
+ * admin-controlled access grant: only client_credentials clients use
+ * allowedGatewayIds as a sole authority, whereas an authorization_code client's
+ * list confers extra access to anyone who authenticates through it. Disabled or
+ * deleted clients (findByClientId returns null) grant nothing.
+ */
+async function mcpOauthClientGrantsGatewayAccess(params: {
+  clientId: string;
+  profileId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedGatewayIds.includes(params.profileId);
 }
 
 /**

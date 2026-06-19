@@ -372,7 +372,12 @@ function CreateOAuthClientDialog({
           event.preventDefault();
           await onSubmit(
             isAuthorizationCode
-              ? { name: name.trim(), grantType, redirectUris }
+              ? {
+                  name: name.trim(),
+                  grantType,
+                  redirectUris,
+                  allowedGatewayIds: selectedGatewayIds,
+                }
               : {
                   name: name.trim(),
                   grantType,
@@ -395,10 +400,17 @@ function CreateOAuthClientDialog({
           <GrantTypeField value={grantType} onChange={setGrantType} />
 
           {isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
+            <>
+              <RedirectUrisField
+                value={redirectUrisText}
+                onChange={setRedirectUrisText}
+              />
+              <GatewayGrantField
+                gateways={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+              />
+            </>
           ) : (
             <div className="space-y-2">
               <Label>Allowed gateways</Label>
@@ -476,7 +488,7 @@ function EditOAuthClientDialog({
       title="Edit OAuth Client"
       description={
         isAuthorizationCode
-          ? "Update the redirect URIs this OAuth client can use."
+          ? "Update the redirect URIs and gateway grant for this OAuth client."
           : "Update the gateways this OAuth client can access."
       }
     >
@@ -491,6 +503,7 @@ function EditOAuthClientDialog({
                   name: name.trim(),
                   grantType: oauthClient.grantType,
                   redirectUris,
+                  allowedGatewayIds: selectedGatewayIds,
                 }
               : {
                   name: name.trim(),
@@ -512,10 +525,17 @@ function EditOAuthClientDialog({
           </div>
 
           {isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
+            <>
+              <RedirectUrisField
+                value={redirectUrisText}
+                onChange={setRedirectUrisText}
+              />
+              <GatewayGrantField
+                gateways={gateways}
+                value={selectedGatewayIds}
+                onValueChange={setSelectedGatewayIds}
+              />
+            </>
           ) : (
             <div className="space-y-2">
               <Label>Allowed gateways</Label>
@@ -609,6 +629,39 @@ function RedirectUrisField({
         The registering application's own callback URL(s) — where users are sent
         after they authorize, not an address on this server. Must match the
         <code className="mx-1">redirect_uri</code>the app sends. One per line.
+      </p>
+    </div>
+  );
+}
+
+function GatewayGrantField({
+  gateways,
+  value,
+  onValueChange,
+}: {
+  gateways: AgentSelectorAgent[];
+  value: string[];
+  onValueChange: (value: string[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Gateway access grant (optional)</Label>
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={gateways}
+        value={value}
+        onValueChange={onValueChange}
+        placeholder="Select gateways to grant"
+        searchPlaceholder="Search gateways"
+        emptyMessage="No gateways found"
+      />
+      <p className="text-sm text-muted-foreground">
+        Grants any user who authenticates through this client access to the
+        selected gateways — <strong>in addition to</strong> their own role-based
+        access, even gateways they otherwise couldn't reach. Leave empty for
+        pure identity passthrough (access stays governed by each user's
+        permissions).
       </p>
     </div>
   );

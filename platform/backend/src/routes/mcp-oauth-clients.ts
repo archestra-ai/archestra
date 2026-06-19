@@ -13,9 +13,12 @@ import {
 /**
  * Both grant types share one body shape. `grantType` defaults to
  * `client_credentials` so existing callers keep working unchanged.
- * - client_credentials: requires `allowedGatewayIds`; `redirectUris` is ignored.
- * - authorization_code: requires `redirectUris`; `allowedGatewayIds` is ignored
- *   (gateway access is governed by the acting user's permissions).
+ * - client_credentials: requires `allowedGatewayIds` (the sole authority for the
+ *   token); `redirectUris` is ignored.
+ * - authorization_code: requires `redirectUris`. `allowedGatewayIds` is optional
+ *   here and acts as an additive, admin-controlled grant — users who
+ *   authenticate through the client may reach those gateways on top of their own
+ *   RBAC. Empty means pure identity passthrough.
  */
 const McpOauthClientBodySchema = z
   .object({
@@ -86,10 +89,10 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      if (body.grantType === "client_credentials") {
+      if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
         await validateMcpOauthClientConfig({
           organizationId,
-          allowedGatewayIds: body.allowedGatewayIds ?? [],
+          allowedGatewayIds: body.allowedGatewayIds,
         });
       }
       const { oauthClient, clientSecret } = await McpOauthClientModel.create({
@@ -116,10 +119,10 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      if (body.grantType === "client_credentials") {
+      if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
         await validateMcpOauthClientConfig({
           organizationId,
-          allowedGatewayIds: body.allowedGatewayIds ?? [],
+          allowedGatewayIds: body.allowedGatewayIds,
         });
       }
       const oauthClient = await McpOauthClientModel.update({

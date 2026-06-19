@@ -69,15 +69,16 @@ class SkillSandboxReplayEventModel {
   static async appendCommand(
     command: InsertSkillSandboxCommand,
   ): Promise<SkillSandboxCommand> {
-    // Postgres `text` columns reject NUL bytes ("invalid byte sequence for
-    // encoding UTF8: 0x00"). A command that pipes binary to stdout (e.g.
-    // `curl <url> | head`, `cat image.png`) would otherwise crash the insert,
-    // so strip them from every text field here at the write boundary — same as
-    // InteractionModel.create.
+    // A command that pipes binary to stdout (e.g. `curl <url> | head`,
+    // `cat image.png`) embeds NUL bytes that a Postgres `text` column rejects
+    // ("invalid byte sequence for encoding UTF8: 0x00"). Strip them from the
+    // captured output so the insert never crashes — same as
+    // InteractionModel.create. `command`/`cwd` are NOT stripped: they are the
+    // inputs that get re-executed on replay, so they are rejected up front when
+    // they contain NUL (see runtime service `validateCommand`) rather than
+    // silently rewritten here.
     const sanitized: InsertSkillSandboxCommand = {
       ...command,
-      command: stripNullBytes(command.command),
-      cwd: stripNullBytes(command.cwd),
       stdout: stripNullBytes(command.stdout),
       stderr: stripNullBytes(command.stderr),
     };

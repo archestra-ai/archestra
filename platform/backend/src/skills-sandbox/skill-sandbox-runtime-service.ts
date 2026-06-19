@@ -94,7 +94,7 @@ class SkillSandboxRuntimeService {
 
   async runCommand(params: RunCommandParams): Promise<CommandResult> {
     this.ensureEnabled();
-    validateCommand(params.command);
+    validateCommand(params.command, params.cwd ?? null);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
@@ -732,9 +732,16 @@ function shouldRecordOnFailure(error: unknown): boolean {
   return error.code === "ARCHESTRA_INTERNAL";
 }
 
-function validateCommand(command: string): void {
+function validateCommand(command: string, cwd: string | null): void {
   if (!command.trim()) {
     throw new SkillSandboxError("command must be a non-empty string");
+  }
+  // Reject NUL in the inputs up front: a `text` column can't store it, and
+  // silently stripping it would replay a different command than ran. stdout/
+  // stderr are stripped instead (they legitimately carry binary) — see
+  // SkillSandboxReplayEventModel.appendCommand.
+  if (command.includes("\0") || cwd?.includes("\0")) {
+    throw new SkillSandboxError("command and cwd must not contain NUL bytes");
   }
   if (
     Buffer.byteLength(command, "utf8") > SKILL_SANDBOX_LIMITS.maxCommandBytes

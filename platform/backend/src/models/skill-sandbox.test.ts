@@ -281,7 +281,7 @@ describe("SkillSandboxReplayEventModel", () => {
     expect(refreshed?.nextReplaySequence).toBe(4);
   });
 
-  test("appendCommand strips NUL bytes so binary output does not crash the insert", async ({
+  test("appendCommand strips NUL bytes from output so binary output does not crash the insert", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -295,14 +295,15 @@ describe("SkillSandboxReplayEventModel", () => {
     });
 
     // Binary piped to stdout (e.g. `curl <url> | head`) embeds NUL bytes that
-    // a Postgres `text` column rejects (code 22021/22P05); every text field is
-    // sanitized at the write boundary so the insert never crashes.
+    // a Postgres `text` column rejects (code 22021/22P05); the captured output
+    // is sanitized at the write boundary so the insert never crashes. command/
+    // cwd are left intact (they are rejected upstream when they carry NUL).
     const NUL = String.fromCharCode(0);
     const row = await SkillSandboxReplayEventModel.appendCommand({
       sandboxId: sandbox.id,
       organizationId: org.id,
-      command: `cat${NUL} image.png`,
-      cwd: `/home/sandbox${NUL}`,
+      command: "cat image.png",
+      cwd: "/home/sandbox",
       stdout: `PNG${NUL}data${NUL}IHDR`,
       stderr: `warn${NUL}ing`,
       exitCode: 0,

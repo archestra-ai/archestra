@@ -27,7 +27,18 @@ Use this page to choose the gateway authentication method for your client, then 
 
 ## Gateway Authentication
 
-The MCP Gateway supports six client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+The MCP Gateway supports six client authentication methods. Choose based on who is calling and whether the request should carry a specific user's identity — that identity is what enables per-user **Resolve at call time**.
+
+| Method | Most relevant for | Acting user | Notes |
+| --- | --- | --- | --- |
+| OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
+| OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered client scoped to an explicit gateway list. |
+| OAuth authorization code (manually registered) | A pre-approved server app acting for whoever is signed in — e.g. an agentic chat backend | Yes | Confidential client (secret + PKCE); enables per-user resolution. |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token (`arch_<token>`); team and org tokens don't identify one user. |
+| ID-JAG | Clients signed in through a corporate IdP (enterprise-managed authorization) | Yes | RFC 8693 token exchange; the IdP issues a JWT Archestra validates. |
+| JWKS | Callers presenting an external IdP JWT directly | Yes | Validated against the profile's IdP; no Archestra token issued. |
+
+These do not all present the same token to `POST /v1/mcp/<gateway-id>`:
 
 - **OAuth 2.1**, **OAuth client credentials**, **OAuth authorization code (manually registered)**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway

@@ -44,7 +44,6 @@ Agents can be triggered through:
 
 - Archestra Chat UI
 - [Webhook (A2A)](/docs/platform-agent-triggers-webhook-a2a)
-- [Scheduled Tasks](/docs/platform-agent-triggers-schedule)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)

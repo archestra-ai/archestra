@@ -26,6 +26,7 @@ import {
 } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { type Agent, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
@@ -204,6 +205,9 @@ export async function validateLlmOAuthAccessToken(params: {
   }
   if (accessToken.refreshTokenRevoked) {
     throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");

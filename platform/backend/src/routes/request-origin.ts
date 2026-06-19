@@ -10,7 +10,7 @@ import logger from "@/logging";
  *
  * The code which gets the origin is taken form the fastify.
  *
- * MUST BE USED ONLY FOR MCP GATEWAY OAUTH.
+ * MUST BE USED ONLY FOR MCP OAUTH (the MCP gateway and the shareable-App connector).
  */
 export function getPublicRequestOrigin(request: FastifyRequest): string {
   const result = computePublicRequestOrigin(request);

@@ -27,6 +27,10 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import {
+  appConnectorAudienceRef,
+  buildConnectorResourceUri,
+} from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
@@ -672,6 +676,43 @@ describe("validateMCPGatewayToken", () => {
       await makeOAuthAccessToken(client.clientId, user.id, {
         token: tokenHash,
         referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${otherAgent.id}`,
+      });
+
+      const result = await validateOAuthToken(targetAgent.id, rawToken);
+
+      expect(result).toBeNull();
+    });
+
+    test("validateOAuthToken returns null for a token bound to an app connector", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeOAuthClient,
+      makeOAuthAccessToken,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "admin" });
+
+      const client = await makeOAuthClient({ userId: user.id });
+      const targetAgent = await makeAgent({ organizationId: org.id });
+
+      const rawToken = `app-connector-token-${crypto.randomUUID()}`;
+      const tokenHash = createHash("sha256")
+        .update(rawToken)
+        .digest("base64url");
+
+      // A token bound to an App connector must never authenticate the gateway,
+      // even for an admin who would otherwise pass the user-access check.
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: tokenHash,
+        referenceId: appConnectorAudienceRef(
+          buildConnectorResourceUri(
+            "https://host",
+            "11111111-1111-1111-1111-111111111111",
+          ) as string,
+        ),
       });
 
       const result = await validateOAuthToken(targetAgent.id, rawToken);

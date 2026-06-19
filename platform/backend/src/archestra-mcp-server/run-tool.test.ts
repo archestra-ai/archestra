@@ -651,6 +651,7 @@ describe("run_tool", () => {
           durationMs: 1,
           timedOut: false,
           truncated: false,
+          binaryStripped: false,
           stagingNotices: [],
         });
     }

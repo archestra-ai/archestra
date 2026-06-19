@@ -143,6 +143,13 @@ const RunCommandOutputSchema = z.object({
   durationMs: z.number(),
   timedOut: z.boolean(),
   truncated: z.boolean(),
+  binaryStripped: z
+    .boolean()
+    .describe(
+      "True when stdout/stderr held binary (NUL) bytes that were removed " +
+        "before storage. Redirect binary output to a file and use " +
+        "download_file instead of reading it inline.",
+    ),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -369,10 +376,8 @@ const registry = defineArchestraTools([
       `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
       "Loaded skills are mounted under /skills and are on PYTHONPATH, so " +
       "their modules import directly. Returns stdout, stderr, " +
-      "exit code, and timing (text only). Do not pipe raw binary to stdout " +
-      "(e.g. `cat image.png`, `curl <url> | head`) — redirect to a file " +
-      "(`curl -o file`, `> file`) and inspect it with `stat`/`wc -c`/`xxd | head`, " +
-      "or use download_file for generated files. Requires `sandbox:execute`.",
+      "exit code, and timing (text only — use download_file for generated " +
+      "files). Requires `sandbox:execute`.",
     schema: RunCommandSchema,
     outputSchema: RunCommandOutputSchema,
     async handler({ args, context }) {
@@ -1172,6 +1177,7 @@ function formatCommandSummary(result: {
   durationMs: number;
   timedOut: boolean;
   truncated: boolean;
+  binaryStripped: boolean;
   stdout: string;
   stderr: string;
 }): string {
@@ -1183,6 +1189,14 @@ function formatCommandSummary(result: {
     lines.push(
       "Output was truncated; re-run with a narrower command " +
         "(grep/head/tail/sed) to read the rest.",
+    );
+  }
+  if (result.binaryStripped) {
+    lines.push(
+      "stdout/stderr held binary (NUL) bytes that were removed before " +
+        "storage, so the text below is incomplete. Redirect binary output to " +
+        "a file (`> out`) and fetch it with download_file, or inspect bytes " +
+        "with `xxd`/`wc -c`.",
     );
   }
   lines.push("", "stdout:", result.stdout || "(empty)");

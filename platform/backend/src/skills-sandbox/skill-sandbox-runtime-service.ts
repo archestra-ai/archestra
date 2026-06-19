@@ -169,20 +169,25 @@ class SkillSandboxRuntimeService {
         );
       }
 
+      // appendCommand strips NUL bytes that Postgres `text` columns reject, so
+      // binary piped to stdout no longer crashes the insert. Return the
+      // persisted values (what was actually stored) and flag when stripping
+      // changed the output, so the model can be told its text is incomplete.
+      const binaryStripped =
+        row.stdout !== executed.stdout || row.stderr !== executed.stderr;
+
       return {
         commandId: row.id,
         sandboxId: params.sandboxId,
         command: params.command,
         cwd: params.cwd ?? null,
-        // use the persisted values: appendCommand strips NUL bytes that
-        // Postgres `text` columns reject, so the model sees exactly what was
-        // stored (binary piped to stdout no longer crashes the insert).
         stdout: row.stdout,
         stderr: row.stderr,
         exitCode: executed.exitCode,
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,
         truncated: executed.truncated,
+        binaryStripped,
         stagingNotices,
       };
     });

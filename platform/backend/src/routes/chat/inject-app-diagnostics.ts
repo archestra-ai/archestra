@@ -1,8 +1,4 @@
-import {
-  type ChatMessage,
-  ChatMessageMetadataSchema,
-  type ChatMessagePart,
-} from "@archestra/shared";
+import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
 import config from "@/config";
 import {
   DIAGNOSTICS_BLOCK_CLOSE,
@@ -10,6 +6,7 @@ import {
   DIAGNOSTICS_UNTRUSTED_PREAMBLE,
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
+import { spliceText } from "./augment-last-user-message";
 
 // Per-message cap on how many apps' diagnostics ride one attachment (the
 // per-app entry cap + sanitization live in the shared formatter).
@@ -73,24 +70,6 @@ export async function injectAppDiagnostics(
   ].join("\n");
 
   const next = [...messages];
-  next[lastUserIndex] = appendText(userMessage, block);
+  next[lastUserIndex] = spliceText(userMessage, block, "append");
   return next;
-}
-
-/** Append `block` to the message's last text part (adding one if absent). */
-function appendText(message: ChatMessage, block: string): ChatMessage {
-  const parts: ChatMessagePart[] = message.parts ? [...message.parts] : [];
-  const textIndex = parts.findLastIndex((part) => part.type === "text");
-
-  if (textIndex === -1) {
-    return { ...message, parts: [...parts, { type: "text", text: block }] };
-  }
-
-  const textPart = parts[textIndex];
-  const existing = typeof textPart.text === "string" ? textPart.text : "";
-  parts[textIndex] = {
-    ...textPart,
-    text: existing ? `${existing}\n\n${block}` : block,
-  };
-  return { ...message, parts };
 }

@@ -277,6 +277,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
+      const claimMessagesPersisted = (): boolean => {
+        if (messagesPersisted || !conversationId) {
+          return false;
+        }
+        messagesPersisted = true;
+        return true;
+      };
 
       // Handle broken pipe gracefully when the client navigates away
       // The stream continues running but writing to a closed response should not crash
@@ -605,10 +612,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
-                const shouldPersist = !messagesPersisted && !!conversationId;
-                if (shouldPersist) {
-                  messagesPersisted = true;
-                }
+                const shouldPersist = claimMessagesPersisted();
                 (async () => {
                   if (shouldPersist) {
                     try {
@@ -924,8 +928,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   onEmptyResponseExhausted: async () => {
                     // Persist before the throw — nothing has merged yet, so the
                     // stream onError/onFinish won't fire to do it.
-                    if (!messagesPersisted && conversationId) {
-                      messagesPersisted = true;
+                    if (claimMessagesPersisted()) {
                       try {
                         await persistNewMessages(
                           conversationId,
@@ -1021,11 +1024,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       error instanceof Error ? error.message : String(error);
                     // Claim persistence before the async work below starts,
                     // otherwise onFinish can race and also persist (duplicates).
-                    const shouldPersist =
-                      !messagesPersisted && !!conversationId;
-                    if (shouldPersist) {
-                      messagesPersisted = true;
-                    }
+                    const shouldPersist = claimMessagesPersisted();
 
                     (async () => {
                       logger.error(

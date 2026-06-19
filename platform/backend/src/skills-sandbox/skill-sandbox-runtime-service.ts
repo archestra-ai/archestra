@@ -174,8 +174,11 @@ class SkillSandboxRuntimeService {
         sandboxId: params.sandboxId,
         command: params.command,
         cwd: params.cwd ?? null,
-        stdout: executed.stdout,
-        stderr: executed.stderr,
+        // use the persisted values: appendCommand strips NUL bytes that
+        // Postgres `text` columns reject, so the model sees exactly what was
+        // stored (binary piped to stdout no longer crashes the insert).
+        stdout: row.stdout,
+        stderr: row.stderr,
         exitCode: executed.exitCode,
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,

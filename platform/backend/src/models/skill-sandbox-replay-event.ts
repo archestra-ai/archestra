@@ -69,10 +69,22 @@ class SkillSandboxReplayEventModel {
   static async appendCommand(
     command: InsertSkillSandboxCommand,
   ): Promise<SkillSandboxCommand> {
+    // Postgres `text` columns reject NUL bytes ("invalid byte sequence for
+    // encoding UTF8: 0x00"). A command that pipes binary to stdout (e.g.
+    // `curl <url> | head`, `cat image.png`) would otherwise crash the insert,
+    // so strip them from every text field here at the write boundary — same as
+    // InteractionModel.create.
+    const sanitized: InsertSkillSandboxCommand = {
+      ...command,
+      command: stripNullBytes(command.command),
+      cwd: stripNullBytes(command.cwd),
+      stdout: stripNullBytes(command.stdout),
+      stderr: stripNullBytes(command.stderr),
+    };
     return await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.skillSandboxCommandsTable)
-        .values(command)
+        .values(sanitized)
         .returning();
       if (!row) {
         throw new Error("failed to insert sandbox command");
@@ -373,4 +385,10 @@ async function allocateSequence(
     );
   }
   return row.next - 1;
+}
+
+function stripNullBytes<T extends string | null | undefined>(value: T): T {
+  return (
+    typeof value === "string" ? value.replaceAll("\u0000", "") : value
+  ) as T;
 }

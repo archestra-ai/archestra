@@ -369,8 +369,10 @@ const registry = defineArchestraTools([
       `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
       "Loaded skills are mounted under /skills and are on PYTHONPATH, so " +
       "their modules import directly. Returns stdout, stderr, " +
-      "exit code, and timing (text only — use download_file for generated " +
-      "files). Requires `sandbox:execute`.",
+      "exit code, and timing (text only). Do not pipe raw binary to stdout " +
+      "(e.g. `cat image.png`, `curl <url> | head`) — redirect to a file " +
+      "(`curl -o file`, `> file`) and inspect it with `stat`/`wc -c`/`xxd | head`, " +
+      "or use download_file for generated files. Requires `sandbox:execute`.",
     schema: RunCommandSchema,
     outputSchema: RunCommandOutputSchema,
     async handler({ args, context }) {

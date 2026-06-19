@@ -18,11 +18,15 @@ export const meta = {
   phases: [{ title: 'Crawl', detail: 'locate and read the real platform/ and archestra-bench/ code' }],
 }
 
+// The runtime may hand `args` to the script as a JSON string rather than a
+// parsed object; normalize so `input.issues` etc. always work.
+const input = typeof args === 'string' ? JSON.parse(args) : args
+
 phase('Crawl')
 const crawled = await parallel(
-  args.issues.map((it) => () =>
+  input.issues.map((it) => () =>
     agent(
-      `${args.crawlerSystem}\n\nRepo root: ${args.repoRoot}\n\nISSUE TO INVESTIGATE:\n${it.prompt}`,
+      `${input.crawlerSystem}\n\nRepo root: ${input.repoRoot}\n\nISSUE TO INVESTIGATE:\n${it.prompt}`,
       { label: it.label, model: 'sonnet', phase: 'Crawl' },
     ).then((evidence) => ({ label: it.label, evidence: evidence || '(crawler returned no result)' })),
   ),

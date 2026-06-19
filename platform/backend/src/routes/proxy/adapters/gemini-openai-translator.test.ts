@@ -82,3 +82,108 @@ describe("openaiToGemini — tool schema sanitization", () => {
     expect(params.properties.color.enum).toEqual(["red", "green"]);
   });
 });
+
+describe("openaiToGemini — multimodal user content", () => {
+  test("forwards a base64 image as inlineData instead of dropping it", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "describe this" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,AAAABBBB" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    expect(geminiBody.contents[0].parts).toEqual([
+      { text: "describe this" },
+      { inlineData: { mimeType: "image/png", data: "AAAABBBB" } },
+    ]);
+  });
+
+  test("drops an http image URL Gemini cannot inline, keeping the text", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "look at this" },
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/cat.png" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    // Gemini's fileData accepts only Files API / gs:// URIs, so a plain web URL
+    // is dropped rather than forwarded as an invalid fileData reference.
+    expect(geminiBody.contents[0].parts).toEqual([{ text: "look at this" }]);
+  });
+
+  test("forwards base64 input_audio as inlineData", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: { data: "QUJD", format: "wav" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    expect(geminiBody.contents[0].parts).toEqual([
+      { inlineData: { mimeType: "audio/wav", data: "QUJD" } },
+    ]);
+  });
+
+  test("still emits a plain text part for a string user message", () => {
+    const { geminiBody } = openaiToGemini(req());
+    expect(geminiBody.contents[0].parts).toEqual([{ text: "hello" }]);
+  });
+
+  test("forwards tool-result text into the functionResponse payload", () => {
+    const request = req({
+      messages: [
+        { role: "user", content: "go" },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [{ type: "text", text: "the result" }],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+    // contents[0] is the user message; contents[1] is the tool result.
+    expect(geminiBody.contents[1].parts).toEqual([
+      {
+        functionResponse: {
+          id: "call_1",
+          name: "tool_result",
+          response: { content: "the result" },
+        },
+      },
+    ]);
+  });
+});

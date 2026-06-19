@@ -502,12 +502,23 @@ async function validateUserLlmOAuthAccessToken(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
+  // Access has two additive sources: the user's own RBAC, or an admin-controlled
+  // grant on the authorization_code LLM OAuth client that minted this token — its
+  // allowedLlmProxyIds may grant access to proxies the user could not otherwise
+  // reach (e.g. a proxy reachable only through a specific pre-registered app).
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
     params.userId,
     params.agent.id,
     false,
   );
-  if (!hasAgentAccess) {
+  const hasClientGrant = hasAgentAccess
+    ? false
+    : await llmOauthClientGrantsProxyAccess({
+        clientId: params.clientId,
+        proxyId: params.agent.id,
+        organizationId: member.organizationId,
+      });
+  if (!hasAgentAccess && !hasClientGrant) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }
   if (!isSupportedProvider(params.expectedProvider)) {
@@ -538,6 +549,30 @@ async function validateUserLlmOAuthAccessToken(params: {
       : undefined,
     userId: params.userId,
   };
+}
+
+/**
+ * Whether the authorization_code LLM OAuth client that minted a user-bound token
+ * grants access to an LLM proxy beyond the user's own RBAC. Additive,
+ * admin-controlled grant (see the MCP gateway equivalent). Disabled or deleted
+ * clients grant nothing.
+ */
+async function llmOauthClientGrantsProxyAccess(params: {
+  clientId: string;
+  proxyId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.disabled) {
+    return false;
+  }
+  if (oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedLlmProxyIds.includes(params.proxyId);
 }
 
 async function resolveOAuthProviderApiKey(params: {

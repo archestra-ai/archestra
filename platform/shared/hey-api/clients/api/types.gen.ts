@@ -1862,9 +1862,11 @@ export type CohereChatRequestInput = {
             type: 'text';
             text: string;
         } | {
-            type: 'tool_result';
-            tool_call_id: string;
-            content: string;
+            type: 'image_url';
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
     } | {
         role: 'assistant';
@@ -7158,9 +7160,11 @@ export type CohereChatRequest = {
             type: 'text';
             text: string;
         } | {
-            type: 'tool_result';
-            tool_call_id: string;
-            content: string;
+            type: 'image_url';
+            image_url: {
+                url: string;
+                detail?: 'auto' | 'low' | 'high';
+            };
         }>;
     } | {
         role: 'assistant';

@@ -150,6 +150,10 @@ The application redirects the user to `GET /api/auth/oauth2/authorize` (`respons
 
 Either way the token is user-bound and carries no provider keys of its own: provider-specific routes and Model Router resolve provider keys from the authorized user's accessible Model Provider keys (personal keys, org-wide keys, and team keys for teams the user belongs to), and the user's cost limits and policies apply.
 
+#### Proxy access grant
+
+A pre-registered client may optionally carry an **LLM proxy access grant** (its `allowedLlmProxyIds`). Any user who authenticates through the client may then reach those proxies **in addition to** their own role-based access — even proxies they otherwise couldn't reach. The grant is additive (it never removes access) and admin-controlled (only admins register clients and set the list). It lets you gate a restricted proxy behind a specific trusted app: assign the proxy to a team with no members (an org-wide proxy is open to all members), then grant it through the client. Each user's own provider keys, cost limits, and policies still apply.
+
 The user OAuth token lifetime is controlled by **Settings > Organization > Auth > OAuth token lifetime**. The same setting applies to newly issued user OAuth tokens for MCP and custom application authorization-code flows. It does not change the fixed 1-hour lifetime for LLM OAuth client credentials tokens.
 
 Use this approach when the application should inherit an individual user's access. Use LLM OAuth client credentials when the caller is a backend service or automation job with its own app identity. See [Model Router User OAuth](/docs/platform-model-router-user-oauth-example) for a complete example application.

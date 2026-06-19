@@ -435,7 +435,12 @@ function CreateOAuthClientDialog({
           event.preventDefault();
           await onSubmit(
             isAuthorizationCode
-              ? { name: name.trim(), grantType, redirectUris }
+              ? {
+                  name: name.trim(),
+                  grantType,
+                  redirectUris,
+                  allowedLlmProxyIds: selectedProxyIds,
+                }
               : {
                   name: name.trim(),
                   grantType,
@@ -459,10 +464,17 @@ function CreateOAuthClientDialog({
           <GrantTypeField value={grantType} onChange={setGrantType} />
 
           {isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
+            <>
+              <RedirectUrisField
+                value={redirectUrisText}
+                onChange={setRedirectUrisText}
+              />
+              <ProxyGrantField
+                llmProxies={llmProxies}
+                value={selectedProxyIds}
+                onValueChange={setSelectedProxyIds}
+              />
+            </>
           ) : (
             <>
               <div className="space-y-2">
@@ -555,7 +567,7 @@ function EditOAuthClientDialog({
       title="Edit OAuth Client"
       description={
         isAuthorizationCode
-          ? "Update the redirect URIs this OAuth client can use."
+          ? "Update the redirect URIs and proxy grant for this OAuth client."
           : "Update the LLM proxies and provider keys this OAuth client can use."
       }
     >
@@ -570,6 +582,7 @@ function EditOAuthClientDialog({
                   name: name.trim(),
                   grantType: oauthClient.grantType,
                   redirectUris,
+                  allowedLlmProxyIds: selectedProxyIds,
                 }
               : {
                   name: name.trim(),
@@ -592,10 +605,17 @@ function EditOAuthClientDialog({
           </div>
 
           {isAuthorizationCode ? (
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
+            <>
+              <RedirectUrisField
+                value={redirectUrisText}
+                onChange={setRedirectUrisText}
+              />
+              <ProxyGrantField
+                llmProxies={llmProxies}
+                value={selectedProxyIds}
+                onValueChange={setSelectedProxyIds}
+              />
+            </>
           ) : (
             <>
               <div className="space-y-2">
@@ -697,6 +717,39 @@ function RedirectUrisField({
         The registering application's own callback URL(s) — where users are sent
         after they authorize, not an address on this server. Must match the
         <code className="mx-1">redirect_uri</code>the app sends. One per line.
+      </p>
+    </div>
+  );
+}
+
+function ProxyGrantField({
+  llmProxies,
+  value,
+  onValueChange,
+}: {
+  llmProxies: AgentSelectorAgent[];
+  value: string[];
+  onValueChange: (value: string[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>LLM proxy access grant (optional)</Label>
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={llmProxies}
+        value={value}
+        onValueChange={onValueChange}
+        placeholder="Select LLM proxies to grant"
+        searchPlaceholder="Search LLM proxies"
+        emptyMessage="No LLM proxies found"
+      />
+      <p className="text-sm text-muted-foreground">
+        Grants any user who authenticates through this client access to the
+        selected LLM proxies — <strong>in addition to</strong> their own
+        role-based access, even proxies they otherwise couldn't reach. Leave
+        empty for pure identity passthrough (access stays governed by each
+        user's permissions). Each user's own provider keys are still used.
       </p>
     </div>
   );

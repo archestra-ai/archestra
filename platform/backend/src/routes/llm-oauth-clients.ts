@@ -26,11 +26,13 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
 /**
  * Both grant types share one body shape. `grantType` defaults to
  * `client_credentials` so existing callers keep working unchanged.
- * - client_credentials: requires `allowedLlmProxyIds` and `providerApiKeys`;
- *   `redirectUris` is ignored.
- * - authorization_code: requires `redirectUris`; the proxy list and provider
- *   keys are ignored (the acting user's identity governs proxy access and
- *   per-user key resolution).
+ * - client_credentials: requires `allowedLlmProxyIds` (the sole authority) and
+ *   `providerApiKeys`; `redirectUris` is ignored.
+ * - authorization_code: requires `redirectUris`. `allowedLlmProxyIds` is optional
+ *   here and acts as an additive, admin-controlled grant (users who authenticate
+ *   through the client may reach those proxies on top of their own RBAC).
+ *   `providerApiKeys` never apply — the acting user's own keys resolve at call
+ *   time.
  */
 const LlmOauthClientBodySchema = z
   .object({
@@ -111,13 +113,15 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      if (body.grantType === "client_credentials") {
-        await validateLlmOauthClientConfig({
-          organizationId,
-          allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
-          providerApiKeys: body.providerApiKeys ?? [],
-        });
-      }
+      await validateLlmOauthClientConfig({
+        organizationId,
+        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
+        // provider keys only apply to client_credentials clients.
+        providerApiKeys:
+          body.grantType === "client_credentials"
+            ? (body.providerApiKeys ?? [])
+            : [],
+      });
       const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
@@ -143,13 +147,15 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      if (body.grantType === "client_credentials") {
-        await validateLlmOauthClientConfig({
-          organizationId,
-          allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
-          providerApiKeys: body.providerApiKeys ?? [],
-        });
-      }
+      await validateLlmOauthClientConfig({
+        organizationId,
+        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
+        // provider keys only apply to client_credentials clients.
+        providerApiKeys:
+          body.grantType === "client_credentials"
+            ? (body.providerApiKeys ?? [])
+            : [],
+      });
       const oauthClient = await LlmOauthClientModel.update({
         id: params.id,
         organizationId,

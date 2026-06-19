@@ -55,16 +55,18 @@ class McpOauthClientModel {
     const clientSecretHash = isAuthorizationCode
       ? hashOauthClientSecret(clientSecret)
       : await hashClientSecret(clientSecret);
-    // allowedGatewayIds only governs client_credentials tokens (the gateway
-    // validator keys on it). authorization_code access is governed by the acting
-    // user's own permissions, so it is always stored empty for those clients.
+    // allowedGatewayIds governs both grant types, but differently:
+    // - client_credentials: the SOLE authority — the token may only reach
+    //   gateways on this list (there is no acting user).
+    // - authorization_code: an ADDITIVE, admin-controlled grant — a user who
+    //   authenticates through this client may reach these gateways IN ADDITION
+    //   to whatever their own RBAC already allows. Empty = pure identity
+    //   passthrough (the original behavior).
     const metadata = {
       type: MCP_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType,
-      allowedGatewayIds: isAuthorizationCode
-        ? []
-        : (params.allowedGatewayIds ?? []),
+      allowedGatewayIds: params.allowedGatewayIds ?? [],
     };
 
     const [client] = await db
@@ -209,13 +211,13 @@ class McpOauthClientModel {
     if (!existing) return null;
     const isAuthorizationCode = existing.grantType === "authorization_code";
 
+    // allowedGatewayIds applies to both grant types (see create()); update it
+    // for either, falling back to the existing value when omitted.
     const metadata = {
       type: MCP_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType: existing.grantType,
-      allowedGatewayIds: isAuthorizationCode
-        ? []
-        : (params.allowedGatewayIds ?? existing.allowedGatewayIds),
+      allowedGatewayIds: params.allowedGatewayIds ?? existing.allowedGatewayIds,
     };
 
     const [client] = await db

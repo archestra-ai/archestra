@@ -117,6 +117,11 @@ export async function injectAppSdk(
   const fullContext = {
     ...context,
     sdkUrl: selfContained ? null : `${baseOrigin}${EXT_APPS_SDK_PATH}`,
+    // The author render-screenshot pulls html2canvas from a CDN and posts the
+    // capture to the parent — both dead in a strict foreign host (its CSP blocks
+    // the CDN, and the postMessage reaches the host's proxy, not Archestra). It's
+    // a genuine unsupported-in-host capability, so don't even attempt it.
+    captureScreenshot: selfContained ? false : context.captureScreenshot,
   };
   const csp = buildPlatformCspContent(baseOrigin, APP_PLATFORM_CSP, {
     selfContained,

@@ -5,7 +5,9 @@
 // boundary: it owns the serve-time route paths and the context shape, and
 // delegates the transform to the native core.
 
-import { getAppAssetBaseOrigin } from "@/config";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import config, { getAppAssetBaseOrigin } from "@/config";
 import type { AppUiCsp } from "@/types/app";
 import { loadAppRuntimeNative } from "./app-runtime-native";
 import { APP_PLATFORM_CSP } from "./app-ui-policy";
@@ -25,6 +27,45 @@ export const APP_BASE_CSS_PATH = "/_sandbox/archestra-app-base.css";
 
 /** Path the backend serves the ext-apps guest SDK bundle on (see server.ts). */
 const EXT_APPS_SDK_PATH = "/_sandbox/ext-apps-app.js";
+
+/**
+ * Filename of the self-contained ext-apps guest bundle (an IIFE publishing the
+ * View SDK on `window.__ARCHESTRA_EXT_APPS__`) that `build:ext-apps-inline`
+ * emits into the static dir. Inlined into the resource for a strict foreign
+ * host; never served as a route.
+ */
+const EXT_APPS_INLINE_GLOBAL_FILENAME = "ext-apps-app.global.js";
+
+/**
+ * The trusted asset bytes the connector inlines for a strict foreign host
+ * (claude.ai), read once from the same static dir the linked routes serve from.
+ * Lazy so a missing inline bundle only fails an actual foreign-host render (the
+ * linked path stays usable), and so module load doesn't touch the filesystem.
+ */
+let inlineAssetsCache: {
+  extAppsGlobal: string;
+  shim: string;
+  baseCss: string;
+} | null = null;
+function loadInlineAssets() {
+  if (inlineAssetsCache) return inlineAssetsCache;
+  const staticDir = path.dirname(config.mcpSandbox.filePath);
+  inlineAssetsCache = {
+    extAppsGlobal: readFileSync(
+      path.join(staticDir, EXT_APPS_INLINE_GLOBAL_FILENAME),
+      "utf-8",
+    ),
+    shim: readFileSync(
+      path.join(staticDir, path.basename(APP_SDK_PATH)),
+      "utf-8",
+    ),
+    baseCss: readFileSync(
+      path.join(staticDir, path.basename(APP_BASE_CSS_PATH)),
+      "utf-8",
+    ),
+  };
+  return inlineAssetsCache;
+}
 
 /** One assigned-tool descriptor embedded for `archestra.tools.list()`. */
 export interface AppSdkTool {
@@ -59,20 +100,39 @@ export interface AppSdkContext {
 export async function injectAppSdk(
   html: string,
   context: AppSdkContext,
+  options: { selfContained?: boolean } = {},
 ): Promise<string> {
   const { prepareAppEnvelope } = await loadAppRuntimeNative();
   const baseOrigin = getAppAssetBaseOrigin();
-  // The SDK reads the ext-apps guest bundle URL from the bootstrap context, so
-  // a foreign host that never runs Archestra's sandbox proxy can still load it.
+  // A strict foreign host (claude.ai) applies its own sandbox CSP that refuses
+  // any cross-origin subresource, so for an external client the SDK and
+  // stylesheet are inlined and the SDK reads the ext-apps View SDK from an
+  // inlined global instead of fetching it. Archestra's own render keeps the
+  // linked, browser-cacheable assets (its host CSP allows the platform origin).
+  const selfContained = options.selfContained ?? false;
   const fullContext = {
     ...context,
-    sdkUrl: `${baseOrigin}${EXT_APPS_SDK_PATH}`,
+    sdkUrl: selfContained ? null : `${baseOrigin}${EXT_APPS_SDK_PATH}`,
   };
+  const csp = buildPlatformCspContent(baseOrigin, APP_PLATFORM_CSP, {
+    selfContained,
+  });
+  const inlineAssets = selfContained
+    ? (() => {
+        const a = loadInlineAssets();
+        return {
+          extAppsGlobal: a.extAppsGlobal,
+          shim: a.shim,
+          baseCss: a.baseCss,
+        };
+      })()
+    : undefined;
   return prepareAppEnvelope(
     html,
     JSON.stringify(fullContext),
     baseOrigin,
-    buildPlatformCspContent(baseOrigin, APP_PLATFORM_CSP),
+    csp,
+    inlineAssets,
   );
 }
 
@@ -90,6 +150,7 @@ export async function injectAppSdk(
 export function buildPlatformCspContent(
   baseOrigin: string,
   csp: AppUiCsp,
+  options: { selfContained?: boolean } = {},
 ): string {
   const resourceDomains = csp.resourceDomains ?? [];
   const connectDomains = csp.connectDomains ?? [];
@@ -106,14 +167,19 @@ export function buildPlatformCspContent(
   const baseUri =
     baseUriDomains.length > 0 ? baseUriDomains.join(" ") : "'none'";
 
-  const extAppsSdk = `${baseOrigin}${EXT_APPS_SDK_PATH}`;
-  const archestraSdk = `${baseOrigin}${APP_SDK_PATH}`;
-  const baseCss = `${baseOrigin}${APP_BASE_CSS_PATH}`;
+  // In self-contained mode the SDK and stylesheet are inline (`'unsafe-inline'`
+  // already covers them), so the platform asset URLs are dropped — the resource
+  // makes no cross-origin subresource request a strict host CSP would refuse.
+  const selfContained = options.selfContained ?? false;
+  const scriptAssets = selfContained
+    ? ""
+    : ` ${baseOrigin}${EXT_APPS_SDK_PATH} ${baseOrigin}${APP_SDK_PATH}`;
+  const styleAssets = selfContained ? "" : ` ${baseOrigin}${APP_BASE_CSS_PATH}`;
 
   return [
     "default-src 'none'",
-    `script-src 'unsafe-inline' ${extAppsSdk} ${archestraSdk} ${resourceSrc}`,
-    `style-src 'unsafe-inline' ${baseCss} ${resourceSrc}`,
+    `script-src 'unsafe-inline'${scriptAssets} ${resourceSrc}`,
+    `style-src 'unsafe-inline'${styleAssets} ${resourceSrc}`,
     `img-src ${resourceSrc}`,
     `font-src ${resourceSrc}`,
     `media-src ${resourceSrc}`,

@@ -383,11 +383,13 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // the stored HTML and the per-viewer context, and served its output back.
     expect(content.text).toContain("<h1>hello app</h1>");
     expect(content.text.startsWith("<!--app-envelope-->")).toBe(true);
+    // Session (Archestra's own) render links the assets — no inline bundle.
     expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
       "<h1>hello app</h1>",
       expect.stringContaining(`"id":"${user.id}"`),
       expect.any(String),
       expect.any(String),
+      undefined,
     );
     expect(content.mimeType).toContain("text/html");
   });
@@ -745,6 +747,56 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     const dataGet = tools.find((t) => t.name === "archestra__app_data_get");
     expect(dataGet).toBeDefined();
     expect(dataGet?._meta?.ui?.visibility).not.toEqual(["app"]);
+  });
+
+  test("resources/read over a bearer connection serves a self-contained resource", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    vi.mocked(prepareAppEnvelope).mockClear();
+    const created = await makeApp({ html: "<h1>hello app</h1>" });
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/read",
+        params: { uri: getArchestraAppResourceUri(created.id) },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // An external (bearer) render must inline the assets — no cross-origin
+    // subresource a strict host CSP would refuse. The envelope is invoked with
+    // the inline asset bytes and a null sdkUrl (the SDK reads an inlined global,
+    // never fetches it).
+    expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
+      "<h1>hello app</h1>",
+      expect.stringContaining('"sdkUrl":null'),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        extAppsGlobal: expect.stringContaining("__ARCHESTRA_EXT_APPS__"),
+        shim: expect.any(String),
+        baseCss: expect.any(String),
+      }),
+    );
   });
 
   test("rejects an OAuth token bound to another app's connector (wrong audience)", async ({

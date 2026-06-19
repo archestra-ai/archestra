@@ -156,14 +156,21 @@ export async function createAppServer(
             // Owned apps get the Apps SDK (window.archestra) injected at serve
             // time; the stored HTML stays pure UI. The bootstrap carries the
             // viewer identity and the assigned-tool descriptors.
-            text: await injectAppSdk(head.html, {
-              user: viewer ? { id: viewer.id, name: viewer.name } : null,
-              tools: await buildAppSdkTools(appId, tokenAuth),
-              appId,
-              version: head.version,
-              captureScreenshot:
-                viewer != null && current?.authorId === viewer.id,
-            }),
+            text: await injectAppSdk(
+              head.html,
+              {
+                user: viewer ? { id: viewer.id, name: viewer.name } : null,
+                tools: await buildAppSdkTools(appId, tokenAuth),
+                appId,
+                version: head.version,
+                captureScreenshot:
+                  viewer != null && current?.authorId === viewer.id,
+              },
+              // An external client renders in a foreign host whose sandbox CSP
+              // may refuse cross-origin assets, so serve a self-contained
+              // resource; Archestra's own session render keeps linked assets.
+              { selfContained: !tokenAuth.isSessionAuth },
+            ),
             _meta: {
               ui: {
                 // Owned apps always render under the platform CSP — never a

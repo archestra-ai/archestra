@@ -1033,6 +1033,38 @@ describe("search_tools", () => {
         expect(signatureFor(schema)).toBe("config?:object{user?:object}…");
       });
 
+      test("marks an array of freeform objects", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            rows: {
+              type: "array",
+              items: { type: "object", additionalProperties: true },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(true);
+        expect(signatureFor(schema)).toBe("rows?:array…");
+      });
+
+      test("does not mark an array of fully-shown objects", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            todos: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { content: { type: "string" } },
+                required: ["content"],
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(false);
+        expect(signatureFor(schema)).toBe("todos?:array{content!:string}");
+      });
+
       test("does not mark scalars", () => {
         expect(
           hasHidden({ type: "object", properties: { q: { type: "string" } } }),

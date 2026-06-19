@@ -754,9 +754,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).toContain(
       '{"tool_name": "acme__send_message", "tool_args": {"channel": "#general", "text": "hi"}}',
     );
-    expect(systemPrompt).toContain(
-      "the error returns the target tool's full input schema",
-    );
+    expect(systemPrompt).toContain("the error describes the expected input");
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {

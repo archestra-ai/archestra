@@ -142,8 +142,8 @@ const SearchToolsOutputSchema = z.object({
             "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
             "more deeply nested) — consult the task instructions or the full schema for its shape. " +
             "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
-            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error returns ` +
-            "the target tool's full input schema.",
+            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error describes ` +
+            "the expected input (for third-party tools, the full input schema).",
         ),
     }),
   ),
@@ -553,30 +553,53 @@ function nestedObjectSchema(
   return null;
 }
 
+// The object schema a parameter ultimately describes: the schema itself when it
+// is object-shaped, or its array `items` when those are. Unlike nestedObjectSchema
+// this recognizes object-typed schemas with no listed properties (opaque /
+// freeform), so an array of freeform objects is not mistaken for a leaf.
+function resolveObjectSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (isObjectSchema(schema)) {
+    return schema;
+  }
+  const items = asRecord(schema.items);
+  return isObjectSchema(items) ? items : null;
+}
+
+function isObjectSchema(schema: Record<string, unknown>): boolean {
+  return (
+    (extractSchemaType(schema)?.includes("object") ?? false) ||
+    Object.keys(asRecord(schema.properties)).length > 0
+  );
+}
+
 // Does the compact one-line rendering hide object content the model would need?
 // True for a freeform/extensible object (additionalProperties), an object whose
 // shape isn't shown at all (type object with no listed properties), or nesting
-// deeper than the one level summarizeNestedProperties emits. Scalars and
+// deeper than the one level summarizeNestedProperties emits. Resolves through
+// array items so an array of objects is judged by its element shape. Scalars and
 // fully-shown one-level objects return false (no marker). Conservative: an object
 // that merely omits `additionalProperties` is not flagged, to avoid marking every
 // object.
 function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
-  const objectSchema = nestedObjectSchema(paramSchema);
-  const additionalProperties =
-    objectSchema?.additionalProperties ?? paramSchema.additionalProperties;
+  const objectSchema = resolveObjectSchema(paramSchema);
+  if (!objectSchema) {
+    return false;
+  }
+  const additionalProperties = objectSchema.additionalProperties;
   if (
     additionalProperties === true ||
     (additionalProperties != null && typeof additionalProperties === "object")
   ) {
     return true;
   }
-  if (!objectSchema) {
-    const type = extractSchemaType(paramSchema);
-    return type?.includes("object") ?? false;
-  }
   const properties = asRecord(objectSchema.properties);
+  if (Object.keys(properties).length === 0) {
+    return true;
+  }
   return Object.values(properties).some(
-    (value) => nestedObjectSchema(asRecord(value)) != null,
+    (value) => resolveObjectSchema(asRecord(value)) != null,
   );
 }
 

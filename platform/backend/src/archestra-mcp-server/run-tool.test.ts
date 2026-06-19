@@ -1384,6 +1384,44 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
     });
 
+    test("does not reject an unknown key admitted by patternProperties (dispatches)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+        // additionalProperties:false but patternProperties admits `x-*` keys, so
+        // the unknown-key check must stand down.
+        parameters: {
+          type: "object",
+          properties: { fixed: { type: "string" } },
+          required: ["fixed"],
+          additionalProperties: false,
+          patternProperties: { "^x-": { type: "string" } },
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "github__search_repositories",
+          tool_args: { fixed: "a", "x-trace": "b" },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
+    });
+
     test("returns the full schema for a dynamically-resolved invalid call (no dispatch)", async ({
       makeAgent,
       makeInternalMcpCatalog,

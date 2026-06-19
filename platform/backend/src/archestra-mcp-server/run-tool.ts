@@ -198,9 +198,19 @@ const registry = defineArchestraTools([
       // a literal top-level `required` and a closed `additionalProperties:false`
       // are enforced, so refs/composed schemas fall through to the upstream
       // server unchanged.
+      // Dynamic dispatch passes availableTool straight through, so its schema is
+      // exactly what runs. For the assigned path the gateway re-resolves by name
+      // at dispatch with no defined ordering, so when duplicate rows share the
+      // name we cannot know which schema will run — skip the pre-check rather
+      // than risk validating against the wrong row.
+      const assignedMatches = assignedTools.filter(
+        (tool) => tool.name === resolvedName,
+      );
       const targetSchema = availableTool
         ? availableTool.parameters
-        : assignedTools.find((tool) => tool.name === resolvedName)?.parameters;
+        : assignedMatches.length === 1
+          ? assignedMatches[0].parameters
+          : undefined;
       const schemaError = checkThirdPartyToolArgs({
         toolName: resolvedName,
         toolArgs: toolInput,
@@ -286,8 +296,18 @@ function checkThirdPartyToolArgs(params: {
     }
   }
 
+  // Unknown-key check only when the schema is literally closed and names its
+  // keys via `properties`. `patternProperties` also admits keys, so its presence
+  // disables this branch to avoid rejecting a key it would have matched.
   const properties = isRecord(schema.properties) ? schema.properties : null;
-  if (schema.additionalProperties === false && properties) {
+  const hasPatternProperties =
+    isRecord(schema.patternProperties) &&
+    Object.keys(schema.patternProperties).length > 0;
+  if (
+    schema.additionalProperties === false &&
+    properties &&
+    !hasPatternProperties
+  ) {
     for (const key of Object.keys(toolArgs)) {
       if (!(key in properties)) {
         problems.push(`unexpected parameter "${key}"`);

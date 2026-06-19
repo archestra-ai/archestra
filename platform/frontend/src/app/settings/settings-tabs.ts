@@ -35,7 +35,7 @@ export function useSettingsNavGroups(): SettingsNavGroup[] {
 
   const organization: SettingsNavItem[] = [
     ...(permissionMap?.["/settings/organization"]
-      ? [{ label: "Overview", href: "/settings/organization" }]
+      ? [{ label: "Appearance & Auth", href: "/settings/organization" }]
       : []),
     ...(permissionMap?.["/settings/users"]
       ? [{ label: "Users", href: "/settings/users" }]
@@ -63,13 +63,13 @@ export function useSettingsNavGroups(): SettingsNavGroup[] {
       ? [{ label: "Identity Providers", href: "/settings/identity-providers" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
-      ? [{ label: "LLM", href: "/settings/llm" }]
+      ? [{ label: "LLM Defaults", href: "/settings/llm" }]
       : []),
     ...(permissionMap?.["/settings/agents"]
-      ? [{ label: "Agents", href: "/settings/agents" }]
+      ? [{ label: "Agent Defaults", href: "/settings/agents" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
-      ? [{ label: "Knowledge", href: "/settings/knowledge" }]
+      ? [{ label: "Knowledge Retrieval", href: "/settings/knowledge" }]
       : []),
   ];
 

@@ -139,13 +139,13 @@ describe("useSettingsNavGroups", () => {
     await waitFor(() => {
       expect(groupNames(result.current)).toEqual(["Personal", "Organization"]);
       const org = itemsOf(result.current, "Organization");
-      expect(org).toContain("Overview");
+      expect(org).toContain("Appearance & Auth");
       expect(org).toContain("Users");
       expect(org).toContain("Teams");
       expect(org).toContain("Roles");
       expect(org).toContain("Service Accounts");
-      expect(org).toContain("LLM");
-      expect(org).toContain("Agents");
+      expect(org).toContain("LLM Defaults");
+      expect(org).toContain("Agent Defaults");
     });
   });
 
@@ -157,7 +157,9 @@ describe("useSettingsNavGroups", () => {
     });
 
     await waitFor(() => {
-      expect(itemsOf(result.current, "Organization")).toContain("LLM");
+      expect(itemsOf(result.current, "Organization")).toContain(
+        "LLM Defaults",
+      );
     });
   });
 
@@ -169,7 +171,7 @@ describe("useSettingsNavGroups", () => {
     });
 
     await waitFor(() => {
-      expect(allLabels(result.current)).not.toContain("LLM");
+      expect(allLabels(result.current)).not.toContain("LLM Defaults");
     });
   });
 
@@ -323,7 +325,7 @@ describe("useSettingsNavGroups", () => {
         "API Keys",
       ]);
       expect(itemsOf(result.current, "Organization")).toEqual([
-        "Overview",
+        "Appearance & Auth",
         "Users",
         "Teams",
         "Roles",
@@ -332,9 +334,9 @@ describe("useSettingsNavGroups", () => {
         "Secrets",
         "GitHub",
         "Identity Providers",
-        "LLM",
-        "Agents",
-        "Knowledge",
+        "LLM Defaults",
+        "Agent Defaults",
+        "Knowledge Retrieval",
       ]);
     });
   });

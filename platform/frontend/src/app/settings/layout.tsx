@@ -20,7 +20,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
       "Create and manage organization service accounts for programmatic access.",
   },
   "/settings/agents": {
-    title: "Agents",
+    title: "Agent Defaults",
     description:
       "Configure default agent behavior and agent-related platform settings.",
   },
@@ -40,17 +40,17 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
       "Configure SSO, linked downstream IdPs, and identity provider integrations.",
   },
   "/settings/knowledge": {
-    title: "Knowledge",
+    title: "Knowledge Retrieval",
     description:
       "Configure embedding, reranking, and knowledge system defaults.",
   },
   "/settings/llm": {
-    title: "LLM",
+    title: "LLM Defaults",
     description:
       "Configure platform-wide LLM behavior, like tool-result compression and default cost limits.",
   },
   "/settings/organization": {
-    title: "Organization",
+    title: "Appearance & Auth",
     description:
       "Manage organization-wide appearance and authentication settings",
   },

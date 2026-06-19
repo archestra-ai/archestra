@@ -70,6 +70,48 @@ export function disabledToolsNotRunMessage(toolNames: string[]): string {
 }
 
 /**
+ * Soft warning prepended to a run_tool result when a short name was recovered to
+ * its exact `server__tool` form. The call still ran; this steers the model to
+ * pass the exact name next time so the implicit short-name fallback is not relied
+ * on. Worded "interpreted as" so it reads correctly even when the dispatch then
+ * failed (e.g. the self-invocation guard).
+ */
+export function recoveredShortNameNotice(
+  requestedName: string,
+  fullName: string,
+): string {
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
+  return (
+    `Note: "${requestedName}" is not an exact tool name; it was interpreted as ` +
+    `"${fullName}". Call ${runToolName} with the exact full name "${fullName}" ` +
+    "(the server__tool form) next time — short names are accepted only as a " +
+    "fallback and may stop resolving if another tool matches the same short name."
+  );
+}
+
+/**
+ * Recovery message when a short name matches more than one tool available to the
+ * agent. Lists the candidate full names and asks the model to pick one rather
+ * than guessing — the disambiguation half of the implicit short-name fallback.
+ */
+export function ambiguousShortNameMessage(
+  requestedName: string,
+  candidates: string[],
+): string {
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
+  const list = candidates.map((name) => `"${name}"`).join(", ");
+  return (
+    `The name "${requestedName}" is ambiguous — it matches multiple tools ` +
+    `available to this agent: ${list}. Call ${runToolName} again with the exact ` +
+    "full name (the server__tool form) you intend. Do not guess tool names."
+  );
+}
+
+/**
  * Generic discovery steer appended after an "unknown tool"/"not assigned"
  * preamble. Single source of truth for the dispatch-surface recovery hint used
  * by `executeArchestraTool` (`index.ts`).

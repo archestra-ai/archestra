@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ai-elements/conversation", () => ({
@@ -84,39 +85,39 @@ vi.mock("@/components/chat/policy-denied-tool", () => ({
   PolicyDeniedTool: () => null,
 }));
 
-vi.mock("@/components/chat/auth-required-tool", () => ({
-  AuthRequiredTool: ({
-    catalogName,
-    onInstall,
+vi.mock("@/components/chat/auth-error-tool", () => ({
+  AuthErrorTool: ({
+    title,
+    description,
+    buttonText,
+    buttonUrl,
+    onAction,
+    openInNewTab = true,
   }: {
-    catalogName: string;
-    onInstall?: () => void;
+    title: string;
+    description: ReactNode;
+    buttonText?: string;
+    buttonUrl?: string;
+    onAction?: () => void;
+    openInNewTab?: boolean;
   }) => (
-    <button type="button" onClick={onInstall}>
-      auth-required:{catalogName}
-    </button>
-  ),
-}));
-
-vi.mock("@/components/chat/assigned-credential-unavailable-tool", () => ({
-  AssignedCredentialUnavailableTool: ({
-    catalogName,
-  }: {
-    catalogName: string;
-  }) => <div>assigned-credential-unavailable:{catalogName}</div>,
-}));
-
-vi.mock("@/components/chat/expired-auth-tool", () => ({
-  ExpiredAuthTool: ({
-    catalogName,
-    onReauth,
-  }: {
-    catalogName: string;
-    onReauth?: () => void;
-  }) => (
-    <button type="button" onClick={onReauth}>
-      expired-auth:{catalogName}
-    </button>
+    <div>
+      <div>auth-error:{title}</div>
+      <div>{description}</div>
+      {onAction && buttonText ? (
+        <button type="button" onClick={onAction}>
+          {buttonText}
+        </button>
+      ) : buttonText && buttonUrl ? (
+        <a
+          href={buttonUrl}
+          target={openInNewTab ? "_blank" : undefined}
+          rel={openInNewTab ? "noopener noreferrer" : undefined}
+        >
+          {buttonText}
+        </a>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -606,6 +607,81 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
+  });
+
+  it("subscribes the sticky-boundary listeners once and does not re-subscribe on an unrelated re-render", () => {
+    // The boundary element only mounts inside a scrollable ancestor; make every
+    // element report as scrollable so findScrollContainer resolves a container.
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const getComputedStyleSpy = vi
+      .spyOn(window, "getComputedStyle")
+      .mockImplementation((element: Element, pseudoElt?: string | null) => {
+        const style = realGetComputedStyle(element, pseudoElt);
+        Object.defineProperty(style, "overflowY", {
+          configurable: true,
+          get: () => "scroll",
+        });
+        return style;
+      });
+
+    const addSpy = vi.spyOn(HTMLElement.prototype, "addEventListener");
+
+    const messages = [
+      {
+        id: "assistant-unsafe",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-read_email",
+            toolCallId: "call-unsafe",
+            state: "output-available",
+            input: { folder: "inbox" },
+            output: { emails: [{ from: "ceo@external.com" }] },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    const boundary = {
+      kind: "tool_result",
+      reason: "tool_result_marked_untrusted",
+      toolCallId: "call-unsafe",
+      toolName: "read_email",
+    } as const;
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={boundary}
+      />,
+    );
+
+    const scrollSubscriptionsAfterMount = addSpy.mock.calls.filter(
+      ([eventName]) => eventName === "scroll",
+    ).length;
+    expect(scrollSubscriptionsAfterMount).toBeGreaterThanOrEqual(1);
+
+    addSpy.mockClear();
+
+    // Re-rendering without changing the boundary element must not re-subscribe the scroll listener.
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+        unsafeContextBoundary={boundary}
+      />,
+    );
+
+    const scrollResubscriptions = addSpy.mock.calls.filter(
+      ([eventName]) => eventName === "scroll",
+    ).length;
+    expect(scrollResubscriptions).toBe(0);
+
+    addSpy.mockRestore();
+    getComputedStyleSpy.mockRestore();
   });
 
   it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
@@ -1155,7 +1231,7 @@ describe("ChatMessages", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+      screen.getByRole("button", { name: "Re-authenticate" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/To re-authenticate, visit this URL:/),
@@ -1185,10 +1261,42 @@ describe("ChatMessages", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "auth-required:jwks demo" }),
+      screen.getByRole("button", { name: "Set up credentials" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/To set up your credentials, visit this URL:/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders an identity-provider connect control as a same-tab link", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/sso/Okta',
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Connect Okta" });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "http://localhost:3000/sso/Okta");
+    expect(link).not.toHaveAttribute("target");
+    expect(link).not.toHaveAttribute("rel");
+    expect(
+      screen.queryByRole("button", { name: "Connect Okta" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1231,7 +1339,7 @@ describe("ChatMessages", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "expired-auth:id-jag test" }),
+      screen.getByRole("button", { name: "Re-authenticate" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("tool-id-jag_test__get_server_info"),
@@ -1273,9 +1381,7 @@ describe("ChatMessages", () => {
     );
 
     expect(
-      screen.getByText(
-        "assigned-credential-unavailable:githubcopilot__remote-mcp",
-      ),
+      screen.getByText(/credentials for.*githubcopilot__remote-mcp.*expired/),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("tool-githubcopilot__remote-mcp__issue_write"),
@@ -1325,7 +1431,7 @@ describe("ChatMessages", () => {
     );
 
     expect(
-      screen.getAllByRole("button", { name: "expired-auth:id-jag test" }),
+      screen.getAllByRole("button", { name: "Re-authenticate" }),
     ).toHaveLength(1);
     expect(
       screen.queryByText(/Please re-authenticate by visiting this URL/i),

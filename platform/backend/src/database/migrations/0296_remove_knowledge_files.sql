@@ -6,3 +6,11 @@
 DELETE FROM "knowledge_base_connectors" WHERE "connector_type" = 'file_upload';
 --> statement-breakpoint
 DROP TABLE "kb_uploaded_files" CASCADE;
+--> statement-breakpoint
+-- Retire the now-unused `knowledgeFile` RBAC resource: strip its grants from any
+-- existing custom organization roles so the stored permission JSON no longer
+-- carries a dead resource key.
+UPDATE "organization_role"
+SET "permission" = ("permission"::jsonb - 'knowledgeFile')::text,
+    "updated_at" = NOW()
+WHERE ("permission"::jsonb) ? 'knowledgeFile';

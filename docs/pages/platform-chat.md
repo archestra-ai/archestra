@@ -65,4 +65,4 @@ When auto-compaction frees tokens, a note appears in the panel showing how many 
 
 ### File Attachments
 
-Chat attachments are scoped to their conversation.
+Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.

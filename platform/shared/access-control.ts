@@ -53,7 +53,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeFile: ["read", "create", "update", "delete", "admin"],
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
 
   // Other
@@ -119,7 +118,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeFile: ["read", "create", "update", "delete"],
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
@@ -191,7 +189,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   githubAppConfig: [],
 
   // Knowledge
-  knowledgeFile: ["read"],
   knowledgeSource: ["read", "query"],
 
   // Other
@@ -426,12 +423,6 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
-  "knowledgeFile:read": "View uploaded Knowledge Files",
-  "knowledgeFile:create": "Upload Knowledge Files",
-  "knowledgeFile:update": "Modify Knowledge File visibility and agent access",
-  "knowledgeFile:delete": "Delete Knowledge Files",
-  "knowledgeFile:admin":
-    "View all Knowledge Files, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":

@@ -36,7 +36,6 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
-  "knowledgeFile",
   "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
@@ -102,7 +101,6 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
-  knowledgeFile: "Knowledge Files",
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
@@ -162,7 +160,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
-  knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
@@ -234,7 +231,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeFile", "knowledgeSource", "knowledgeSettings"],
+  Knowledge: ["knowledgeSource", "knowledgeSettings"],
   Other: [
     "chat",
     "project",

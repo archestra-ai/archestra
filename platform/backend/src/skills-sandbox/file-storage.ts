@@ -39,6 +39,8 @@ interface ObjectStore {
     scope: OwnerScope;
     name: string;
     data: Buffer;
+    /** Replace bytes if the object already exists (edit) instead of failing. */
+    overwrite?: boolean;
   }): Promise<{ key: string }>;
   read(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
@@ -120,6 +122,7 @@ export class FilesystemObjectStore implements EnumerableObjectStore {
     scope: OwnerScope;
     name: string;
     data: Buffer;
+    overwrite?: boolean;
   }): Promise<{ key: string }> {
     const root = this.getRoot();
     const folder = safeSegment(params.scope.label);
@@ -131,9 +134,10 @@ export class FilesystemObjectStore implements EnumerableObjectStore {
     // the owner folder itself must not be a symlink escaping the root.
     await this.assertRealWithinRoot(root, dir);
 
-    // write fully to a temp file, then publish atomically + exclusively: link
-    // fails with EEXIST if the destination is taken, so we never overwrite a
-    // row-backed or hand-dropped object.
+    // write fully to a temp file, then publish atomically. Default publish is
+    // exclusive (`link` fails EEXIST if taken, so we never clobber a row-backed
+    // or hand-dropped object); `overwrite` (edit_file) replaces in place via
+    // `rename`, which atomically swaps the destination.
     const tmpPath = `${finalPath}.${randomUUID()}.tmp`;
     const handle = await fs.open(tmpPath, "wx");
     try {
@@ -141,6 +145,15 @@ export class FilesystemObjectStore implements EnumerableObjectStore {
       await handle.sync();
     } finally {
       await handle.close();
+    }
+    if (params.overwrite) {
+      try {
+        await fs.rename(tmpPath, finalPath);
+      } catch (error) {
+        await fs.unlink(tmpPath).catch(() => {});
+        throw error;
+      }
+      return { key };
     }
     try {
       await fs.link(tmpPath, finalPath);

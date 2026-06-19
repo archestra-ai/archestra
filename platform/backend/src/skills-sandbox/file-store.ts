@@ -48,7 +48,7 @@ type ResolvedMyFile = {
   mimeType: string;
   originalName: string;
 };
-type MyFileResolutionError = {
+export type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
 };
 
@@ -316,8 +316,112 @@ class FileStore {
     filename?: string;
     scope?: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
-    const scope = params.scope ?? null;
+    const row = await this.findMyFileRow(params);
+    if (row === null) {
+      // no matching row — try a hand-placed object by filename.
+      return this.resolveUntrackedByName({
+        userId: params.userId,
+        filename: params.filename ?? "",
+        scope: params.scope ?? null,
+      });
+    }
+    if ("error" in row) return row;
+    return this.readBytes(row);
+  }
 
+  /**
+   * Resolve a `my_file` ref (id, or filename within scope) to its row, for
+   * edit/delete. Same resolution + ACL as {@link resolveMyFileSource}, but
+   * returns the row and never falls back to a rowless (hand-placed) object.
+   */
+  async resolveMyFileRef(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope?: { projectId: string } | null;
+  }): Promise<PersistedFile | MyFileResolutionError> {
+    const row = await this.findMyFileRow(params);
+    if (row === null) return { error: "not_found" };
+    return row;
+  }
+
+  /**
+   * Replace a file's bytes in place (edit_file), keeping its id and filename.
+   * Re-stores via the active backend and updates the row; drops the old external
+   * bytes if they lived at a different key. Returns null if the row vanished.
+   */
+  async update(params: {
+    file: PersistedFile;
+    mimeType: string;
+    sizeBytes: number;
+    data: Buffer;
+  }): Promise<PersistedFile | null> {
+    const { file } = params;
+    const store = getObjectStore();
+    if (store) {
+      const scope = await this.resolveScope({
+        userId: file.userId,
+        projectId: file.projectId,
+      });
+      const { key } = await store.write({
+        scope,
+        name: file.filename,
+        data: params.data,
+        overwrite: true,
+      });
+      const updated = await FileModel.updateContent({
+        id: file.id,
+        organizationId: file.organizationId,
+        storageProvider: config.fileStorage.provider,
+        objectKey: key,
+        data: null,
+        mimeType: params.mimeType,
+        sizeBytes: params.sizeBytes,
+      });
+      if (!updated) return null;
+      // drop old external bytes only if they lived at a different key/provider.
+      if (
+        file.storageProvider !== "db" &&
+        file.objectKey &&
+        (file.objectKey !== key ||
+          file.storageProvider !== config.fileStorage.provider)
+      ) {
+        await deleteRowBytes({
+          provider: file.storageProvider,
+          objectKey: file.objectKey,
+        }).catch(() => {});
+      }
+      return updated;
+    }
+    // inline db: bytes live in the row.
+    return FileModel.updateContent({
+      id: file.id,
+      organizationId: file.organizationId,
+      storageProvider: "db",
+      objectKey: null,
+      data: params.data,
+      mimeType: params.mimeType,
+      sizeBytes: params.sizeBytes,
+    });
+  }
+
+  // === internal ===
+
+  /**
+   * Resolve a `my_file` ref to its row: by id (org + scope checked), or by exact
+   * filename within the scope. Returns the row, a definitive error (ambiguous /
+   * outside_project / not_found-by-id), or null when no row matches a filename
+   * (the caller may then try a hand-placed object).
+   */
+  private async findMyFileRow(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope?: { projectId: string } | null;
+  }): Promise<PersistedFile | MyFileResolutionError | null> {
+    const scope = params.scope ?? null;
     if (params.id) {
       const file = await FileModel.findById(params.id);
       if (!file || file.organizationId !== params.organizationId) {
@@ -329,9 +433,8 @@ class FileStore {
       } else if (file.userId !== params.userId || file.projectId != null) {
         return { error: "not_found" };
       }
-      return this.readBytes(file);
+      return file;
     }
-
     const filename = params.filename ?? "";
     const candidates = scope
       ? await FileModel.listByProject({
@@ -346,17 +449,10 @@ class FileStore {
     if (matches.length > 1) return { error: "ambiguous" };
     if (matches.length === 1) {
       const file = await FileModel.findById(matches[0].id);
-      if (!file) return { error: "not_found" };
-      return this.readBytes(file);
+      return file ?? { error: "not_found" };
     }
-    return this.resolveUntrackedByName({
-      userId: params.userId,
-      filename,
-      scope,
-    });
+    return null;
   }
-
-  // === internal ===
 
   /** An untracked object matched by filename within the upload scope. */
   private async resolveUntrackedByName(params: {

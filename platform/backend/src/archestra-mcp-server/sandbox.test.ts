@@ -14,6 +14,7 @@ import {
   ConversationAttachmentModel,
   ConversationFileTouchModel,
   ConversationModel,
+  FileModel,
   ProjectModel,
   SkillModel,
   SkillSandboxModel,
@@ -1565,7 +1566,7 @@ describe("edit_file / delete_file", () => {
   }
 
   function makePersonalFile(filename: string, body: string) {
-    return FileModel.create({
+    return fileStore.put({
       organizationId,
       userId,
       projectId: null,

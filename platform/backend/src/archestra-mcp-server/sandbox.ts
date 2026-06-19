@@ -911,7 +911,7 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
-      const resolved = await skillSandboxArtifactService.resolveMyFileRef({
+      const resolved = await fileStore.resolveMyFileRef({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
@@ -926,7 +926,7 @@ const registry = defineArchestraTools([
         buffer: data,
         claimed: args.mimeType,
       });
-      const updated = await FileModel.updateContent({
+      const updated = await fileStore.update({
         file: resolved,
         mimeType,
         sizeBytes: data.byteLength,
@@ -1003,7 +1003,7 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
-      const resolved = await skillSandboxArtifactService.resolveMyFileRef({
+      const resolved = await fileStore.resolveMyFileRef({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
@@ -1014,8 +1014,8 @@ const registry = defineArchestraTools([
         return errorResult(describeMyFileError(resolved.error, ref));
       }
 
-      const deleted = await skillSandboxArtifactService.deleteArtifactForUser({
-        artifactId: resolved.id,
+      const deleted = await fileStore.delete({
+        ref: resolved.id,
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
       });

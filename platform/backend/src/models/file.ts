@@ -83,66 +83,38 @@ class FileModel {
   }
 
   /**
-   * Replace a file's bytes in place (edit_file), keeping the same id and
-   * filename. The caller passes the existing row (already authorized). Stores
-   * the new bytes first, then swaps the row; on failure the just-stored bytes
-   * are cleaned up, and on success any previous blob at a different location is
-   * dropped (no-op under the db provider). The update is org-scoped as
-   * defense-in-depth. Returns null if the row no longer exists.
+   * Swap a file's storage pointer + content metadata in place (edit_file),
+   * keeping the same id and filename. Byte I/O is the caller's job
+   * ({@link FileStore.update} writes the new bytes and purges the old); this is
+   * the row write only. Org-scoped as defense-in-depth. Returns null if the row
+   * no longer exists.
    */
   static async updateContent(params: {
-    file: PersistedFile;
+    id: string;
+    organizationId: string;
+    storageProvider: PersistedFile["storageProvider"];
+    objectKey: string | null;
+    data: Buffer | null;
     mimeType: string;
     sizeBytes: number;
-    data: Buffer;
   }): Promise<PersistedFile | null> {
-    const { file } = params;
-    const stored = await getFileBytesStorage().put({
-      fileId: file.id,
-      filename: file.filename,
-      data: params.data,
-    });
-    let row: PersistedFile | undefined;
-    try {
-      [row] = await db
-        .update(schema.filesTable)
-        .set({
-          data: stored.dbData,
-          storageProvider: stored.provider,
-          objectKey: stored.objectKey,
-          mimeType: params.mimeType,
-          sizeBytes: params.sizeBytes,
-        })
-        .where(
-          and(
-            eq(schema.filesTable.id, file.id),
-            eq(schema.filesTable.organizationId, file.organizationId),
-          ),
-        )
-        .returning();
-    } catch (error) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
-      throw error;
-    }
-    if (!row) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
-      return null;
-    }
-    // Drop the old blob only if it lived elsewhere (e.g. a future external
-    // backend with non-deterministic keys); same-key/db updates overwrite.
-    if (
-      file.objectKey !== stored.objectKey ||
-      file.storageProvider !== stored.provider
-    ) {
-      await getFileBytesStorage()
-        .delete({ provider: file.storageProvider, objectKey: file.objectKey })
-        .catch(() => {});
-    }
-    return normalizeByteaField(row, "data");
+    const [row] = await db
+      .update(schema.filesTable)
+      .set({
+        data: params.data,
+        storageProvider: params.storageProvider,
+        objectKey: params.objectKey,
+        mimeType: params.mimeType,
+        sizeBytes: params.sizeBytes,
+      })
+      .where(
+        and(
+          eq(schema.filesTable.id, params.id),
+          eq(schema.filesTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning();
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   static async findById(id: string): Promise<PersistedFile | null> {

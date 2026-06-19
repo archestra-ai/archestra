@@ -6207,4 +6207,57 @@ describe("connectAndGetTools network egress enforcement", () => {
     // The guard fails the call before any connection is attempted.
     expect(mockConnect).not.toHaveBeenCalled();
   });
+
+  test("blocks a tool call (the chat/gateway path) on a forbidden remote host", async ({
+    makeOrganization,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    // Chat-UI tool calls run through the MCP Gateway, which executes via
+    // executeToolCallForOwner — the same getTransport chokepoint as inspection.
+    // This proves that path is guarded too (chat-mcp-client needs no change).
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "locked",
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["allowed.example.com"],
+        allowedCidrs: [],
+      },
+    });
+    const catalogItem = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: env.id,
+      serverType: "remote",
+      serverUrl: "https://blocked.example.com/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalogItem.id,
+      scope: "org",
+    });
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "blocked-remote__do_thing",
+      description: "do thing",
+      parameters: {},
+      catalogId: catalogItem.id,
+    });
+    await AgentToolModel.create(agent.id, tool.id, {
+      mcpServerId: mcpServer.id,
+    });
+
+    mockConnect.mockClear();
+
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "call_blocked", name: tool.name, arguments: {} },
+      agentOwner(agent.id),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.error).toContain('not permitted by the "locked" environment');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
 });

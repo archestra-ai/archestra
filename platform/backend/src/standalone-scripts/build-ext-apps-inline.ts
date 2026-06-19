@@ -34,7 +34,8 @@ await esbuild.build({
   format: "iife",
   minify: true,
   platform: "browser",
-  legalComments: "none",
+  // Preserve bundled third-party license notices — the bundle ships to end users.
+  legalComments: "eof",
   outfile,
 });
 

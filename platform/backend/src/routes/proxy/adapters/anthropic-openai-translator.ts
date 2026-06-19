@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Anthropic, OpenAi } from "@/types";
 import {
+  parseDataUrl,
   parseJsonObject,
   stringifyTextContent,
 } from "./openai-translator-utils";
@@ -52,7 +53,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
     if (message.role === "user") {
       messages.push({
         role: "user",
-        content: stringifyTextContent(message.content),
+        content: userContentToAnthropicContent(message.content),
       });
       continue;
     }
@@ -209,6 +210,75 @@ export function mapStopReason(
   if (reason === "tool_use") return "tool_calls";
   if (reason === "stop_sequence" || reason === "end_turn") return "stop";
   return "stop";
+}
+
+type AnthropicUserContent = AnthropicRequest["messages"][number]["content"];
+
+// Converts an OpenAI user-message `content` into Anthropic content, preserving
+// images (base64 data URLs → image blocks) and PDF files (→ document blocks)
+// instead of dropping every non-text part. A plain string passes through
+// unchanged; http(s) image URLs are dropped since Anthropic's base64 image
+// source is the only multimodal source modeled here.
+function userContentToAnthropicContent(content: unknown): AnthropicUserContent {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+
+  const blocks: Array<Record<string, unknown>> = [];
+  for (const part of content as Array<Record<string, LooseContentValue>>) {
+    if (!part || typeof part !== "object") continue;
+
+    if (part.type === "text") {
+      if (typeof part.text === "string" && part.text) {
+        blocks.push({ type: "text", text: part.text });
+      }
+      continue;
+    }
+
+    if (part.type === "image_url") {
+      const url = String(getNested(part.image_url, "url") ?? "");
+      const inline = parseDataUrl(url);
+      if (inline) {
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: inline.mimeType,
+            data: inline.data,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (part.type === "file") {
+      const fileData = String(getNested(part.file, "file_data") ?? "");
+      const inline = parseDataUrl(fileData);
+      if (inline && inline.mimeType === "application/pdf") {
+        blocks.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: inline.data,
+          },
+        });
+      }
+    }
+  }
+
+  // Anthropic requires non-empty content; fall back to an empty string when
+  // nothing convertible remained.
+  if (blocks.length === 0) return "";
+  return blocks as AnthropicUserContent;
+}
+
+type LooseContentValue = string | Record<string, unknown> | undefined;
+
+function getNested(value: LooseContentValue, key: string): unknown {
+  if (value && typeof value === "object") {
+    return (value as Record<string, unknown>)[key];
+  }
+  return undefined;
 }
 
 function toAnthropicToolChoice(

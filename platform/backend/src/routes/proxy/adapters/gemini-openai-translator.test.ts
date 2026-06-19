@@ -82,3 +82,81 @@ describe("openaiToGemini — tool schema sanitization", () => {
     expect(params.properties.color.enum).toEqual(["red", "green"]);
   });
 });
+
+describe("openaiToGemini — multimodal user content", () => {
+  test("forwards a base64 image as inlineData instead of dropping it", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "describe this" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,AAAABBBB" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    expect(geminiBody.contents[0].parts).toEqual([
+      { text: "describe this" },
+      { inlineData: { mimeType: "image/png", data: "AAAABBBB" } },
+    ]);
+  });
+
+  test("forwards an http image URL as a fileData reference", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/cat.png" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    expect(geminiBody.contents[0].parts).toEqual([
+      { fileData: { fileUri: "https://example.com/cat.png" } },
+    ]);
+  });
+
+  test("forwards base64 input_audio as inlineData", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: { data: "QUJD", format: "wav" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+
+    expect(geminiBody.contents[0].parts).toEqual([
+      { inlineData: { mimeType: "audio/wav", data: "QUJD" } },
+    ]);
+  });
+
+  test("still emits a plain text part for a string user message", () => {
+    const { geminiBody } = openaiToGemini(req());
+    expect(geminiBody.contents[0].parts).toEqual([{ text: "hello" }]);
+  });
+});

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Gemini, OpenAi } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
+  parseDataUrl,
   parseJsonObject,
   stringifyTextContent,
 } from "./openai-translator-utils";
@@ -52,9 +53,12 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
 
     if (message.role === "user") {
+      const parts = userContentToGeminiParts(message.content);
       contents.push({
+        // Gemini rejects a content entry with no parts; keep an empty text
+        // part for messages that carried no convertible content.
         role: "user",
-        parts: [{ text: stringifyTextContent(message.content) }],
+        parts: parts.length > 0 ? parts : [{ text: "" }],
       });
       continue;
     }
@@ -253,4 +257,71 @@ function toGeminiToolChoice(
   if (toolChoice === "required") return "ANY";
   if (toolChoice === "none") return "NONE";
   return "AUTO";
+}
+
+// Converts an OpenAI user-message `content` (string or array of content parts)
+// into Gemini parts, preserving images/files/audio instead of dropping every
+// non-text part. Inline base64 data URLs become `inlineData`; http(s) image
+// URLs become `fileData` references, which Gemini fetches itself.
+function userContentToGeminiParts(
+  content: unknown,
+): Gemini.Types.MessagePart[] {
+  if (typeof content === "string") {
+    return content ? [{ text: content }] : [];
+  }
+  if (!Array.isArray(content)) return [];
+
+  const parts: Gemini.Types.MessagePart[] = [];
+  for (const part of content as Array<Record<string, LooseContentValue>>) {
+    if (!part || typeof part !== "object") continue;
+
+    if (part.type === "text") {
+      if (typeof part.text === "string" && part.text) {
+        parts.push({ text: part.text });
+      }
+      continue;
+    }
+
+    if (part.type === "image_url") {
+      const url = String(getNested(part.image_url, "url") ?? "");
+      const inline = parseDataUrl(url);
+      if (inline) {
+        parts.push({
+          inlineData: { mimeType: inline.mimeType, data: inline.data },
+        });
+      } else if (/^https?:\/\//i.test(url)) {
+        parts.push({ fileData: { fileUri: url } });
+      }
+      continue;
+    }
+
+    if (part.type === "input_audio") {
+      const data = String(getNested(part.input_audio, "data") ?? "");
+      const format = String(getNested(part.input_audio, "format") ?? "");
+      if (data && format) {
+        parts.push({ inlineData: { mimeType: `audio/${format}`, data } });
+      }
+      continue;
+    }
+
+    if (part.type === "file") {
+      const fileData = String(getNested(part.file, "file_data") ?? "");
+      const inline = parseDataUrl(fileData);
+      if (inline) {
+        parts.push({
+          inlineData: { mimeType: inline.mimeType, data: inline.data },
+        });
+      }
+    }
+  }
+  return parts;
+}
+
+type LooseContentValue = string | Record<string, unknown> | undefined;
+
+function getNested(value: LooseContentValue, key: string): unknown {
+  if (value && typeof value === "object") {
+    return (value as Record<string, unknown>)[key];
+  }
+  return undefined;
 }

@@ -78,4 +78,63 @@ describe("openaiToAnthropic — multimodal user content", () => {
     const { anthropicBody } = openaiToAnthropic(req());
     expect(anthropicBody.messages[0].content).toBe("hello");
   });
+
+  test("forwards images inside a tool result as image blocks", () => {
+    const request = req({
+      messages: [
+        { role: "user", content: "go" },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            { type: "text", text: "here is the chart" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,Q0hBUlQ=" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
+    } as any);
+
+    const { anthropicBody } = openaiToAnthropic(request);
+    // messages[0] is the user turn; messages[1] carries the tool_result.
+    expect(anthropicBody.messages[1].content).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "call_1",
+        content: [
+          { type: "text", text: "here is the chart" },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: "Q0hBUlQ=",
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("falls back to text for a tool result with no convertible media", () => {
+    const request = req({
+      messages: [
+        { role: "user", content: "go" },
+        { role: "tool", tool_call_id: "call_1", content: "plain result" },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
+    } as any);
+
+    const { anthropicBody } = openaiToAnthropic(request);
+    expect(anthropicBody.messages[1].content).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "call_1",
+        content: "plain result",
+      },
+    ]);
+  });
 });

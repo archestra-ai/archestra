@@ -159,4 +159,37 @@ describe("openaiToGemini — multimodal user content", () => {
     const { geminiBody } = openaiToGemini(req());
     expect(geminiBody.contents[0].parts).toEqual([{ text: "hello" }]);
   });
+
+  test("keeps tool-result text and appends images as sibling media parts", () => {
+    const request = req({
+      messages: [
+        { role: "user", content: "go" },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            { type: "text", text: "here is the chart" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,Q0hBUlQ=" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
+    } as any);
+
+    const { geminiBody } = openaiToGemini(request);
+    // contents[0] is the user message; contents[1] is the tool result.
+    expect(geminiBody.contents[1].parts).toEqual([
+      {
+        functionResponse: {
+          id: "call_1",
+          name: "tool_result",
+          response: { content: "here is the chart" },
+        },
+      },
+      { inlineData: { mimeType: "image/png", data: "Q0hBUlQ=" } },
+    ]);
+  });
 });

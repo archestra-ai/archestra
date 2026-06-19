@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Gemini, OpenAi } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
+  type NormalizedContentPart,
+  normalizeOpenAiContentParts,
   parseDataUrl,
   parseJsonObject,
   stringifyTextContent,
@@ -86,6 +88,18 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
 
     if (message.role === "tool") {
+      // Gemini function responses carry only a JSON payload, so keep the text
+      // in the response object and append any images/files as sibling media
+      // parts in the same turn rather than dropping them.
+      const normalized = normalizeOpenAiContentParts(message.content);
+      const text = normalized
+        .filter((part) => part.kind === "text")
+        .map((part) => part.text)
+        .join("\n");
+      const mediaParts = normalized
+        .filter((part) => part.kind !== "text")
+        .map(normalizedPartToGeminiPart)
+        .filter((part): part is Gemini.Types.MessagePart => part !== null);
       contents.push({
         role: "user",
         parts: [
@@ -95,9 +109,10 @@ export function openaiToGemini(req: OpenAiRequest): {
               // OpenAI tool result messages only include tool_call_id, not the
               // original function name. Use a stable synthetic name for Gemini.
               name: "tool_result",
-              response: { content: stringifyTextContent(message.content) },
+              response: { content: text },
             },
           },
+          ...mediaParts,
         ],
       });
     }
@@ -259,69 +274,48 @@ function toGeminiToolChoice(
   return "AUTO";
 }
 
-// Converts an OpenAI user-message `content` (string or array of content parts)
-// into Gemini parts, preserving images/files/audio instead of dropping every
-// non-text part. Inline base64 data URLs become `inlineData`; http(s) image
-// URLs become `fileData` references, which Gemini fetches itself.
+// Converts an OpenAI user-message `content` into Gemini parts, preserving
+// images/files/audio instead of dropping every non-text part.
 function userContentToGeminiParts(
   content: unknown,
 ): Gemini.Types.MessagePart[] {
-  if (typeof content === "string") {
-    return content ? [{ text: content }] : [];
-  }
-  if (!Array.isArray(content)) return [];
-
   const parts: Gemini.Types.MessagePart[] = [];
-  for (const part of content as Array<Record<string, LooseContentValue>>) {
-    if (!part || typeof part !== "object") continue;
-
-    if (part.type === "text") {
-      if (typeof part.text === "string" && part.text) {
-        parts.push({ text: part.text });
-      }
-      continue;
-    }
-
-    if (part.type === "image_url") {
-      const url = String(getNested(part.image_url, "url") ?? "");
-      const inline = parseDataUrl(url);
-      if (inline) {
-        parts.push({
-          inlineData: { mimeType: inline.mimeType, data: inline.data },
-        });
-      } else if (/^https?:\/\//i.test(url)) {
-        parts.push({ fileData: { fileUri: url } });
-      }
-      continue;
-    }
-
-    if (part.type === "input_audio") {
-      const data = String(getNested(part.input_audio, "data") ?? "");
-      const format = String(getNested(part.input_audio, "format") ?? "");
-      if (data && format) {
-        parts.push({ inlineData: { mimeType: `audio/${format}`, data } });
-      }
-      continue;
-    }
-
-    if (part.type === "file") {
-      const fileData = String(getNested(part.file, "file_data") ?? "");
-      const inline = parseDataUrl(fileData);
-      if (inline) {
-        parts.push({
-          inlineData: { mimeType: inline.mimeType, data: inline.data },
-        });
-      }
-    }
+  for (const part of normalizeOpenAiContentParts(content)) {
+    const geminiPart = normalizedPartToGeminiPart(part);
+    if (geminiPart) parts.push(geminiPart);
   }
   return parts;
 }
 
-type LooseContentValue = string | Record<string, unknown> | undefined;
-
-function getNested(value: LooseContentValue, key: string): unknown {
-  if (value && typeof value === "object") {
-    return (value as Record<string, unknown>)[key];
+// Maps one normalized content part to a Gemini part. Inline base64 data URLs
+// become `inlineData`; http(s) image URLs become `fileData` references, which
+// Gemini fetches itself. Returns null for parts Gemini can't represent.
+function normalizedPartToGeminiPart(
+  part: NormalizedContentPart,
+): Gemini.Types.MessagePart | null {
+  switch (part.kind) {
+    case "text":
+      return { text: part.text };
+    case "image": {
+      const inline = parseDataUrl(part.url);
+      if (inline) {
+        return { inlineData: { mimeType: inline.mimeType, data: inline.data } };
+      }
+      if (/^https?:\/\//i.test(part.url)) {
+        return { fileData: { fileUri: part.url } };
+      }
+      return null;
+    }
+    case "audio":
+      return {
+        inlineData: { mimeType: `audio/${part.format}`, data: part.data },
+      };
+    case "file": {
+      const inline = parseDataUrl(part.fileData);
+      if (inline) {
+        return { inlineData: { mimeType: inline.mimeType, data: inline.data } };
+      }
+      return null;
+    }
   }
-  return undefined;
 }

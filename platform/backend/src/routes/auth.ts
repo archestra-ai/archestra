@@ -26,10 +26,17 @@ import {
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  OAuthRefreshTokenModel,
   OrganizationModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import {
+  appConnectorAudienceRef,
+  isAppConnectorAudienceRef,
+  isConnectorTargetedResource,
+  resolveAppConnectorResource,
+} from "@/services/apps/app-connector-resource";
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
@@ -502,6 +509,25 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "[auth:oauth2/token] Token request failed",
         );
+      }
+
+      // Bind a shareable-App connector token to its canonical resource URI
+      // (RFC 8707) so it is accepted only at its own connector. Fail closed if
+      // an app-connector resource was requested but the binding can't be written
+      // — better to error than hand back a token that silently 401s.
+      if (response.ok) {
+        const connectorBinding = await bindAppConnectorTokenAudience({
+          resource,
+          responseBody,
+          grantType: body?.grant_type,
+          tokenEndpointOrigin,
+        });
+        if (connectorBinding.status === "error") {
+          return reply.status(400).send({
+            error: "invalid_target",
+            error_description: connectorBinding.message,
+          });
+        }
       }
 
       reply.status(response.status);
@@ -1221,4 +1247,140 @@ function getProfileIdFromReferenceId(
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
   return OAuthAccessTokenModel.hashTokenForLookup(oauthAccessToken);
+}
+
+/**
+ * Bind a freshly minted access token to a shareable-App connector resource
+ * (RFC 8707), so the connector accepts it only at its own canonical URI. The
+ * `resource` parameter is stripped before better-auth (which rejects a dynamic
+ * audience), so the binding is stamped here, after mint. On an authorization_code
+ * grant the audience is the consented `resource`; on a refresh_token grant it is
+ * the audience carried on the refresh token from the original grant — a refresh
+ * cannot re-target a different connector. Returns `error` when an app-connector
+ * resource was requested but the token could not be bound to it, so the caller
+ * fails the request rather than return a token that silently 401s.
+ *
+ * @public — exercised by auth.test.ts
+ */
+export async function bindAppConnectorTokenAudience(params: {
+  resource: unknown;
+  responseBody: string | null;
+  grantType: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<{ status: "ok" | "skip" } | { status: "error"; message: string }> {
+  if (!params.responseBody) {
+    return { status: "skip" };
+  }
+  const tokenBody = parseOAuthTokenResponseBody(params.responseBody);
+  const accessToken =
+    typeof tokenBody?.access_token === "string" ? tokenBody.access_token : null;
+  if (!accessToken) {
+    return { status: "skip" };
+  }
+
+  const allowedOrigins = new Set([
+    new URL(buildOAuthIssuer()).origin,
+    params.tokenEndpointOrigin,
+  ]);
+  const requestedCanonical = resolveAppConnectorResource(
+    params.resource,
+    allowedOrigins,
+  );
+  const requestedRef = requestedCanonical
+    ? appConnectorAudienceRef(requestedCanonical)
+    : null;
+
+  // A `resource` that targets a connector path but did not resolve to a trusted
+  // canonical URI (an untrusted origin like https://evil.example.com/api/mcp/app/<id>,
+  // or a malformed/sub-path connector URL) must fail closed with RFC 8707
+  // invalid_target. Falling through to "skip" would mint an unbound `mcp` token,
+  // which still authenticates the MCP gateway via the user-access path. Absent or
+  // non-connector resources are unaffected (they bind elsewhere or not at all).
+  if (!requestedRef && isConnectorTargetedResource(params.resource)) {
+    return {
+      status: "error",
+      message:
+        "The requested resource is not a valid connector on this server.",
+    };
+  }
+
+  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
+
+  if (params.grantType === "refresh_token") {
+    // better-auth carries the original grant's audience onto the refreshed
+    // token, so a refresh cannot acquire a connector the original grant did not
+    // authorize. Honor that inherited binding and reject an attempt to
+    // re-target a different connector (RFC 8707 invalid_target).
+    const refreshed = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    let inheritedRef = isAppConnectorAudienceRef(refreshed?.referenceId)
+      ? (refreshed?.referenceId ?? null)
+      : null;
+    if (!inheritedRef && refreshed?.refreshId) {
+      const refresh = await OAuthRefreshTokenModel.getById(refreshed.refreshId);
+      inheritedRef = isAppConnectorAudienceRef(refresh?.referenceId)
+        ? (refresh?.referenceId ?? null)
+        : null;
+    }
+    if (requestedRef && requestedRef !== inheritedRef) {
+      return {
+        status: "error",
+        message: "The refresh token is not bound to the requested resource.",
+      };
+    }
+    if (!inheritedRef) {
+      return { status: "skip" };
+    }
+    // Stamp the access token only if better-auth did not already inherit it.
+    if (refreshed?.referenceId !== inheritedRef) {
+      await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+        tokenHash,
+        referenceId: inheritedRef,
+      });
+    }
+    return { status: "ok" };
+  }
+
+  // Initial (authorization_code) grant: stamp the consented connector audience.
+  if (!requestedRef) {
+    return { status: "skip" };
+  }
+  const bound =
+    await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+      tokenHash,
+      referenceId: requestedRef,
+    });
+  if (!bound) {
+    // A prior stamp of the same audience is success (idempotent); any other
+    // unbindable state fails closed.
+    const existing = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    if (existing?.referenceId === requestedRef) {
+      return { status: "ok" };
+    }
+    logger.error(
+      { requestedRef },
+      "[auth:oauth2/token] could not bind app connector token to its resource",
+    );
+    return {
+      status: "error",
+      message: "Unable to bind the access token to the requested resource.",
+    };
+  }
+  // Carry the binding onto the refresh token so better-auth inherits it on later
+  // refreshes. Best-effort: if it can't be written, a future refresh that omits
+  // `resource` yields an unbound token the connector rejects (fail-closed).
+  if (bound.refreshId) {
+    const carried = await OAuthRefreshTokenModel.bindReferenceIdByIdWhenUnbound(
+      {
+        id: bound.refreshId,
+        referenceId: requestedRef,
+      },
+    );
+    if (!carried) {
+      logger.warn(
+        { refreshId: bound.refreshId, requestedRef },
+        "[auth:oauth2/token] could not carry the connector audience onto the refresh token",
+      );
+    }
+  }
+  return { status: "ok" };
 }

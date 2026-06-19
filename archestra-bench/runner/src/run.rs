@@ -1267,7 +1267,7 @@ async fn grade_rollout(
         if index == final_stage {
             bench_mcp.allow_submission(rollout_key).await;
         }
-        stage_error = drive_stage(
+        stage_error = drive_stage_with_retry(
             &client,
             &conversation_id,
             stage,
@@ -1304,7 +1304,7 @@ async fn grade_rollout(
             text: SUBMIT_NUDGE.to_string(),
             files: Vec::new(),
         };
-        stage_error = drive_stage(
+        stage_error = drive_stage_with_retry(
             &client,
             &conversation_id,
             &nudge,
@@ -1482,7 +1482,20 @@ async fn grade_rollout(
     }
 }
 
-async fn drive_stage(
+/// Drive a stage, retrying it once when the backend reports a retryable error
+/// (e.g. an incomplete tool call). Such a failure on a single turn would
+/// otherwise end the whole rollout; one clean re-attempt recovers the common
+/// transient cases. Parse/idle errors are not backend-classified and are never
+/// retried.
+///
+/// The retry must look exactly like the first attempt, never an accumulation of
+/// it: (1) prior history is fetched once and reused, so the retry does not pick
+/// up the failed attempt's own just-persisted user turn; (2) the user turn id is
+/// fixed, so a re-sent turn is deduped backend-side instead of duplicated; and
+/// (3) `run` is snapshotted and restored before retrying, so the failed
+/// attempt's partial text / tool calls / turn count / tokens never leak into the
+/// rollout metrics.
+async fn drive_stage_with_retry(
     client: &EvalClient,
     conversation_id: &str,
     stage: &crate::config::types::Stage,
@@ -1491,6 +1504,84 @@ async fn drive_stage(
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
     expect_prior_history: bool,
+) -> Result<Option<String>, RunError> {
+    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
+    // platform builds LLM context from the request body only. The first turn has no history yet;
+    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
+    // the rollout loudly rather than silently run the agent on contextless history.
+    let prior_messages = if expect_prior_history {
+        let messages = client.get_conversation_messages(conversation_id).await?;
+        if messages.is_empty() {
+            return Ok(Some(
+                "conversation history empty on a follow-up turn; the prior turn likely failed to \
+                 persist — refusing to continue on contextless history"
+                    .to_string(),
+            ));
+        }
+        messages
+    } else {
+        Vec::new()
+    };
+    let turn_id = uuid::Uuid::new_v4().to_string();
+
+    let snapshot = run.clone();
+    let first = drive_stage(
+        client,
+        conversation_id,
+        stage,
+        task,
+        run,
+        artifacts,
+        runtime,
+        &prior_messages,
+        &turn_id,
+    )
+    .await?;
+    let Some(error) = first else {
+        return Ok(None);
+    };
+    if !stage_error_is_retryable(&error) {
+        return Ok(Some(error));
+    }
+    artifacts
+        .append("stage_retry", serde_json::json!({ "error": error }))
+        .await;
+    *run = snapshot;
+    drive_stage(
+        client,
+        conversation_id,
+        stage,
+        task,
+        run,
+        artifacts,
+        runtime,
+        &prior_messages,
+        &turn_id,
+    )
+    .await
+}
+
+/// True when a stage-error string is the backend's JSON error payload carrying
+/// `isRetryable: true`. A combined or non-JSON error (parse error, idle
+/// timeout, or a stream error merged with one) does not parse and is treated as
+/// non-retryable — only a clean backend classification triggers a re-attempt.
+fn stage_error_is_retryable(error: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(error)
+        .ok()
+        .and_then(|v| v.get("isRetryable").and_then(|r| r.as_bool()))
+        .unwrap_or(false)
+}
+
+async fn drive_stage(
+    client: &EvalClient,
+    conversation_id: &str,
+    stage: &crate::config::types::Stage,
+    task: &Task,
+    run: &mut ChatRunResult,
+    artifacts: &RunArtifacts,
+    runtime: &HashMap<String, String>,
+    prior_messages: &[serde_json::Value],
+    turn_id: &str,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1513,25 +1604,8 @@ async fn drive_stage(
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
 
-    // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
-    // platform builds LLM context from the request body only. The first turn has no history yet;
-    // a later turn that fetches an empty history means the prior turn failed to persist, so fail
-    // the rollout loudly rather than silently run the agent on contextless history.
-    let prior_messages = if expect_prior_history {
-        let messages = client.get_conversation_messages(conversation_id).await?;
-        if messages.is_empty() {
-            return Ok(Some(
-                "conversation history empty on a follow-up turn; the prior turn likely failed to \
-                 persist — refusing to continue on contextless history"
-                    .to_string(),
-            ));
-        }
-        messages
-    } else {
-        Vec::new()
-    };
     let mut stream = client
-        .stream_chat_records(conversation_id, &prior_messages, &text, &files)
+        .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
         .await?;
     loop {
         let record = match timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
@@ -2282,6 +2356,26 @@ async fn write_report(report: &str, out: Option<&Path>) -> Result<(), RunError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_stage_error_is_retryable() {
+        // Backend error JSON with the flag set → retry.
+        assert!(stage_error_is_retryable(
+            r#"{"code":"incomplete_tool_call","message":"...","isRetryable":true}"#
+        ));
+        // Flag explicitly false → no retry.
+        assert!(!stage_error_is_retryable(
+            r#"{"code":"authentication","isRetryable":false}"#
+        ));
+        // Non-JSON (idle timeout / parse error) → no retry.
+        assert!(!stage_error_is_retryable("chat stream idle for 120s"));
+        // Stream error merged with a parse error is no longer valid JSON → no retry.
+        assert!(!stage_error_is_retryable(
+            r#"{"isRetryable":true}; malformed chat stream data"#
+        ));
+        // Missing flag → no retry.
+        assert!(!stage_error_is_retryable(r#"{"code":"unknown"}"#));
+    }
 
     #[test]
     fn test_rollout_token() {

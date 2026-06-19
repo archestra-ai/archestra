@@ -10,6 +10,7 @@ import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppRuntimeFrame } from "../_parts/app-runtime-frame";
 import { AppSettingsForm } from "../_parts/app-settings-form";
+import { AppShareTab } from "../_parts/app-share-tab";
 import { AppToolsTab } from "../_parts/app-tools-tab";
 import { AppVersionsTab } from "../_parts/app-versions-tab";
 
@@ -57,6 +58,7 @@ export default function AppDetailPage({ appId }: { appId: string }) {
         <TabsList>
           <TabsTrigger value="preview">Preview</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
+          <TabsTrigger value="share">Share</TabsTrigger>
           <TabsTrigger value="versions">Versions</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -69,6 +71,10 @@ export default function AppDetailPage({ appId }: { appId: string }) {
 
         <TabsContent value="tools">
           <AppToolsTab appId={appId} />
+        </TabsContent>
+
+        <TabsContent value="share">
+          <AppShareTab appId={appId} />
         </TabsContent>
 
         <TabsContent value="versions">

@@ -144,6 +144,11 @@ const RunCommandOutputSchema = z.object({
   durationMs: z.number(),
   timedOut: z.boolean(),
   truncated: z.boolean(),
+  binaryStripped: z
+    .boolean()
+    .describe(
+      "True when NUL bytes were stripped from stdout/stderr before storage.",
+    ),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -1194,6 +1199,7 @@ function formatCommandSummary(result: {
   durationMs: number;
   timedOut: boolean;
   truncated: boolean;
+  binaryStripped: boolean;
   stdout: string;
   stderr: string;
 }): string {
@@ -1205,6 +1211,14 @@ function formatCommandSummary(result: {
     lines.push(
       "Output was truncated; re-run with a narrower command " +
         "(grep/head/tail/sed) to read the rest.",
+    );
+  }
+  if (result.binaryStripped) {
+    lines.push(
+      "stdout/stderr held binary (NUL) bytes that were removed before " +
+        "storage, so the text below is incomplete. Redirect binary output to " +
+        "a file (`> out`) and fetch it with download_file, or inspect bytes " +
+        "with `xxd`/`wc -c`.",
     );
   }
   lines.push("", "stdout:", result.stdout || "(empty)");

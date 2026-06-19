@@ -281,6 +281,51 @@ describe("SkillSandboxReplayEventModel", () => {
     expect(refreshed?.nextReplaySequence).toBe(4);
   });
 
+  test("appendCommand strips NUL bytes from output so binary output does not crash the insert", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+
+    // Binary piped to stdout (e.g. `curl <url> | head`) embeds NUL bytes that
+    // a Postgres `text` column rejects (code 22021/22P05); the captured output
+    // is sanitized at the write boundary so the insert never crashes. command/
+    // cwd are left intact (they are rejected upstream when they carry NUL).
+    const NUL = String.fromCharCode(0);
+    const row = await SkillSandboxReplayEventModel.appendCommand({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      command: "cat image.png",
+      cwd: "/home/sandbox",
+      stdout: `PNG${NUL}data${NUL}IHDR`,
+      stderr: `warn${NUL}ing`,
+      exitCode: 0,
+      durationMs: 1,
+      timeoutSeconds: 30,
+    });
+
+    expect(row.command).toBe("cat image.png");
+    expect(row.cwd).toBe("/home/sandbox");
+    expect(row.stdout).toBe("PNGdataIHDR");
+    expect(row.stderr).toBe("warning");
+
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const [event] = log;
+    if (event?.kind !== "command") {
+      throw new Error("expected a command replay event");
+    }
+    expect(event.command.command).toBe("cat image.png");
+    expect(event.command.stdout).toBe("PNGdataIHDR");
+    expect(event.command.stderr).toBe("warning");
+  });
+
   test("appendSkillMount records every install command in order within the mount transaction", async ({
     makeOrganization,
     makeUser,

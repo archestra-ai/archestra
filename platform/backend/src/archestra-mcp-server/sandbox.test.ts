@@ -170,6 +170,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 12,
         timedOut: false,
         truncated: false,
+        binaryStripped: false,
         stagingNotices: [],
       });
   }
@@ -190,6 +191,7 @@ describe("sandbox tools (runtime enabled)", () => {
           durationMs: 1,
           timedOut: false,
           truncated: false,
+          binaryStripped: false,
           stagingNotices: [],
         });
 
@@ -231,6 +233,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 5,
         timedOut: false,
         truncated: true,
+        binaryStripped: false,
         stagingNotices: [],
       });
 
@@ -247,6 +250,63 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       // the old trailing marker is gone — no duplicate warning at the end.
       expect(text).not.toContain("(output was truncated)");
+    });
+
+    test("surfaces a binary-output warning before stdout, but not on clean text", async () => {
+      const ctx = await makeConversationCtx();
+      const spy = vi.spyOn(skillSandboxRuntimeService, "runCommand");
+      spy.mockResolvedValue({
+        commandId: "cmd-1",
+        sandboxId: "x" as any,
+        command: "cat image.png",
+        cwd: null,
+        stdout: "PNGdata\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: true,
+        stagingNotices: [],
+      });
+
+      const dirty = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "cat image.png" },
+          ctx,
+        ),
+      );
+      expect(dirty).toContain("binary (NUL) bytes");
+      expect(dirty).toContain("download_file");
+      // the model must see the warning before it starts reading the blob.
+      expect(dirty.indexOf("binary (NUL) bytes")).toBeLessThan(
+        dirty.indexOf("stdout:"),
+      );
+
+      // happy path: no binary stripped → no warning leaks into the summary.
+      spy.mockResolvedValue({
+        commandId: "cmd-2",
+        sandboxId: "x" as any,
+        command: "echo hi",
+        cwd: null,
+        stdout: "hi\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: false,
+        stagingNotices: [],
+      });
+      const clean = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo hi" },
+          ctx,
+        ),
+      );
+      expect(clean).not.toContain("binary (NUL) bytes");
     });
 
     test("omits the truncation warning when output is complete", async () => {

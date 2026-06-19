@@ -5428,20 +5428,32 @@
                                   "type": {
                                     "type": "string",
                                     "enum": [
-                                      "tool_result"
+                                      "image_url"
                                     ]
                                   },
-                                  "tool_call_id": {
-                                    "type": "string"
-                                  },
-                                  "content": {
-                                    "type": "string"
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ]
                                   }
                                 },
                                 "required": [
                                   "type",
-                                  "tool_call_id",
-                                  "content"
+                                  "image_url"
                                 ]
                               }
                             ]
@@ -22697,20 +22709,33 @@
                                   "type": {
                                     "type": "string",
                                     "enum": [
-                                      "tool_result"
+                                      "image_url"
                                     ]
                                   },
-                                  "tool_call_id": {
-                                    "type": "string"
-                                  },
-                                  "content": {
-                                    "type": "string"
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "low",
+                                          "high"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "url"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
                                   "type",
-                                  "tool_call_id",
-                                  "content"
+                                  "image_url"
                                 ],
                                 "additionalProperties": false
                               }

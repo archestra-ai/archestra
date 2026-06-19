@@ -1045,6 +1045,32 @@ describe("bindAppConnectorTokenAudience", () => {
     expect(row?.referenceId).toBeNull();
   });
 
+  test("a connector-targeted resource on an untrusted origin fails closed (not an unbound token)", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      // Connector-shaped, but the origin is not one this server serves — must
+      // not fall through to an unbound mcp token.
+      resource: `https://evil.example.com/api/mcp/app/${APP_A}`,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "authorization_code",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("error");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+
   test("refresh honors the inherited binding for the same resource and when omitted", async ({
     makeUser,
     makeOAuthClient,

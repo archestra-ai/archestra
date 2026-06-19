@@ -57,7 +57,45 @@ export function resolveAppConnectorResource(
   if (!canonical) {
     return null;
   }
-  return allowedOrigins.has(new URL(canonical).origin) ? canonical : null;
+  // Compare both sides as normalized `URL.origin` (lowercased host, default
+  // :80/:443 stripped). `allowedOrigins` is built from request-derived strings
+  // (a Host/X-Forwarded-Host that may carry a mixed-case host or an explicit
+  // default port), while the canonical origin is already normalized — a raw
+  // string compare would reject a valid resource and leave the token unbound.
+  const target = new URL(canonical).origin;
+  for (const origin of allowedOrigins) {
+    let normalized: string;
+    try {
+      normalized = new URL(origin).origin;
+    } catch {
+      continue;
+    }
+    if (normalized === target) {
+      return canonical;
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a client-supplied `resource` targets a connector path at all — any
+ * `/api/mcp/app/...` URL — including one that fails {@link
+ * resolveAppConnectorResource} (an untrusted origin, or a sub-path). The token
+ * endpoint uses this to fail closed (RFC 8707 `invalid_target`) on a
+ * connector-intended `resource` it cannot bind, rather than fall through to an
+ * unbound token that would still authenticate the MCP gateway.
+ */
+export function isConnectorTargetedResource(raw: unknown): boolean {
+  if (typeof raw !== "string") {
+    return false;
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  return url.pathname.startsWith(APP_CONNECTOR_PATH_PREFIX);
 }
 
 /** The connector's own canonical resource URI, derived from the request origin. */

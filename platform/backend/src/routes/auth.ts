@@ -34,6 +34,7 @@ import {
 import {
   appConnectorAudienceRef,
   isAppConnectorAudienceRef,
+  isConnectorTargetedResource,
   resolveAppConnectorResource,
 } from "@/services/apps/app-connector-resource";
 import {
@@ -1266,6 +1267,21 @@ export async function bindAppConnectorTokenAudience(params: {
   const requestedRef = requestedCanonical
     ? appConnectorAudienceRef(requestedCanonical)
     : null;
+
+  // A `resource` that targets a connector path but did not resolve to a trusted
+  // canonical URI (an untrusted origin like https://evil.example.com/api/mcp/app/<id>,
+  // or a malformed/sub-path connector URL) must fail closed with RFC 8707
+  // invalid_target. Falling through to "skip" would mint an unbound `mcp` token,
+  // which still authenticates the MCP gateway via the user-access path. Absent or
+  // non-connector resources are unaffected (they bind elsewhere or not at all).
+  if (!requestedRef && isConnectorTargetedResource(params.resource)) {
+    return {
+      status: "error",
+      message:
+        "The requested resource is not a valid connector on this server.",
+    };
+  }
+
   const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
 
   if (params.grantType === "refresh_token") {

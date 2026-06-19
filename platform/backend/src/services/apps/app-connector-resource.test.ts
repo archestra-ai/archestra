@@ -6,6 +6,7 @@ import {
   canonicalizeConnectorResourceUri,
   connectorWwwAuthenticate,
   isAppConnectorAudienceRef,
+  isConnectorTargetedResource,
   resolveAppConnectorResource,
 } from "./app-connector-resource";
 
@@ -64,6 +65,60 @@ describe("resolveAppConnectorResource", () => {
       ),
     ).toBeNull();
     expect(resolveAppConnectorResource(undefined, allowed)).toBeNull();
+  });
+
+  test("matches an allowed origin that differs only by host case or default port", () => {
+    // allowedOrigins are request-derived and may carry a mixed-case host or an
+    // explicit :443; the canonical origin is lowercased/port-stripped. Both must
+    // be normalized before compare, or a valid resource is wrongly rejected.
+    const messyAllowed = new Set([
+      "https://App.Example.com:443",
+      "HTTP://Localhost:80",
+    ]);
+    expect(
+      resolveAppConnectorResource(
+        `https://app.example.com/api/mcp/app/${APP_ID}`,
+        messyAllowed,
+      ),
+    ).toBe(`https://app.example.com/api/mcp/app/${APP_ID}`);
+    expect(
+      resolveAppConnectorResource(
+        `http://localhost/api/mcp/app/${APP_ID}`,
+        messyAllowed,
+      ),
+    ).toBe(`http://localhost/api/mcp/app/${APP_ID}`);
+  });
+});
+
+describe("isConnectorTargetedResource", () => {
+  test("true for any /api/mcp/app/ path, even an untrusted origin or sub-path", () => {
+    expect(
+      isConnectorTargetedResource(
+        `https://app.example.com/api/mcp/app/${APP_ID}`,
+      ),
+    ).toBe(true);
+    // The cases resolveAppConnectorResource rejects but which must still fail
+    // closed rather than mint an unbound token.
+    expect(
+      isConnectorTargetedResource(
+        `https://evil.example.com/api/mcp/app/${APP_ID}`,
+      ),
+    ).toBe(true);
+    expect(
+      isConnectorTargetedResource(
+        `https://app.example.com/api/mcp/app/${APP_ID}/extra`,
+      ),
+    ).toBe(true);
+  });
+
+  test("false for an absent or non-connector resource", () => {
+    expect(isConnectorTargetedResource(undefined)).toBe(false);
+    expect(isConnectorTargetedResource("")).toBe(false);
+    expect(isConnectorTargetedResource("not a url")).toBe(false);
+    expect(
+      isConnectorTargetedResource("https://app.example.com/api/mcp/gateway/x"),
+    ).toBe(false);
+    expect(isConnectorTargetedResource("https://app.example.com/")).toBe(false);
   });
 });
 

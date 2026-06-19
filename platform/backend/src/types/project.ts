@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ConversationOriginSchema } from "./conversation";
 
 /** Who a shared project is visible to (no share row = owner only). */
 export const ProjectShareVisibilitySchema = z.enum(["organization", "team"]);
@@ -52,6 +53,8 @@ export const ProjectConversationItemSchema = z.object({
   title: z.string().nullable(),
   authorUserId: z.string(),
   authorName: z.string().nullable(),
+  /** `schedule_trigger` marks a chat created by a scheduled run. */
+  origin: ConversationOriginSchema,
   lastMessageAt: z.date(),
   createdAt: z.date(),
   /** True when the caller is not the chat's author (view-only). */

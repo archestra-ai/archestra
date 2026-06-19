@@ -74518,6 +74518,13 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "schedule_trigger"
+                        ]
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -74851,6 +74858,7 @@
                       "todoList",
                       "artifact",
                       "projectId",
+                      "origin",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -75268,6 +75276,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -75601,6 +75616,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -75989,6 +76005,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -76322,6 +76345,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -76751,6 +76775,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -77084,6 +77115,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -79017,6 +79049,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -79350,6 +79389,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -80105,6 +80145,13 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "schedule_trigger"
+                          ]
+                        },
                         "pinnedAt": {
                           "nullable": true,
                           "type": "string",
@@ -80438,6 +80485,7 @@
                         "todoList",
                         "artifact",
                         "projectId",
+                        "origin",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -81782,6 +81830,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -82118,6 +82173,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -82527,6 +82583,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -82860,6 +82923,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -83264,6 +83328,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -83597,6 +83668,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -84011,6 +84083,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -84344,6 +84423,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -207423,6 +207503,13 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "schedule_trigger"
+                        ]
+                      },
                       "lastMessageAt": {
                         "type": "string",
                         "format": "date-time"
@@ -207440,6 +207527,7 @@
                       "title",
                       "authorUserId",
                       "authorName",
+                      "origin",
                       "lastMessageAt",
                       "createdAt",
                       "readOnly"
@@ -207751,6 +207839,16 @@
           },
           {
             "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "projectId",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "boolean"
             },
             "in": "query",
@@ -207783,6 +207881,12 @@
                             "type": "string"
                           },
                           "agentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "projectId": {
+                            "nullable": true,
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -207863,6 +207967,7 @@
                           "organizationId",
                           "name",
                           "agentId",
+                          "projectId",
                           "messageTemplate",
                           "cronExpression",
                           "timezone",
@@ -208182,6 +208287,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                   },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -208201,7 +208311,6 @@
                 },
                 "required": [
                   "name",
-                  "agentId",
                   "cronExpression",
                   "timezone",
                   "messageTemplate"
@@ -208230,6 +208339,12 @@
                       "type": "string"
                     },
                     "agentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "projectId": {
+                      "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -208310,6 +208425,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -208603,6 +208719,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -208679,6 +208801,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -208950,6 +209073,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
                   },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
                   "enabled": {
                     "default": true,
                     "type": "boolean"
@@ -209003,6 +209131,12 @@
                       "type": "string"
                     },
                     "agentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "projectId": {
+                      "nullable": true,
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -209083,6 +209217,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -209650,6 +209785,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -209726,6 +209867,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -210019,6 +210161,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "messageTemplate": {
                       "type": "string"
                     },
@@ -210095,6 +210243,7 @@
                     "organizationId",
                     "name",
                     "agentId",
+                    "projectId",
                     "messageTemplate",
                     "cronExpression",
                     "timezone",
@@ -211621,6 +211770,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger"
+                      ]
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -211954,6 +212110,7 @@
                     "todoList",
                     "artifact",
                     "projectId",
+                    "origin",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertProject, Project } from "@/types";
+import type { ConversationOrigin, InsertProject, Project } from "@/types";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -110,6 +110,7 @@ class ProjectModel {
       title: string | null;
       authorUserId: string;
       authorName: string | null;
+      origin: ConversationOrigin;
       lastMessageAt: Date;
       createdAt: Date;
     }[]
@@ -120,6 +121,7 @@ class ProjectModel {
         title: schema.conversationsTable.title,
         authorUserId: schema.conversationsTable.userId,
         authorName: schema.usersTable.name,
+        origin: schema.conversationsTable.origin,
         lastMessageAt: schema.conversationsTable.lastMessageAt,
         createdAt: schema.conversationsTable.createdAt,
       })

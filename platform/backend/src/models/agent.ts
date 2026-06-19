@@ -1573,6 +1573,34 @@ class AgentModel {
     return result;
   }
 
+  /**
+   * The org's default agent of a given type (`isDefault = true`), if one exists.
+   * Used as the implicit fallback when a caller cannot pick an agent — e.g. a
+   * user without `agent:read` creating a scheduled task. Returns id-level
+   * metadata only; null when the org has no default of that type.
+   */
+  static async findDefaultByType(params: {
+    organizationId: string;
+    agentType: AgentType;
+  }): Promise<{ id: string; agentType: AgentType } | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, params.agentType),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   private static async getOrCreateDefaultByType(
     agentType: "llm_proxy",
     defaultName: string,

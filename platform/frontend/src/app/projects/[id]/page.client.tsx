@@ -2,12 +2,14 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
+  CalendarClock,
   Eye,
   File as FileIcon,
   FileText,
   Globe,
   Lock,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Trash2,
   Users,
@@ -17,6 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -32,6 +35,12 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,6 +77,7 @@ function ProjectDetail() {
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -110,17 +120,30 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             project.isOwner ? (
-              <div className="flex items-center gap-1">
-                <EditProjectButton project={project} />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Delete project"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Project actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <Badge variant="secondary">Shared with you</Badge>
             )
@@ -139,9 +162,17 @@ function ProjectDetail() {
             confirmLabel="Delete"
             pendingLabel="Deleting..."
           />
+          {editOpen && (
+            <EditProjectDialog
+              project={project}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+            />
+          )}
 
           <div className="space-y-6">
             <ProjectChatInput projectId={project.id} />
+            <ProjectSchedulesSection projectId={project.id} />
             <ChatsList conversations={conversations ?? []} />
           </div>
         </PageLayout>
@@ -185,6 +216,7 @@ function ChatsList({
     id: string;
     title: string | null;
     authorName: string | null;
+    origin: "user" | "schedule_trigger";
     lastMessageAt: string;
     readOnly: boolean;
   }>;
@@ -207,13 +239,23 @@ function ChatsList({
               className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
+                {conv.origin === "schedule_trigger" ? (
+                  <CalendarClock className="h-4 w-4 text-primary" aria-hidden />
+                ) : (
+                  <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">
                     {conv.title ?? "Untitled chat"}
                   </span>
+                  {conv.origin === "schedule_trigger" && (
+                    <Badge variant="outline" className="shrink-0 gap-1">
+                      <CalendarClock className="h-3 w-3" />
+                      scheduled
+                    </Badge>
+                  )}
                   {conv.readOnly && (
                     <Badge variant="outline" className="shrink-0 gap-1">
                       <Eye className="h-3 w-3" />
@@ -340,33 +382,6 @@ type EditProjectForm = {
  * shared visibility control (replacing the old separate description dialog and
  * share popover).
  */
-function EditProjectButton({
-  project,
-}: {
-  project: archestraApiTypes.GetProjectResponses["200"];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Edit project"
-        onClick={() => setOpen(true)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      {open && (
-        <EditProjectDialog
-          project={project}
-          open={open}
-          onOpenChange={setOpen}
-        />
-      )}
-    </>
-  );
-}
-
 function EditProjectDialog({
   project,
   open,

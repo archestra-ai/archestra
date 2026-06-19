@@ -2059,6 +2059,13 @@
       "when": 1781792323492,
       "tag": "0293_project_icon",
       "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "7",
+      "when": 1781793826446,
+      "tag": "0294_scheduled_tasks_projects",
+      "breakpoints": true
     }
   ]
 }

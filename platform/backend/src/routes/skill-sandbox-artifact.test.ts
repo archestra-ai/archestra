@@ -1,7 +1,11 @@
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import config from "@/config";
 import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -33,7 +37,7 @@ async function seedArtifact(params: {
   projectId?: string | null;
 }) {
   const path = params.path ?? "/sandbox/skills/example/out.png";
-  return await FileModel.create({
+  return await fileStore.put({
     organizationId: params.organizationId,
     userId: params.userId,
     projectId: params.projectId ?? null,
@@ -70,6 +74,41 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("serves an untracked (obj_) artifact whose ref exceeds Fastify's default path-length limit", async () => {
+    // obj_ refs encode base64url(JSON{scope,key}), which runs well past Fastify's
+    // default maxParamLength of 100; without raising it the route never matches
+    // and the request 403s (unmatched route → auth-hook "deny by default").
+    const savedProvider = config.fileStorage.provider;
+    const savedRoot = config.fileStorage.filesystemRoot;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "artifact-objref-"));
+    config.fileStorage.provider = "filesystem";
+    config.fileStorage.filesystemRoot = root;
+    try {
+      const dir = path.join(root, user.email);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, "untracked-note.md"), "# hi");
+
+      const [item] = await fileStore.search({
+        organizationId,
+        userId: user.id,
+        scope: { kind: "personal" },
+      });
+      expect(item.downloadRef.startsWith("obj_")).toBe(true);
+      expect(item.downloadRef.length).toBeGreaterThan(100);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/skill-sandbox/artifacts/${item.downloadRef}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.rawPayload.toString()).toBe("# hi");
+    } finally {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   test("serves inline-safe images with inline disposition and security headers", async () => {
@@ -632,14 +671,12 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       projectId: project.id,
     });
 
-    // a non-member of the project cannot delete (checked via the service)
-    const { skillSandboxArtifactService } = await import(
-      "@/skills-sandbox/skill-sandbox-artifact-service"
-    );
+    // a non-member of the project cannot delete (checked via the store)
+    const { fileStore } = await import("@/skills-sandbox/file-store");
     const stranger = await makeUser({ email: "delete-stranger@test.com" });
     expect(
-      await skillSandboxArtifactService.deleteArtifactForUser({
-        artifactId: produced.id,
+      await fileStore.delete({
+        ref: produced.id,
         organizationId,
         userId: stranger.id,
       }),

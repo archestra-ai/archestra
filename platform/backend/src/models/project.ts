@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { urlSlugify } from "@archestra/shared";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
@@ -9,10 +11,14 @@ import type { ConversationOrigin, InsertProject, Project } from "@/types";
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {
+    const slug = await ProjectModel.generateUniqueSlug({
+      name: project.name,
+      organizationId: project.organizationId,
+    });
     try {
       const [row] = await db
         .insert(schema.projectsTable)
-        .values(project)
+        .values({ ...project, slug })
         .returning();
       if (!row) throw new Error("failed to insert project");
       return row;
@@ -132,6 +138,31 @@ class ProjectModel {
       )
       .where(eq(schema.conversationsTable.projectId, projectId))
       .orderBy(desc(schema.conversationsTable.lastMessageAt));
+  }
+
+  // === internal ===
+
+  /**
+   * A URL-safe slug for the project's filesystem folder, unique within the org.
+   * Derived from the name; on a base-slug collision a short random suffix keeps
+   * it distinct (the unique index is the final guard against a create race).
+   */
+  private static async generateUniqueSlug(params: {
+    name: string;
+    organizationId: string;
+  }): Promise<string> {
+    const baseSlug = urlSlugify(params.name) || "project";
+    const [existing] = await db
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          eq(schema.projectsTable.slug, baseSlug),
+        ),
+      )
+      .limit(1);
+    return existing ? `${baseSlug}-${randomUUID().slice(0, 6)}` : baseSlug;
   }
 }
 

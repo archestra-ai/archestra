@@ -14,6 +14,8 @@ export const InsertProjectSchema = createInsertSchema(
   schema.projectsTable,
 ).omit({
   id: true,
+  // generated from the name by ProjectModel.create, never caller-supplied.
+  slug: true,
   createdAt: true,
   updatedAt: true,
 });

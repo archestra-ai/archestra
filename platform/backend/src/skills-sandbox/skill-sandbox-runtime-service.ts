@@ -3,7 +3,6 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
-  FileModel,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -19,7 +18,8 @@ import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-read
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
-import { getFileBytesStorage, storageFilename } from "./file-storage";
+import { readRowBytes, storageFilename } from "./file-storage";
+import { fileStore } from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -232,9 +232,9 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof FileModel.create>>;
+      let row: Awaited<ReturnType<typeof fileStore.put>>;
       try {
-        row = await FileModel.create({
+        row = await fileStore.put({
           organizationId: sandbox.organizationId,
           userId: sandbox.userId,
           projectId: params.projectId ?? null,
@@ -538,7 +538,6 @@ class SkillSandboxRuntimeService {
     replayEntries: ReplayEntry[];
   }> {
     const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
-    const storage = getFileBytesStorage();
     // uniform, ordered replay: every command (including per-skill
     // requirements-install steps), every uploaded file, and every skill mount
     // lives in one sequenced log. interleaving is preserved so each step
@@ -569,7 +568,7 @@ class SkillSandboxRuntimeService {
               file: {
                 path: entry.upload.path,
                 encoding: "base64",
-                content: (await storage.get(entry.upload)).toString("base64"),
+                content: (await readRowBytes(entry.upload)).toString("base64"),
               },
             };
           case "skill_mount":

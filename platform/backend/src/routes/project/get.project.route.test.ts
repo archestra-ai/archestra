@@ -2,6 +2,7 @@ import { ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -143,14 +144,14 @@ describe("GET /api/projects/:id/files", () => {
       teamIds: [],
     });
 
-    const { FileModel, SkillSandboxModel } = await import("@/models");
+    const { SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId: owner.id,
       conversationId: null,
       defaultCwd: "/sandbox",
     });
-    await FileModel.create({
+    await fileStore.put({
       organizationId,
       userId: owner.id,
       projectId: project.id,
@@ -162,7 +163,7 @@ describe("GET /api/projects/:id/files", () => {
       data: Buffer.from("in"),
     });
     // the owner's personal file must not appear in the project listing
-    await FileModel.create({
+    await fileStore.put({
       organizationId,
       userId: owner.id,
       projectId: null,

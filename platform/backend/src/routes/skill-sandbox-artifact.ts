@@ -3,17 +3,23 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { projectService } from "@/services/project";
-import {
-  FileBytesMissingError,
-  getFileBytesStorage,
-} from "@/skills-sandbox/file-storage";
+import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
-import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import {
   ApiError,
   constructResponseSchema,
   SandboxFileListItemSchema,
 } from "@/types";
+
+/**
+ * An artifact handle: a row UUID, or a bounded `obj_` ref for an untracked
+ * (hand-placed) object. Bounding the length/charset here keeps a malformed/huge
+ * ref from reaching the decoder (the store still validates the decoded key).
+ */
+const ARTIFACT_REF = z
+  .string()
+  .regex(/^(?:[0-9a-fA-F-]{36}|obj_[A-Za-z0-9_-]{1,2048})$/);
 
 /**
  * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
@@ -42,7 +48,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Stream the raw bytes of a skill sandbox artifact. Inline for " +
           "known-safe raster images; download for everything else.",
         tags: ["Skills"],
-        params: z.object({ artifactId: z.string().uuid() }),
+        // a row UUID, or an `obj_` ref for an untracked (hand-placed) object.
+        params: z.object({ artifactId: ARTIFACT_REF }),
         // no `response` schema: this endpoint streams raw bytes, not JSON,
         // so the zod type-provider would reject the Buffer payload. The
         // global error handler still formats 4xx/5xx as JSON.
@@ -50,32 +57,16 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { artifactId }, organizationId, user }, reply) => {
       // "wrong owner" and "missing" collapse into the same 404 inside the
-      // service so cross-org probes can't tell them apart. Access: the file's
-      // author, or anyone with access to the project owning the file.
-      const artifact = await skillSandboxArtifactService.getArtifactForUser({
-        artifactId,
-        organizationId,
-        userId: user.id,
-      });
-      if (!artifact) {
-        throw new ApiError(404, "Artifact not found");
-      }
-
-      const inlineSafe = isInlineSafeImageMime(artifact.mimeType);
-      const filename = safeFilenameFromPath(artifact.filename);
-      const disposition = inlineSafe
-        ? `inline; filename="${filename}"`
-        : `attachment; filename="${filename}"`;
-      const contentType = inlineSafe
-        ? artifact.mimeType
-        : "application/octet-stream";
-
-      // byte normalization (pg Buffer vs PGlite Uint8Array) lives in the
-      // storage adapter, which also resolves rows whose bytes live outside
-      // the data column (storage_provider = 'filesystem').
-      let data: Buffer;
+      // store so cross-org probes can't tell them apart. Access: the file's
+      // author, or anyone with access to the project owning the file. Byte
+      // normalization and per-row provider dispatch happen in the store.
+      let resolved: Awaited<ReturnType<typeof fileStore.get>>;
       try {
-        data = await getFileBytesStorage().get(artifact);
+        resolved = await fileStore.get({
+          ref: artifactId,
+          organizationId,
+          userId: user.id,
+        });
       } catch (error) {
         if (error instanceof FileBytesMissingError) {
           // the row exists but its bytes are gone
@@ -83,6 +74,19 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
+      if (!resolved) {
+        throw new ApiError(404, "Artifact not found");
+      }
+      const { data } = resolved;
+
+      const inlineSafe = isInlineSafeImageMime(resolved.mimeType);
+      const filename = safeFilenameFromPath(resolved.filename);
+      const disposition = inlineSafe
+        ? `inline; filename="${filename}"`
+        : `attachment; filename="${filename}"`;
+      const contentType = inlineSafe
+        ? resolved.mimeType
+        : "application/octet-stream";
 
       reply
         .header("Content-Type", contentType)
@@ -105,18 +109,17 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Delete a persistent file. Allowed for the file's author, or " +
             "anyone with access to the project owning the file.",
           tags: ["Skills"],
-          params: z.object({ artifactId: z.string().uuid() }),
+          // a row UUID, or an `obj_` ref for an untracked (hand-placed) object.
+          params: z.object({ artifactId: ARTIFACT_REF }),
           response: constructResponseSchema(z.object({ ok: z.literal(true) })),
         },
       },
       async ({ params: { artifactId }, organizationId, user }) => {
-        const deleted = await skillSandboxArtifactService.deleteArtifactForUser(
-          {
-            artifactId,
-            organizationId,
-            userId: user.id,
-          },
-        );
+        const deleted = await fileStore.delete({
+          ref: artifactId,
+          organizationId,
+          userId: user.id,
+        });
         if (!deleted) {
           throw new ApiError(404, "Artifact not found");
         }
@@ -137,10 +140,10 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
       async ({ params: { conversationId }, organizationId, user }) =>
-        skillSandboxArtifactService.listForConversation({
+        fileStore.list({
           organizationId,
-          userId: user.id,
           conversationId,
+          authorUserId: user.id,
         }),
     );
 
@@ -161,16 +164,22 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       async ({ organizationId, user }) => {
         const [own, shared] = await Promise.all([
-          skillSandboxArtifactService.listAllForUser({
+          fileStore.search({
             organizationId,
             userId: user.id,
+            scope: { kind: "personal" },
           }),
           projectService.listSharedProjectFiles({
             organizationId,
             userId: user.id,
           }),
         ]);
-        return { files: [...own, ...shared] };
+        // newest-first across personal + every shared project (the per-project
+        // fan-out in listSharedProjectFiles loses global ordering otherwise).
+        const files = [...own, ...shared].sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        return { files };
       },
     );
   }

@@ -22,6 +22,7 @@ import {
   SkillVersionModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import {
@@ -1064,7 +1065,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    return FileModel.create({
+    return fileStore.put({
       organizationId,
       userId,
       projectId: null,
@@ -1120,7 +1121,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
         conversationId: null,
         defaultCwd: "/home/sandbox",
       });
-      await FileModel.create({
+      await fileStore.put({
         organizationId,
         userId: stranger.id,
         projectId: null,
@@ -1396,14 +1397,14 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
 
   test("search_files in a project chat sees only the project's files", async () => {
     const { project, ctx } = await makeProjectChatCtx("searchable");
-    const { FileModel, SkillSandboxModel } = await import("@/models");
+    const { SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId,
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    await FileModel.create({
+    await fileStore.put({
       organizationId,
       userId,
       projectId: project.id,
@@ -1414,7 +1415,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
       sizeBytes: 2,
       data: Buffer.from("in"),
     });
-    await FileModel.create({
+    await fileStore.put({
       organizationId,
       userId,
       projectId: null,
@@ -1439,14 +1440,14 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
 
   test("my_file uploads in a project chat are confined to the project", async () => {
     const { project, ctx } = await makeProjectChatCtx("confined");
-    const { FileModel, SkillSandboxModel } = await import("@/models");
+    const { SkillSandboxModel } = await import("@/models");
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId,
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    const inside = await FileModel.create({
+    const inside = await fileStore.put({
       organizationId,
       userId,
       projectId: project.id,
@@ -1457,7 +1458,7 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
       sizeBytes: 2,
       data: Buffer.from("in"),
     });
-    const outside = await FileModel.create({
+    const outside = await fileStore.put({
       organizationId,
       userId,
       projectId: null,
@@ -1565,7 +1566,7 @@ describe("edit_file / delete_file", () => {
   }
 
   function makePersonalFile(filename: string, body: string) {
-    return FileModel.create({
+    return fileStore.put({
       organizationId,
       userId,
       projectId: null,

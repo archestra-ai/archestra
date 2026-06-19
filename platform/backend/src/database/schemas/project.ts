@@ -28,6 +28,12 @@ const projectsTable = pgTable(
       .references(() => usersTable.id, { onDelete: "cascade" }),
     /** Validated display name; editable by the owner (unique per user). */
     name: text("name").notNull(),
+    /**
+     * Immutable URL-safe identifier derived from the name at creation, unique
+     * per org. Addresses the project's folder in the filesystem file store, so
+     * renaming the display name never moves files on disk.
+     */
+    slug: text("slug").notNull(),
     description: text("description"),
     /** Emoji character or base64-encoded image data URL, like agents/catalog. */
     icon: text("icon"),
@@ -35,8 +41,12 @@ const projectsTable = pgTable(
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    // one project name per user.
+    // display name stays unique per user: one member can't have two same-named
+    // projects, but different members may reuse a name (their slugs differ).
     uniqueIndex("projects_user_name_uidx").on(table.userId, table.name),
+    // the slug is the project's folder in the filesystem file store, so it must
+    // be unique across the org's members.
+    uniqueIndex("projects_org_slug_uidx").on(table.organizationId, table.slug),
   ],
 );
 

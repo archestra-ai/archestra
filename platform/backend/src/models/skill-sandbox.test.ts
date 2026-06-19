@@ -9,6 +9,7 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 
@@ -483,7 +484,7 @@ describe("Cascade behavior", () => {
     });
     // a persistent file produced by this sandbox: it references the sandbox
     // only as provenance (ON DELETE SET NULL), so it must outlive the sandbox.
-    const file = await FileModel.create({
+    const file = await fileStore.put({
       organizationId: org.id,
       userId: user.id,
       projectId: null,

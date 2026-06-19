@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0296_remove_knowledge_files.sql"),
+  path.join(__dirname, "0297_remove_knowledge_files.sql"),
   "utf-8",
 );
 
@@ -57,7 +57,7 @@ async function getRolePermission(
   return JSON.parse(role.permission);
 }
 
-describe("0296 migration: remove knowledgeFile RBAC resource", () => {
+describe("0297 migration: remove knowledgeFile RBAC resource", () => {
   test("removes the knowledgeFile resource while preserving others", async ({
     makeOrganization,
   }) => {

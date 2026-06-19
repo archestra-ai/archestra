@@ -204301,6 +204301,9 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "downloadRef": {
+                        "type": "string"
+                      },
                       "filename": {
                         "type": "string"
                       },
@@ -204332,6 +204335,7 @@
                     },
                     "required": [
                       "id",
+                      "downloadRef",
                       "filename",
                       "mimeType",
                       "sizeBytes",
@@ -219930,8 +219934,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "pattern": "^(?:[0-9a-fA-F-]{36}|obj_[A-Za-z0-9_-]{1,2048})$"
             },
             "in": "path",
             "name": "artifactId",
@@ -219960,8 +219963,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "pattern": "^(?:[0-9a-fA-F-]{36}|obj_[A-Za-z0-9_-]{1,2048})$"
             },
             "in": "path",
             "name": "artifactId",
@@ -220263,6 +220265,9 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
+                      "downloadRef": {
+                        "type": "string"
+                      },
                       "filename": {
                         "type": "string"
                       },
@@ -220294,6 +220299,7 @@
                     },
                     "required": [
                       "id",
+                      "downloadRef",
                       "filename",
                       "mimeType",
                       "sizeBytes",
@@ -220571,6 +220577,9 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "downloadRef": {
+                            "type": "string"
+                          },
                           "filename": {
                             "type": "string"
                           },
@@ -220602,6 +220611,7 @@
                         },
                         "required": [
                           "id",
+                          "downloadRef",
                           "filename",
                           "mimeType",
                           "sizeBytes",

@@ -1,9 +1,9 @@
 import {
-  FileModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
 } from "@/models";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   Project,
@@ -11,27 +11,9 @@ import type {
   ProjectDetail,
   ProjectListItem,
   ProjectShareVisibility,
-  SandboxArtifactRow,
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
-
-/** Map a stored file row to the wire shape the file surfaces use. */
-function toFileListItem(
-  row: SandboxArtifactRow,
-  projectName: string | null,
-): SandboxFileListItem {
-  return {
-    id: row.id,
-    filename: row.filename,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    createdAt: row.createdAt,
-    downloadable: true,
-    projectId: row.projectId,
-    projectName,
-  };
-}
 
 /**
  * Projects: named collections of chats that own a set of result files
@@ -61,7 +43,10 @@ class ProjectService {
       });
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
-        throw new ApiError(409, `a project named "${name}" already exists`);
+        throw new ApiError(
+          409,
+          `a project named "${name}" already exists in this organization`,
+        );
       }
       throw error;
     }
@@ -174,13 +159,21 @@ class ProjectService {
     });
   }
 
-  /** Chats SET NULL and survive; the project's files are deleted with it (FK cascade). */
+  /**
+   * Chats SET NULL and survive; the project's file rows are deleted with it (FK
+   * cascade). Externally-stored bytes (filesystem provider) live outside Postgres,
+   * so purge them first — the cascade would otherwise orphan them on disk.
+   */
   async delete(params: {
     id: string;
     organizationId: string;
     userId: string;
   }): Promise<void> {
     await this.requireOwned(params);
+    await fileStore.purgeProjectBytes({
+      organizationId: params.organizationId,
+      projectId: params.id,
+    });
     await ProjectModel.delete(params.id);
   }
 
@@ -194,11 +187,15 @@ class ProjectService {
     userId: string;
   }): Promise<SandboxFileListItem[]> {
     const project = await this.requireReadable(params);
-    const rows = await FileModel.listByProject({
+    return fileStore.search({
       organizationId: params.organizationId,
-      projectId: project.id,
+      userId: params.userId,
+      scope: {
+        kind: "project",
+        projectId: project.id,
+        projectName: project.name,
+      },
     });
-    return rows.map((r) => toFileListItem(r, project.name));
   }
 
   /**
@@ -211,14 +208,16 @@ class ProjectService {
   }): Promise<SandboxFileListItem[]> {
     const projects = await ProjectShareModel.listAccessibleProjects(params);
     if (projects.length === 0) return [];
-    const names = new Map(projects.map((p) => [p.id, p.name]));
-    const rows = await FileModel.listByProjects({
-      organizationId: params.organizationId,
-      projectIds: projects.map((p) => p.id),
-    });
-    return rows.map((r) =>
-      toFileListItem(r, r.projectId ? (names.get(r.projectId) ?? null) : null),
+    const perProject = await Promise.all(
+      projects.map((p) =>
+        fileStore.search({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          scope: { kind: "project", projectId: p.id, projectName: p.name },
+        }),
+      ),
     );
+    return perProject.flat();
   }
 
   async listConversations(params: {

@@ -35,6 +35,11 @@ process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 // branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
 // flip config.projects.enabled to false locally.
 process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
+// Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
+// independent of the dev .env. The filesystem-specific suites opt in by
+// overriding config.fileStorage at runtime against a temp root.
+process.env.ARCHESTRA_FILE_STORAGE_PROVIDER = "db";
+process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

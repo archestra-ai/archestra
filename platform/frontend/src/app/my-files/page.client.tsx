@@ -50,8 +50,8 @@ function MyFilesList() {
         description="This permanently removes the file from your storage. Chats that linked to it will no longer be able to download it."
         isPending={deleteFile.isPending}
         onConfirm={async () => {
-          if (pendingDelete?.id) {
-            await deleteFile.mutateAsync({ id: pendingDelete.id });
+          if (pendingDelete) {
+            await deleteFile.mutateAsync({ ref: pendingDelete.downloadRef });
             setPendingDelete(null);
           }
         }}
@@ -60,11 +60,11 @@ function MyFilesList() {
       />
       <FilePreviewSheet
         file={
-          previewing?.id
+          previewing
             ? {
                 name: previewing.filename,
                 mimeType: previewing.mimeType,
-                contentUrl: sandboxArtifactUrl(previewing.id),
+                contentUrl: sandboxArtifactUrl(previewing.downloadRef),
               }
             : null
         }
@@ -81,7 +81,7 @@ function MyFilesList() {
               <div key="(own)" className="overflow-hidden rounded-md border">
                 {group.files.map((file, i) => (
                   <FileRow
-                    key={file.id ?? file.filename}
+                    key={file.downloadRef}
                     file={file}
                     withBorder={i > 0}
                     onDelete={setPendingDelete}
@@ -147,7 +147,7 @@ function ProjectGroup({
           ) : (
             group.files.map((file, i) => (
               <FileRow
-                key={file.id ?? `${group.project}/${file.filename}`}
+                key={file.downloadRef}
                 file={file}
                 withBorder={i > 0}
                 onDelete={onDelete}
@@ -179,7 +179,7 @@ function FileRow({
     <div
       className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${withBorder ? "border-t" : ""} ${isPreviewing ? "bg-muted" : ""}`}
     >
-      {file.id ? (
+      {file.downloadable ? (
         <button
           type="button"
           onClick={() => onPreview(file)}
@@ -196,10 +196,10 @@ function FileRow({
       <span className="hidden w-44 shrink-0 text-right text-muted-foreground sm:block">
         {new Date(file.createdAt).toLocaleString()}
       </span>
-      {file.id ? (
+      {file.downloadable ? (
         <>
           <a
-            href={sandboxArtifactUrl(file.id)}
+            href={sandboxArtifactUrl(file.downloadRef)}
             download={file.filename}
             className="text-muted-foreground hover:text-foreground"
             aria-label={`Download ${file.filename}`}
@@ -219,8 +219,8 @@ function FileRow({
         <span
           role="img"
           className="text-muted-foreground/50"
-          title="Added outside the app"
-          aria-label={`${file.filename} was added outside the app; download unavailable`}
+          title="Download unavailable"
+          aria-label={`${file.filename}: download unavailable`}
         >
           <Download className="h-4 w-4" />
         </span>

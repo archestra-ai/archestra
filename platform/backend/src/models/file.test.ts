@@ -1,5 +1,28 @@
 import { ConversationModel, FileModel, ProjectModel } from "@/models";
+import { FileNameExistsError } from "@/models/file";
 import { expect, test } from "@/test";
+
+/** Insert a db-backed row directly (orchestration is FileStore's job). */
+function insert(params: {
+  organizationId: string;
+  userId: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  filename: string;
+}) {
+  return FileModel.insertRow({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    projectId: params.projectId ?? null,
+    conversationId: params.conversationId ?? null,
+    filename: params.filename,
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    storageProvider: "db",
+    data: Buffer.from("hi"),
+    objectKey: null,
+  });
+}
 
 test("listForUser returns the user's own files and excludes project files", async ({
   makeUser,
@@ -14,25 +37,16 @@ test("listForUser returns the user's own files and excludes project files", asyn
     description: null,
   });
 
-  const own = await FileModel.create({
+  const own = await insert({
     organizationId: org.id,
     userId: user.id,
-    projectId: null,
-    conversationId: null,
     filename: "mine.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
-  await FileModel.create({
+  await insert({
     organizationId: org.id,
     userId: user.id,
     projectId: project.id,
-    conversationId: null,
     filename: "proj.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
 
   const mine = await FileModel.listForUser({
@@ -63,25 +77,17 @@ test("listByConversation returns only the caller's files in that conversation", 
     agentId: agent.id,
   });
 
-  const mine = await FileModel.create({
+  const mine = await insert({
     organizationId: org.id,
     userId: me.id,
-    projectId: null,
     conversationId: conv.id,
     filename: "mine.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
-  await FileModel.create({
+  await insert({
     organizationId: org.id,
     userId: other.id,
-    projectId: null,
     conversationId: conv.id,
     filename: "theirs.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
 
   const listed = await FileModel.listByConversation({
@@ -91,4 +97,20 @@ test("listByConversation returns only the caller's files in that conversation", 
   });
   expect(listed.map((r) => r.filename)).toEqual(["mine.txt"]);
   expect(listed[0].id).toBe(mine.id);
+});
+
+test("insertRow rejects a duplicate filename in the same owner scope", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    filename: "dup.txt",
+  });
+  await expect(
+    insert({ organizationId: org.id, userId: user.id, filename: "dup.txt" }),
+  ).rejects.toBeInstanceOf(FileNameExistsError);
 });

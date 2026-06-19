@@ -48,9 +48,10 @@ export function useDeleteSandboxFile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
+    // `ref` is a row UUID or an `fd_` handle for a hand-dropped (disk-only) file.
+    mutationFn: async ({ ref }: { ref: string }) => {
       const { error } = await deleteSkillSandboxArtifact({
-        path: { artifactId: id },
+        path: { artifactId: ref },
       });
       if (error) {
         handleApiError(error);

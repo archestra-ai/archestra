@@ -249,6 +249,22 @@ archestra:
     # Set to a positive integer such as 1 to enable during targeted investigations.
     heapSnapshotsNearHeapLimit: 0
 
+  # Persistent "My Files" file storage. provider "db" (default) keeps bytes in
+  # Postgres; "filesystem" stores them on a PVC. When filesystem, the chart
+  # creates a PVC unless `existingClaim` names a pre-provisioned one.
+  fileStorage:
+    provider: db
+    filesystem:
+      mountPath: /data/archestra_results
+      size: 50Gi
+      # "" uses the cluster default StorageClass.
+      storageClassName: ""
+      # multi-replica / HPA needs ReadWriteMany.
+      accessModes:
+        - ReadWriteOnce
+      # set to reuse a pre-provisioned PVC instead of a chart-created one.
+      existingClaim: ""
+
   # Init containers configuration
   initContainers:
     # Wait for PostgreSQL to be ready before starting the application

@@ -34,6 +34,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -407,16 +408,26 @@ export function ChatSidebarSection({
   return (
     <>
       {isLoading ? (
-        <SidebarMenuSub className={subClass}>
-          <SidebarMenuSubItem>
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-              <span className="text-xs text-muted-foreground">
-                Loading chats...
-              </span>
-            </div>
-          </SidebarMenuSubItem>
-        </SidebarMenuSub>
+        <SidebarGroup className="pt-0">
+          <SidebarGroupLabel>Recents</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuSub className={subClass}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <SidebarMenuSubItem key={i}>
+                      <div className="flex w-full items-center justify-between gap-1">
+                        <div className="flex h-8 w-full flex-1 items-center gap-2 rounded-md p-2">
+                          <Skeleton className="h-4 w-full bg-sidebar-foreground/10" />
+                        </div>
+                      </div>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       ) : (
         <>
           {pinnedChats.length > 0 && (

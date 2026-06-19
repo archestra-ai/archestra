@@ -57,11 +57,16 @@ const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 
 export interface ArchestraPromptInputProps
   extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
+  /**
+   * Handle a submit. The textarea and the saved draft are cleared only when
+   * this resolves/returns without throwing. Throw (or reject) to reject the
+   * submit and keep both the typed text and its draft.
+   */
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
     options?: { skill?: ChatSkillMetadata },
-  ) => void;
+  ) => void | Promise<void>;
   status: ChatStatus;
   // Tools integration props
   agentId: string;
@@ -397,14 +402,24 @@ const PromptInputContent = ({
     reject: (reason?: unknown) => void;
   } | null>(null);
 
+  // The draft is cleared only once the consumer accepts the submit (a
+  // non-throwing, non-rejecting return). A rejecting consumer (e.g. the
+  // new-chat composer refusing a text+attachment submit) keeps the draft and,
+  // because the throw/rejection propagates, ai-elements also keeps the textarea
+  // — so the typed prompt survives. Mirrors the textarea-clear timing.
   const dispatchSubmit = useCallback(
     (
       outgoing: PromptInputMessage,
       e: FormEvent<HTMLFormElement>,
       options?: { skill: ChatSkillMetadata },
-    ) => {
+    ): void | Promise<void> => {
+      const result = onSubmit(outgoing, e, options);
+      if (result instanceof Promise) {
+        return result.then(() => {
+          localStorage.removeItem(storageKey);
+        });
+      }
       localStorage.removeItem(storageKey);
-      onSubmit(outgoing, e, options);
     },
     [onSubmit, storageKey],
   );
@@ -455,7 +470,7 @@ const PromptInputContent = ({
         }
       }
 
-      dispatchSubmit(outgoing, e, options);
+      return dispatchSubmit(outgoing, e, options);
     },
     [
       canDebug,
@@ -472,9 +487,20 @@ const PromptInputContent = ({
     const pending = pendingSubmissionRef.current;
     pendingSubmissionRef.current = null;
     setSensitiveDataDialogOpen(false);
-    if (pending) {
-      dispatchSubmit(pending.outgoing, pending.e, pending.options);
-      pending.resolve();
+    if (!pending) return;
+    try {
+      const result = dispatchSubmit(
+        pending.outgoing,
+        pending.e,
+        pending.options,
+      );
+      if (result instanceof Promise) {
+        result.then(pending.resolve, pending.reject);
+      } else {
+        pending.resolve();
+      }
+    } catch (err) {
+      pending.reject(err);
     }
   }, [dispatchSubmit]);
 

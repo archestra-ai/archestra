@@ -164,8 +164,15 @@ class SkillSandboxRuntimeService {
           timeoutSeconds,
         });
       } catch (dbError) {
+        // never surface the raw driver error: it embeds the full INSERT SQL and
+        // every parameter (command text + stdout) and is unparseable to the
+        // model. Keep the detail in the log; hand the agent an actionable line.
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist command result",
+        );
         throw new SkillSandboxError(
-          `failed to persist command result: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The command ran but its output could not be saved due to an internal storage error. Try running it again; redirect large or binary output to a file and fetch it with download_file.",
         );
       }
 
@@ -246,8 +253,12 @@ class SkillSandboxRuntimeService {
           data,
         });
       } catch (dbError) {
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist artifact",
+        );
         throw new SkillSandboxError(
-          `failed to persist artifact: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The file could not be saved due to an internal storage error. Try the operation again.",
         );
       }
 
@@ -312,8 +323,12 @@ class SkillSandboxRuntimeService {
           origin: params.origin ?? null,
         });
       } catch (dbError) {
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist upload",
+        );
         throw new SkillSandboxError(
-          `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The uploaded file could not be saved due to an internal storage error. Try the upload again.",
         );
       }
       // null means the ON CONFLICT index fired and the insert was a no-op.
@@ -397,8 +412,12 @@ class SkillSandboxRuntimeService {
           installCommands,
         });
       } catch (dbError) {
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to mount skill",
+        );
         throw new SkillSandboxError(
-          `failed to mount skill: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The skill could not be mounted due to an internal storage error. Try loading the skill again.",
         );
       }
       // already mounted: ON CONFLICT made the insert a no-op.

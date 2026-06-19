@@ -70,11 +70,10 @@ export function disabledToolsNotRunMessage(toolNames: string[]): string {
 }
 
 /**
- * Soft warning prepended to a run_tool result when a short name was recovered to
- * its exact `server__tool` form. The call still ran; this steers the model to
- * pass the exact name next time so the implicit short-name fallback is not relied
- * on. Worded "interpreted as" so it reads correctly even when the dispatch then
- * failed (e.g. the self-invocation guard).
+ * Soft warning prepended to a successful run_tool result when a short name was
+ * recovered to its exact `server__tool` form. The call ran; this steers the
+ * model to pass the exact name next time so the implicit short-name fallback is
+ * not relied on.
  */
 export function recoveredShortNameNotice(
   requestedName: string,

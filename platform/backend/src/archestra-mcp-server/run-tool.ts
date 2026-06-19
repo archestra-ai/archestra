@@ -24,6 +24,7 @@ import {
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { filterToolNamesByPermission } from "./rbac";
 import {
   ambiguousShortNameMessage,
   recoveredShortNameNotice,
@@ -90,10 +91,10 @@ async function runToolHandler({
     );
   }
 
-  // Built-in recovery keeps the original short name flowing through dispatch so
-  // the existing `isArchestraShortName` routing + canonicalization apply (the
-  // canonical `archestra__` form would misroute in a custom-branded org).
-  // Third-party recovery substitutes the resolved full name.
+  // Built-in recovery keeps the original short name as the effective name:
+  // dispatch's existing `isArchestraShortName` path + resolveRunToolTargetName
+  // already canonicalize it, so recovery only adds the notice. Third-party
+  // recovery substitutes the resolved full name so dispatch routes to it.
   const effectiveName =
     recovery.kind === "thirdparty" ? recovery.fullName : requestedName;
   const result = await dispatchTool({
@@ -129,9 +130,9 @@ type ShortNameResolution =
  * delegations are taken as-is (`none`). A built-in short name is a reserved
  * namespace and wins unconditionally (`builtin`) — downstream RBAC/assignment in
  * executeArchestraTool still gates whether it runs. Otherwise the bare name is
- * matched against the suffix of the tools available to the agent (assigned plus,
- * when dynamic access is on, discoverable): exactly one match recovers it
- * (`thirdparty`), several is `ambiguous`, none is `none`.
+ * matched against the suffix of the tools available to the agent, narrowed to
+ * the same space search_tools shows (see `visibleCandidates`): exactly one match
+ * recovers it (`thirdparty`), several is `ambiguous`, none is `none`.
  */
 async function resolveShortName({
   requestedName,
@@ -154,45 +155,69 @@ async function resolveShortName({
   if (!context.agentId) {
     return { kind: "none" };
   }
-  const available = await availableToolNamesForAgent({
+  const candidates = await visibleCandidates({
+    suffix: `__${requestedName}`,
     agentId: context.agentId,
-    userId: context.userId,
-    organizationId: context.organizationId,
+    context,
   });
-  const suffix = `__${requestedName}`;
-  const matches = [
-    ...new Set(available.filter((name) => name.endsWith(suffix))),
-  ];
-  if (matches.length === 0) {
+  if (candidates.length === 0) {
     return { kind: "none" };
   }
-  if (matches.length === 1) {
-    return { kind: "thirdparty", fullName: matches[0] };
+  if (candidates.length === 1) {
+    return { kind: "thirdparty", fullName: candidates[0] };
   }
-  return { kind: "ambiguous", candidates: matches.sort() };
+  return { kind: "ambiguous", candidates: candidates.sort() };
 }
 
 /**
- * Names of every third-party tool the agent can use — its assigned tools plus,
- * when the dynamic-access setting is on, the discoverable set. Only consulted on
- * the short-name recovery path (a bare, non-built-in name), never for an exact
- * name.
+ * Tool names ending in `suffix` that the agent can actually reach in this
+ * context — its assigned tools plus, when dynamic access is on, the discoverable
+ * set, then narrowed by the same gates search_tools applies: RBAC
+ * (filterToolNamesByPermission) and the per-conversation tool selection. Without
+ * that narrowing, recovery could resolve to — or an ambiguity message could
+ * disclose — a tool the agent cannot discover here. Only consulted on the
+ * recovery path (a bare, non-built-in name), never for an exact name.
  */
-async function availableToolNamesForAgent(params: {
+async function visibleCandidates(params: {
+  suffix: string;
   agentId: string;
-  userId?: string;
-  organizationId?: string;
+  context: ArchestraContext;
 }): Promise<string[]> {
-  const assigned = await ToolModel.getMcpToolsByAgent(params.agentId);
+  const { agentId, context, suffix } = params;
+  const accessParams = {
+    agentId,
+    userId: context.userId,
+    organizationId: context.organizationId,
+  };
+  const assigned = await ToolModel.getMcpToolsByAgent(agentId);
   const names = assigned.map((tool) => tool.name);
-  if (await dynamicAccessContext(params)) {
+  if (await dynamicAccessContext(accessParams)) {
     const discoverable = await getUnassignedDiscoverableTools({
-      ...params,
+      ...accessParams,
       assignedToolNames: new Set(names),
     });
     names.push(...discoverable.map((tool) => tool.name));
   }
-  return names;
+
+  const matches = [...new Set(names.filter((name) => name.endsWith(suffix)))];
+  if (matches.length === 0) {
+    return matches;
+  }
+  const permitted = await filterToolNamesByPermission(
+    matches,
+    context.userId,
+    context.organizationId,
+  );
+  const allowed = matches.filter((name) => permitted.has(name));
+  if (allowed.length === 0 || !context.conversationId) {
+    return allowed;
+  }
+  const enabledNames = await ConversationEnabledToolModel.getEnabledToolNameSet(
+    context.conversationId,
+  );
+  return allowed.filter((name) =>
+    isToolEnabledForConversation(name, enabledNames),
+  );
 }
 
 function prependRecoveryNotice(

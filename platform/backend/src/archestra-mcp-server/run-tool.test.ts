@@ -412,6 +412,52 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
+    test("narrows ambiguous matches to the conversation's enabled tools", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const githubCatalog = await makeInternalMcpCatalog();
+      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubTool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: githubCatalog.id,
+      });
+      const gitlabTool = await makeTool({
+        name: "gitlab__search_repositories",
+        catalogId: gitlabCatalog.id,
+      });
+      await makeAgentTool(testAgent.id, githubTool.id);
+      await makeAgentTool(testAgent.id, gitlabTool.id);
+      // Custom per-conversation selection enables only the github tool, so the
+      // bare name is no longer ambiguous — it recovers to the enabled one.
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        githubTool.id,
+      ]);
+
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "Third-party response" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search_repositories" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "github__search_repositories" }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect((result.content[0] as any).text).toContain(
+        "github__search_repositories",
+      );
+    });
+
     test("a built-in short name wins over a colliding third-party tool", async ({
       makeAgentTool,
       makeInternalMcpCatalog,

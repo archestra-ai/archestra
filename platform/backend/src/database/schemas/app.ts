@@ -2,11 +2,13 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  jsonb,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AppSpec } from "@/types/app-spec";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
@@ -45,6 +47,11 @@ const appsTable = softDeletablePgTable(
     description: text("description"),
     /** Id of the starter template the app was created from, for provenance. */
     templateId: text("template_id"),
+    /**
+     * Consolidated requirements the app was refined to (mutable head; re-refining
+     * overwrites it). Null for legacy apps authored before the refine flow.
+     */
+    spec: jsonb("spec").$type<AppSpec>(),
     /**
      * Head version number, pointing at the latest `app_versions` row. Bumped in
      * the same transaction as an edit that forks a new version. Every app has at

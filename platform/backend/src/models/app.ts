@@ -145,6 +145,7 @@ class AppModel {
         version: 1,
         payload: params.payload,
         contentHash: AppVersionModel.computeContentHash(params.payload),
+        spec: app.spec,
       });
       return app;
     };
@@ -167,7 +168,9 @@ class AppModel {
    */
   static async update(params: {
     id: string;
-    patch?: Partial<Pick<App, "name" | "description" | "scope" | "templateId">>;
+    patch?: Partial<
+      Pick<App, "name" | "description" | "scope" | "templateId" | "spec">
+    >;
     version?: VersionPayload;
     teamIds?: string[];
     expectedLatestVersion?: number;
@@ -251,6 +254,9 @@ class AppModel {
             version: nextVersion,
             payload: params.version,
             contentHash,
+            // Snapshot the head spec (already reflects any spec set in this
+            // same update's patch) so the pinned html records what built it.
+            spec: app.spec,
           });
           const [bumped] = await tx
             .update(schema.appsTable)

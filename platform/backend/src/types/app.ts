@@ -3,6 +3,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
+import { AppSpecSchema } from "./app-spec";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
 
 /** Apps share the personal/team/org visibility model of agents and skills. */
@@ -49,11 +50,13 @@ export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
 // drizzle-derived schemas (internal: model layer reads/writes through these).
 export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   scope: AppScopeSchema,
+  spec: AppSpecSchema.nullable(),
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {
   scope: AppScopeSchema.optional(),
+  spec: AppSpecSchema.nullable().optional(),
 }).omit({
   id: true,
   latestVersion: true,
@@ -68,12 +71,14 @@ export const SelectAppVersionSchema = createSelectSchema(
   schema.appVersionsTable,
   {
     uiPermissions: AppUiPermissionsSchema.nullable(),
+    spec: AppSpecSchema.nullable(),
   },
 );
 export const InsertAppVersionSchema = createInsertSchema(
   schema.appVersionsTable,
   {
     uiPermissions: AppUiPermissionsSchema.nullable().optional(),
+    spec: AppSpecSchema.nullable().optional(),
   },
 ).omit({ id: true, createdAt: true });
 
@@ -142,6 +147,9 @@ export const UpdateAppSchema = z.object({
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
 });
+
+export type { AppSpec } from "./app-spec";
+export { AppSpecSchema } from "./app-spec";
 
 export type App = z.infer<typeof SelectAppSchema>;
 export type InsertApp = z.infer<typeof InsertAppSchema>;

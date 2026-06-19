@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import type { AppUiPermissions, AppVersion } from "@/types/app";
+import type { AppSpec } from "@/types/app-spec";
 
 /** The canonical, hashable payload of an app version. */
 export interface VersionPayload {
@@ -54,6 +55,8 @@ class AppVersionModel {
       version: number;
       payload: VersionPayload;
       contentHash: string;
+      /** Spec snapshot for provenance; not hashed into `contentHash`. */
+      spec?: AppSpec | null;
     },
   ): Promise<AppVersion> {
     const [version] = await tx
@@ -64,6 +67,7 @@ class AppVersionModel {
         html: params.payload.html,
         uiPermissions: params.payload.uiPermissions,
         contentHash: params.contentHash,
+        spec: params.spec ?? null,
       })
       .returning();
     if (!version) {

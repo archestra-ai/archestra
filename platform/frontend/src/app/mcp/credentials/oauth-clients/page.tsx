@@ -602,11 +602,13 @@ function RedirectUrisField({
         id="oauth-client-redirect-uris"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={"https://app.example.com/oauth/callback"}
+        placeholder={"https://your-app.example.com/oauth/callback"}
         rows={3}
       />
       <p className="text-sm text-muted-foreground">
-        One per line. The app redirects here after a user authorizes it.
+        The registering application's own callback URL(s) — where users are sent
+        after they authorize, not an address on this server. Must match the
+        <code className="mx-1">redirect_uri</code>the app sends. One per line.
       </p>
     </div>
   );

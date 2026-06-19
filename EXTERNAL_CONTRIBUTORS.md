@@ -622,3 +622,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @eyraspree-coder
 - @Yanis-Bouchelaghem
 - @grzxz
+- @vishalpatil-45

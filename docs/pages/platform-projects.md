@@ -12,8 +12,6 @@ Check ../docs_writer_prompt.md before changing this file.
 
 A project is a named collection of chats that own a shared set of result files. Chats started in a project belong to it for their lifetime, files the agent saves are owned by the project rather than the individual author, and the project's page lists every chat and file in one place. Use a project to keep a body of work — its conversations, its outputs, and its recurring tasks — together and optionally shared with teammates.
 
-Ships behind `ARCHESTRA_PROJECTS_ENABLED` (off by default). See [Deployment](./platform-deployment).
-
 ## Sharing
 
 A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) stay owner-only. Deleting a project keeps its chats as ordinary conversations but removes its files.

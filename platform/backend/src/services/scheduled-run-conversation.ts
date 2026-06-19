@@ -30,7 +30,7 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  */
 
 /** A short title seeded from the trigger's message template. */
-export function buildRunConversationSeedTitle(prompt: string): string {
+function buildRunConversationSeedTitle(prompt: string): string {
   const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
   if (!normalizedPrompt) {
     return "Scheduled run";

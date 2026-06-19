@@ -14,7 +14,7 @@ async function makeProject(params: {
 }
 
 describe("ProjectModel", () => {
-  test("create/find/updateDescription/delete round-trip", async ({
+  test("create/find/update/delete round-trip", async ({
     makeUser,
     makeOrganization,
   }) => {
@@ -46,13 +46,14 @@ describe("ProjectModel", () => {
       }),
     ).toBeNull();
 
-    await ProjectModel.updateDescription({
+    await ProjectModel.update({
       id: project.id,
-      description: "all the things",
+      fields: { description: "all the things", icon: "🔬", name: "research-2" },
     });
-    expect((await ProjectModel.findById(project.id))?.description).toBe(
-      "all the things",
-    );
+    const updated = await ProjectModel.findById(project.id);
+    expect(updated?.description).toBe("all the things");
+    expect(updated?.icon).toBe("🔬");
+    expect(updated?.name).toBe("research-2");
 
     await ProjectModel.delete(project.id);
     expect(await ProjectModel.findById(project.id)).toBeNull();

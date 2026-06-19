@@ -7,7 +7,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -334,7 +333,6 @@ function McpAppContainer({
   fillContainer?: boolean;
 }) {
   const isFullscreen = displayMode === "fullscreen";
-  const containerRef = useRef<HTMLDivElement>(null);
   const [bounds, setBounds] = useState<{
     top: number;
     left: number;
@@ -379,7 +377,6 @@ function McpAppContainer({
 
   return (
     <div
-      ref={containerRef}
       className={cn(
         "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group",
         isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",

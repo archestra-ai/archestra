@@ -22,7 +22,7 @@ export function ConversationFilesPanel({
   onClose,
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
-  const { generated, attachments, myFiles, myFilesTitle } =
+  const { generated, attachments, referenced, referencedTitle } =
     assembleFileSections({
       files,
       artifact,
@@ -33,7 +33,7 @@ export function ConversationFilesPanel({
     hasArtifact ? "artifact" : null,
   );
 
-  const all = [...generated, ...attachments, ...myFiles];
+  const all = [...generated, ...attachments, ...referenced];
   const selected = all.find((f) => f.id === selectedId) ?? null;
 
   // download_file outputs only (the artifact has its own default handling).
@@ -103,7 +103,7 @@ export function ConversationFilesPanel({
   if (
     generated.length === 0 &&
     attachments.length === 0 &&
-    myFiles.length === 0
+    referenced.length === 0
   ) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
@@ -149,8 +149,8 @@ export function ConversationFilesPanel({
           onSelect={setSelectedId}
         />
         <FileSection
-          title={myFilesTitle}
-          items={myFiles}
+          title={referencedTitle}
+          items={referenced}
           selectedId={selectedId}
           onSelect={setSelectedId}
         />

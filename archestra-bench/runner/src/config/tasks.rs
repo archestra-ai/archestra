@@ -24,7 +24,7 @@ pub fn load_task(task_dir: &Path) -> Result<Task, TaskConfigError> {
         .to_string();
     let ctx = format!("task {task_id:?}");
 
-    if !toml_util::is_slug(&task_id) {
+    if !archestra_bench_core::is_slug(&task_id) {
         return Err(TaskConfigError(format!(
             "{ctx}: task dir name must be lowercase alphanumeric with dashes (slug-safe)"
         )));

@@ -94,7 +94,7 @@ class SkillSandboxRuntimeService {
 
   async runCommand(params: RunCommandParams): Promise<CommandResult> {
     this.ensureEnabled();
-    validateCommand(params.command);
+    validateCommand(params.command, params.cwd ?? null);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
@@ -169,17 +169,25 @@ class SkillSandboxRuntimeService {
         );
       }
 
+      // appendCommand strips NUL bytes that Postgres `text` columns reject, so
+      // binary piped to stdout no longer crashes the insert. Return the
+      // persisted values (what was actually stored) and flag when stripping
+      // changed the output, so the model can be told its text is incomplete.
+      const binaryStripped =
+        row.stdout !== executed.stdout || row.stderr !== executed.stderr;
+
       return {
         commandId: row.id,
         sandboxId: params.sandboxId,
         command: params.command,
         cwd: params.cwd ?? null,
-        stdout: executed.stdout,
-        stderr: executed.stderr,
+        stdout: row.stdout,
+        stderr: row.stderr,
         exitCode: executed.exitCode,
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,
         truncated: executed.truncated,
+        binaryStripped,
         stagingNotices,
       };
     });
@@ -724,9 +732,16 @@ function shouldRecordOnFailure(error: unknown): boolean {
   return error.code === "ARCHESTRA_INTERNAL";
 }
 
-function validateCommand(command: string): void {
+function validateCommand(command: string, cwd: string | null): void {
   if (!command.trim()) {
     throw new SkillSandboxError("command must be a non-empty string");
+  }
+  // Reject NUL in the inputs up front: a `text` column can't store it, and
+  // silently stripping it would replay a different command than ran. stdout/
+  // stderr are stripped instead (they legitimately carry binary) — see
+  // SkillSandboxReplayEventModel.appendCommand.
+  if (command.includes("\0") || cwd?.includes("\0")) {
+    throw new SkillSandboxError("command and cwd must not contain NUL bytes");
   }
   if (
     Buffer.byteLength(command, "utf8") > SKILL_SANDBOX_LIMITS.maxCommandBytes

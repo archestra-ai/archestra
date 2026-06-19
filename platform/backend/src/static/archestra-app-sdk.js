@@ -113,16 +113,25 @@
   const context = window.__ARCHESTRA_APP_CONTEXT__ || {};
 
   const connectPromise = (async () => {
-    // Prefer the bundle URL the backend embedded in the bootstrap context
-    // (absolute, present in any host); fall back to the proxy-injected global
-    // for the same-origin sandbox path.
-    const sdkUrl = context.sdkUrl || window.__ARCHESTRA_APP_SDK_URL__;
-    if (!sdkUrl) {
-      throw new Error(
-        "Archestra Apps SDK: host did not provide the guest SDK URL",
-      );
+    // A strict foreign host (claude.ai) refuses any cross-origin <script src>,
+    // so the connector inlines the ext-apps bundle ahead of this script and
+    // exposes it as a global — prefer it and never touch the network. Otherwise
+    // (Archestra's own render) import it from the platform origin the host's CSP
+    // allows.
+    let App;
+    let PostMessageTransport;
+    const preloaded = window.__ARCHESTRA_EXT_APPS__;
+    if (preloaded && preloaded.App && preloaded.PostMessageTransport) {
+      ({ App, PostMessageTransport } = preloaded);
+    } else {
+      const sdkUrl = context.sdkUrl || window.__ARCHESTRA_APP_SDK_URL__;
+      if (!sdkUrl) {
+        throw new Error(
+          "Archestra Apps SDK: host did not provide the guest SDK URL",
+        );
+      }
+      ({ App, PostMessageTransport } = await import(sdkUrl));
     }
-    const { App, PostMessageTransport } = await import(sdkUrl);
     // the guest bundle observes document.body for size reporting at connect
     // time; a blocking <head> script (e.g. a CDN library) can let the
     // handshake win the race against <body> parsing, so wait for the DOM.
@@ -148,6 +157,25 @@
   // the connect failure is already reported above; don't double-report when an
   // app never awaits ready
   ready.catch(() => {});
+
+  // A connect that neither resolves nor rejects means the host accepted our
+  // postMessage but never answered ui/initialize — its sandbox doesn't relay to
+  // an MCP-Apps bridge (a wrapper/proxy frame, or a non-conformant host). That
+  // failure is otherwise invisible (the app just sees a forever-pending ready),
+  // so surface it as a diagnostic. A resolve or reject cancels it.
+  const HANDSHAKE_TIMEOUT_MS = 10000;
+  const handshakeTimer = setTimeout(() => {
+    postDiagnostic(
+      "error",
+      "host handshake (ui/initialize) did not complete within " +
+        HANDSHAKE_TIMEOUT_MS +
+        "ms — the host may not relay postMessage to its MCP-Apps bridge",
+    );
+  }, HANDSHAKE_TIMEOUT_MS);
+  connectPromise.then(
+    () => clearTimeout(handshakeTimer),
+    () => clearTimeout(handshakeTimer),
+  );
 
   // Canonical built-in tool names. Kept in sync with @archestra/shared
   // constants by a backend drift-guard test (app-sdk-injection.test.ts).

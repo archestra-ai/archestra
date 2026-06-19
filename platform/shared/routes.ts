@@ -30,7 +30,6 @@ export const RouteId = {
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
-  GrantToolToAgent: "grantToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
   AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",

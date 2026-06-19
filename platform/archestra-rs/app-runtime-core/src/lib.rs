@@ -14,4 +14,4 @@ pub use diagnostics::{
     DiagnosticEntry, cap_diagnostic_entries, escape_angle_brackets, format_diagnostic_entry_lines,
     merge_diagnostic_entries,
 };
-pub use envelope::prepare_app_envelope;
+pub use envelope::{InlineAssets, prepare_app_envelope, prepare_app_envelope_with_assets};

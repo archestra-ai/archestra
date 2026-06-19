@@ -35,6 +35,7 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
@@ -628,7 +629,19 @@ function createTracedFetch(): typeof globalThis.fetch {
     for (const [key, value] of Object.entries(carrier)) {
       headers.set(key, value);
     }
-    return globalThis.fetch(input, { ...init, headers });
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults
+    // untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+
+    if (!dispatcher) {
+      return globalThis.fetch(input, { ...init, headers });
+    }
+
+    return globalThis.fetch(input, {
+      ...init,
+      headers,
+      dispatcher,
+    } as RequestInit);
   };
 }
 

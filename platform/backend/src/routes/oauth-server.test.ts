@@ -5,7 +5,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { parseTrustProxy } from "@/config";
+import config, { parseTrustProxy } from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -76,6 +76,41 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
       expect(body.resource).toBe("http://localhost:9000/v1/mcp/test-id");
       expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
+    });
+
+    test("returns app-connector metadata when the apps feature is enabled", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = true;
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
+          headers: { host: "localhost:9000" },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().resource).toBe(
+          "http://localhost:9000/api/mcp/app/11111111-1111-1111-1111-111111111111",
+        );
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
+    });
+
+    test("app-connector discovery is dark (404) when the apps feature is disabled", async () => {
+      const original = config.apps.enabled;
+      (config.apps as { enabled: boolean }).enabled = false;
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
+          headers: { host: "localhost:9000" },
+        });
+
+        expect(response.statusCode).toBe(404);
+      } finally {
+        (config.apps as { enabled: boolean }).enabled = original;
+      }
     });
   });
 

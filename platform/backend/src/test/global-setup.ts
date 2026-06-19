@@ -19,9 +19,17 @@ import os from "node:os";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
+import { buildExtAppsInlineBundle } from "../standalone-scripts/build-ext-apps-inline";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 export default async function setup() {
+  // The MCP-App connector inlines this generated, gitignored bundle and the
+  // connector route tests read it, so build it once if a fresh checkout (CI)
+  // hasn't — `build`/`dev` generate it via tsdown otherwise.
+  if (!fs.existsSync(path.resolve("src/static/ext-apps-app.global.js"))) {
+    buildExtAppsInlineBundle();
+  }
+
   const pg = new PGlite("memory://", { extensions: { vector } });
 
   for (const migrationSql of getMigrationsSql()) {

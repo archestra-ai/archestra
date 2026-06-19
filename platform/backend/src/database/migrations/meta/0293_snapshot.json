@@ -1,5 +1,5 @@
 {
-  "id": "dca44402-14aa-46d1-85cf-52802675dc9d",
+  "id": "3c566a39-555d-4cb2-985f-aaded881c957",
   "prevId": "742af067-3983-4d81-ac69-d6dd1ea0d7f3",
   "version": "7",
   "dialect": "postgresql",
@@ -1244,6 +1244,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'full'"
+        },
+        "access_all_tools": {
+          "name": "access_all_tools",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
@@ -6070,6 +6077,12 @@
           "notNull": true,
           "default": false
         },
+        "dynamic_connection_mcp_server_id": {
+          "name": "dynamic_connection_mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "server_url": {
           "name": "server_url",
           "type": "text",
@@ -6819,6 +6832,207 @@
         "kb_documents_connector_id_knowledge_base_connectors_id_fk": {
           "name": "kb_documents_connector_id_knowledge_base_connectors_id_fk",
           "tableFrom": "kb_documents",
+          "tableTo": "knowledge_base_connectors",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kb_uploaded_files": {
+      "name": "kb_uploaded_files",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'org'"
+        },
+        "team_ids": {
+          "name": "team_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_size": {
+          "name": "file_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_data": {
+          "name": "file_data",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blob_storage_provider": {
+          "name": "blob_storage_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blob_storage_key": {
+          "name": "blob_storage_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processing_status": {
+          "name": "processing_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'completed'"
+        },
+        "processing_error": {
+          "name": "processing_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "kb_uploaded_files_connector_id_idx": {
+          "name": "kb_uploaded_files_connector_id_idx",
+          "columns": [
+            {
+              "expression": "connector_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_uploaded_files_organization_id_idx": {
+          "name": "kb_uploaded_files_organization_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_uploaded_files_org_content_hash_idx": {
+          "name": "kb_uploaded_files_org_content_hash_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_uploaded_files_content_hash_uidx": {
+          "name": "kb_uploaded_files_content_hash_uidx",
+          "columns": [
+            {
+              "expression": "connector_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "kb_uploaded_files_connector_id_knowledge_base_connectors_id_fk": {
+          "name": "kb_uploaded_files_connector_id_knowledge_base_connectors_id_fk",
+          "tableFrom": "kb_uploaded_files",
           "tableTo": "knowledge_base_connectors",
           "columnsFrom": [
             "connector_id"

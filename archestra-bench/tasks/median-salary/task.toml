@@ -1,5 +1,5 @@
 [[stages]]
-text = """Below is a CSV of employee records with a salary column (alongside name and department). Compute the **median** of the salary values. Some salary cells are blank or non-numeric -- ignore those and take the median over the numeric salaries only. Use the sandbox to do the computation. Submit your answer with result = {"median_salary": <integer>}.
+text = """Below is a CSV of employee records with a salary column (alongside name and department). Compute the **median** salary across all employees. Submit your answer with result = {"median_salary": <integer>}.
 
 ```csv
 {{file:inputs/salaries.csv}}

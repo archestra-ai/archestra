@@ -2,7 +2,6 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
-  ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -27,7 +26,6 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
-  TeamModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
@@ -40,17 +38,13 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EmbeddingStatusSchema,
-  ErrorResponsesSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
-  UploadedFileProcessingStatusSchema,
 } from "@/types";
-import { sanitizeAttachmentContentType } from "./chat/attachment-content-type";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),

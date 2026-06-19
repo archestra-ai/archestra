@@ -619,3 +619,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @clutchpbcfo
 - @kish-00
 - @PANTOK-cmyk
+- @eyraspree-coder
+- @Yanis-Bouchelaghem
+- @grzxz
+- @vishalpatil-45
+- @rokieg77-alt

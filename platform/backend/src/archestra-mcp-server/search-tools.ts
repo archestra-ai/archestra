@@ -16,6 +16,7 @@ import {
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
+import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -23,7 +24,6 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
-import { getUnassignedDiscoverableTools } from "./tool-auto-assign";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -80,6 +80,11 @@ const InputParameterSchema = z.object({
     .describe(
       "One-level summary of nested properties for object (or array-of-object) parameters.",
     ),
+  hasHiddenDetail: z
+    .boolean()
+    .describe(
+      "True when the compact summary elides object content — a freeform/extensible object, or nesting deeper than the one level shown. Rendered as a trailing '…' so the model knows to consult the full schema.",
+    ),
 });
 
 type InputParameterSummary = z.infer<typeof InputParameterSchema>;
@@ -106,7 +111,9 @@ const SearchToolsOutputSchema = z.object({
   hint: z
     .string()
     .nullable()
-    .describe("Actionable guidance when results were truncated or empty."),
+    .describe(
+      "Actionable guidance when results were truncated, empty, or when some query terms matched no tool text.",
+    ),
   tools: z.array(
     z.object({
       toolName: z
@@ -128,11 +135,15 @@ const SearchToolsOutputSchema = z.object({
       params: z
         .string()
         .describe(
-          "Compact one-line input signature. Parameters are joined by '; ', each rendered as " +
-            "`name<!|?>:<type>` where `!` marks required and `?` optional. Object parameters are " +
-            "expanded one level as `{child<!|?>:type, …}`, enums as `enum(<json-values>)`, and a " +
-            "trailing ` — description` is added when available. Empty string when the tool takes " +
-            `no input. Pass matching values inside tool_args when calling ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+          "Compact one-line input signature — a summary, not the full schema. Parameters are " +
+            "joined by '; ', each rendered as `name<!|?>:<type>` where `!` marks required and `?` " +
+            "optional. Object parameters are expanded one level as `{child<!|?>:type, …}`, enums as " +
+            "`enum(<json-values>)`, and a trailing ` — description` is added when available. A " +
+            "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
+            "more deeply nested) — consult the task instructions or the full schema for its shape. " +
+            "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
+            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error describes ` +
+            "the expected input (for third-party tools, the full input schema).",
         ),
     }),
   ),
@@ -178,6 +189,7 @@ const registry = defineArchestraTools([
       });
 
       let matches: SearchCandidate[];
+      let unmatchedTerms: string[] = [];
       if (args.mode === "regex") {
         const result = rankCandidatesByRegex(searchableTools, args.query);
         if (!result.ok) {
@@ -185,9 +197,11 @@ const registry = defineArchestraTools([
         }
         matches = result.matches;
       } else {
-        matches = rankCandidatesByKeyword(
+        const preparedQuery = prepareSearchQuery(args.query);
+        matches = rankCandidatesByKeyword(searchableTools, preparedQuery);
+        unmatchedTerms = findUnmatchedQueryTerms(
           searchableTools,
-          prepareSearchQuery(args.query),
+          preparedQuery,
         );
       }
 
@@ -199,6 +213,7 @@ const registry = defineArchestraTools([
         truncated,
         limit: args.limit,
         searchableTools,
+        unmatchedTerms,
       });
 
       const structured = {
@@ -239,6 +254,7 @@ export const __test = {
   prepareSearchQuery,
   rankCandidatesByKeyword,
   rankCandidatesByRegex,
+  findUnmatchedQueryTerms,
   summarizeInputParameters,
   formatParamsSignature,
   makeRankingCandidate(input: {
@@ -276,13 +292,15 @@ async function getSearchableTools(params: {
   const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
-  // Widened search space: skills reference tools nobody assigned to the agent,
-  // so discovery also spans third-party tools from every catalog the user can
-  // access, plus the sandbox built-ins when the feature is on. Running such a
-  // tool is not silent — run_tool proposes granting it to the agent (or steers
-  // the user to an admin), which keeps these results actionable.
+  // Dynamic tool access: when the agent's "access all tools" setting is on,
+  // discovery also spans third-party tools from every catalog the user can
+  // access, the sandbox built-ins when the feature is on, and
+  // query_knowledge_sources when the user can access a knowledge connector.
+  // run_tool executes such a tool directly without assigning it; the MCP
+  // server's connection policy decides which credential the call uses.
   const discoverableTools = await getUnassignedDiscoverableTools({
     assignedToolNames: assignedNames,
+    agentId,
     userId,
     organizationId,
   });
@@ -313,8 +331,8 @@ async function getSearchableTools(params: {
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
-  // same row the grant flow resolves, so the description shown by search
-  // matches the row a later run_tool grant assigns.
+  // same row resolveDynamicTool picks, so the description shown by search
+  // matches the row a later run_tool call executes.
   for (const tool of filteredTools) {
     if (candidates.has(tool.name)) {
       continue;
@@ -464,6 +482,7 @@ function summarizeInputParameters(
             ? paramSchema.description
             : null,
         properties: summarizeNestedProperties(paramSchema),
+        hasHiddenDetail: objectHasHiddenDetail(paramSchema),
       };
     })
     .sort(
@@ -534,6 +553,56 @@ function nestedObjectSchema(
   return null;
 }
 
+// The object schema a parameter ultimately describes: the schema itself when it
+// is object-shaped, or its array `items` when those are. Unlike nestedObjectSchema
+// this recognizes object-typed schemas with no listed properties (opaque /
+// freeform), so an array of freeform objects is not mistaken for a leaf.
+function resolveObjectSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (isObjectSchema(schema)) {
+    return schema;
+  }
+  const items = asRecord(schema.items);
+  return isObjectSchema(items) ? items : null;
+}
+
+function isObjectSchema(schema: Record<string, unknown>): boolean {
+  return (
+    (extractSchemaType(schema)?.includes("object") ?? false) ||
+    Object.keys(asRecord(schema.properties)).length > 0
+  );
+}
+
+// Does the compact one-line rendering hide object content the model would need?
+// True for a freeform/extensible object (additionalProperties), an object whose
+// shape isn't shown at all (type object with no listed properties), or nesting
+// deeper than the one level summarizeNestedProperties emits. Resolves through
+// array items so an array of objects is judged by its element shape. Scalars and
+// fully-shown one-level objects return false (no marker). Conservative: an object
+// that merely omits `additionalProperties` is not flagged, to avoid marking every
+// object.
+function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
+  const objectSchema = resolveObjectSchema(paramSchema);
+  if (!objectSchema) {
+    return false;
+  }
+  const additionalProperties = objectSchema.additionalProperties;
+  if (
+    additionalProperties === true ||
+    (additionalProperties != null && typeof additionalProperties === "object")
+  ) {
+    return true;
+  }
+  const properties = asRecord(objectSchema.properties);
+  if (Object.keys(properties).length === 0) {
+    return true;
+  }
+  return Object.values(properties).some(
+    (value) => resolveObjectSchema(asRecord(value)) != null,
+  );
+}
+
 type PreparedSearchQuery = {
   normalizedQuery: string;
   // unique query terms — deduped so a repeated query word does not multiply its
@@ -592,6 +661,11 @@ function formatParamType(param: InputParameterSummary): string {
   if (param.enum && param.enum.length > 0) {
     const enumClause = formatEnumValues(param.enum);
     type = type ? `${type} ${enumClause}` : enumClause;
+  }
+  // mark objects whose content the compact summary could not fully show, so the
+  // model knows to consult the full schema (returned on an invalid run_tool call).
+  if (param.hasHiddenDetail) {
+    type += "…";
   }
   return type;
 }
@@ -679,24 +753,74 @@ function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
 }
 
 // Actionable next-step guidance (Anthropic recovery-error practice). Null when
-// results are complete and non-empty.
+// results are complete, non-empty, and every query term hit some tool text.
+// Clauses compose: a vocabulary-mismatch note can ride alongside the empty- or
+// truncated-result note so the model learns both what happened and which terms
+// to drop or replace.
 function buildSearchHint(params: {
   matchCount: number;
   truncated: boolean;
   limit: number;
   searchableTools: SearchCandidate[];
+  unmatchedTerms: string[];
 }): string | null {
-  const { limit, matchCount, searchableTools, truncated } = params;
+  const { limit, matchCount, searchableTools, truncated, unmatchedTerms } =
+    params;
+  const parts: string[] = [];
+
   if (matchCount === 0) {
     const servers = availableServerNames(searchableTools);
     const serverHint =
       servers.length > 0 ? ` Available servers: ${servers.join(", ")}.` : "";
-    return `No tools matched. Try broader or different keywords, or switch mode.${serverHint}`;
+    parts.push(
+      `No tools matched. Try broader or different keywords, or switch mode.${serverHint}`,
+    );
+  } else if (truncated) {
+    parts.push(
+      `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`,
+    );
   }
-  if (truncated) {
-    return `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`;
+
+  if (unmatchedTerms.length > 0) {
+    parts.push(
+      `No tool text matches these query terms: ${unmatchedTerms.join(", ")}.`,
+    );
   }
-  return null;
+
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+// Query terms the ranker cannot match against any tool. The ranker has exactly
+// two match surfaces: BM25 over indexed tokens across every field, and the
+// whole-query substring boost over name/title. So a term is unmatched only when
+// it is neither an indexed token (any field) nor a substring of any name/title.
+// Both checks are necessary: the token set alone would falsely report "repo"
+// (which matches github__search_repositories via the name substring boost), and
+// the name/title substring check alone would miss a description-only term.
+// One-sided by design — never names a term that contributed to a result; it may
+// stay silent on a term that only appears inside a name/title as a substring.
+function findUnmatchedQueryTerms(
+  candidates: SearchCandidate[],
+  query: PreparedSearchQuery,
+): string[] {
+  if (query.tokens.length === 0) {
+    return [];
+  }
+  const corpusTokens = new Set<string>();
+  let nameTitleText = "";
+  for (const candidate of candidates) {
+    const { name, title, description, argNames, argDescriptions } =
+      candidate.searchText;
+    for (const token of tokenize(
+      `${name} ${title} ${description} ${argNames} ${argDescriptions}`,
+    )) {
+      corpusTokens.add(token);
+    }
+    nameTitleText += ` ${name} ${title}`;
+  }
+  return query.tokens.filter(
+    (token) => !corpusTokens.has(token) && !nameTitleText.includes(token),
+  );
 }
 
 const MAX_HINT_SERVERS = 10;
@@ -957,7 +1081,7 @@ function visitSchema(
 // top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
 // via sandbox:execute is NOT top-level, so surface it here so the model can
-// discover it and propose granting it. Meta tools are never useful as results.
+// discover and run it. Meta tools are never useful as results.
 function isExcludedFromSearchResults(
   toolName: string,
   assignedNames: Set<string>,

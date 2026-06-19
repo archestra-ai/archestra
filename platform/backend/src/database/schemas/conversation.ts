@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ConversationOrigin } from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
@@ -63,6 +64,8 @@ const conversationsTable = pgTable("conversations", {
   projectId: uuid("project_id").references(() => projectsTable.id, {
     onDelete: "set null",
   }),
+  /** How the chat was started; `schedule_trigger` marks a scheduled run's chat. */
+  origin: text("origin").$type<ConversationOrigin>().notNull().default("user"),
   pinnedAt: timestamp("pinned_at", { mode: "date" }),
   lastMessageAt: timestamp("last_message_at", { mode: "date" })
     .notNull()

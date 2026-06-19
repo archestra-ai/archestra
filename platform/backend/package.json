@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.2.68",
+  "version": "1.2.69",
   "description": "",
   "author": "",
   "private": true,
@@ -147,6 +147,7 @@
     "quick-lru": "^7.3.0",
     "safe-regex2": "5.1.0",
     "tiktoken": "^1.0.22",
+    "undici": "7.28.0",
     "ws": "^8.20.1",
     "zod": "catalog:"
   },
@@ -161,6 +162,7 @@
     "@types/pg": "^8.18.0",
     "@types/ws": "^8.18.1",
     "@typescript/native-preview": "catalog:",
+    "esbuild": "^0.28.1",
     "knip": "^5.85.0",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",

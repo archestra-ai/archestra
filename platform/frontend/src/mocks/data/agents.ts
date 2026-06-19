@@ -29,6 +29,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     environmentId: null,
     passthroughHeaders: null,
     toolExposureMode: "full",
+    accessAllTools: false,
     builtInAgentConfig: null,
     builtIn: null,
     createdAt: "2026-01-01T00:00:00.000Z",

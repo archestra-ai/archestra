@@ -2056,8 +2056,29 @@
     {
       "idx": 293,
       "version": "7",
-      "when": 1781796590387,
-      "tag": "0293_remove_knowledge_files",
+      "when": 1781803268096,
+      "tag": "0293_dynamic_tool_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "7",
+      "when": 1781839440184,
+      "tag": "0294_projects_and_scheduled_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1781872377363,
+      "tag": "0295_conversation_file_touches",
+      "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1781896138507,
+      "tag": "0296_remove_knowledge_files",
       "breakpoints": true
     }
   ]

@@ -1,9 +1,7 @@
 import crypto from "node:crypto";
 import {
-  buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
@@ -12,27 +10,21 @@ import {
   stepCountIs,
   streamText,
 } from "ai";
+import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
+import { AgentModel, McpServerModel } from "@/models";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
 } from "@/routes/chat/errors";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
@@ -194,29 +186,6 @@ export async function executeA2AMessage(
       userId,
     });
 
-  // Build system prompt from agent's systemPrompt field
-  let systemPrompt: string | undefined;
-
-  // Build template context only when prompts use Handlebars syntax
-  let promptContext: UserSystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt)) {
-    const [userDetails, userTeams] = await Promise.all([
-      UserModel.getById(userId),
-      TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
-    ]);
-    promptContext = buildUserSystemPromptContext({
-      userName: userDetails?.name ?? "",
-      userEmail: userDetails?.email ?? "",
-      userTeams: userTeams.map((t) => t.name),
-    });
-  }
-
-  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
-
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
-  }
-
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
   // Only track delegated calls — direct A2A calls have no browser preview.
@@ -243,22 +212,13 @@ export async function executeA2AMessage(
       scheduleTriggerRunId,
     });
 
-    // eagerly list the agent's skills in the prompt — autonomous runs have no
-    // human to type a slash command — but only when the agent can load them.
-    if (
-      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in mcpTools
-    ) {
-      const skillCatalogPrompt = await buildSkillCatalogPrompt({
-        organizationId,
-        userId,
-        agentId: agent.id,
-      });
-      if (skillCatalogPrompt) {
-        systemPrompt =
-          [systemPrompt, skillCatalogPrompt].filter(Boolean).join("\n\n") ||
-          undefined;
-      }
-    }
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
 
     logger.info(
       {
@@ -267,7 +227,7 @@ export async function executeA2AMessage(
         orgId: organizationId,
         toolCount: Object.keys(mcpTools).length,
         model: selectedModel,
-        hasSystemPrompt: !!systemPrompt,
+        hasSystemPrompt: !!agent.systemPrompt,
         isolationKey,
         isDirectExecutionOutsideConversation,
       },

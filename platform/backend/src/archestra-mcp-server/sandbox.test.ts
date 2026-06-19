@@ -1,7 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
   ADMIN_ROLE_NAME,
+  TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_EDIT_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
@@ -10,6 +12,7 @@ import {
 import config from "@/config";
 import {
   ConversationAttachmentModel,
+  ConversationFileTouchModel,
   ConversationModel,
   FileModel,
   ProjectModel,
@@ -170,6 +173,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 12,
         timedOut: false,
         truncated: false,
+        binaryStripped: false,
         stagingNotices: [],
       });
   }
@@ -190,6 +194,7 @@ describe("sandbox tools (runtime enabled)", () => {
           durationMs: 1,
           timedOut: false,
           truncated: false,
+          binaryStripped: false,
           stagingNotices: [],
         });
 
@@ -231,6 +236,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 5,
         timedOut: false,
         truncated: true,
+        binaryStripped: false,
         stagingNotices: [],
       });
 
@@ -247,6 +253,63 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       // the old trailing marker is gone — no duplicate warning at the end.
       expect(text).not.toContain("(output was truncated)");
+    });
+
+    test("surfaces a binary-output warning before stdout, but not on clean text", async () => {
+      const ctx = await makeConversationCtx();
+      const spy = vi.spyOn(skillSandboxRuntimeService, "runCommand");
+      spy.mockResolvedValue({
+        commandId: "cmd-1",
+        sandboxId: "x" as any,
+        command: "cat image.png",
+        cwd: null,
+        stdout: "PNGdata\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: true,
+        stagingNotices: [],
+      });
+
+      const dirty = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "cat image.png" },
+          ctx,
+        ),
+      );
+      expect(dirty).toContain("binary (NUL) bytes");
+      expect(dirty).toContain("download_file");
+      // the model must see the warning before it starts reading the blob.
+      expect(dirty.indexOf("binary (NUL) bytes")).toBeLessThan(
+        dirty.indexOf("stdout:"),
+      );
+
+      // happy path: no binary stripped → no warning leaks into the summary.
+      spy.mockResolvedValue({
+        commandId: "cmd-2",
+        sandboxId: "x" as any,
+        command: "echo hi",
+        cwd: null,
+        stdout: "hi\n",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: false,
+        stagingNotices: [],
+      });
+      const clean = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo hi" },
+          ctx,
+        ),
+      );
+      expect(clean).not.toContain("binary (NUL) bytes");
     });
 
     test("omits the truncation warning when output is complete", async () => {
@@ -341,6 +404,62 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ sandboxId: sandboxes[0].id }),
       );
+    });
+
+    test("target {fresh:false} resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { fresh: false } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: sandboxes[0].id }),
+      );
+    });
+
+    test("target with an empty id resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "" } },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalled();
+    });
+
+    test("target with a non-empty but malformed id returns a clear error", async () => {
+      const ctx = await makeConversationCtx();
+      stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: "not-a-uuid" } },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("UUID");
     });
 
     test("target {id} from a different conversation is rejected", async () => {
@@ -1378,6 +1497,179 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   });
 });
 
+describe("edit_file / delete_file", () => {
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+  let context: ArchestraContext;
+  const originalEnabled = config.skillsSandbox.enabled;
+
+  beforeAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+  });
+  afterAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+  });
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      seedAndAssignArchestraTools,
+    }) => {
+      agent = await makeAgent({ name: "Edit Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      userId = user.id;
+      await seedAndAssignArchestraTools(agent.id);
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId,
+        userId,
+      };
+    },
+  );
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function makePlainChatCtx() {
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId: agent.id,
+      title: "plain",
+    });
+    return { ...context, conversationId: conversation.id };
+  }
+
+  async function makeProjectChatCtx(name: string) {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId,
+      name,
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: name,
+    });
+    return { project, ctx: { ...context, conversationId: conversation.id } };
+  }
+
+  function makePersonalFile(filename: string, body: string) {
+    return FileModel.create({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename,
+      mimeType: "text/plain",
+      sizeBytes: Buffer.byteLength(body),
+      data: Buffer.from(body),
+    });
+  }
+
+  test("edit_file replaces content in place and records an edit touch", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("jokes.md", "ten jokes");
+
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: file.id, content: "the one good joke" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const out = structuredOf<{ fileId: string; sizeBytes: number }>(result);
+    expect(out.fileId).toBe(file.id);
+    expect(out.sizeBytes).toBe(Buffer.byteLength("the one good joke"));
+
+    const row = await FileModel.findById(file.id);
+    expect(row?.data?.toString()).toBe("the one good joke");
+
+    const referenced = await ConversationFileTouchModel.listReferencedFiles({
+      organizationId,
+      conversationId: ctx.conversationId as string,
+      scope: { kind: "personal", userId },
+    });
+    expect(referenced.map((f) => f.id)).toEqual([file.id]);
+  });
+
+  test("edit_file resolves by filename", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("notes.txt", "old");
+
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { filename: "notes.txt", content: "new" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const row = await FileModel.findById(file.id);
+    expect(row?.data?.toString()).toBe("new");
+  });
+
+  test("edit_file requires exactly one of content / contentBase64", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("a.txt", "x");
+    const both = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: file.id, content: "a", contentBase64: "YQ==" },
+      ctx,
+    );
+    expect(both.isError).toBe(true);
+  });
+
+  test("edit_file in a project chat cannot touch a personal file", async () => {
+    const { ctx } = await makeProjectChatCtx("scoped");
+    const personal = await makePersonalFile("personal.txt", "secret");
+
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: personal.id, content: "hacked" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("project");
+    const row = await FileModel.findById(personal.id);
+    expect(row?.data?.toString()).toBe("secret");
+  });
+
+  test("delete_file removes the file", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("trash.txt", "bye");
+
+    const result = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ deleted: boolean }>(result).deleted).toBe(true);
+    expect(await FileModel.findById(file.id)).toBeNull();
+  });
+
+  test("delete_file in a project chat cannot touch a personal file", async () => {
+    const { ctx } = await makeProjectChatCtx("scoped-del");
+    const personal = await makePersonalFile("keep.txt", "stays");
+
+    const result = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { id: personal.id },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(await FileModel.findById(personal.id)).not.toBeNull();
+  });
+});
+
 describe("projects feature gating (search_files / save_result / my_file)", () => {
   const originalSandbox = config.skillsSandbox.enabled;
   const originalProjects = config.projects.enabled;
@@ -1400,6 +1692,8 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     const off = getArchestraMcpTools().map((tool) => tool.name);
     expect(off).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
     expect(off).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
+    expect(off).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
+    expect(off).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
     // the non-gated sandbox surface is still advertised
     expect(off).toContain(TOOL_RUN_COMMAND_FULL_NAME);
     expect(off).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
@@ -1410,6 +1704,8 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     for (const name of [
       TOOL_SEARCH_FILES_FULL_NAME,
       TOOL_SAVE_RESULT_FULL_NAME,
+      TOOL_EDIT_FILE_FULL_NAME,
+      TOOL_DELETE_FILE_FULL_NAME,
       TOOL_RUN_COMMAND_FULL_NAME,
       TOOL_DOWNLOAD_FILE_FULL_NAME,
       TOOL_UPLOAD_FILE_FULL_NAME,
@@ -1469,6 +1765,32 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
         code: -32601,
         message: expect.stringContaining(
           `No tool named "${TOOL_SAVE_RESULT_FULL_NAME}" exists`,
+        ),
+      });
+
+      await expect(
+        executeArchestraTool(
+          TOOL_EDIT_FILE_FULL_NAME,
+          { id: "00000000-0000-0000-0000-000000000000", content: "hi" },
+          context,
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: expect.stringContaining(
+          `No tool named "${TOOL_EDIT_FILE_FULL_NAME}" exists`,
+        ),
+      });
+
+      await expect(
+        executeArchestraTool(
+          TOOL_DELETE_FILE_FULL_NAME,
+          { id: "00000000-0000-0000-0000-000000000000" },
+          context,
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: expect.stringContaining(
+          `No tool named "${TOOL_DELETE_FILE_FULL_NAME}" exists`,
         ),
       });
     });

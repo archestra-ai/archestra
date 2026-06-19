@@ -58,6 +58,13 @@ export interface CommandResult {
   /** stdout or stderr was truncated to the configured byte cap. */
   truncated: boolean;
   /**
+   * stdout/stderr contained NUL bytes (a Postgres `text` column can't store
+   * them) that were stripped before persistence — the command produced binary
+   * output. Surfaced to the model so it redirects to a file + download_file
+   * rather than trusting the de-NUL'd text.
+   */
+  binaryStripped: boolean;
+  /**
    * Human-readable notices about chat attachments that could not be auto-staged
    * (e.g. too large). Empty when everything staged cleanly. Surfaced to the
    * model so a skipped attachment is never silently assumed present.

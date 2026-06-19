@@ -2,10 +2,12 @@ import {
   getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_EDIT_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
@@ -161,6 +163,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(result.result.capabilities.extensions).toEqual({
       [MCP_APPS_EXTENSION_ID]: {},
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+      [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
     });
   });
 
@@ -1018,6 +1021,7 @@ describe("MCP Gateway (stateless mode)", () => {
       expect(toolNames.sort()).toEqual(
         [
           TOOL_DOWNLOAD_FILE_FULL_NAME,
+          TOOL_EDIT_FILE_FULL_NAME,
           TOOL_LIST_SKILLS_FULL_NAME,
           TOOL_LOAD_SKILL_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,

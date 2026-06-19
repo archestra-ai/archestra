@@ -5,16 +5,50 @@ import { AgentModel, McpOauthClientModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
+  McpOauthClientGrantTypeSchema,
   McpOauthClientSchema,
   McpOauthClientWithSecretSchema,
 } from "@/types";
 
-const CreateMcpOauthClientBodySchema = z.object({
-  name: z.string().min(1).max(256),
-  allowedGatewayIds: z.array(z.string().uuid()).min(1),
-});
+/**
+ * Both grant types share one body shape. `grantType` defaults to
+ * `client_credentials` so existing callers keep working unchanged.
+ * - client_credentials: requires `allowedGatewayIds`; `redirectUris` is ignored.
+ * - authorization_code: requires `redirectUris`; `allowedGatewayIds` is ignored
+ *   (gateway access is governed by the acting user's permissions).
+ */
+const McpOauthClientBodySchema = z
+  .object({
+    name: z.string().min(1).max(256),
+    grantType: McpOauthClientGrantTypeSchema.default("client_credentials"),
+    allowedGatewayIds: z.array(z.string().uuid()).optional(),
+    redirectUris: z.array(z.string().url()).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.grantType === "authorization_code") {
+      if (!value.redirectUris || value.redirectUris.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["redirectUris"],
+          message:
+            "At least one redirect URI is required for authorization_code clients",
+        });
+      }
+    } else if (
+      !value.allowedGatewayIds ||
+      value.allowedGatewayIds.length === 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["allowedGatewayIds"],
+        message:
+          "At least one gateway is required for client_credentials clients",
+      });
+    }
+  });
 
-const UpdateMcpOauthClientBodySchema = CreateMcpOauthClientBodySchema;
+const CreateMcpOauthClientBodySchema = McpOauthClientBodySchema;
+const UpdateMcpOauthClientBodySchema = McpOauthClientBodySchema;
 
 const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -52,11 +86,18 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      await validateMcpOauthClientConfig({ ...body, organizationId });
+      if (body.grantType === "client_credentials") {
+        await validateMcpOauthClientConfig({
+          organizationId,
+          allowedGatewayIds: body.allowedGatewayIds ?? [],
+        });
+      }
       const { oauthClient, clientSecret } = await McpOauthClientModel.create({
         organizationId,
         name: body.name,
+        grantType: body.grantType,
         allowedGatewayIds: body.allowedGatewayIds,
+        redirectUris: body.redirectUris,
       });
       return reply.send({ ...oauthClient, clientSecret });
     },
@@ -75,12 +116,18 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      await validateMcpOauthClientConfig({ ...body, organizationId });
+      if (body.grantType === "client_credentials") {
+        await validateMcpOauthClientConfig({
+          organizationId,
+          allowedGatewayIds: body.allowedGatewayIds ?? [],
+        });
+      }
       const oauthClient = await McpOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
         allowedGatewayIds: body.allowedGatewayIds,
+        redirectUris: body.redirectUris,
       });
       if (!oauthClient) {
         throw new ApiError(404, "MCP OAuth client not found");

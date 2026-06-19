@@ -107,11 +107,13 @@ export function useCreateProject() {
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { id: string; description: string | null }) => {
-      const { error } = await updateProject({
-        path: { id: params.id },
-        body: { description: params.description },
-      });
+    mutationFn: async (
+      params: { id: string } & NonNullable<
+        archestraApiTypes.UpdateProjectData["body"]
+      >,
+    ) => {
+      const { id, ...body } = params;
+      const { error } = await updateProject({ path: { id }, body });
       if (error) {
         handleApiError(error);
         return null;

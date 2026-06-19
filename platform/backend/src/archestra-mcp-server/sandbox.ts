@@ -1,6 +1,8 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
+  TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_RESULT_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -13,6 +15,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   ConversationAttachmentModel,
+  ConversationFileTouchModel,
   EnvironmentModel,
   FileModel,
   SkillSandboxConversationGoneError,
@@ -28,7 +31,10 @@ import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
 } from "@/skills-sandbox/runtime-image";
-import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
+import {
+  type MyFileResolutionError,
+  skillSandboxArtifactService,
+} from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -67,31 +73,35 @@ const UUID_REGEX =
 // typed target — no magic strings. omitted = the conversation's default
 // sandbox (lazily created); { fresh: true } = a new isolated sandbox (its id is
 // returned); { id } = an explicit existing sandbox in the same conversation.
+// Both fields are optional and weakly typed on purpose: models routinely guess
+// `{ fresh: false }` or `{ id: "" }` meaning "the default sandbox", so the
+// schema accepts those shapes and `normalizeTarget` maps any no-op guess back to
+// the default rather than rejecting it.
 const SandboxTargetSchema = z
-  .union([
-    z
-      .strictObject({ fresh: z.literal(true) })
+  .strictObject({
+    fresh: z
+      .boolean()
+      .optional()
       .describe(
-        "Run against a brand-new isolated sandbox; its id is returned.",
+        "Set true for a brand-new isolated sandbox; its id is returned.",
       ),
-    z
-      .strictObject({
-        id: z
-          .string()
-          .trim()
-          .regex(UUID_REGEX, "must be a sandbox id (UUID)")
-          .describe("An existing sandbox id returned by an earlier call."),
-      })
-      .describe("Run against a specific existing sandbox."),
-  ])
+    id: z
+      .string()
+      .optional()
+      .describe("An existing sandbox id (UUID) returned by an earlier call."),
+  })
   .optional()
   .describe(
-    "Which sandbox to use. Omit for the conversation's default sandbox " +
-      '(created on first use). Pass `{ "fresh": true }` for a new isolated ' +
+    "Which sandbox to use. Omit (or leave empty) for the conversation's default " +
+      'sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated ' +
       'sandbox, or `{ "id": "<uuid>" }` to target a specific one.',
   );
 
 type SandboxTarget = z.infer<typeof SandboxTargetSchema>;
+
+// Canonical target intent after normalizing a (loosely typed) SandboxTarget:
+// a fresh sandbox, a specific id, or the default (undefined).
+type SandboxTargetIntent = { fresh: true } | { id: string } | undefined;
 
 const RunCommandSchema = z
   .strictObject({
@@ -139,6 +149,11 @@ const RunCommandOutputSchema = z.object({
   durationMs: z.number(),
   timedOut: z.boolean(),
   truncated: z.boolean(),
+  binaryStripped: z
+    .boolean()
+    .describe(
+      "True when NUL bytes were stripped from stdout/stderr before storage.",
+    ),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -352,6 +367,85 @@ const SaveResultOutputSchema = z.object({
   downloadUrl: z.string(),
 });
 
+const EditFileSchema = z
+  .strictObject({
+    id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Id of the file to edit (from search_files / save_result)."),
+    filename: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name.",
+      ),
+    content: z
+      .string()
+      .optional()
+      .describe("New UTF-8 text content; fully replaces the file."),
+    contentBase64: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("New base64 binary content; fully replaces the file."),
+    mimeType: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional new MIME type. Sniffed from the bytes when omitted."),
+  })
+  .refine((v) => (v.id != null) !== (v.filename != null), {
+    message: "provide exactly one of `id` or `filename`",
+  })
+  .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
+    message: "provide exactly one of `content` or `contentBase64`",
+  })
+  .describe(
+    "Replace the contents of an existing persistent file (My Files) in place, " +
+      "keeping its id and name. In a project chat only the project's files can " +
+      "be edited.",
+  );
+
+const EditFileOutputSchema = z.object({
+  fileId: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  /** See DownloadFileOutputSchema.downloadUrl. */
+  downloadUrl: z.string(),
+});
+
+const DeleteFileSchema = z
+  .strictObject({
+    id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Id of the file to delete (from search_files / save_result)."),
+    filename: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name.",
+      ),
+  })
+  .refine((v) => (v.id != null) !== (v.filename != null), {
+    message: "provide exactly one of `id` or `filename`",
+  })
+  .describe(
+    "Permanently delete a persistent file (My Files). In a project chat only " +
+      "the project's files can be deleted.",
+  );
+
+const DeleteFileOutputSchema = z.object({
+  fileId: z.string(),
+  filename: z.string(),
+  deleted: z.literal(true),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_COMMAND_SHORT_NAME,
@@ -561,6 +655,26 @@ const registry = defineArchestraTools([
           "[Sandbox] file uploaded",
         );
 
+        // Pulling a persistent file into the sandbox is a "read" — record it so
+        // the chat Files panel shows the files the agent actually touched. The
+        // upload already succeeded, so this is best-effort: a failure is logged,
+        // not surfaced as a failed tool call.
+        if (loaded.sourceFileId && context.conversationId) {
+          const { conversationId } = context;
+          const { sourceFileId } = loaded;
+          void ConversationFileTouchModel.recordTouch({
+            organizationId: guard.userCtx.organizationId,
+            conversationId,
+            fileId: sourceFileId,
+            touchKind: "read",
+          }).catch((error) => {
+            logger.warn(
+              { error, conversationId, fileId: sourceFileId },
+              "[Sandbox] failed to record file touch",
+            );
+          });
+        }
+
         return structuredSuccessResult(
           { ...result },
           `Uploaded ${result.path} (${result.sizeBytes} bytes). It is now part of the sandbox and visible to every subsequent command.`,
@@ -743,6 +857,178 @@ const registry = defineArchestraTools([
       }
     },
   }),
+  defineArchestraTool({
+    shortName: TOOL_EDIT_FILE_SHORT_NAME,
+    title: "Edit File",
+    description:
+      "Replace the contents of an existing persistent file (My Files) in " +
+      "place, keeping its id and filename — use it to revise a file you saved " +
+      "earlier (e.g. trim a list down to the one item you want to keep). " +
+      "Identify the file by `id` (from search_files / save_result) or by " +
+      "`filename`. In a project chat only the project's files can be edited. " +
+      "Requires `sandbox:execute`.",
+    schema: EditFileSchema,
+    outputSchema: EditFileOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      let data: Buffer;
+      if (args.contentBase64 != null) {
+        if (!BASE64_RE.test(args.contentBase64)) {
+          return errorResult("contentBase64 is not valid base64.");
+        }
+        data = Buffer.from(args.contentBase64, "base64");
+      } else {
+        data = Buffer.from(args.content ?? "", "utf8");
+      }
+      if (data.byteLength === 0) {
+        return errorResult("the file content is empty.");
+      }
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (data.byteLength > limit) {
+        return errorResult(
+          `the file is too large (${data.byteLength} bytes > ${limit} byte limit).`,
+        );
+      }
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
+        throw error;
+      }
+
+      const ref = args.id ?? args.filename ?? "";
+      const resolved = await skillSandboxArtifactService.resolveMyFileRef({
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+        id: args.id,
+        filename: args.filename,
+        scope: scope ? { projectId: scope.projectId } : null,
+      });
+      if ("error" in resolved) {
+        return errorResult(describeMyFileError(resolved.error, ref));
+      }
+
+      const mimeType = resolveArtifactMime({
+        buffer: data,
+        claimed: args.mimeType,
+      });
+      const updated = await FileModel.updateContent({
+        file: resolved,
+        mimeType,
+        sizeBytes: data.byteLength,
+        data,
+      });
+      if (!updated) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
+
+      logger.info(
+        {
+          fileId: updated.id,
+          sizeBytes: updated.sizeBytes,
+          projectScoped: !!scope,
+        },
+        "[Sandbox] file edited in PFS",
+      );
+
+      if (context.conversationId) {
+        const { conversationId } = context;
+        void ConversationFileTouchModel.recordTouch({
+          organizationId: guard.userCtx.organizationId,
+          conversationId,
+          fileId: updated.id,
+          touchKind: "edit",
+        }).catch((error) => {
+          logger.warn(
+            { error, conversationId, fileId: updated.id },
+            "[Sandbox] failed to record file touch",
+          );
+        });
+      }
+
+      const downloadUrl = `/api/skill-sandbox/artifacts/${updated.id}`;
+      return structuredSuccessResult(
+        {
+          fileId: updated.id,
+          filename: updated.filename,
+          mimeType: updated.mimeType,
+          sizeBytes: updated.sizeBytes,
+          downloadUrl,
+        },
+        [
+          `Updated ${updated.filename} (${updated.sizeBytes} bytes).`,
+          `Download URL (use this for links): ${downloadUrl}`,
+        ].join("\n"),
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_DELETE_FILE_SHORT_NAME,
+    title: "Delete File",
+    description:
+      "Permanently delete a persistent file (My Files), identified by `id` " +
+      "(from search_files / save_result) or by `filename`. In a project chat " +
+      "only the project's files can be deleted. Requires `sandbox:execute`.",
+    schema: DeleteFileSchema,
+    outputSchema: DeleteFileOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
+        throw error;
+      }
+
+      const ref = args.id ?? args.filename ?? "";
+      const resolved = await skillSandboxArtifactService.resolveMyFileRef({
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+        id: args.id,
+        filename: args.filename,
+        scope: scope ? { projectId: scope.projectId } : null,
+      });
+      if ("error" in resolved) {
+        return errorResult(describeMyFileError(resolved.error, ref));
+      }
+
+      const deleted = await skillSandboxArtifactService.deleteArtifactForUser({
+        artifactId: resolved.id,
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+      });
+      if (!deleted) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
+
+      logger.info(
+        { fileId: resolved.id, projectScoped: !!scope },
+        "[Sandbox] file deleted from PFS",
+      );
+
+      return structuredSuccessResult(
+        { fileId: resolved.id, filename: resolved.filename, deleted: true },
+        `Deleted ${resolved.filename}.`,
+      );
+    },
+  }),
 ] as const);
 
 export const toolEntries = registry.toolEntries;
@@ -825,6 +1111,34 @@ function ensureUsable(
 }
 
 /**
+ * Map a loosely-typed {@link SandboxTarget} to a canonical intent. Models often
+ * express "the default sandbox" as `{ fresh: false }`, `{ id: "" }`, or `{}`, so
+ * those collapse to the default (undefined). `fresh: true` wins over an id; a
+ * non-empty id is validated as a UUID and otherwise reported clearly.
+ */
+function normalizeTarget(
+  target: SandboxTarget,
+): { intent: SandboxTargetIntent } | { error: string } {
+  if (!target) {
+    return { intent: undefined };
+  }
+  if (target.fresh === true) {
+    return { intent: { fresh: true } };
+  }
+  const id = target.id?.trim();
+  if (id) {
+    if (!UUID_REGEX.test(id)) {
+      return {
+        error: `target.id must be a sandbox id (UUID). Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+      };
+    }
+    return { intent: { id } };
+  }
+  // `{ fresh: false }`, `{ id: "" }`, or `{}` — the model meant the default.
+  return { intent: undefined };
+}
+
+/**
  * Resolve a {@link SandboxTarget} to a concrete sandbox id, creating the
  * conversation default (or a fresh sandbox) as needed. Explicit ids are scoped
  * to the calling user + organization.
@@ -838,8 +1152,14 @@ async function resolveTarget(params: {
   const conversationId = context.conversationId ?? null;
   const isolationKey = context.isolationKey ?? null;
 
-  if (target && "id" in target) {
-    const sandbox = await SkillSandboxModel.findById(target.id);
+  const normalized = normalizeTarget(target);
+  if ("error" in normalized) {
+    return { error: normalized.error };
+  }
+  const intent = normalized.intent;
+
+  if (intent && "id" in intent) {
+    const sandbox = await SkillSandboxModel.findById(intent.id);
     // scope to the same org + user + conversation (or, for conversation-less
     // sandboxes, the same execution): an explicit id must not be a back door
     // to a sandbox from another conversation or another headless execution.
@@ -859,19 +1179,19 @@ async function resolveTarget(params: {
           organizationId: userCtx.organizationId,
           userId: userCtx.userId,
           conversationId,
-          targetId: target.id,
+          targetId: intent.id,
           reason: "out_of_scope_sandbox_id",
         },
         "[Sandbox] rejected out-of-scope sandbox id",
       );
       return {
-        error: `No accessible sandbox with id ${target.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+        error: `No accessible sandbox with id ${intent.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
       };
     }
     return { sandboxId: asSandboxId(sandbox.id) };
   }
 
-  if (target && "fresh" in target) {
+  if (intent && "fresh" in intent) {
     let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
     try {
       sandbox = await SkillSandboxModel.create({
@@ -988,6 +1308,25 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
+  /** Set for my_file sources — the PFS file the agent pulled in, for touch tracking. */
+  sourceFileId?: string;
+}
+
+/** Map a my_file resolution failure to a model-facing message. */
+function describeMyFileError(
+  error: MyFileResolutionError["error"],
+  ref: string,
+): string {
+  switch (error) {
+    case "ambiguous":
+      return `Multiple persistent files are named "${ref}". Run search_files and use the \`id\` of the one you mean.`;
+    case "outside_project":
+      return "This chat belongs to a project; only the project's files can be used here. Run search_files to see them.";
+    case "missing_bytes":
+      return `The persistent file ${ref} exists but its bytes are no longer in storage.`;
+    default:
+      return `No persistent file ${ref} exists. Run search_files to see what is available.`;
+  }
 }
 
 /**
@@ -1098,30 +1437,13 @@ async function loadUploadSource(params: {
           },
           "[Sandbox] rejected my_file upload",
         );
-        switch (resolved.error) {
-          case "ambiguous":
-            return {
-              error: `Multiple persistent files are named "${source.filename}". Run search_files and use the \`id\` of the one you mean.`,
-            };
-          case "outside_project":
-            return {
-              error:
-                "This chat belongs to a project; only the project's files can be used here. Run search_files to see them.",
-            };
-          case "missing_bytes":
-            return {
-              error: `The persistent file ${ref} exists but its bytes are no longer in storage.`,
-            };
-          default:
-            return {
-              error: `No persistent file ${ref} exists. Run search_files to see what is available.`,
-            };
-        }
+        return { error: describeMyFileError(resolved.error, ref) };
       }
       return {
         data: resolved.data,
         mimeType: resolved.mimeType,
         originalName: resolved.originalName,
+        sourceFileId: resolved.fileId,
       };
     }
   }
@@ -1132,6 +1454,7 @@ function formatCommandSummary(result: {
   durationMs: number;
   timedOut: boolean;
   truncated: boolean;
+  binaryStripped: boolean;
   stdout: string;
   stderr: string;
 }): string {
@@ -1143,6 +1466,14 @@ function formatCommandSummary(result: {
     lines.push(
       "Output was truncated; re-run with a narrower command " +
         "(grep/head/tail/sed) to read the rest.",
+    );
+  }
+  if (result.binaryStripped) {
+    lines.push(
+      "stdout/stderr held binary (NUL) bytes that were removed before " +
+        "storage, so the text below is incomplete. Redirect binary output to " +
+        "a file (`> out`) and fetch it with download_file, or inspect bytes " +
+        "with `xxd`/`wc -c`.",
     );
   }
   lines.push("", "stdout:", result.stdout || "(empty)");

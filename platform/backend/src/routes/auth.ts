@@ -248,7 +248,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "[auth:oauth2/authorize] Authorization request received",
       );
 
-      if (clientId && isCimdClientId(clientId)) {
+      if (
+        clientId &&
+        isCimdClientId(clientId) &&
+        config.auth.dynamicClientRegistrationEnabled
+      ) {
         try {
           await ensureCimdClientRegistered(clientId);
         } catch (error) {
@@ -376,7 +380,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // CIMD: auto-register client if client_id is a URL
       const clientId = body?.client_id as string | undefined;
-      if (clientId && isCimdClientId(clientId)) {
+      if (
+        clientId &&
+        isCimdClientId(clientId) &&
+        config.auth.dynamicClientRegistrationEnabled
+      ) {
         try {
           await ensureCimdClientRegistered(clientId);
         } catch (error) {
@@ -603,6 +611,20 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body;
+
+      // When DCR is disabled, only pre-registered OAuth clients may run OAuth
+      // flows. Reject self-registration with the RFC 7591 error shape.
+      if (!config.auth.dynamicClientRegistrationEnabled) {
+        logger.warn(
+          { clientName: body.client_name },
+          "[auth:oauth2/register] Dynamic client registration is disabled",
+        );
+        return reply.status(403).send({
+          error: "access_denied",
+          error_description:
+            "Dynamic client registration is disabled on this instance",
+        });
+      }
 
       logger.info(
         {

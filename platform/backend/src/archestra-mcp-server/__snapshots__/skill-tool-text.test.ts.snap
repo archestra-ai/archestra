@@ -74,38 +74,19 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
         "type": "string",
       },
       "target": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "description": "Run against a brand-new isolated sandbox; its id is returned.",
-            "properties": {
-              "fresh": {
-                "const": true,
-                "type": "boolean",
-              },
-            },
-            "required": [
-              "fresh",
-            ],
-            "type": "object",
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
           },
-          {
-            "additionalProperties": false,
-            "description": "Run against a specific existing sandbox.",
-            "properties": {
-              "id": {
-                "description": "An existing sandbox id returned by an earlier call.",
-                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                "type": "string",
-              },
-            },
-            "required": [
-              "id",
-            ],
-            "type": "object",
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
           },
-        ],
-        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        },
+        "type": "object",
       },
     },
     "required": [
@@ -178,38 +159,19 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
         "type": "string",
       },
       "target": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "description": "Run against a brand-new isolated sandbox; its id is returned.",
-            "properties": {
-              "fresh": {
-                "const": true,
-                "type": "boolean",
-              },
-            },
-            "required": [
-              "fresh",
-            ],
-            "type": "object",
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
           },
-          {
-            "additionalProperties": false,
-            "description": "Run against a specific existing sandbox.",
-            "properties": {
-              "id": {
-                "description": "An existing sandbox id returned by an earlier call.",
-                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                "type": "string",
-              },
-            },
-            "required": [
-              "id",
-            ],
-            "type": "object",
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
           },
-        ],
-        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        },
+        "type": "object",
       },
       "timeoutSeconds": {
         "description": "Optional wall-clock limit in seconds, capped at the deployment maximum.",
@@ -467,38 +429,19 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
         ],
       },
       "target": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "description": "Run against a brand-new isolated sandbox; its id is returned.",
-            "properties": {
-              "fresh": {
-                "const": true,
-                "type": "boolean",
-              },
-            },
-            "required": [
-              "fresh",
-            ],
-            "type": "object",
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
           },
-          {
-            "additionalProperties": false,
-            "description": "Run against a specific existing sandbox.",
-            "properties": {
-              "id": {
-                "description": "An existing sandbox id returned by an earlier call.",
-                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                "type": "string",
-              },
-            },
-            "required": [
-              "id",
-            ],
-            "type": "object",
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
           },
-        ],
-        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        },
+        "type": "object",
       },
     },
     "required": [

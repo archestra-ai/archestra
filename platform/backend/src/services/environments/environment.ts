@@ -6,9 +6,11 @@ import {
   type CreateEnvironment,
   type Environment,
   type EnvironmentList,
+  type InternalMcpCatalogServerType,
   type UpdateEnvironment,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
+import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "./remote-server-network-policy";
 
 /**
  * Provision (or update) the environment's per-env Dagger engine + egress
@@ -157,6 +159,32 @@ export async function assertValuesMatchEnvironmentRegex(params: {
     }
   } catch (e) {
     throw new ApiError(400, (e as Error).message);
+  }
+}
+
+/**
+ * Enforce that a remote MCP server's URL is reachable under its governing
+ * environment's network egress policy. No-op for self-hosted servers (their
+ * egress is enforced by the real k8s NetworkPolicy on the pod) and for
+ * unrestricted / built-in policies. Throws `ApiError(400)` when the policy
+ * would block the backend's outbound connection to the server URL.
+ *
+ * This is the create/edit-time guard, for early feedback in the form. The
+ * runtime connection guard in the MCP client enforces the same policy on actual
+ * calls, so a grandfathered server is still blocked at call time.
+ */
+export async function assertRemoteServerUrlAllowedByNetworkPolicy(params: {
+  serverType: InternalMcpCatalogServerType;
+  serverUrl: string | null | undefined;
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<void> {
+  const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy(params);
+  if (!verdict.allowed) {
+    // internal_code lets the frontend attach this to the Server URL field
+    // inline instead of a generic toast. Keep in sync with the frontend
+    // constant of the same value.
+    throw new ApiError(400, verdict.message, "remote_server_url_not_allowed");
   }
 }
 

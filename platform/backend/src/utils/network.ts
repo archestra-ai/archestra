@@ -1,4 +1,5 @@
 import { isIP, isIPv4 } from "node:net";
+import ipaddr from "ipaddr.js";
 
 /**
  * Check whether an IP address string is a loopback (localhost) address.
@@ -105,6 +106,41 @@ export function loopbackRedirectUriMatchesIgnoringPort(
       return false;
     }
   });
+}
+
+/**
+ * Whether a host (a URL hostname, possibly a bracketed IPv6 literal such as
+ * `[::1]`) is an IP-address literal rather than a domain name.
+ */
+export function isIpLiteralHost(host: string): boolean {
+  return isIP(stripIpBrackets(host)) !== 0;
+}
+
+/**
+ * Whether an IP-literal host falls within any of the given CIDR ranges. Handles
+ * bracketed IPv6 hosts and never throws on malformed input or on an IPv4/IPv6
+ * kind mismatch (those simply do not match).
+ */
+export function ipMatchesAnyCidr(host: string, cidrs: string[]): boolean {
+  let addr: ipaddr.IPv4 | ipaddr.IPv6;
+  try {
+    addr = ipaddr.parse(stripIpBrackets(host));
+  } catch {
+    return false;
+  }
+  return cidrs.some((cidr) => {
+    let range: [ipaddr.IPv4 | ipaddr.IPv6, number];
+    try {
+      range = ipaddr.parseCIDR(cidr);
+    } catch {
+      return false;
+    }
+    return addr.kind() === range[0].kind() && addr.match(range);
+  });
+}
+
+function stripIpBrackets(host: string): string {
+  return host.trim().replace(/^\[(.*)\]$/, "$1");
 }
 
 function isPrivateIpv4Address(ipAddress: string): boolean {

@@ -11,13 +11,19 @@ export const LLM_PROXY_OAUTH_SCOPE = "llm:proxy";
  */
 export const MCP_GATEWAY_OAUTH_SCOPE = "mcp";
 
+/**
+ * Standard OIDC offline-access scope. Requested by authorization_code MCP OAuth
+ * clients so the token endpoint issues a refresh token for long-running servers.
+ */
+export const OFFLINE_ACCESS_OAUTH_SCOPE = "offline_access";
+
 export const OAUTH_SCOPES = [
   MCP_GATEWAY_OAUTH_SCOPE,
   LLM_PROXY_OAUTH_SCOPE,
   "openid",
   "profile",
   "email",
-  "offline_access",
+  OFFLINE_ACCESS_OAUTH_SCOPE,
 ] as const;
 export type OAuthScope = (typeof OAUTH_SCOPES)[number];
 

@@ -1294,6 +1294,51 @@ const RENDERABLE_STREAM_EVENTS = [
   { type: "text-delta", text: "hi" },
   { type: "finish", finishReason: "stop" },
 ];
+// model began streaming a tool call but the stream ended before a completed
+// tool-call — an abortive (truncated) turn.
+const ABORTIVE_TOOL_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  { type: "start-step" },
+  { type: "tool-input-start" },
+  { type: "tool-input-delta" },
+  { type: "finish-step", finishReason: "tool-calls" },
+  { type: "finish", finishReason: "tool-calls" },
+];
+
+// Like fakeStreamResult, but fires the config's onStepFinish as the step
+// finishes during probe consumption — mimicking how real streamText invokes the
+// callback, so the route's usage-suppression guard can be exercised. The probe
+// drains a discarded attempt before any result is committed, so onStepFinish
+// here runs while hasCommittedResult is still false.
+function fakeStreamResultFiringStepFinish(
+  config: { onStepFinish?: (args: unknown) => void },
+  events: Array<Record<string, unknown>>,
+) {
+  const result = fakeStreamResult(events);
+  const baseIterator = result.fullStream[Symbol.asyncIterator];
+  result.fullStream[Symbol.asyncIterator] = () => {
+    const it = baseIterator();
+    return {
+      next: async () => {
+        const r = await it.next();
+        if (!r.done && (r.value as { type?: string })?.type === "finish") {
+          config.onStepFinish?.({
+            usage: {
+              inputTokens: 5,
+              outputTokens: 1,
+              totalTokens: 6,
+              cachedInputTokens: 0,
+            },
+            finishReason: "tool-calls",
+          });
+        }
+        return r;
+      },
+      return: it.return,
+    };
+  };
+  return result;
+}
 
 // Composition tests: the ordering and wiring between the (individually
 // unit-tested) helpers — injection-before-normalization, compaction event
@@ -1555,6 +1600,81 @@ describe("POST /api/chat handler composition", () => {
 
     // initial attempt + exactly one trim retry, then fall through to the merge.
     expect(mockStreamText).toHaveBeenCalledTimes(2);
+  });
+
+  test("retries an abortive tool call, then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() =>
+        fakeStreamResult(ABORTIVE_TOOL_CALL_STREAM_EVENTS),
+      )
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("bounds abortive tool-call retries and commits the result (tracker surfaces the incomplete call)", async ({
+    expect,
+  }) => {
+    // the merged UI stream replays the unresolved tool call so the abortive-turn
+    // tracker (piped onto the merge) can append its error chunk.
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(ABORTIVE_TOOL_CALL_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "tool-input-start", toolCallId: "t1", toolName: "x" },
+        ],
+      }),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // initial attempt + exactly one retry, then commit (the abortive-turn
+    // tracker emits IncompleteToolCall inline rather than throwing).
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+
+    const merged = mergedStreams.at(-1);
+    expect(merged).toBeDefined();
+    const chunks = (await readAll(merged as ReadableStream<unknown>)) as Array<{
+      type?: string;
+      errorText?: string;
+    }>;
+    const errorChunk = chunks.find((c) => c.type === "error");
+    expect(errorChunk?.errorText).toContain("incomplete_tool_call");
+  });
+
+  test("does not emit token-usage from a discarded abortive retry attempt", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(
+        (config: { onStepFinish?: (a: unknown) => void }) =>
+          fakeStreamResultFiringStepFinish(
+            config,
+            ABORTIVE_TOOL_CALL_STREAM_EVENTS,
+          ),
+      )
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    const usageWrites = writerEvents.filter(
+      (e) =>
+        e.kind === "write" &&
+        (e.value as { type?: string })?.type === "data-token-usage",
+    );
+    expect(usageWrites).toHaveLength(0);
   });
 
   test("injects slash-command skill activation into the model-bound messages but not the persisted ones", async ({

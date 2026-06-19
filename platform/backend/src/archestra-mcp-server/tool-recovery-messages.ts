@@ -51,20 +51,6 @@ export function toolNotEnabledForConversationMessage(toolName: string): string {
 }
 
 /**
- * Recovery message for a tool that exists and is visible to the user but is
- * not assigned to the agent, when the user lacks permission to modify the
- * agent's tools (so run_tool could not auto-assign it). The actionable next
- * step lies with the user, not the model.
- */
-export function toolNotAssignedAskAdminMessage(toolName: string): string {
-  return (
-    `Tool "${toolName}" exists but is not assigned to this agent, and the ` +
-    "current user is not allowed to change the agent's tools. Tell the user " +
-    `to ask an admin to assign "${toolName}" to this agent, then retry.`
-  );
-}
-
-/**
  * Generic discovery steer appended after an "unknown tool"/"not assigned"
  * preamble. Single source of truth for the dispatch-surface recovery hint used
  * by `executeArchestraTool` (`index.ts`).

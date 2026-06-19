@@ -13,11 +13,9 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, timeout};
 use tracing::{error, info, warn};
 
-use crate::client::{
-    AgentCreate, ChatRecordKind, ChatRunResult, ChatStreamRecord, EvalClient, FilePart,
-    apply_chat_event,
-};
-use crate::config::types::{EnvConfig, Stage, Task};
+use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_chat_event};
+use crate::client::{AgentCreate, EvalClient, FilePart};
+use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
@@ -36,9 +34,6 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
-// Agents run in search_and_run_only mode: the model gets the search_tools/run_tool meta tools and
-// discovers its assigned tools dynamically rather than seeing the full list up front.
-const AGENT_TOOL_EXPOSURE_MODE: &str = "search_and_run_only";
 // Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
 // the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
 // solves the task still closes the loop by finding and calling its submit tool instead of replying in
@@ -240,7 +235,7 @@ fn select_envs(
     env_filter: Option<&str>,
     task_filter: Option<&str>,
 ) -> Result<Vec<(EnvConfig, Vec<Task>)>, RunError> {
-    let env_names = split_names(env_filter);
+    let env_names = archestra_bench_core::split_names(env_filter);
     let chosen: Vec<EnvConfig> = match env_names {
         None => {
             let mut names: Vec<_> = envs.keys().cloned().collect();
@@ -267,7 +262,7 @@ fn select_envs(
         }
     };
 
-    let task_names = split_names(task_filter);
+    let task_names = archestra_bench_core::split_names(task_filter);
     let mut selected = Vec::new();
     let mut matched = HashSet::new();
     for env in chosen {
@@ -304,16 +299,6 @@ fn select_envs(
         ));
     }
     Ok(selected)
-}
-
-fn split_names(value: Option<&str>) -> Option<Vec<String>> {
-    let value = value?;
-    let parts: Vec<String> = value
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.is_empty() { None } else { Some(parts) }
 }
 
 /// A shared-backend env's per-lane agent + MCP, prepared up front so a lane worker can run that env's
@@ -773,6 +758,7 @@ fn infra_results_for_lane(
             "lane": lane.name,
             "provider": lane.provider,
             "model": lane.model,
+            "tool_exposure_mode": env.platform.tool_exposure_mode,
             "outcome": Outcome::AgentError.value(),
             "agent_error": format!("infra: {error}"),
             "finished_at": stamp,
@@ -851,6 +837,7 @@ async fn setup_lane_agent(
         client,
         &format!("{}-{}", env.agent_name, lane.slug()),
         &env.agent_system_prompt,
+        env.platform.tool_exposure_mode,
     )
     .await?;
     let submit_tool =
@@ -862,8 +849,12 @@ async fn ensure_agent(
     client: &EvalClient,
     name: &str,
     system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
 ) -> Result<String, RunError> {
     let existing = client.list_agents(Some(name), Some("org")).await?;
+    // Reuse by name is intra-run idempotency only: each run boots a fresh per-run database that
+    // teardown drops (see lifecycle::Instance::start), so no agent created with a different
+    // tool_exposure_mode can survive into a later run with a flipped flag.
     if let Some(agent) = existing
         .iter()
         .find(|a| a.get("name").and_then(|v| v.as_str()) == Some(name))
@@ -880,7 +871,7 @@ async fn ensure_agent(
             scope: "org".to_string(),
             agent_type: "agent".to_string(),
             system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
-            tool_exposure_mode: AGENT_TOOL_EXPOSURE_MODE.to_string(),
+            tool_exposure_mode,
         })
         .await?;
     Ok(created
@@ -1103,6 +1094,7 @@ async fn run_lane(
             &root_run_dir,
             &env.id,
             &env.agent_system_prompt,
+            env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
             &task,
@@ -1123,6 +1115,7 @@ async fn run_one(
     root_run_dir: &Path,
     env_id: &str,
     agent_system_prompt: &str,
+    tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
     task: &Task,
@@ -1158,6 +1151,7 @@ async fn run_one(
         "lane": lane.name,
         "provider": lane.provider,
         "model": lane.model,
+        "tool_exposure_mode": tool_exposure_mode,
         "model_id": resolved.model_id,
         "chat_api_key_id": resolved.api_key_id,
         "submit_tool": submit_tool,
@@ -2220,6 +2214,7 @@ async fn write_run_config(
                 "id": p.env.id,
                 "tasks": p.tasks.iter().map(|t| &t.id).collect::<Vec<_>>(),
                 "share_backend": p.share_backend(),
+                "tool_exposure_mode": p.env.platform.tool_exposure_mode,
             })
         })
         .collect();
@@ -2326,16 +2321,6 @@ mod tests {
         assert_eq!(resolve_workers(None, 0), 1);
     }
 
-    #[test]
-    fn test_split_names() {
-        assert_eq!(split_names(None), None);
-        assert_eq!(split_names(Some("")), None);
-        assert_eq!(
-            split_names(Some("a, b")),
-            Some(vec!["a".to_string(), "b".to_string()])
-        );
-    }
-
     fn dummy_task(id: &str) -> Task {
         Task {
             id: id.to_string(),
@@ -2364,6 +2349,7 @@ mod tests {
             tasks,
             tools: vec![],
             share_backend: false,
+            platform: crate::config::types::PlatformConfig::default(),
         }
     }
 
@@ -2528,6 +2514,38 @@ mod tests {
             .collect();
         // two envs, but each lane listed exactly once and in declaration order.
         assert_eq!(names, ["l1", "l2"]);
+        // each env records its active tool exposure mode (default here) for reproducibility.
+        assert_eq!(
+            config["environments"][0]["tool_exposure_mode"],
+            "search_and_run_only"
+        );
+    }
+
+    #[test]
+    fn infra_failure_run_json_records_tool_exposure_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = RunCtx {
+            root_run_dir: tmp.path().to_path_buf(),
+            run_id: "rid".to_string(),
+            api_keys: std::collections::HashMap::new(),
+            envs_dir: tmp.path().to_path_buf(),
+            update_mcp_lock: false,
+        };
+        let mut env = dummy_env("e", vec![dummy_task("t1")]);
+        env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;
+        let lane = dummy_lane("l1");
+        let progress = ProgressBar::hidden();
+        // Setup failed before any agent existed -- the env's configured flag must still land in
+        // run.json, since that is where the analyzer reads it (RunMeta).
+        infra_results_for_lane(&env, &env.tasks, &lane, &ctx, &progress, "boom");
+        let run_json = tmp
+            .path()
+            .join(run_subdir("e", "t1", &lane))
+            .join("run.json");
+        let meta: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(run_json).unwrap()).unwrap();
+        assert_eq!(meta["tool_exposure_mode"], "full");
+        assert_eq!(meta["outcome"], Outcome::AgentError.value());
     }
 
     #[tokio::test]

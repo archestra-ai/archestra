@@ -5,7 +5,6 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-  isSandboxArchestraToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
@@ -29,6 +28,7 @@ import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
   errorResult,
@@ -79,11 +79,7 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { resolveToolGrant } from "./tool-auto-assign";
-import {
-  toolDiscoverySteer,
-  toolNotAssignedAskAdminMessage,
-} from "./tool-recovery-messages";
+import { toolDiscoverySteer } from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -197,8 +193,8 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. Unassigned
-  // sandbox built-ins go through the grant flow rather than running (see below).
+  // Archestra tool the user has RBAC for, regardless of assignment. A narrow
+  // set of built-ins is exempt under dynamic tool access (see below).
   const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
@@ -304,38 +300,26 @@ async function checkToolAssignedToAgent(
   });
 }
 
-// Assignment gate. Sandbox built-ins are never auto-assigned: when an unassigned
-// sandbox tool reaches here (RBAC sandbox:execute already passed), the grant flow
-// — chat proposes it, the user confirms, the assign endpoint writes it, then the
-// call resumes assigned — is what puts it on the agent. So reaching here means it
-// was not granted; only upgrade the message to "ask an admin" when the user could
-// not have granted it anyway.
+// Assignment gate with the dynamic-access relaxation: an unassigned sandbox
+// built-in (feature on) or query_knowledge_sources (user can access a knowledge
+// connector) executes anyway when the agent's "access all tools" setting and
+// the org kill-switch allow it — nothing is assigned. RBAC already ran before
+// this gate, so e.g. the sandbox tools still require sandbox:execute.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
 ): Promise<CallToolResult | null> {
   const notAssigned = await checkToolAssignedToAgent(toolName, context);
   if (!notAssigned) return null;
+  if (!context.agentId) return notAssigned;
 
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (
-    !context.agentId ||
-    shortName == null ||
-    !config.skillsSandbox.enabled ||
-    !isSandboxArchestraToolShortName(shortName)
-  ) {
-    return notAssigned;
-  }
-
-  const grant = await resolveToolGrant({
+  const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
   });
-  return grant === "forbidden"
-    ? errorResult(toolNotAssignedAskAdminMessage(toolName))
-    : notAssigned;
+  return dynamicallyAvailable ? null : notAssigned;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

@@ -10,17 +10,16 @@ import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
-import { agentOwner } from "@/types";
+import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
+import { resolveDynamicTool, resolveRunToolTargetName } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
 } from "./helpers";
-import { resolveRunToolTargetName, resolveToolGrant } from "./tool-auto-assign";
 import {
-  toolNotAssignedAskAdminMessage,
   toolNotEnabledForConversationMessage,
   unavailableThirdPartyToolMessage,
 } from "./tool-recovery-messages";
@@ -48,7 +47,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. If you call a tool the user can access but the agent does not have yet, the user is asked to confirm adding it (or told to ask an admin) before it runs — it is not assigned silently; target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, invocation policies, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -63,8 +62,6 @@ const registry = defineArchestraTools([
           ? "archestra"
           : "third-party";
 
-      // Shared with the grant check (isToolGrantApprovable) so dispatch and the
-      // chat grant approval resolve a target name the same way.
       const resolvedName = resolveRunToolTargetName(requestedName);
 
       logger.info(
@@ -134,16 +131,16 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Gate dispatch on the assigned-tool set. An unassigned tool is never run
-      // silently: discovery widens the search space to tools the user can access,
-      // but actually putting one on the agent goes through the grant flow (chat
-      // proposes it, the user confirms, the assign endpoint writes it, then this
-      // call resumes with the tool assigned). So a miss here means the tool was
-      // not granted (or there is no UI to propose it): steer the user. The set is
+      // Gate dispatch on the assigned-tool set, then fall back to dynamic
+      // access: when the agent's "access all tools" setting is on, a tool the
+      // user can access runs directly with call-time credential resolution —
+      // nothing is written to the agent. A miss on both means the tool does
+      // not exist for this user: steer the model at search_tools. The set is
       // reused by the policy gate below so it is fetched only once.
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
+      let availableTool: Tool | null = null;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
         // agent's assigned tools, so an unassigned tool can never be enabled in
@@ -151,32 +148,34 @@ const registry = defineArchestraTools([
         if (await checkConversationGate(resolvedName)) {
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
-        const grant = await resolveToolGrant({
+        availableTool = await resolveDynamicTool({
           toolName: resolvedName,
           agentId: context.agentId,
           userId: context.userId,
           organizationId: context.organizationId,
         });
         logger.info(
-          { agentId: context.agentId, requestedName, resolvedName, grant },
+          {
+            agentId: context.agentId,
+            requestedName,
+            resolvedName,
+            dynamicallyResolved: availableTool != null,
+          },
           `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
         );
-        // "ask an admin" when the user cannot assign it; otherwise the generic
-        // recovery (the grant approval already handles the can-assign case
-        // before execution, so reaching here means it was not granted).
-        return errorResult(
-          grant === "forbidden"
-            ? toolNotAssignedAskAdminMessage(resolvedName)
-            : unavailableThirdPartyToolMessage(resolvedName),
-        );
+        if (!availableTool) {
+          return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
+      } else {
+        // The tool is assigned — enforce the per-conversation selection.
+        const gateError = await checkConversationGate(resolvedName);
+        if (gateError) return gateError;
       }
-
-      // The tool exists and is assigned — enforce the per-conversation selection.
-      const gateError = await checkConversationGate(resolvedName);
-      if (gateError) return gateError;
 
       const toolInput = args.tool_args ?? {};
       // Reuse the set computed above so the policy gate does not re-query it.
+      // A dynamically resolved tool is appended so the evaluator does not
+      // refuse it as "disabled" — invocation policies still evaluate it.
       const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
         agentId: context.agentId,
         toolName: resolvedName,
@@ -184,7 +183,9 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
         enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-        enabledToolNames: assignedToolNames,
+        enabledToolNames: availableTool
+          ? new Set([...assignedToolNames, resolvedName])
+          : assignedToolNames,
       });
       if (policyBlock) {
         return errorResult(policyBlock.refusalMessage);
@@ -205,7 +206,14 @@ const registry = defineArchestraTools([
         // mcp-client scopes per-conversation sessions (e.g. browser contexts)
         // by this key; headless executions use their isolation key so
         // concurrent runs never share a session and cleanup can close it.
-        { conversationId: context.isolationKey ?? context.conversationId },
+        // availableTool lets a tool the agent has no assignment for execute in
+        // "All tools" mode; it is only ever set after the dynamic-access gates
+        // above passed, and the MCP server's connection policy still decides
+        // which credential the call uses.
+        {
+          conversationId: context.isolationKey ?? context.conversationId,
+          availableTool: availableTool ?? undefined,
+        },
       );
 
       const callToolResult: CallToolResult = {

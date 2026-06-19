@@ -22,13 +22,17 @@ export type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
  * Run streamText, probing each attempt's stream for its first renderable event
  * before the caller merges it to the client. This lets us, before anything
  * reaches the user:
- *   - trim + retry on a context-length rejection (vLLM/LiteLLM), and
+ *   - trim + retry on a context-length rejection (vLLM/LiteLLM),
  *   - silently retry a clean-but-empty response (a stupid-model / inference
- *     glitch), then surface a stream error if it persists.
+ *     glitch), then surface a stream error if it persists, and
+ *   - retry an abortive tool call (the model started streaming tool input but
+ *     the stream ended before a completed `tool-call`), then surface the
+ *     existing IncompleteToolCall error if it persists.
  * tee() buffers the stream, so consuming the probe prefix does not drop events
- * from the caller's toUIMessageStream merge. Returning on the first
- * *renderable* event (not first text) keeps Gemini's tool-call-before-text
- * turns streaming the tool indicator promptly.
+ * from the caller's toUIMessageStream merge. Commit happens on the first
+ * *committing* event — content or a completed `tool-call`, not the opening
+ * `tool-input-start` — so an abortive tool call is caught before anything
+ * reaches the client; the cost is a slightly later tool indicator.
  *
  * A probed error other than a trimmable context-length rejection returns the
  * errored result so the caller's merge surfaces it through the existing
@@ -54,8 +58,13 @@ export async function streamTextWithRecovery(params: {
   // avoid an unbounded loop; on the cap we fall through to the merge and let
   // the existing onError surface it.
   const MAX_CONTEXT_TRIM_ATTEMPTS = 1;
+  // a truncated tool call is usually a transient provider glitch; one retry
+  // recovers most. On the cap we return the abortive result so the abortive-turn
+  // tracker surfaces IncompleteToolCall, the same outcome as before this retry.
+  const MAX_ABORTIVE_TOOL_CALL_ATTEMPTS = 2;
   let emptyResponseAttempts = 0;
   let contextTrimAttempts = 0;
+  let abortiveToolCallAttempts = 0;
   // the config the loop retries from; trim replaces its messages so a later
   // empty-response retry reuses the trimmed payload instead of resending the
   // original (too-large) one.
@@ -103,6 +112,33 @@ export async function streamTextWithRecovery(params: {
       return result;
     }
 
+    if (probe.kind === "abortive") {
+      abortiveToolCallAttempts++;
+      if (abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS) {
+        logger.warn(
+          {
+            conversationId,
+            finishReason: probe.finishReason,
+            rawFinishReason: probe.rawFinishReason,
+            attempt: abortiveToolCallAttempts,
+          },
+          "[AbortiveToolCall] tool call truncated mid-stream, retrying",
+        );
+        result = streamText(currentConfig);
+        continue;
+      }
+      // Exhausted: surface the abortive turn through the merge so the
+      // abortive-turn tracker emits IncompleteToolCall (unchanged end state).
+      logger.warn(
+        {
+          conversationId,
+          attempts: abortiveToolCallAttempts,
+        },
+        "[AbortiveToolCall] retries exhausted, surfacing incomplete tool call",
+      );
+      return result;
+    }
+
     // probe.kind === "empty": the provider finished with no content.
     emptyResponseAttempts++;
     const canRetryEmptyResponse =
@@ -143,19 +179,23 @@ export type StreamProbeEvent = {
 export type StreamProbeOutcome =
   | { kind: "renderable" }
   | { kind: "empty"; finishReason: string; rawFinishReason?: string }
+  // The model began streaming a tool call (tool-input-*) but the stream ended
+  // before the call completed (no tool-call). Recoverable like an empty turn.
+  | { kind: "abortive"; finishReason: string; rawFinishReason?: string }
   | { kind: "aborted" }
   | { kind: "error"; error: unknown };
 
 // fullStream event types that carry (or commit to) content the chat UI renders.
 // Seeing any of these means the turn is not empty and should stream normally.
+// `tool-input-*` is deliberately absent: a lone tool-input stream that never
+// reaches `tool-call` is an abortive (truncated) tool call we want to retry, so
+// the probe holds commit until the completed `tool-call` arrives. The cost is a
+// slightly later tool indicator (after args finish streaming) for healthy turns.
 const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "text-start",
   "text-delta",
   "reasoning-start",
   "reasoning-delta",
-  "tool-input-start",
-  "tool-input-delta",
-  "tool-input-end",
   "tool-call",
   "tool-result",
   // tool failure, denial, and approval-request parts are all UI-rendered turn
@@ -166,6 +206,15 @@ const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "tool-approval-request",
   "source",
   "file",
+]);
+
+// tool-input streaming events: pending, not committing. Seeing one means a tool
+// call started; if the stream ends before a committing `tool-call`, it was
+// abortive.
+const PENDING_TOOL_INPUT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "tool-input-start",
+  "tool-input-delta",
+  "tool-input-end",
 ]);
 
 // finishReasons where a content-free turn is plausibly a transient model/inference
@@ -192,6 +241,11 @@ export function isRetryableEmptyFinishReason(finishReason: string): boolean {
 export async function probeFirstRenderableEvent(
   iterator: AsyncIterator<StreamProbeEvent>,
 ): Promise<StreamProbeOutcome> {
+  // A tool call started streaming (tool-input-*) but has not yet reached a
+  // committing `tool-call`. If the stream ends in this state, the turn is
+  // abortive rather than merely empty.
+  let sawPendingToolInput = false;
+
   while (true) {
     let result: IteratorResult<StreamProbeEvent>;
     try {
@@ -201,8 +255,10 @@ export async function probeFirstRenderableEvent(
     }
 
     if (result.done) {
-      // stream ended without a terminal finish event — nothing renderable seen.
-      return { kind: "empty", finishReason: "unknown" };
+      // stream ended without a terminal finish event.
+      return sawPendingToolInput
+        ? { kind: "abortive", finishReason: "unknown" }
+        : { kind: "empty", finishReason: "unknown" };
     }
 
     const event = result.value;
@@ -211,22 +267,29 @@ export async function probeFirstRenderableEvent(
       return { kind: "renderable" };
     }
 
+    if (PENDING_TOOL_INPUT_EVENT_TYPES.has(event.type)) {
+      sawPendingToolInput = true;
+      continue;
+    }
+
     switch (event.type) {
       case "error":
         return { kind: "error", error: event.error };
       case "abort":
         return { kind: "aborted" };
-      case "finish":
-        return {
-          kind: "empty",
-          finishReason:
-            typeof event.finishReason === "string"
-              ? event.finishReason
-              : "unknown",
-          ...(typeof event.rawFinishReason === "string" && {
-            rawFinishReason: event.rawFinishReason,
-          }),
-        };
+      case "finish": {
+        const finishReason =
+          typeof event.finishReason === "string"
+            ? event.finishReason
+            : "unknown";
+        const rawFinishReason =
+          typeof event.rawFinishReason === "string"
+            ? { rawFinishReason: event.rawFinishReason }
+            : {};
+        return sawPendingToolInput
+          ? { kind: "abortive", finishReason, ...rawFinishReason }
+          : { kind: "empty", finishReason, ...rawFinishReason };
+      }
       // control parts (start, start-step, finish-step, text-end, ...) carry no
       // content on their own — keep pulling until content, finish, or error.
       default:

@@ -1,6 +1,6 @@
 {
-  "id": "e28ba511-37fb-4be7-b41c-aaab2aacf3d9",
-  "prevId": "3c8d6e9d-58f6-44b4-a62a-b8d3124b3971",
+  "id": "b86434a0-31ef-444a-a550-e67d173edcc6",
+  "prevId": "3c566a39-555d-4cb2-985f-aaded881c957",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1244,6 +1244,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'full'"
+        },
+        "access_all_tools": {
+          "name": "access_all_tools",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
@@ -6076,6 +6083,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "dynamic_connection_mcp_server_id": {
+          "name": "dynamic_connection_mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "server_url": {
           "name": "server_url",

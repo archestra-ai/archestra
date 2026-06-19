@@ -55,6 +55,50 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
+  test("reports abortive when a tool call starts but the turn finishes without a tool-call", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "tool-input-start" },
+      { type: "tool-input-delta" },
+      { type: "finish-step", finishReason: "tool-calls" },
+      { type: "finish", finishReason: "tool-calls" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "abortive",
+      finishReason: "tool-calls",
+    });
+  });
+
+  test("reports abortive when a tool-input stream ends without any finish event", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "tool-input-start" },
+      { type: "tool-input-delta" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "abortive",
+      finishReason: "unknown",
+    });
+  });
+
+  test("a completed tool call after tool-input streaming is renderable, not abortive", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "tool-input-start" },
+      { type: "tool-input-delta" },
+      { type: "tool-input-end" },
+      { type: "tool-call" },
+      { type: "finish", finishReason: "tool-calls" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "renderable",
+    });
+  });
+
   test("treats a resume turn opening with tool-output-denied as renderable", async () => {
     const events: StreamProbeEvent[] = [
       { type: "start" },

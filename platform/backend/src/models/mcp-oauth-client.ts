@@ -2,12 +2,15 @@ import { randomBytes } from "node:crypto";
 import {
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_ID_PREFIX,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
 } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, sql } from "drizzle-orm";
+import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
 import {
   MCP_OAUTH_CLIENT_METADATA_TYPE,
+  type McpOauthClientGrantType,
   McpOauthClientMetadataSchema,
 } from "@/types/mcp-oauth-client";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -40,14 +43,28 @@ class McpOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
-    allowedGatewayIds: string[];
+    grantType?: McpOauthClientGrantType;
+    allowedGatewayIds?: string[];
+    redirectUris?: string[];
   }) {
+    const grantType = params.grantType ?? "client_credentials";
+    const isAuthorizationCode = grantType === "authorization_code";
     const clientSecret = createClientSecret();
-    const clientSecretHash = await hashClientSecret(clientSecret);
+    // authorization_code secrets are verified by better-auth (deterministic
+    // hash); client_credentials secrets are verified by this model (bcrypt).
+    const clientSecretHash = isAuthorizationCode
+      ? hashOauthClientSecret(clientSecret)
+      : await hashClientSecret(clientSecret);
+    // allowedGatewayIds only governs client_credentials tokens (the gateway
+    // validator keys on it). authorization_code access is governed by the acting
+    // user's own permissions, so it is always stored empty for those clients.
     const metadata = {
       type: MCP_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      allowedGatewayIds: params.allowedGatewayIds,
+      grantType,
+      allowedGatewayIds: isAuthorizationCode
+        ? []
+        : (params.allowedGatewayIds ?? []),
     };
 
     const [client] = await db
@@ -57,12 +74,20 @@ class McpOauthClientModel {
         clientId: `${MCP_OAUTH_CLIENT_ID_PREFIX}${randomBytes(18).toString("base64url")}`,
         clientSecret: clientSecretHash,
         name: params.name,
-        redirectUris: [],
+        // authorization_code is a confidential client (client_secret_post) that
+        // additionally requires PKCE; its tokens flow through better-auth's
+        // standard authorize→token exchange and are user-bound.
+        redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
         tokenEndpointAuthMethod: "client_secret_post",
-        grantTypes: ["client_credentials"],
-        responseTypes: [],
+        grantTypes: isAuthorizationCode
+          ? ["authorization_code", "refresh_token"]
+          : ["client_credentials"],
+        responseTypes: isAuthorizationCode ? ["code"] : [],
+        requirePKCE: isAuthorizationCode,
         public: false,
-        scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+        scopes: isAuthorizationCode
+          ? [MCP_GATEWAY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
+          : [MCP_GATEWAY_OAUTH_SCOPE],
         type: "service",
         metadata,
         createdAt: new Date(),
@@ -138,11 +163,18 @@ class McpOauthClientModel {
   }
 
   static async rotateSecret(params: { id: string; organizationId: string }) {
+    // Hash the new secret with the scheme this client's grant type uses.
+    const existing = await McpOauthClientModel.findById(params);
+    if (!existing) return null;
     const clientSecret = createClientSecret();
+    const clientSecretHash =
+      existing.grantType === "authorization_code"
+        ? hashOauthClientSecret(clientSecret)
+        : await hashClientSecret(clientSecret);
     const [client] = await db
       .update(schema.oauthClientsTable)
       .set({
-        clientSecret: await hashClientSecret(clientSecret),
+        clientSecret: clientSecretHash,
         updatedAt: new Date(),
       })
       .where(
@@ -165,12 +197,25 @@ class McpOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
-    allowedGatewayIds: string[];
+    allowedGatewayIds?: string[];
+    redirectUris?: string[];
   }) {
+    // The grant type is fixed at creation; reload the client to preserve it and
+    // to apply only the fields that grant type actually uses.
+    const existing = await McpOauthClientModel.findById({
+      id: params.id,
+      organizationId: params.organizationId,
+    });
+    if (!existing) return null;
+    const isAuthorizationCode = existing.grantType === "authorization_code";
+
     const metadata = {
       type: MCP_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
-      allowedGatewayIds: params.allowedGatewayIds,
+      grantType: existing.grantType,
+      allowedGatewayIds: isAuthorizationCode
+        ? []
+        : (params.allowedGatewayIds ?? existing.allowedGatewayIds),
     };
 
     const [client] = await db
@@ -178,6 +223,9 @@ class McpOauthClientModel {
       .set({
         name: params.name,
         metadata,
+        ...(isAuthorizationCode
+          ? { redirectUris: params.redirectUris ?? existing.redirectUris }
+          : {}),
         updatedAt: new Date(),
       })
       .where(
@@ -219,7 +267,9 @@ class McpOauthClientModel {
       name: client.name,
       clientId: client.clientId,
       organizationId: client.organizationId,
+      grantType: client.grantType,
       allowedGatewayIds: [...client.allowedGatewayIds].sort(),
+      redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
@@ -255,7 +305,9 @@ function hydrateOauthClients(
         clientId: client.clientId,
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
+        grantType: metadata.grantType,
         allowedGatewayIds: metadata.allowedGatewayIds,
+        redirectUris: client.redirectUris ?? [],
         disabled: client.disabled ?? false,
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,

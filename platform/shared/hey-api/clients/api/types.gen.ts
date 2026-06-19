@@ -10906,6 +10906,7 @@ export type GetAgentsResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -11015,6 +11016,7 @@ export type CreateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        accessAllTools?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11144,6 +11146,7 @@ export type CreateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11348,6 +11351,7 @@ export type GetAllAgentsResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11527,6 +11531,7 @@ export type GetDefaultMcpGatewayResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11706,6 +11711,7 @@ export type GetDefaultLlmProxyResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11813,6 +11819,7 @@ export type ImportAgentData = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools?: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -11963,6 +11970,7 @@ export type ImportAgentResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -12235,6 +12243,7 @@ export type GetAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12335,6 +12344,7 @@ export type UpdateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        accessAllTools?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12466,6 +12476,7 @@ export type UpdateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12647,6 +12658,7 @@ export type CloneAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12831,6 +12843,7 @@ export type ExportAgentResponses = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            accessAllTools: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
             incomingEmailAllowedDomain: string | null;
@@ -12988,6 +13001,7 @@ export type RestoreAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -13806,93 +13820,6 @@ export type AssignToolToAgentResponses = {
 };
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
-
-export type GrantToolToAgentData = {
-    body: {
-        toolName: string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/tools/grant';
-};
-
-export type GrantToolToAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GrantToolToAgentError = GrantToolToAgentErrors[keyof GrantToolToAgentErrors];
-
-export type GrantToolToAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type GrantToolToAgentResponse = GrantToolToAgentResponses[keyof GrantToolToAgentResponses];
 
 export type BulkAssignToolsData = {
     body: {
@@ -25533,6 +25460,7 @@ export type GetConfigResponses = {
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
             projectsEnabled: boolean;
+            dynamicToolAccessEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -36150,6 +36078,7 @@ export type GetInternalMcpCatalogResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36282,6 +36211,7 @@ export type CreateInternalMcpCatalogItemData = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant?: boolean;
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -36478,6 +36408,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36771,6 +36702,7 @@ export type GetInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -36900,6 +36832,7 @@ export type UpdateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -37097,6 +37030,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -42874,12 +42808,14 @@ export type GetLlmOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -42891,11 +42827,13 @@ export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLl
 export type CreateLlmOauthClientData = {
     body: {
         name: string;
-        allowedLlmProxyIds: Array<string>;
-        providerApiKeys: Array<{
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedLlmProxyIds?: Array<string>;
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        redirectUris?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -42976,12 +42914,14 @@ export type CreateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -43079,11 +43019,13 @@ export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof D
 export type UpdateLlmOauthClientData = {
     body: {
         name: string;
-        allowedLlmProxyIds: Array<string>;
-        providerApiKeys: Array<{
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedLlmProxyIds?: Array<string>;
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        redirectUris?: Array<string>;
     };
     path: {
         id: string;
@@ -43166,12 +43108,14 @@ export type UpdateLlmOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -43263,12 +43207,14 @@ export type RotateLlmOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedLlmProxyIds: Array<string>;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44086,7 +44032,9 @@ export type GetMcpOauthClientsResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44098,7 +44046,9 @@ export type GetMcpOauthClientsResponse = GetMcpOauthClientsResponses[keyof GetMc
 export type CreateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -44179,7 +44129,9 @@ export type CreateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44277,7 +44229,9 @@ export type DeleteMcpOauthClientResponse = DeleteMcpOauthClientResponses[keyof D
 export type UpdateMcpOauthClientData = {
     body: {
         name: string;
-        allowedGatewayIds: Array<string>;
+        grantType?: 'client_credentials' | 'authorization_code';
+        allowedGatewayIds?: Array<string>;
+        redirectUris?: Array<string>;
     };
     path: {
         id: string;
@@ -44360,7 +44314,9 @@ export type UpdateMcpOauthClientResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -44452,7 +44408,9 @@ export type RotateMcpOauthClientSecretResponses = {
         clientId: string;
         name: string;
         organizationId: string;
+        grantType: 'client_credentials' | 'authorization_code';
         allowedGatewayIds: Array<string>;
+        redirectUris: Array<string>;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -48828,7 +48786,7 @@ export type GetWellKnownOauthAuthorizationServerResponses = {
         issuer: string;
         authorization_endpoint: string;
         token_endpoint: string;
-        registration_endpoint: string;
+        registration_endpoint?: string;
         jwks_uri: string;
         response_types_supported: Array<string>;
         grant_types_supported: Array<string>;

@@ -18,6 +18,7 @@ import {
   generateId,
   generateText,
   hasToolCall,
+  NoSuchToolError,
   stepCountIs,
   type UIMessage,
   type UIMessageChunk,
@@ -140,6 +141,7 @@ import {
   type ChatStreamTextConfig,
   streamTextWithRecovery,
 } from "./stream-probe";
+import { repairHarmonyToolName } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
 const PromoteChatAttachmentResultSchema = z.object({
@@ -790,16 +792,54 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
+                // Flipped once streamTextWithRecovery returns the committed
+                // result. The probe drains discarded retry attempts before this,
+                // so their onStepFinish callbacks must not emit usage events.
+                let hasCommittedResult = false;
+
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
+                  // Repair tool names that carry a leaked harmony sentinel token
+                  // (e.g. `archestra__run_command<|channel|>commentary`) before
+                  // they surface as an unrecoverable NoSuchToolError. Repair lands
+                  // at tool-call parse, so the earlier tool-input-start chunk keeps
+                  // the raw name — execution is correct, but an MCP App UI start
+                  // keyed off that earlier name may not render for such calls.
+                  experimental_repairToolCall: async ({ toolCall, error }) => {
+                    if (!NoSuchToolError.isInstance(error)) {
+                      return null;
+                    }
+                    const repaired = repairHarmonyToolName(
+                      toolCall.toolName,
+                      Object.keys(mcpTools),
+                    );
+                    if (!repaired) {
+                      return null;
+                    }
+                    logger.info(
+                      {
+                        conversationId,
+                        requestedToolName: toolCall.toolName,
+                        repairedToolName: repaired,
+                      },
+                      "Repaired harmony-marked tool name",
+                    );
+                    return { ...toolCall, toolName: repaired };
+                  },
                   // Emit per-step usage so the context indicator tracks the
                   // prompt growing across tool round-trips, instead of jumping
-                  // only once when the whole turn finishes.
+                  // only once when the whole turn finishes. Suppressed for
+                  // discarded retry attempts (empty/abortive) that the probe
+                  // drains before a result is committed, so their usage never
+                  // reaches the client.
                   onStepFinish: ({ usage, finishReason }) => {
+                    if (!hasCommittedResult) {
+                      return;
+                    }
                     writer.write({
                       type: "data-token-usage",
                       data: {
@@ -901,6 +941,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }
                   },
                 });
+                // The committed result's steps finish after this point; allow
+                // their usage events through (discarded attempts already drained).
+                hasCommittedResult = true;
 
                 // Surface provider warnings (e.g. a sampling param dropped for a reasoning model)
                 // without blocking the stream, so a silently-ignored `temperature` is diagnosable.

@@ -1,0 +1,242 @@
+[
+  {
+    "sale_id": "S001",
+    "salesperson": "Ana",
+    "team": "North",
+    "units": 3,
+    "unit_price": 12.5,
+    "commission_pct": 0.035
+  },
+  {
+    "sale_id": "S002",
+    "salesperson": "Ben",
+    "team": "North",
+    "units": 10,
+    "unit_price": 20.87,
+    "commission_pct": 0.041
+  },
+  {
+    "sale_id": "S003",
+    "salesperson": "Cara",
+    "team": "East",
+    "units": 17,
+    "unit_price": 29.24,
+    "commission_pct": 0.028
+  },
+  {
+    "sale_id": "S004",
+    "salesperson": "Drew",
+    "team": "East",
+    "units": 24,
+    "unit_price": 37.61,
+    "commission_pct": 0.052
+  },
+  {
+    "sale_id": "S005",
+    "salesperson": "Esme",
+    "team": "South",
+    "units": 31,
+    "unit_price": 45.98,
+    "commission_pct": 0.047
+  },
+  {
+    "sale_id": "S006",
+    "salesperson": "Finn",
+    "team": "South",
+    "units": 38,
+    "unit_price": 49.0,
+    "commission_pct": 0.033
+  },
+  {
+    "sale_id": "S007",
+    "salesperson": "Gita",
+    "team": "West",
+    "units": 5,
+    "unit_price": 57.37,
+    "commission_pct": 0.039
+  },
+  {
+    "sale_id": "S008",
+    "salesperson": "Hugo",
+    "team": "West",
+    "units": 12,
+    "unit_price": 65.74,
+    "commission_pct": 0.044
+  },
+  {
+    "sale_id": "S009",
+    "salesperson": "Ana",
+    "team": "North",
+    "units": 19,
+    "unit_price": 74.11,
+    "commission_pct": 0.035
+  },
+  {
+    "sale_id": "S010",
+    "salesperson": "Ben",
+    "team": "North",
+    "units": 26,
+    "unit_price": 16.78,
+    "commission_pct": 0.041
+  },
+  {
+    "sale_id": "S011",
+    "salesperson": "Cara",
+    "team": "East",
+    "units": 33,
+    "unit_price": 19.8,
+    "commission_pct": 0.028
+  },
+  {
+    "sale_id": "S012",
+    "salesperson": "Drew",
+    "team": "East",
+    "units": 40,
+    "unit_price": 28.17,
+    "commission_pct": 0.052
+  },
+  {
+    "sale_id": "S013",
+    "salesperson": "Esme",
+    "team": "South",
+    "units": 7,
+    "unit_price": 36.54,
+    "commission_pct": 0.047
+  },
+  {
+    "sale_id": "S014",
+    "salesperson": "Finn",
+    "team": "South",
+    "units": 14,
+    "unit_price": 44.91,
+    "commission_pct": 0.033
+  },
+  {
+    "sale_id": "S015",
+    "salesperson": "Gita",
+    "team": "West",
+    "units": 21,
+    "unit_price": 53.28,
+    "commission_pct": 0.039
+  },
+  {
+    "sale_id": "S016",
+    "salesperson": "Hugo",
+    "team": "West",
+    "units": 28,
+    "unit_price": 56.3,
+    "commission_pct": 0.044
+  },
+  {
+    "sale_id": "S017",
+    "salesperson": "Ana",
+    "team": "North",
+    "units": 35,
+    "unit_price": 64.67,
+    "commission_pct": 0.035
+  },
+  {
+    "sale_id": "S018",
+    "salesperson": "Ben",
+    "team": "North",
+    "units": 42,
+    "unit_price": 73.04,
+    "commission_pct": 0.041
+  },
+  {
+    "sale_id": "S019",
+    "salesperson": "Cara",
+    "team": "East",
+    "units": 9,
+    "unit_price": 15.71,
+    "commission_pct": 0.028
+  },
+  {
+    "sale_id": "S020",
+    "salesperson": "Drew",
+    "team": "East",
+    "units": 16,
+    "unit_price": 24.08,
+    "commission_pct": 0.052
+  },
+  {
+    "sale_id": "S021",
+    "salesperson": "Esme",
+    "team": "South",
+    "units": 23,
+    "unit_price": 27.1,
+    "commission_pct": 0.047
+  },
+  {
+    "sale_id": "S022",
+    "salesperson": "Finn",
+    "team": "South",
+    "units": 30,
+    "unit_price": 35.47,
+    "commission_pct": 0.033
+  },
+  {
+    "sale_id": "S023",
+    "salesperson": "Gita",
+    "team": "West",
+    "units": 37,
+    "unit_price": 43.84,
+    "commission_pct": 0.039
+  },
+  {
+    "sale_id": "S024",
+    "salesperson": "Hugo",
+    "team": "West",
+    "units": 4,
+    "unit_price": 52.21,
+    "commission_pct": 0.044
+  },
+  {
+    "sale_id": "S025",
+    "salesperson": "Ana",
+    "team": "North",
+    "units": 11,
+    "unit_price": 60.58,
+    "commission_pct": 0.035
+  },
+  {
+    "sale_id": "S026",
+    "salesperson": "Ben",
+    "team": "North",
+    "units": 18,
+    "unit_price": 63.6,
+    "commission_pct": 0.041
+  },
+  {
+    "sale_id": "S027",
+    "salesperson": "Cara",
+    "team": "East",
+    "units": 25,
+    "unit_price": 71.97,
+    "commission_pct": 0.028
+  },
+  {
+    "sale_id": "S028",
+    "salesperson": "Drew",
+    "team": "East",
+    "units": 32,
+    "unit_price": 14.64,
+    "commission_pct": 0.052
+  },
+  {
+    "sale_id": "S029",
+    "salesperson": "Esme",
+    "team": "South",
+    "units": 39,
+    "unit_price": 23.01,
+    "commission_pct": 0.047
+  },
+  {
+    "sale_id": "S030",
+    "salesperson": "Finn",
+    "team": "South",
+    "units": 6,
+    "unit_price": 31.38,
+    "commission_pct": 0.033
+  }
+]

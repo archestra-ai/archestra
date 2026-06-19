@@ -199,7 +199,15 @@ async function visibleCandidates(params: {
     names.push(...discoverable.map((tool) => tool.name));
   }
 
-  const matches = [...new Set(names.filter((name) => name.endsWith(suffix)))];
+  // `agent__<short>` proxy-discovered delegation artifacts are hidden from
+  // search_tools, so a bare short name must not surface them here either.
+  const matches = [
+    ...new Set(
+      names.filter(
+        (name) => name.endsWith(suffix) && !name.startsWith("agent__"),
+      ),
+    ),
+  ];
   if (matches.length === 0) {
     return matches;
   }

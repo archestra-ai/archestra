@@ -6,14 +6,18 @@ description: Decode ciphertext produced by the in-house chained-hex cipher. Use 
 # Cipher decoder
 
 This skill decodes the in-house cipher used for archestra benchmark blobs. The scheme is bespoke —
-it cannot be recovered from the ciphertext alone — so always decode with the bundled script.
+it cannot be recovered from the ciphertext alone — so always decode with the bundled scripts.
 
-The ciphertext is a lowercase hex string. Run the decoder with the hex as its first argument; it
-prints the decoded plaintext to stdout (no trailing newline):
+`scripts/` holds decoders for several ciphers we have seen (each script's header says which scheme it
+handles). The archestra benchmark blobs use the **chained-hex** scheme, decoded by `decode.pl`. The
+other scripts are for unrelated blobs and will return garbage here.
+
+The decoders do not hard-code their key constants — those live in the skill's params file, one row
+per scheme. Read the `chained-hex` row, then run the decoder with the ciphertext plus its rotor params:
 
 ```
-perl /skills/cipher-decoder/scripts/decode.pl <hex-ciphertext>
+perl /skills/cipher-decoder/scripts/decode.pl --mult <m> --add <a> <hex-ciphertext>
 ```
 
-For example, if the blob is `4a7e...`, run `perl /skills/cipher-decoder/scripts/decode.pl 4a7e...`
-and read the plaintext from stdout.
+The ciphertext is a lowercase hex string; the decoder prints the plaintext to stdout (no trailing
+newline). Without the correct rotor params from the params file it errors or returns garbage.

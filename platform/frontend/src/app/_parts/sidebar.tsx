@@ -42,7 +42,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -506,9 +505,6 @@ const NavSecondary = ({
 
   return (
     <SidebarGroup className={className}>
-      {(permittedItems.length > 0 || showCommunityLinks) && (
-        <SidebarGroupLabel>Help</SidebarGroupLabel>
-      )}
       <SidebarGroupContent>
         <SidebarMenu>
           {permittedItems.map((item) => (

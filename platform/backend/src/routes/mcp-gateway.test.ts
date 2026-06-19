@@ -11,7 +11,9 @@ import {
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -20,6 +22,7 @@ import {
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -1030,7 +1033,10 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
           getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_REFINE_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),

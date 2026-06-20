@@ -17,6 +17,7 @@ import {
   FolderKanban,
   FolderOpen,
   Github,
+  Inbox,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -25,6 +26,7 @@ import {
   PencilRuler,
   Route,
   Slack,
+  Sparkles,
   Star,
 } from "lucide-react";
 import Link from "next/link";
@@ -213,24 +215,26 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/skills"),
         subItems: [
           {
-            title: "Skills",
-            url: "/agents/skills",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/skills"),
-          },
-          {
-            title: "Scheduled",
+            title: "Scheduled Tasks",
             url: "/scheduled-tasks",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/scheduled-tasks"),
           },
-          {
-            title: "Triggers",
-            url: "/agents/triggers",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/triggers"),
-          },
         ],
+      },
+      {
+        title: "Skills",
+        url: "/agents/skills",
+        icon: Sparkles,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/skills"),
+      },
+      {
+        title: "Messaging Channels",
+        url: "/agents/triggers",
+        icon: Inbox,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/triggers"),
       },
     ],
   },

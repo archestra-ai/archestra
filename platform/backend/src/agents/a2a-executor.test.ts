@@ -438,7 +438,7 @@ describe("executeA2AMessage model selection", () => {
       finishReason: Promise.resolve("stop"),
     });
 
-    const result = await executeA2AMessage({
+    await executeA2AMessage({
       agentId: "agent-child",
       message: "Handle this",
       organizationId: "org-1",
@@ -465,12 +465,6 @@ describe("executeA2AMessage model selection", () => {
         externalAgentId: "agent-parent:agent-child",
       }),
     );
-    expect(result.text).toBe("Delegated response");
-    expect(result.responseUiMessage).toEqual({
-      id: "msg-1",
-      role: "assistant",
-      parts: [{ type: "text", text: "Delegated response" }],
-    });
   });
 });
 

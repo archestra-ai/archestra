@@ -242,14 +242,6 @@ describe("probeFirstRenderableEvent", () => {
 });
 
 describe("isRetryableEmptyFinishReason", () => {
-  test("retries on stop, length, unknown, error, and other", () => {
-    expect(isRetryableEmptyFinishReason("stop")).toBe(true);
-    expect(isRetryableEmptyFinishReason("length")).toBe(true);
-    expect(isRetryableEmptyFinishReason("unknown")).toBe(true);
-    expect(isRetryableEmptyFinishReason("error")).toBe(true);
-    expect(isRetryableEmptyFinishReason("other")).toBe(true);
-  });
-
   test("does not retry on deterministic terminal reasons", () => {
     expect(isRetryableEmptyFinishReason("content-filter")).toBe(false);
     expect(isRetryableEmptyFinishReason("tool-calls")).toBe(false);

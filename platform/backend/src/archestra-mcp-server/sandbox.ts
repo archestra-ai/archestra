@@ -227,6 +227,10 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
       attachmentId: z
         .string()
         .min(1)
+        .refine(
+          (v) => UUID_REGEX.test(v),
+          "must be the attachment's id, not its filename",
+        )
         .describe(
           "Id of an attachment in the CURRENT conversation. The bytes are " +
             "read server-side; they never pass through the model context.",
@@ -1881,6 +1885,25 @@ async function loadUploadSource(params: {
         return {
           error:
             "chat_attachment uploads require a conversation context; use a base64 or text source instead.",
+        };
+      }
+      // A filename or other non-UUID can't be an attachment id. Reject it here:
+      // the id column is uuid-typed, so querying it with a non-UUID throws an
+      // unhandled Postgres error that aborts the whole turn instead of
+      // surfacing as the graceful "no such attachment" result below.
+      if (!UUID_REGEX.test(source.attachmentId)) {
+        logger.warn(
+          {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            conversationId,
+            attachmentId: source.attachmentId,
+            reason: "attachment_id_not_uuid",
+          },
+          "[Sandbox] rejected chat_attachment upload",
+        );
+        return {
+          error: `No accessible attachment with id "${source.attachmentId}" exists. Pass the attachment's id, not its filename.`,
         };
       }
       const attachment = await ConversationAttachmentModel.findByIdWithData(

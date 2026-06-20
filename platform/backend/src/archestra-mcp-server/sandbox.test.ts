@@ -820,6 +820,27 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(uploadSpy).not.toHaveBeenCalled();
     });
 
+    test("rejects a non-UUID attachmentId without throwing a DB error", async () => {
+      // A model that only sees the attachment's filename guesses it as the id.
+      // The id column is uuid-typed, so this once threw an unhandled Postgres
+      // error that aborted the whole turn — it must surface gracefully instead.
+      const ctx = await makeConversationCtx();
+      const uploadSpy = vi.spyOn(skillSandboxRuntimeService, "uploadFile");
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        {
+          path: "certificate.pdf",
+          source: { type: "chat_attachment", attachmentId: "certificate.pdf" },
+        },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain(
+        "must be the attachment's id, not its filename",
+      );
+      expect(uploadSpy).not.toHaveBeenCalled();
+    });
+
     // uploadFile does no Dagger work, so enabling the runtime engine lets these
     // exercise the real persistence + validation path against PGlite.
     describe("with the runtime engine available", () => {

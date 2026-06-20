@@ -1,7 +1,7 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
+ARG GOLANG_IMAGE=golang:1.26.4-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -62,7 +62,8 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    go mod edit -go=1.25.11 && \
+    # dagger v0.21.5's vendored Go SDK requires go >= 1.26.1; align the module directive.
+    go mod edit -go=1.26.1 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
@@ -291,7 +292,7 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.25.11 to fix CVE-2025-68121,
+# these binaries are built from source in go-builder with Go 1.26.4 to fix CVE-2025-68121,
 # the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811), and
 # the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker

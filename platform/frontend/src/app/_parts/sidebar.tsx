@@ -638,6 +638,9 @@ export function AppSidebar() {
         items: group.items
           .filter((item) => {
             if (item.title === "Connect" && !showConnect) return false;
+            // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
+            // var. It's a top-level item now, so gate it here (not in subItems).
+            if (item.url === "/agents/skills" && !skillsEnabled) return false;
             return true;
           })
           .map((item) =>
@@ -645,7 +648,6 @@ export function AppSidebar() {
               ? {
                   ...item,
                   subItems: item.subItems.filter((sub) => {
-                    if (sub.url === "/agents/skills") return skillsEnabled;
                     // With projects on, schedules are managed per-project on the
                     // project detail page, so the standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;

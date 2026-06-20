@@ -139,7 +139,6 @@ export function buildMcpGatewayTool(params: {
           }
 
           let toolResult: string | { content: string; [key: string]: unknown };
-          // Check if this is an Archestra tool - handle directly without DB lookup
           if (archestraMcpBranding.isToolName(mcpTool.name)) {
             logger.debug(
               {
@@ -272,7 +271,6 @@ export function buildAgentDelegationTool(params: {
     chatOpsThreadId: ctx.chatOpsThreadId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
-    // Pass delegation chain for tracking delegated agent calls
     delegationChain: ctx.delegationChain,
     abortSignal: ctx.abortSignal,
     tokenAuth: buildTokenAuthContext({
@@ -731,7 +729,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     }
   }
 
-  // Execute via mcpClient
   const toolCall = {
     id: randomUUID(),
     name: toolName,
@@ -810,7 +807,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     };
   }
 
-  // Sync browser state if needed
   logger.debug(
     { isolationKey, toolName, isEnabled: browserStreamFeature.isEnabled() },
     "[executeMcpTool] Checking browser sync conditions",
@@ -1324,7 +1320,6 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     additionalProperties: false,
   };
 
-  // If schema is missing or invalid, return a minimal valid schema
   if (!isRecord(schema)) {
     return fallbackSchema;
   }
@@ -1360,7 +1355,6 @@ function addAdditionalPropertiesFalse(
       result.additionalProperties = false;
     }
 
-    // Recurse into properties
     if (isRecord(result.properties)) {
       const newProps: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(result.properties)) {
@@ -1372,7 +1366,6 @@ function addAdditionalPropertiesFalse(
     }
   }
 
-  // Recurse into array items
   if (result.type === "array" && isRecord(result.items)) {
     result.items = addAdditionalPropertiesFalse(result.items);
   }

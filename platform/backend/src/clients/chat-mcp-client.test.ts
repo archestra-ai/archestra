@@ -11,7 +11,6 @@ import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
-import ToolModel from "@/models/tool";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -1250,37 +1249,34 @@ describe("getChatMcpToolUiResourceUris", () => {
 
   test("returns only tools that have a UI resource URI in meta", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
 
-    const mockTools = [
-      {
-        id: "tool-1",
-        name: "server__get-stats",
-        description: "Get stats",
-        parameters: {},
-        meta: { _meta: { ui: { resourceUri: "resource://server/stats-ui" } } },
-      },
-      {
-        id: "tool-2",
-        name: "server__get-info",
-        description: "Get info",
-        parameters: {},
-        meta: null, // no UI
-      },
-      {
-        id: "tool-3",
-        name: "server__show-chart",
-        description: "Show chart",
-        parameters: {},
-        meta: { _meta: { ui: { resourceUri: "resource://server/chart-ui" } } },
-      },
-    ];
-
-    const spy = vi
-      .spyOn(ToolModel, "getMcpToolsByAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockTools as any);
+    const statsTool = await makeTool({
+      name: "server__get-stats",
+      description: "Get stats",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "resource://server/stats-ui" } } },
+    });
+    const infoTool = await makeTool({
+      name: "server__get-info",
+      description: "Get info",
+      catalogId: catalog.id,
+      meta: null,
+    });
+    const chartTool = await makeTool({
+      name: "server__show-chart",
+      description: "Show chart",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "resource://server/chart-ui" } } },
+    });
+    await makeAgentTool(agent.id, statsTool.id);
+    await makeAgentTool(agent.id, infoTool.id);
+    await makeAgentTool(agent.id, chartTool.id);
 
     const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
 
@@ -1289,35 +1285,28 @@ describe("getChatMcpToolUiResourceUris", () => {
       "server__show-chart": "resource://server/chart-ui",
     });
     expect(result).not.toHaveProperty("server__get-info");
-
-    spy.mockRestore();
   });
 
   test("returns empty record when no tools have a UI resource URI", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
 
-    const mockTools = [
-      {
-        id: "tool-1",
-        name: "server__query",
-        description: "Query",
-        parameters: {},
-        meta: { annotations: { audience: ["assistant"] } }, // no _meta.ui
-      },
-    ];
-
-    const spy = vi
-      .spyOn(ToolModel, "getMcpToolsByAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockTools as any);
+    const queryTool = await makeTool({
+      name: "server__query",
+      description: "Query",
+      catalogId: catalog.id,
+      meta: { annotations: { audience: ["assistant"] } }, // no _meta.ui
+    });
+    await makeAgentTool(agent.id, queryTool.id);
 
     const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
 
     expect(result).toEqual({});
-
-    spy.mockRestore();
   });
 });
 
@@ -1785,16 +1774,18 @@ describe("buildArchestraToolOutput", () => {
 
   test("attaches the target tool's UI resource when dispatched via run_tool", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
-    const mockToolDef = {
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
       name: "excalidraw__create_view",
+      catalogId: catalog.id,
       meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
-    };
-    const spy = vi
-      .spyOn(ToolModel, "findByNameForAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockToolDef as any);
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -1806,7 +1797,6 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(spy).toHaveBeenCalledWith("excalidraw__create_view", agent.id);
     expect(typeof result).toBe("object");
     expect(result).toMatchObject({
       content: "Diagram displayed!",
@@ -1816,18 +1806,53 @@ describe("buildArchestraToolOutput", () => {
       },
       structuredContent: { checkpoint: "abc" },
     });
+  });
 
-    spy.mockRestore();
+  test("does not attach the UI resource when the target tool is not assigned to the agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const owner = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(owner.id, targetTool.id);
+
+    // A different agent without the tool assigned must not resolve it: the
+    // target lookup is scoped to the caller's agent, so no UI resource attaches.
+    const otherAgent = await makeAgent();
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: otherAgent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
   });
 
   test("returns plain text when the dispatched target has no UI resource", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
-    const spy = vi
-      .spyOn(ToolModel, "findByNameForAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "context7__search",
+      catalogId: catalog.id,
+      meta: null,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -1837,8 +1862,6 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toBe("Diagram displayed!");
-
-    spy.mockRestore();
   });
 });
 

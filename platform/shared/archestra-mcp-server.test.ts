@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
-  ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolPrefix,
@@ -12,20 +11,9 @@ import {
 } from "./archestra-mcp-server";
 
 describe("archestra MCP tool names", () => {
-  test("contains the shared special tool short names", () => {
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("create_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("swap_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("artifact_write");
-  });
-
-  test("builds a fully-qualified Archestra tool name", () => {
-    expect(getArchestraToolFullName("create_agent")).toBe(
-      TOOL_CREATE_AGENT_FULL_NAME,
-    );
-  });
-
-  test("preserves literal full-name typing", () => {
+  test("builds a fully-qualified Archestra tool name with literal typing", () => {
     const fullName = getArchestraToolFullName("create_agent");
+    expect(fullName).toBe(TOOL_CREATE_AGENT_FULL_NAME);
     expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
   });
 

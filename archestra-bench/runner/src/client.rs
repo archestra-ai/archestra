@@ -614,6 +614,102 @@ impl EvalClient {
             .unwrap_or_default())
     }
 
+    /// All persisted LLM-proxy interactions for a chat session (the chat route sets the interaction
+    /// `sessionId` to the conversation id), in chronological order. Used post-run to recover the
+    /// effective prompt the model received. Pages the capped API and waits out the write race: the
+    /// proxy persists each row in a `finally` after the chat stream ends, so a naive single fetch
+    /// can miss the last call.
+    pub async fn fetch_session_interactions(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<JsonValue>, ClientError> {
+        const PAGE: usize = 100;
+        const MAX_REFETCH: usize = 5;
+        // The total can keep growing while we page (the proxy is still flushing rows), so settle on a
+        // stable count, page it fully, then re-verify the count did not move under us; retry if it did.
+        for _ in 0..MAX_REFETCH {
+            let total = self.stable_interaction_total(session_id).await?;
+            let mut all: Vec<JsonValue> = Vec::with_capacity(total);
+            while all.len() < total {
+                let (page, _) = self.interactions_page(session_id, PAGE, all.len()).await?;
+                if page.is_empty() {
+                    return Err(ContractError(format!(
+                        "GET /api/interactions: pagination gap for session {session_id}: got {} of {total} rows",
+                        all.len()
+                    ))
+                    .into());
+                }
+                all.extend(page);
+            }
+            let (_, total_after) = self.interactions_page(session_id, 1, 0).await?;
+            if total_after == all.len() {
+                return Ok(all);
+            }
+        }
+        Err(ContractError(format!(
+            "GET /api/interactions: interaction count for session {session_id} never stabilized"
+        ))
+        .into())
+    }
+
+    /// Poll the interaction count with the cheapest possible query until it holds steady across several
+    /// consecutive samples, so a row the proxy is still flushing (it persists each in a `finally` after
+    /// the stream ends) is not missed by a single lucky-quiet read.
+    async fn stable_interaction_total(&self, session_id: &str) -> Result<usize, ClientError> {
+        const NEEDED_STABLE: usize = 3;
+        const MAX_ATTEMPTS: usize = 20;
+        const INTERVAL: Duration = Duration::from_millis(300);
+        let (_, mut prev) = self.interactions_page(session_id, 1, 0).await?;
+        let mut stable = 1;
+        for _ in 0..MAX_ATTEMPTS {
+            sleep(INTERVAL).await;
+            let (_, current) = self.interactions_page(session_id, 1, 0).await?;
+            if current == prev {
+                stable += 1;
+                if stable >= NEEDED_STABLE {
+                    return Ok(current);
+                }
+            } else {
+                stable = 1;
+                prev = current;
+            }
+        }
+        Ok(prev)
+    }
+
+    async fn interactions_page(
+        &self,
+        session_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<JsonValue>, usize), ClientError> {
+        let params = [
+            ("sessionId".to_string(), session_id.to_string()),
+            ("limit".to_string(), limit.to_string()),
+            ("offset".to_string(), offset.to_string()),
+            ("sortBy".to_string(), "createdAt".to_string()),
+            ("sortDirection".to_string(), "asc".to_string()),
+        ];
+        let body = self
+            .request(Method::GET, "/api/interactions", Some(&params), None)
+            .await?;
+        let data = body
+            .get("data")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .ok_or_else(|| {
+                ContractError(format!("GET /api/interactions: missing `data` array: {body}"))
+            })?;
+        let total = body
+            .get("pagination")
+            .and_then(|p| p.get("total"))
+            .and_then(JsonValue::as_u64)
+            .ok_or_else(|| {
+                ContractError(format!("GET /api/interactions: missing `pagination.total`: {body}"))
+            })? as usize;
+        Ok((data, total))
+    }
+
     pub async fn stream_chat_records(
         &self,
         conversation_id: &str,

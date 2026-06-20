@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
@@ -34,7 +35,6 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -408,28 +408,9 @@ export function ChatSidebarSection({
   return (
     <>
       {isLoading ? (
-        <SidebarGroup className="pt-0">
-          <SidebarGroupLabel>Recents</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuSub className={subClass}>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <SidebarMenuSubItem key={i}>
-                      <div className="flex w-full items-center justify-between gap-1">
-                        <div className="flex h-8 w-full flex-1 items-center gap-2 rounded-md p-2">
-                          <Skeleton className="h-4 w-full bg-sidebar-foreground/10" />
-                        </div>
-                      </div>
-                    </SidebarMenuSubItem>
-                  ))}
-                </SidebarMenuSub>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <ChatListSkeleton subClass={subClass} />
       ) : (
-        <>
+        <div className="animate-in fade-in-0 duration-300">
           {pinnedChats.length > 0 && (
             <SidebarGroup className="pt-0">
               <SidebarGroupLabel>Pinned</SidebarGroupLabel>
@@ -472,7 +453,7 @@ export function ChatSidebarSection({
               </SidebarGroupContent>
             </SidebarGroup>
           )}
-        </>
+        </div>
       )}
 
       <DeleteConfirmDialog

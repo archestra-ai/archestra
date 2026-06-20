@@ -4,7 +4,6 @@ import { describe, expect, test, vi } from "vitest";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
 import {
   isRetryableEmptyFinishReason,
-  MAX_AGENT_STEPS,
   probeFirstRenderableEvent,
   runAgentStream,
   type StreamProbeEvent,
@@ -363,6 +362,18 @@ describe("runAgentStream", () => {
     expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
   });
 
+  test("retries an empty response, then commits the renderable retry", async () => {
+    const model = modelFor(emptyChunks(), renderableChunks());
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(await result.text).toBe("hi");
+  });
+
   test("retries an abortive tool call, then surfaces the abortive result on exhaustion", async () => {
     const model = modelFor(abortiveChunks(), abortiveChunks());
 
@@ -443,9 +454,5 @@ describe("runAgentStream", () => {
     await drain(result);
 
     expect(callerOnError).toHaveBeenCalledWith({ error: contextError });
-  });
-
-  test("exports the shared step cap", () => {
-    expect(MAX_AGENT_STEPS).toBe(500);
   });
 });

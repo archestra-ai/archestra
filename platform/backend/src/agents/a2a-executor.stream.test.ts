@@ -5,6 +5,7 @@
 // mapping, and the context-trim recovery on the A2A `messages` path — none of
 // which the mocked-streamText suite in a2a-executor.test.ts can prove.
 
+import { ChatErrorCode } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
@@ -93,6 +94,15 @@ function textChunks(text: string): ModelStreamPart[] {
     { type: "text-start", id: "1" },
     { type: "text-delta", id: "1", delta: text },
     { type: "text-end", id: "1" },
+    { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+  ];
+}
+
+// A content-free turn: only a finish event, no text — the probe treats it as an
+// empty (retryable) response.
+function emptyChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
     { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
   ];
 }
@@ -189,6 +199,27 @@ describe("executeA2AMessage real stream boundary", () => {
 
     expect(error).toBeInstanceOf(ProviderError);
     expect((error as ProviderError).message).toContain("Insufficient credits");
+  });
+
+  test("maps an exhausted empty response to a ProviderError EmptyResponse", async () => {
+    // every attempt is content-free, so the recovery loop exhausts and throws
+    // EmptyModelResponseError, which a2a maps to the EmptyResponse card.
+    const model = modelEmitting(emptyChunks());
+    primeAgent(model);
+
+    const error = await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as ProviderError).chatErrorResponse.code).toBe(
+      ChatErrorCode.EmptyResponse,
+    );
+    expect(model.doStreamCalls).toHaveLength(3);
   });
 
   test("trims and retries a context-length rejection on the A2A messages path", async () => {

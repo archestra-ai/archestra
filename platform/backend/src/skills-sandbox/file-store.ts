@@ -138,6 +138,20 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return null;
       if (!(await this.canAccessScope(parsed.scope, params))) return null;
+      // Bind the opaque key to the authorized scope: it must be an object that
+      // scope actually owns. Without this, a ref carrying the caller's own scope
+      // but a sibling folder's key (e.g. `other@x.com/secret`, no traversal)
+      // would read another tenant's file under the shared root. Enumeration is
+      // provider-agnostic and already skips symlinks.
+      const ownerScope =
+        parsed.scope.kind === "user"
+          ? await this.userScope(parsed.scope.userId)
+          : await this.projectScope(parsed.scope.projectId);
+      if (!ownerScope) return null;
+      const owned = (await store.enumerate(ownerScope)).some(
+        (o) => o.key === parsed.key,
+      );
+      if (!owned) return null;
       let data: Buffer;
       try {
         data = await store.read(parsed.key);
@@ -316,6 +330,15 @@ class FileStore {
     filename?: string;
     scope?: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
+    // A stable `obj_` ref (from search_files) addresses a hand-placed object
+    // directly — resolve it by ref, confined to the chat scope.
+    if (params.id && parseObjectRef(params.id)) {
+      return this.resolveUntrackedByRef({
+        userId: params.userId,
+        ref: params.id,
+        scope: params.scope ?? null,
+      });
+    }
     const row = await this.findMyFileRow(params);
     if (row === null) {
       // no matching row — try a hand-placed object by filename.
@@ -423,6 +446,8 @@ class FileStore {
   }): Promise<PersistedFile | MyFileResolutionError | null> {
     const scope = params.scope ?? null;
     if (params.id) {
+      // a non-UUID id is never a row id (and would error the uuid column query).
+      if (!UUID_RE.test(params.id)) return { error: "not_found" };
       const file = await FileModel.findById(params.id);
       if (!file || file.organizationId !== params.organizationId) {
         return { error: "not_found" };
@@ -452,6 +477,51 @@ class FileStore {
       return file ?? { error: "not_found" };
     }
     return null;
+  }
+
+  /**
+   * An untracked object addressed by its stable `obj_` ref, confined to the
+   * caller's chat scope: the owner scope is derived from the chat (NOT the ref's
+   * embedded scope), and the key must belong to it (verified by enumeration). So
+   * a ref carrying a foreign or crafted key resolves to not-found, never a
+   * cross-scope read.
+   */
+  private async resolveUntrackedByRef(params: {
+    userId: string;
+    ref: string;
+    scope: { projectId: string } | null;
+  }): Promise<ResolvedMyFile | MyFileResolutionError> {
+    const parsed = parseObjectRef(params.ref);
+    if (!parsed) return { error: "not_found" };
+    const store = getObjectStore();
+    if (!store) return { error: "not_found" };
+    const ownerScope: OwnerScope | null = params.scope
+      ? await this.projectScope(params.scope.projectId)
+      : await this.userScope(params.userId);
+    if (!ownerScope) return { error: "not_found" };
+    if (
+      !(await store.enumerate(ownerScope)).some((o) => o.key === parsed.key)
+    ) {
+      return { error: "not_found" };
+    }
+    try {
+      const data = await store.read(parsed.key);
+      const name = keyName(parsed.key);
+      return {
+        fileId: null,
+        data,
+        mimeType: resolveArtifactMime({
+          buffer: data,
+          claimed: mimeFromExtension(name),
+        }),
+        originalName: name,
+      };
+    } catch (error) {
+      if (error instanceof FileBytesMissingError)
+        return { error: "missing_bytes" };
+      if (error instanceof UnsafePathError) return { error: "not_found" };
+      throw error;
+    }
   }
 
   /** An untracked object matched by filename within the upload scope. */
@@ -592,7 +662,8 @@ export const fileStore = new FileStore();
 
 // === internal ===
 
-const OBJECT_REF_PREFIX = "obj_";
+/** Prefix marking an opaque object ref (`obj_…`) vs a row UUID. @public */
+export const OBJECT_REF_PREFIX = "obj_";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -7,6 +7,7 @@ import {
   isAgentTool,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
@@ -119,11 +120,12 @@ const appToolFullNames = new Set<string>([
   ...Object.keys(appLlmToolEntries),
 ]);
 
-// search_files / save_result / edit_file / delete_file are the persistent-files
-// (Projects) surface of the sandbox tool group. Registered above for unit tests,
-// but hidden and non-dispatchable when the projects feature is dark.
+// search_files / read_file / save_result / edit_file / delete_file are the
+// persistent-files (Projects) surface of the sandbox tool group. Registered above
+// for unit tests, but hidden and non-dispatchable when the projects feature is dark.
 const projectGatedSandboxFullNames = new Set<string>([
   TOOL_SEARCH_FILES_FULL_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,

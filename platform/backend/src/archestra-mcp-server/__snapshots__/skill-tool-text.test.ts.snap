@@ -127,21 +127,12 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
 {
-  "description": "Replace the contents of an existing persistent file (My Files) in place, keeping its id and filename — use it to revise a file you saved earlier (e.g. trim a list down to the one item you want to keep). Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
+  "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Replace the contents of an existing persistent file (My Files) in place, keeping its id and name. In a project chat only the project's files can be edited.",
+    "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited.",
     "properties": {
-      "content": {
-        "description": "New UTF-8 text content; fully replaces the file.",
-        "type": "string",
-      },
-      "contentBase64": {
-        "description": "New base64 binary content; fully replaces the file.",
-        "minLength": 1,
-        "type": "string",
-      },
       "filename": {
         "description": "Filename to edit instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
         "minLength": 1,
@@ -152,12 +143,25 @@ exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
         "minLength": 1,
         "type": "string",
       },
-      "mimeType": {
-        "description": "Optional new MIME type. Sniffed from the bytes when omitted.",
+      "new_string": {
+        "description": "The text to insert in place of old_string.",
+        "type": "string",
+      },
+      "old_string": {
+        "description": "The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set.",
         "minLength": 1,
         "type": "string",
       },
+      "replace_all": {
+        "default": false,
+        "description": "Replace every occurrence of old_string. Default false replaces a single occurrence and errors if old_string is not unique.",
+        "type": "boolean",
+      },
     },
+    "required": [
+      "old_string",
+      "new_string",
+    ],
     "type": "object",
   },
   "name": "archestra__edit_file",
@@ -201,6 +205,44 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
   },
   "name": "archestra__load_skill",
   "title": "Load Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__read_file 1`] = `
+{
+  "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, use the download URL or copy the file into the sandbox with upload_file and inspect it with run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), use the download URL or upload_file + run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
+    "properties": {
+      "filename": {
+        "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id or ref of the file to read — the \`id\` or \`ref\` from search_files, or a fileId from save_result.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "limit": {
+        "description": "Maximum number of lines to read. Defaults to 2000.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "offset": {
+        "description": "1-based line number to start reading from. Defaults to 1.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__read_file",
+  "title": "Read File",
 }
 `;
 
@@ -257,7 +299,7 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 
 exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 {
-  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -283,6 +325,11 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
         "minLength": 1,
         "type": "string",
       },
+      "overwrite": {
+        "default": false,
+        "description": "Replace an existing file of the same name in place, keeping its id and download URL. Default false errors if the name is already taken.",
+        "type": "boolean",
+      },
     },
     "required": [
       "filename",
@@ -296,7 +343,7 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's my_file source (by \`id\`, or by \`filename\`). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
+  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only — each result carries a stable \`ref\`. To work on a found file, pass its \`ref\` to read_file (read its content), or to upload_file's my_file source (copy it into the sandbox). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -477,8 +524,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
                 "type": "string",
               },
               "id": {
-                "description": "Id of a persistent file, as returned by search_files.",
-                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "description": "Id or ref of a persistent file, as returned by search_files (\`id\` for stored files, \`ref\` for hand-placed ones).",
                 "type": "string",
               },
               "type": {

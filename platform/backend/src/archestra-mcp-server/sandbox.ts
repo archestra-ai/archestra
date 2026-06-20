@@ -3,6 +3,7 @@ import {
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_RESULT_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -23,9 +24,13 @@ import {
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { UnsafePathError } from "@/skills-sandbox/file-path";
+import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import type { MyFileResolutionError } from "@/skills-sandbox/file-store";
-import { fileStore } from "@/skills-sandbox/file-store";
-import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
+import { fileStore, OBJECT_REF_PREFIX } from "@/skills-sandbox/file-store";
+import {
+  isInlineSafeImageMime,
+  resolveArtifactMime,
+} from "@/skills-sandbox/mime-sniff";
 import {
   type ProjectFileScope,
   resolveProjectFileScope,
@@ -39,7 +44,7 @@ import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
 } from "@/skills-sandbox/types";
-import { asSandboxId, type SandboxId } from "@/types";
+import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -68,6 +73,14 @@ import type { ArchestraContext } from "./types";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// read_file default line window (matches the SOTA Read default).
+const READ_FILE_DEFAULT_LINES = 2000;
+
+// Cap raw image bytes read_file will return inline so the base64 payload stays
+// under the model's ~5 MB per-image limit (base64 inflates by ~4/3). Larger
+// images are refused with a pointer to the download URL.
+const READ_FILE_IMAGE_BYTES_LIMIT = 3.75 * 1024 * 1024;
 
 // typed target — no magic strings. omitted = the conversation's default
 // sandbox (lazily created); { fresh: true } = a new isolated sandbox (its id is
@@ -242,9 +255,15 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
       id: z
         .string()
         .trim()
-        .regex(UUID_REGEX, "must be a file id (UUID)")
+        .refine(
+          (v) => UUID_REGEX.test(v) || v.startsWith(OBJECT_REF_PREFIX),
+          "must be a file id or ref from search_files",
+        )
         .optional()
-        .describe("Id of a persistent file, as returned by search_files."),
+        .describe(
+          "Id or ref of a persistent file, as returned by search_files " +
+            "(`id` for stored files, `ref` for hand-placed ones).",
+        ),
       filename: z
         .string()
         .min(1)
@@ -315,13 +334,94 @@ const SearchFilesSchema = z
 const SearchFilesOutputSchema = z.object({
   files: z.array(
     z.object({
-      id: z.string().nullable(),
+      id: z
+        .string()
+        .nullable()
+        .describe("Row id (UUID), or null for a hand-placed file with no row."),
+      ref: z
+        .string()
+        .describe(
+          "Stable handle for this file — pass it to read_file / upload_file / " +
+            "edit_file / delete_file. Works for hand-placed files too (where " +
+            "`id` is null).",
+        ),
       filename: z.string(),
       mimeType: z.string(),
       sizeBytes: z.number(),
       createdAt: z.string(),
     }),
   ),
+});
+
+const ReadFileSchema = z
+  .strictObject({
+    id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Id or ref of the file to read — the `id` or `ref` from search_files, " +
+          "or a fileId from save_result.",
+      ),
+    filename: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Filename to read instead of `id`; rejected as ambiguous if more than one file shares the name.",
+      ),
+    offset: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("1-based line number to start reading from. Defaults to 1."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        `Maximum number of lines to read. Defaults to ${READ_FILE_DEFAULT_LINES}.`,
+      ),
+  })
+  .refine((v) => (v.id != null) !== (v.filename != null), {
+    message: "provide exactly one of `id` or `filename`",
+  })
+  .describe(
+    "Read a persistent file (My Files) directly — no sandbox roundtrip. Text " +
+      "files come back as numbered lines (`<n>\\t<line>`); images (PNG, JPEG, " +
+      "WebP, GIF) are returned inline so you can see them. Identify the file by " +
+      "`id` (from search_files / save_result) or by `filename`. Page large text " +
+      "files with `offset`/`limit`. For other binary types (PDF, archives, …), " +
+      "use the download URL or upload_file + run_command. In a project chat only " +
+      "the project's files are visible. Requires `sandbox:execute`.",
+  );
+
+const ReadFileOutputSchema = z.object({
+  kind: z
+    .enum(["text", "image"])
+    .describe(
+      "`text` = numbered lines in the text content; `image` = the file is " +
+        "returned as an inline image block.",
+    ),
+  fileId: z
+    .string()
+    .nullable()
+    .describe("The file's id, or null for a hand-placed file with no row."),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  // text reads only
+  totalLines: z.number().optional(),
+  startLine: z.number().optional(),
+  returnedLines: z.number().optional(),
+  truncated: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when more lines follow the returned window (raise `offset` to continue).",
+    ),
 });
 
 const SaveResultSchema = z
@@ -344,6 +444,14 @@ const SaveResultSchema = z
       .min(1)
       .optional()
       .describe("Optional MIME type. Sniffed from the bytes when omitted."),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Replace an existing file of the same name in place, keeping its id and " +
+          "download URL. Default false errors if the name is already taken.",
+      ),
   })
   .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
     message: "provide exactly one of `content` or `contentBase64`",
@@ -364,6 +472,9 @@ const SaveResultOutputSchema = z.object({
   sizeBytes: z.number(),
   /** See DownloadFileOutputSchema.downloadUrl. */
   downloadUrl: z.string(),
+  overwritten: z
+    .boolean()
+    .describe("True when an existing same-named file was replaced in place."),
 });
 
 const EditFileSchema = z
@@ -380,31 +491,38 @@ const EditFileSchema = z
       .describe(
         "Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name.",
       ),
-    content: z
-      .string()
-      .optional()
-      .describe("New UTF-8 text content; fully replaces the file."),
-    contentBase64: z
+    old_string: z
       .string()
       .min(1)
-      .optional()
-      .describe("New base64 binary content; fully replaces the file."),
-    mimeType: z
+      .describe(
+        "The exact text to replace; must match the file's current content " +
+          "(read it first with read_file). Include enough surrounding context to " +
+          "be unique unless replace_all is set.",
+      ),
+    new_string: z
       .string()
-      .min(1)
+      .describe("The text to insert in place of old_string."),
+    replace_all: z
+      .boolean()
       .optional()
-      .describe("Optional new MIME type. Sniffed from the bytes when omitted."),
+      .default(false)
+      .describe(
+        "Replace every occurrence of old_string. Default false replaces a single " +
+          "occurrence and errors if old_string is not unique.",
+      ),
   })
   .refine((v) => (v.id != null) !== (v.filename != null), {
     message: "provide exactly one of `id` or `filename`",
   })
-  .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
-    message: "provide exactly one of `content` or `contentBase64`",
+  .refine((v) => v.old_string !== v.new_string, {
+    message: "new_string must differ from old_string",
   })
   .describe(
-    "Replace the contents of an existing persistent file (My Files) in place, " +
-      "keeping its id and name. In a project chat only the project's files can " +
-      "be edited.",
+    "Edit an existing persistent file (My Files) by replacing a snippet, keeping " +
+      "its id and filename. Give the exact `old_string` to find and the " +
+      "`new_string` to put in its place; set `replace_all` to change every " +
+      "occurrence. Text files only — to replace a binary file, use save_result " +
+      "with overwrite. In a project chat only the project's files can be edited.",
   );
 
 const EditFileOutputSchema = z.object({
@@ -414,6 +532,9 @@ const EditFileOutputSchema = z.object({
   sizeBytes: z.number(),
   /** See DownloadFileOutputSchema.downloadUrl. */
   downloadUrl: z.string(),
+  replacements: z
+    .number()
+    .describe("How many occurrences of old_string were replaced."),
 });
 
 const DeleteFileSchema = z
@@ -689,10 +810,10 @@ const registry = defineArchestraTools([
     description:
       "Search the user's persistent file storage (My Files): files exported " +
       "with download_file across ALL conversations, plus files the user added " +
-      "by hand. Returns metadata only. To work on a found file, copy it into " +
-      "the sandbox with upload_file's my_file source (by `id`, or by " +
-      "`filename`). In a project chat, searches the project's files instead. " +
-      "Requires `sandbox:execute`.",
+      "by hand. Returns metadata only — each result carries a stable `ref`. To " +
+      "work on a found file, pass its `ref` to read_file (read its content), or " +
+      "to upload_file's my_file source (copy it into the sandbox). In a project " +
+      "chat, searches the project's files instead. Requires `sandbox:execute`.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
     async handler({ args, context }) {
@@ -728,6 +849,7 @@ const registry = defineArchestraTools([
       const result = {
         files: matches.map((f) => ({
           id: f.id,
+          ref: f.downloadRef,
           filename: f.filename,
           mimeType: f.mimeType,
           sizeBytes: f.sizeBytes,
@@ -740,10 +862,208 @@ const registry = defineArchestraTools([
           : matches
               .map(
                 (f) =>
-                  `${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes)${f.id ? ` id=${f.id}` : ""}`,
+                  `${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes) ref=${f.downloadRef}`,
               )
               .join("\n");
       return structuredSuccessResult(result, summary);
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_READ_FILE_SHORT_NAME,
+    title: "Read File",
+    description:
+      "Read a persistent file (My Files) directly — no sandbox roundtrip. Text " +
+      "files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are " +
+      "returned inline so you can see them. Identify the file by `id` (from " +
+      "search_files / save_result) or by `filename`. Page large text files with " +
+      "`offset`/`limit`. For other binary types, use the download URL or copy " +
+      "the file into the sandbox with upload_file and inspect it with " +
+      "run_command. In a project chat only the project's files are visible. " +
+      "Requires `sandbox:execute`.",
+    schema: ReadFileSchema,
+    outputSchema: ReadFileOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
+        throw error;
+      }
+
+      const ref = args.id ?? args.filename ?? "";
+      const resolved = await fileStore.resolveMyFileSource({
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+        id: args.id,
+        filename: args.filename,
+        scope: scope ? { projectId: scope.projectId } : null,
+      });
+      if ("error" in resolved) {
+        return errorResult(describeMyFileError(resolved.error, ref));
+      }
+
+      const { data, mimeType, originalName, fileId } = resolved;
+      const downloadHint = fileId
+        ? `Download it at /api/skill-sandbox/artifacts/${fileId}, or `
+        : "";
+
+      // Inline-safe raster image? Decide from the BYTES, not the (spoofable) mime
+      // label — `claimed: undefined` means only a real PNG/JPEG/WebP/GIF signature
+      // counts. Such files are returned as an image block the model can see.
+      const imageMime = resolveArtifactMime({
+        buffer: data,
+        claimed: undefined,
+      });
+      if (isInlineSafeImageMime(imageMime)) {
+        if (data.byteLength > READ_FILE_IMAGE_BYTES_LIMIT) {
+          return errorResult(
+            `"${originalName}" is too large to view inline (${data.byteLength} bytes > ${READ_FILE_IMAGE_BYTES_LIMIT} byte limit). ` +
+              `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+          );
+        }
+        recordReadTouch({
+          organizationId: guard.userCtx.organizationId,
+          conversationId: context.conversationId,
+          fileId,
+        });
+        logger.info(
+          { fileId, sizeBytes: data.byteLength, mimeType: imageMime },
+          "[Sandbox] image read from PFS",
+        );
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `${originalName} (${imageMime}, ${data.byteLength} bytes)`,
+            },
+            {
+              type: "image" as const,
+              data: data.toString("base64"),
+              mimeType: imageMime,
+            },
+          ],
+          structuredContent: {
+            kind: "image",
+            fileId,
+            filename: originalName,
+            mimeType: imageMime,
+            sizeBytes: data.byteLength,
+          },
+          isError: false,
+        };
+      }
+
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (data.byteLength > limit) {
+        return errorResult(
+          `"${originalName}" is too large to read inline (${data.byteLength} bytes > ${limit} byte limit). ` +
+            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+        );
+      }
+
+      // Byte-level guard: the mime label is untrustworthy (a binary payload can be
+      // saved as e.g. text/plain), so readability is decided by the bytes — only
+      // NUL-free, valid UTF-8 is returned as text.
+      const text = decodeUtf8Text(data);
+      if (text === null) {
+        return errorResult(
+          `"${originalName}" (${mimeType}) is not text or a supported image. ` +
+            `${downloadHint}copy it into the sandbox with upload_file and process it with run_command.`,
+        );
+      }
+
+      recordReadTouch({
+        organizationId: guard.userCtx.organizationId,
+        conversationId: context.conversationId,
+        fileId,
+      });
+
+      if (data.byteLength === 0) {
+        logger.info({ fileId, sizeBytes: 0 }, "[Sandbox] file read from PFS");
+        return structuredSuccessResult(
+          {
+            kind: "text",
+            fileId,
+            filename: originalName,
+            mimeType,
+            sizeBytes: 0,
+            totalLines: 0,
+            startLine: 1,
+            returnedLines: 0,
+            truncated: false,
+          },
+          `"${originalName}" is empty.`,
+        );
+      }
+
+      const startLine = args.offset ?? 1;
+      const maxLines = args.limit ?? READ_FILE_DEFAULT_LINES;
+      const numbered = numberLines({
+        text,
+        startLine,
+        maxLines,
+        byteLimit: config.skillsSandbox.outputBytesLimit,
+      });
+      const truncated =
+        numbered.byteCapped ||
+        startLine - 1 + numbered.returnedLines < numbered.totalLines;
+
+      const summary: string[] = [];
+      if (numbered.returnedLines > 0) {
+        summary.push(numbered.body);
+        if (truncated) {
+          summary.push(
+            "",
+            `Output truncated (lines ${startLine}-${startLine + numbered.returnedLines - 1} of ${numbered.totalLines}); ` +
+              "re-run read_file with a higher `offset` to read the rest.",
+          );
+        }
+      } else if (numbered.byteCapped) {
+        // The first in-window line alone exceeds the output cap, so nothing
+        // could be rendered — explain rather than imply the range is empty.
+        summary.push(
+          `Line ${startLine} is too large to render inline (over the ${config.skillsSandbox.outputBytesLimit}-byte output cap). ` +
+            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+        );
+      } else {
+        // offset past end of file.
+        summary.push(
+          `No lines at offset ${startLine}; the file has ${numbered.totalLines} line${numbered.totalLines === 1 ? "" : "s"}.`,
+        );
+      }
+
+      logger.info(
+        {
+          fileId,
+          sizeBytes: data.byteLength,
+          returnedLines: numbered.returnedLines,
+        },
+        "[Sandbox] file read from PFS",
+      );
+
+      return structuredSuccessResult(
+        {
+          kind: "text",
+          fileId,
+          filename: originalName,
+          mimeType,
+          sizeBytes: data.byteLength,
+          totalLines: numbered.totalLines,
+          startLine,
+          returnedLines: numbered.returnedLines,
+          truncated,
+        },
+        summary.join("\n"),
+      );
     },
   }),
   defineArchestraTool({
@@ -753,9 +1073,11 @@ const registry = defineArchestraTools([
       "Save inline content directly to the user's persistent file storage " +
       "(My Files) and return a download URL — no sandbox roundtrip. Use it " +
       "for results you produced in the conversation itself (text, markdown, " +
-      "small data files). In a project chat the file is saved to the " +
-      "project. For files generated INSIDE the sandbox, use download_file " +
-      "instead. Requires `sandbox:execute`.",
+      "small data files). Pass `overwrite: true` to replace an existing " +
+      "same-named file in place (e.g. a full rewrite); otherwise a duplicate " +
+      "name is rejected. In a project chat the file is saved to the project. " +
+      "For files generated INSIDE the sandbox, use download_file instead. " +
+      "Requires `sandbox:execute`.",
     schema: SaveResultSchema,
     outputSchema: SaveResultOutputSchema,
     async handler({ args, context }) {
@@ -810,6 +1132,40 @@ const registry = defineArchestraTools([
         buffer: data,
         claimed: args.mimeType,
       });
+
+      // Overwrite: replace an existing same-named file in this scope in place,
+      // keeping its id (and download URL). Falls through to create when none
+      // exists. Without overwrite, a duplicate name surfaces as an error below.
+      if (args.overwrite) {
+        const existing = await fileStore.resolveMyFileRef({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+          filename,
+          scope: scope ? { projectId: scope.projectId } : null,
+        });
+        if (!("error" in existing)) {
+          const updated = await fileStore.update({
+            file: existing,
+            mimeType,
+            sizeBytes: data.byteLength,
+            data,
+          });
+          if (!updated) {
+            return errorResult(describeMyFileError("not_found", filename));
+          }
+          return saveResultSuccess({
+            row: updated,
+            filename,
+            scope,
+            overwritten: true,
+          });
+        }
+        if (existing.error !== "not_found") {
+          return errorResult(describeMyFileError(existing.error, filename));
+        }
+        // not_found → create below.
+      }
+
       try {
         const row = await fileStore.put({
           organizationId: guard.userCtx.organizationId,
@@ -821,35 +1177,11 @@ const registry = defineArchestraTools([
           sizeBytes: data.byteLength,
           data,
         });
-
-        logger.info(
-          {
-            fileId: row.id,
-            sizeBytes: row.sizeBytes,
-            projectScoped: !!scope,
-          },
-          "[Sandbox] result saved to PFS",
-        );
-
-        const downloadUrl = `/api/skill-sandbox/artifacts/${row.id}`;
-        return structuredSuccessResult(
-          {
-            fileId: row.id,
-            filename,
-            projectName: scope?.projectName ?? null,
-            mimeType: row.mimeType,
-            sizeBytes: row.sizeBytes,
-            downloadUrl,
-          },
-          [
-            `Saved ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes) to persistent storage.`,
-            `Download URL (use this for links): ${downloadUrl}`,
-          ].join("\n"),
-        );
+        return saveResultSuccess({ row, filename, scope, overwritten: false });
       } catch (error) {
         if (error instanceof FileNameExistsError) {
           return errorResult(
-            `A file named "${filename}" already exists${scope ? ` in ${scope.projectName}` : ""}. Choose a different name or delete the existing file first.`,
+            `A file named "${filename}" already exists${scope ? ` in ${scope.projectName}` : ""}. Choose a different name, pass overwrite: true, or delete the existing file first.`,
           );
         }
         if (error instanceof UnsafePathError) {
@@ -866,36 +1198,18 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_FILE_SHORT_NAME,
     title: "Edit File",
     description:
-      "Replace the contents of an existing persistent file (My Files) in " +
-      "place, keeping its id and filename — use it to revise a file you saved " +
-      "earlier (e.g. trim a list down to the one item you want to keep). " +
-      "Identify the file by `id` (from search_files / save_result) or by " +
-      "`filename`. In a project chat only the project's files can be edited. " +
-      "Requires `sandbox:execute`.",
+      "Edit an existing persistent file (My Files) by replacing a snippet, " +
+      "keeping its id and filename. Give the exact `old_string` to find (read " +
+      "the file first with read_file) and the `new_string` to put in its place; " +
+      "set `replace_all` to change every occurrence. Identify the file by `id` " +
+      "(from search_files / save_result) or by `filename`. Text files only — to " +
+      "replace a binary file, use save_result with overwrite. In a project chat " +
+      "only the project's files can be edited. Requires `sandbox:execute`.",
     schema: EditFileSchema,
     outputSchema: EditFileOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
-
-      let data: Buffer;
-      if (args.contentBase64 != null) {
-        if (!BASE64_RE.test(args.contentBase64)) {
-          return errorResult("contentBase64 is not valid base64.");
-        }
-        data = Buffer.from(args.contentBase64, "base64");
-      } else {
-        data = Buffer.from(args.content ?? "", "utf8");
-      }
-      if (data.byteLength === 0) {
-        return errorResult("the file content is empty.");
-      }
-      const limit = config.skillsSandbox.artifactBytesLimit;
-      if (data.byteLength > limit) {
-        return errorResult(
-          `the file is too large (${data.byteLength} bytes > ${limit} byte limit).`,
-        );
-      }
 
       let scope: ProjectFileScope | null;
       try {
@@ -922,13 +1236,59 @@ const registry = defineArchestraTools([
         return errorResult(describeMyFileError(resolved.error, ref));
       }
 
-      const mimeType = resolveArtifactMime({
-        buffer: data,
-        claimed: args.mimeType,
-      });
+      // Read the current bytes through the facade (it re-authorizes the row we
+      // just resolved). Gone bytes surface as a clear model-facing message.
+      let current: Awaited<ReturnType<typeof fileStore.get>>;
+      try {
+        current = await fileStore.get({
+          ref: resolved.id,
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+        });
+      } catch (error) {
+        if (error instanceof FileBytesMissingError) {
+          return errorResult(describeMyFileError("missing_bytes", ref));
+        }
+        throw error;
+      }
+      if (!current) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
+
+      const text = decodeUtf8Text(current.data);
+      if (text === null) {
+        return errorResult(
+          `edit_file edits text files only; "${resolved.filename}" (${resolved.mimeType}) is not UTF-8 text. Replace it wholesale with save_result (overwrite: true).`,
+        );
+      }
+
+      const occurrences = countOccurrences(text, args.old_string);
+      if (occurrences === 0) {
+        return errorResult(
+          `old_string was not found in "${resolved.filename}". Read it with read_file and copy the exact text to replace.`,
+        );
+      }
+      if (occurrences > 1 && !args.replace_all) {
+        return errorResult(
+          `old_string is not unique in "${resolved.filename}" (${occurrences} occurrences). Add surrounding context to make it unique, or set replace_all: true.`,
+        );
+      }
+      const replacements = args.replace_all ? occurrences : 1;
+      const updatedText = args.replace_all
+        ? text.split(args.old_string).join(args.new_string)
+        : replaceFirst(text, args.old_string, args.new_string);
+      const data = Buffer.from(updatedText, "utf8");
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (data.byteLength > limit) {
+        return errorResult(
+          `the edited file is too large (${data.byteLength} bytes > ${limit} byte limit).`,
+        );
+      }
+
+      // Keep the stored mime — a snippet edit of a text file never changes type.
       const updated = await fileStore.update({
         file: resolved,
-        mimeType,
+        mimeType: resolved.mimeType,
         sizeBytes: data.byteLength,
         data,
       });
@@ -940,6 +1300,7 @@ const registry = defineArchestraTools([
         {
           fileId: updated.id,
           sizeBytes: updated.sizeBytes,
+          replacements,
           projectScoped: !!scope,
         },
         "[Sandbox] file edited in PFS",
@@ -968,9 +1329,10 @@ const registry = defineArchestraTools([
           mimeType: updated.mimeType,
           sizeBytes: updated.sizeBytes,
           downloadUrl,
+          replacements,
         },
         [
-          `Updated ${updated.filename} (${updated.sizeBytes} bytes).`,
+          `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
           `Download URL (use this for links): ${downloadUrl}`,
         ].join("\n"),
       );
@@ -1315,6 +1677,145 @@ interface LoadedUpload {
   originalName?: string;
   /** Set for my_file sources — the PFS file the agent pulled in, for touch tracking. */
   sourceFileId?: string;
+}
+
+/**
+ * Decode bytes as text for read_file / edit_file, or null when they are not
+ * safe to treat as text. The mime label is never trusted (a binary payload can
+ * be saved as e.g. text/plain), so readability is decided by the bytes: a NUL
+ * byte or any invalid UTF-8 sequence means "binary".
+ */
+function decodeUtf8Text(data: Buffer): string | null {
+  if (data.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return null;
+  }
+}
+
+/** Count non-overlapping occurrences of a non-empty needle (literal). */
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle === "") return 0;
+  return haystack.split(needle).length - 1;
+}
+
+/** Replace the first literal occurrence of `needle` (no regex/`$` semantics). */
+function replaceFirst(
+  haystack: string,
+  needle: string,
+  replacement: string,
+): string {
+  const i = haystack.indexOf(needle);
+  if (i === -1) return haystack;
+  return haystack.slice(0, i) + replacement + haystack.slice(i + needle.length);
+}
+
+/**
+ * Render a `cat -n`-style window of `text` (line number + tab + content),
+ * starting at 1-based `startLine`, at most `maxLines` lines, stopping early if
+ * the rendered output would exceed `byteLimit`. A single trailing newline is
+ * dropped so a newline-terminated file isn't reported with a phantom blank last
+ * line (matching `cat -n`).
+ */
+function numberLines(params: {
+  text: string;
+  startLine: number;
+  maxLines: number;
+  byteLimit: number;
+}): {
+  body: string;
+  returnedLines: number;
+  totalLines: number;
+  byteCapped: boolean;
+} {
+  const trimmed = params.text.endsWith("\n")
+    ? params.text.slice(0, -1)
+    : params.text;
+  const all = trimmed.split("\n");
+  const totalLines = all.length;
+  const from = Math.min(Math.max(params.startLine - 1, 0), totalLines);
+  const window = all.slice(from, from + params.maxLines);
+  const out: string[] = [];
+  let bytes = 0;
+  let byteCapped = false;
+  for (let i = 0; i < window.length; i++) {
+    const rendered = `${from + i + 1}\t${window[i]}`;
+    const add =
+      (out.length === 0 ? 0 : 1) + Buffer.byteLength(rendered, "utf8");
+    if (bytes + add > params.byteLimit) {
+      byteCapped = true;
+      break;
+    }
+    bytes += add;
+    out.push(rendered);
+  }
+  return {
+    body: out.join("\n"),
+    returnedLines: out.length,
+    totalLines,
+    byteCapped,
+  };
+}
+
+/** Build the save_result success result for both the create and overwrite paths. */
+function saveResultSuccess(params: {
+  row: PersistedFile;
+  filename: string;
+  scope: ProjectFileScope | null;
+  overwritten: boolean;
+}) {
+  const { row, filename, scope, overwritten } = params;
+  logger.info(
+    {
+      fileId: row.id,
+      sizeBytes: row.sizeBytes,
+      projectScoped: !!scope,
+      overwritten,
+    },
+    "[Sandbox] result saved to PFS",
+  );
+  const downloadUrl = `/api/skill-sandbox/artifacts/${row.id}`;
+  return structuredSuccessResult(
+    {
+      fileId: row.id,
+      filename,
+      projectName: scope?.projectName ?? null,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      downloadUrl,
+      overwritten,
+    },
+    [
+      `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
+      `Download URL (use this for links): ${downloadUrl}`,
+    ].join("\n"),
+  );
+}
+
+/**
+ * Best-effort record that the agent read a persistent file in this conversation
+ * (powers the chat Files panel). No-op without a conversation or a backing row
+ * (hand-placed files have no row to touch). Failures are logged, never surfaced.
+ */
+function recordReadTouch(params: {
+  organizationId: string;
+  conversationId: string | undefined;
+  fileId: string | null;
+}): void {
+  const { organizationId, conversationId, fileId } = params;
+  if (!conversationId || !fileId) return;
+  void ConversationFileTouchModel.recordTouch({
+    organizationId,
+    conversationId,
+    fileId,
+    touchKind: "read",
+  }).catch((error) => {
+    logger.warn(
+      { error, conversationId, fileId },
+      "[Sandbox] failed to record file touch",
+    );
+  });
 }
 
 /** Map a my_file resolution failure to a model-facing message. */

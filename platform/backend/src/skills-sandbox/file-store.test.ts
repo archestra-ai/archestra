@@ -591,6 +591,83 @@ describe("fileStore disk overlay (filesystem provider)", () => {
     expect(items.filter((i) => i.filename === "written.txt")).toHaveLength(1);
   });
 
+  test("get() denies a ref whose key points outside its own scope", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await drop(owner.email, "private.txt", "secret");
+    const attacker = await makeUser({ email: "ref-attacker@test.com" });
+    // a well-formed ref for the ATTACKER's own scope, but with the OWNER's key —
+    // no traversal, just a sibling folder under the shared root.
+    const crafted = `obj_${Buffer.from(
+      JSON.stringify({
+        s: { kind: "user", userId: attacker.id },
+        k: `${owner.email}/private.txt`,
+      }),
+      "utf8",
+    ).toString("base64url")}`;
+    expect(
+      await fileStore.get({
+        ref: crafted,
+        organizationId: org.id,
+        userId: attacker.id,
+      }),
+    ).toBeNull();
+    // control: the owner reads it via the real ref from search
+    const [item] = await fileStore.search({
+      organizationId: org.id,
+      userId: owner.id,
+      scope: { kind: "personal" },
+    });
+    const got = await fileStore.get({
+      ref: item.downloadRef,
+      organizationId: org.id,
+      userId: owner.id,
+    });
+    expect(got?.data.toString()).toBe("secret");
+  });
+
+  test("resolveMyFileSource resolves a hand-placed file by ref, scope-confined", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await drop(user.email, "notes.txt", "by ref");
+    const [item] = await fileStore.search({
+      organizationId: org.id,
+      userId: user.id,
+      scope: { kind: "personal" },
+    });
+    expect(item.id).toBeNull(); // hand-placed → addressable only by ref
+
+    const ok = await fileStore.resolveMyFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      id: item.downloadRef,
+      scope: null,
+    });
+    expect("error" in ok).toBe(false);
+    expect((ok as { data: Buffer }).data.toString()).toBe("by ref");
+
+    // a project chat cannot resolve a personal ref (owner scope is the project)
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      name: "Other",
+      description: null,
+    });
+    const denied = await fileStore.resolveMyFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      id: item.downloadRef,
+      scope: { projectId: project.id },
+    });
+    expect(denied).toEqual({ error: "not_found" });
+  });
+
   test("update replaces a filesystem-backed file's bytes in place (edit_file)", async ({
     makeUser,
     makeOrganization,

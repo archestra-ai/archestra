@@ -4,6 +4,7 @@ import {
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
@@ -1387,6 +1388,105 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(both.isError).toBe(true);
   });
 
+  test("save_result errors on a duplicate name without overwrite", async () => {
+    const ctx = await makePlainChatCtx();
+    const first = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "dup.md", content: "one" },
+      ctx,
+    );
+    expect(first.isError).toBe(false);
+
+    const second = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "dup.md", content: "two" },
+      ctx,
+    );
+    expect(second.isError).toBe(true);
+    expect(textOf(second)).toContain("already exists");
+  });
+
+  test("save_result overwrite replaces an existing file in place, keeping its id", async () => {
+    const ctx = await makePlainChatCtx();
+    const first = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "report.md", content: "draft" },
+      ctx,
+    );
+    const firstOut = structuredOf<{ fileId: string }>(first);
+
+    const second = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "report.md", content: "final", overwrite: true },
+      ctx,
+    );
+    expect(second.isError).toBe(false);
+    const secondOut = structuredOf<{ fileId: string; overwritten: boolean }>(
+      second,
+    );
+    expect(secondOut.overwritten).toBe(true);
+    expect(secondOut.fileId).toBe(firstOut.fileId);
+
+    const row = await FileModel.findById(firstOut.fileId);
+    expect(row?.data?.toString()).toBe("final");
+  });
+
+  test("save_result overwrite creates the file when none exists", async () => {
+    const ctx = await makePlainChatCtx();
+    const result = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "fresh.md", content: "hi", overwrite: true },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ overwritten: boolean }>(result).overwritten).toBe(
+      false,
+    );
+  });
+
+  test("save_result overwrite stays within the project in a project chat", async () => {
+    const { project, ctx } = await makeProjectChatCtx("overwrite-here");
+    const first = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "out.md", content: "v1" },
+      ctx,
+    );
+    const firstOut = structuredOf<{ fileId: string }>(first);
+
+    const second = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "out.md", content: "v2", overwrite: true },
+      ctx,
+    );
+    expect(second.isError).toBe(false);
+    const secondOut = structuredOf<{ fileId: string; overwritten: boolean }>(
+      second,
+    );
+    expect(secondOut.overwritten).toBe(true);
+    expect(secondOut.fileId).toBe(firstOut.fileId);
+
+    const row = await FileModel.findById(firstOut.fileId);
+    expect(row?.projectId).toBe(project.id);
+    expect(row?.data?.toString()).toBe("v2");
+  });
+
+  test("save_result overwrite surfaces an error if the row vanishes mid-write", async () => {
+    const ctx = await makePlainChatCtx();
+    await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "racy.md", content: "before" },
+      ctx,
+    );
+    // Simulate the file's row disappearing after the bytes were written.
+    vi.spyOn(FileModel, "updateContent").mockResolvedValue(null);
+    const result = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "racy.md", content: "after", overwrite: true },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
   test("search_files in a project chat sees only the project's files", async () => {
     const { project, ctx } = await makeProjectChatCtx("searchable");
     const { SkillSandboxModel } = await import("@/models");
@@ -1425,9 +1525,12 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
       ctx,
     );
     const out = structuredOf<{
-      files: Array<{ filename: string }>;
+      files: Array<{ filename: string; id: string | null; ref: string }>;
     }>(result);
     expect(out.files.map((f) => f.filename)).toEqual(["inside.txt"]);
+    // every result carries a stable ref; for a row-backed file it is the id
+    expect(out.files[0].ref).toBe(out.files[0].id);
+    expect(out.files[0].ref).toBeTruthy();
   });
 
   test("my_file uploads in a project chat are confined to the project", async () => {
@@ -1487,6 +1590,467 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     );
     expect(denied.isError).toBe(true);
     expect(textOf(denied)).toContain("project");
+  });
+});
+
+describe("read_file", () => {
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+  let context: ArchestraContext;
+  const originalEnabled = config.skillsSandbox.enabled;
+
+  beforeAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+  });
+  afterAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+  });
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      seedAndAssignArchestraTools,
+    }) => {
+      agent = await makeAgent({ name: "Read Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      userId = user.id;
+      await seedAndAssignArchestraTools(agent.id);
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId,
+        userId,
+      };
+    },
+  );
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function makePlainChatCtx() {
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId: agent.id,
+      title: "plain",
+    });
+    return { ...context, conversationId: conversation.id };
+  }
+
+  async function makeProjectChatCtx(name: string) {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId,
+      name,
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: name,
+    });
+    return { project, ctx: { ...context, conversationId: conversation.id } };
+  }
+
+  function makePersonalFile(filename: string, body: string) {
+    return fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename,
+      mimeType: "text/plain",
+      sizeBytes: Buffer.byteLength(body),
+      data: Buffer.from(body),
+    });
+  }
+
+  test("reads a file's content as numbered lines, by id", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("a.txt", "first\nsecond\nthird");
+
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe("1\tfirst\n2\tsecond\n3\tthird");
+    const out = structuredOf<{
+      fileId: string;
+      totalLines: number;
+      returnedLines: number;
+      truncated: boolean;
+    }>(result);
+    expect(out.fileId).toBe(file.id);
+    expect(out.totalLines).toBe(3);
+    expect(out.returnedLines).toBe(3);
+    expect(out.truncated).toBe(false);
+  });
+
+  test("reads by filename", async () => {
+    const ctx = await makePlainChatCtx();
+    await makePersonalFile("notes.md", "hello");
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { filename: "notes.md" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe("1\thello");
+  });
+
+  test("windows large files with offset/limit and flags truncation", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("lines.txt", "l1\nl2\nl3\nl4\nl5");
+
+    const head = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id, limit: 2 },
+      ctx,
+    );
+    expect(textOf(head)).toContain("1\tl1");
+    const headOut = structuredOf<{ returnedLines: number; truncated: boolean }>(
+      head,
+    );
+    expect(headOut.returnedLines).toBe(2);
+    expect(headOut.truncated).toBe(true);
+
+    const tail = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id, offset: 3 },
+      ctx,
+    );
+    expect(textOf(tail)).toBe("3\tl3\n4\tl4\n5\tl5");
+    expect(structuredOf<{ truncated: boolean }>(tail).truncated).toBe(false);
+  });
+
+  test("refuses a binary file even when labeled text/plain", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "fake.txt",
+      mimeType: "text/plain",
+      sizeBytes: 5,
+      data: Buffer.from([0x61, 0x00, 0x62, 0x63, 0x64]),
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("not text or a supported image");
+  });
+
+  test("refuses invalid UTF-8 even without a NUL byte", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "latin1.txt",
+      mimeType: "text/plain",
+      sizeBytes: 3,
+      // 0xff 0xfe 0xfd is not valid UTF-8 (and has no NUL byte).
+      data: Buffer.from([0xff, 0xfe, 0xfd]),
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("not text or a supported image");
+  });
+
+  test("returns an inline-safe image as an image content block", async () => {
+    const ctx = await makePlainChatCtx();
+    // PNG magic bytes are enough for the byte-sniffer to classify it as image/png.
+    const pngBytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01,
+    ]);
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "pic.png",
+      mimeType: "image/png",
+      sizeBytes: pngBytes.byteLength,
+      data: pngBytes,
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const image = (result.content as Array<{ type: string }>).find(
+      (c) => c.type === "image",
+    ) as { type: string; data: string; mimeType: string } | undefined;
+    expect(image).toBeDefined();
+    expect(image?.mimeType).toBe("image/png");
+    expect(image?.data).toBe(pngBytes.toString("base64"));
+    expect(structuredOf<{ kind: string }>(result).kind).toBe("image");
+  });
+
+  test("classifies an image by its bytes even when mislabeled text/plain", async () => {
+    const ctx = await makePlainChatCtx();
+    const gifBytes = Buffer.from([
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00,
+    ]);
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "sneaky.txt",
+      mimeType: "text/plain",
+      sizeBytes: gifBytes.byteLength,
+      data: gifBytes,
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ kind: string; mimeType: string }>(result).kind).toBe(
+      "image",
+    );
+    expect(structuredOf<{ mimeType: string }>(result).mimeType).toBe(
+      "image/gif",
+    );
+  });
+
+  test("returns JPEG and WebP raster images inline", async () => {
+    const ctx = await makePlainChatCtx();
+    const cases = [
+      {
+        name: "p.jpg",
+        mime: "image/jpeg",
+        bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]),
+      },
+      {
+        name: "p.webp",
+        mime: "image/webp",
+        bytes: Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42,
+          0x50,
+        ]),
+      },
+    ];
+    for (const c of cases) {
+      const file = await fileStore.put({
+        organizationId,
+        userId,
+        projectId: null,
+        conversationId: null,
+        filename: c.name,
+        mimeType: c.mime,
+        sizeBytes: c.bytes.byteLength,
+        data: c.bytes,
+      });
+      const result = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { id: file.id },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      const out = structuredOf<{ kind: string; mimeType: string }>(result);
+      expect(out.kind).toBe("image");
+      expect(out.mimeType).toBe(c.mime);
+    }
+  });
+
+  test("reads a project-scoped image in its project chat", async () => {
+    const { project, ctx } = await makeProjectChatCtx("img-project");
+    const png = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+    ]);
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: project.id,
+      conversationId: null,
+      filename: "chart.png",
+      mimeType: "image/png",
+      sizeBytes: png.byteLength,
+      data: png,
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ kind: string }>(result).kind).toBe("image");
+  });
+
+  test("refuses an image larger than the inline size cap", async () => {
+    const ctx = await makePlainChatCtx();
+    const big = Buffer.alloc(4 * 1024 * 1024); // > 3.75 MB image cap
+    big.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0); // PNG signature
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "huge.png",
+      mimeType: "image/png",
+      sizeBytes: big.byteLength,
+      data: big,
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("too large to view inline");
+  });
+
+  test("returns no lines when offset is past the end of the file", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("two.txt", "a\nb");
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id, offset: 99 },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const out = structuredOf<{ returnedLines: number; truncated: boolean }>(
+      result,
+    );
+    expect(out.returnedLines).toBe(0);
+    expect(out.truncated).toBe(false);
+    expect(textOf(result)).toContain("No lines at offset 99");
+  });
+
+  test("explains when a single line exceeds the output byte cap", async () => {
+    const ctx = await makePlainChatCtx();
+    const huge = "x".repeat(config.skillsSandbox.outputBytesLimit + 100);
+    const file = await makePersonalFile("huge-line.txt", huge);
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    const out = structuredOf<{ returnedLines: number; truncated: boolean }>(
+      result,
+    );
+    expect(out.returnedLines).toBe(0);
+    expect(out.truncated).toBe(true);
+    expect(textOf(result)).toContain("too large to render inline");
+  });
+
+  test("reads a project file in its project chat", async () => {
+    const { project, ctx } = await makeProjectChatCtx("readable-project");
+    const projectFile = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: project.id,
+      conversationId: null,
+      filename: "plan.md",
+      mimeType: "text/markdown",
+      sizeBytes: 4,
+      data: Buffer.from("plan"),
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: projectFile.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe("1\tplan");
+  });
+
+  test("reports an empty file", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("blank.txt", "");
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ sizeBytes: number }>(result).sizeBytes).toBe(0);
+    expect(textOf(result)).toContain("empty");
+  });
+
+  test("errors when the file does not exist", async () => {
+    const ctx = await makePlainChatCtx();
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: "00000000-0000-0000-0000-000000000000" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("routes an obj_ ref to the object store (fails closed on db backend)", async () => {
+    const ctx = await makePlainChatCtx();
+    // An obj_ ref must go to the object-store resolver, not the uuid column. On
+    // the db backend there is no store, so it resolves to a clean not-found.
+    const ref = `obj_${Buffer.from(
+      JSON.stringify({ s: { kind: "user", userId }, k: `${userId}/x.txt` }),
+      "utf8",
+    ).toString("base64url")}`;
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: ref },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("reads without materializing a sandbox and records a read touch", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("touch.txt", "content");
+    const createSpy = vi.spyOn(SkillSandboxModel, "create");
+    const defaultSpy = vi.spyOn(SkillSandboxModel, "findOrCreateDefault");
+
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: file.id },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(defaultSpy).not.toHaveBeenCalled();
+
+    const referenced = await ConversationFileTouchModel.listReferencedFiles({
+      organizationId,
+      conversationId: ctx.conversationId as string,
+      scope: { kind: "personal", userId },
+    });
+    expect(referenced.map((f) => f.id)).toEqual([file.id]);
+  });
+
+  test("in a project chat cannot read a personal file", async () => {
+    const { ctx } = await makeProjectChatCtx("scoped-read");
+    const personal = await makePersonalFile("secret.txt", "classified");
+    const result = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { id: personal.id },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).not.toContain("classified");
   });
 });
 
@@ -1570,22 +2134,25 @@ describe("edit_file / delete_file", () => {
     });
   }
 
-  test("edit_file replaces content in place and records an edit touch", async () => {
+  test("edit_file replaces a snippet in place, keeps the id, records a touch", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("jokes.md", "ten jokes");
+    const file = await makePersonalFile(
+      "poem.md",
+      "roses are red\nviolets are blue\n",
+    );
 
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
-      { id: file.id, content: "the one good joke" },
+      { id: file.id, old_string: "blue", new_string: "cyan" },
       ctx,
     );
     expect(result.isError).toBe(false);
-    const out = structuredOf<{ fileId: string; sizeBytes: number }>(result);
+    const out = structuredOf<{ fileId: string; replacements: number }>(result);
     expect(out.fileId).toBe(file.id);
-    expect(out.sizeBytes).toBe(Buffer.byteLength("the one good joke"));
+    expect(out.replacements).toBe(1);
 
     const row = await FileModel.findById(file.id);
-    expect(row?.data?.toString()).toBe("the one good joke");
+    expect(row?.data?.toString()).toBe("roses are red\nviolets are cyan\n");
 
     const referenced = await ConversationFileTouchModel.listReferencedFiles({
       organizationId,
@@ -1597,27 +2164,90 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file resolves by filename", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("notes.txt", "old");
+    const file = await makePersonalFile("notes.txt", "old value");
 
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
-      { filename: "notes.txt", content: "new" },
+      { filename: "notes.txt", old_string: "old", new_string: "new" },
       ctx,
     );
     expect(result.isError).toBe(false);
     const row = await FileModel.findById(file.id);
-    expect(row?.data?.toString()).toBe("new");
+    expect(row?.data?.toString()).toBe("new value");
   });
 
-  test("edit_file requires exactly one of content / contentBase64", async () => {
+  test("edit_file errors when old_string is not found", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("a.txt", "x");
-    const both = await executeArchestraTool(
+    const file = await makePersonalFile("a.txt", "hello world");
+    const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
-      { id: file.id, content: "a", contentBase64: "YQ==" },
+      { id: file.id, old_string: "absent", new_string: "x" },
       ctx,
     );
-    expect(both.isError).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("not found");
+    const row = await FileModel.findById(file.id);
+    expect(row?.data?.toString()).toBe("hello world");
+  });
+
+  test("edit_file errors when old_string is not unique without replace_all", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("dup.txt", "a a a");
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: file.id, old_string: "a", new_string: "b" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("not unique");
+    const row = await FileModel.findById(file.id);
+    expect(row?.data?.toString()).toBe("a a a");
+  });
+
+  test("edit_file replace_all changes every occurrence", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("dup.txt", "a a a");
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: file.id, old_string: "a", new_string: "b", replace_all: true },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(structuredOf<{ replacements: number }>(result).replacements).toBe(3);
+    const row = await FileModel.findById(file.id);
+    expect(row?.data?.toString()).toBe("b b b");
+  });
+
+  test("edit_file rejects new_string equal to old_string", async () => {
+    const ctx = await makePlainChatCtx();
+    const file = await makePersonalFile("a.txt", "keep");
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: file.id, old_string: "keep", new_string: "keep" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("edit_file refuses a binary (non-UTF-8) file", async () => {
+    const ctx = await makePlainChatCtx();
+    const binary = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: null,
+      conversationId: null,
+      filename: "image.bin",
+      mimeType: "application/octet-stream",
+      sizeBytes: 4,
+      data: Buffer.from([0x00, 0x01, 0x02, 0xff]),
+    });
+    const result = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { id: binary.id, old_string: "x", new_string: "y" },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("text");
   });
 
   test("edit_file in a project chat cannot touch a personal file", async () => {
@@ -1626,7 +2256,7 @@ describe("edit_file / delete_file", () => {
 
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
-      { id: personal.id, content: "hacked" },
+      { id: personal.id, old_string: "secret", new_string: "hacked" },
       ctx,
     );
     expect(result.isError).toBe(true);
@@ -1684,6 +2314,7 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     (config.projects as { enabled: boolean }).enabled = false;
     const off = getArchestraMcpTools().map((tool) => tool.name);
     expect(off).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
+    expect(off).not.toContain(TOOL_READ_FILE_FULL_NAME);
     expect(off).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
     expect(off).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
     expect(off).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
@@ -1696,6 +2327,7 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
     const on = getArchestraMcpTools().map((tool) => tool.name);
     for (const name of [
       TOOL_SEARCH_FILES_FULL_NAME,
+      TOOL_READ_FILE_FULL_NAME,
       TOOL_SAVE_RESULT_FULL_NAME,
       TOOL_EDIT_FILE_FULL_NAME,
       TOOL_DELETE_FILE_FULL_NAME,
@@ -1764,7 +2396,11 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
       await expect(
         executeArchestraTool(
           TOOL_EDIT_FILE_FULL_NAME,
-          { id: "00000000-0000-0000-0000-000000000000", content: "hi" },
+          {
+            id: "00000000-0000-0000-0000-000000000000",
+            old_string: "x",
+            new_string: "y",
+          },
           context,
         ),
       ).rejects.toMatchObject({
@@ -1784,6 +2420,19 @@ describe("projects feature gating (search_files / save_result / my_file)", () =>
         code: -32601,
         message: expect.stringContaining(
           `No tool named "${TOOL_DELETE_FILE_FULL_NAME}" exists`,
+        ),
+      });
+
+      await expect(
+        executeArchestraTool(
+          TOOL_READ_FILE_FULL_NAME,
+          { id: "00000000-0000-0000-0000-000000000000" },
+          context,
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: expect.stringContaining(
+          `No tool named "${TOOL_READ_FILE_FULL_NAME}" exists`,
         ),
       });
     });

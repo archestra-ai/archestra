@@ -691,7 +691,7 @@ export function AppSidebar() {
                     together within this region, while the nav above stays
                     pinned. The fade hints there is more content below. */}
                 <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
-                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable]">
+                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
                     <ChatSidebarSection slots={15} flat />
                     <NavSecondary
                       items={[]}

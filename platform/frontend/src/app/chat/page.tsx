@@ -1889,31 +1889,36 @@ export function ChatPageContent({
                 {/* Left side - conversation title */}
                 {conversationId && conversation && (
                   <div className="flex items-center flex-shrink min-w-0">
-                    <TruncatedTooltip
-                      content={getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )}
-                    >
+                    {/* Skip TruncatedTooltip while the title animates: its
+                        resize measurement re-renders on every TypingText tick,
+                        which loops past React's nested-update cap. */}
+                    {headerAnimatingTitles.has(conversation.id) ? (
                       <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                        {headerAnimatingTitles.has(conversation.id) ? (
-                          <TypingText
-                            text={getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )}
-                            typingSpeed={35}
-                            showCursor
-                            cursorClassName="bg-muted-foreground"
-                          />
-                        ) : (
-                          getConversationDisplayTitle(
+                        <TypingText
+                          text={getConversationDisplayTitle(
                             conversation.title,
                             conversation.messages,
-                          )
-                        )}
+                          )}
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
                       </h1>
-                    </TruncatedTooltip>
+                    ) : (
+                      <TruncatedTooltip
+                        content={getConversationDisplayTitle(
+                          conversation.title,
+                          conversation.messages,
+                        )}
+                      >
+                        <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                          {getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                        </h1>
+                      </TruncatedTooltip>
+                    )}
                   </div>
                 )}
                 {/* Right side - desktop: panel toggle */}

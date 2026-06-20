@@ -3,14 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { EditableUserMessage } from "./editable-user-message";
 
-vi.mock("@/components/chat/message-actions", () => ({
-  MessageActions: () => null,
-}));
-
-vi.mock("@/components/chat/user-message-text", () => ({
-  UserMessageText: ({ text }: { text: string }) => <div>{text}</div>,
-}));
-
 const editProps = {
   messageId: "message-1",
   partIndex: 0,

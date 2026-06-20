@@ -3,14 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 
-vi.mock("@/components/chat/message-actions", () => ({
-  MessageActions: () => null,
-}));
-
-vi.mock("@/components/ai-elements/response", () => ({
-  Response: ({ children }: { children: string }) => <div>{children}</div>,
-}));
-
 const baseProps = {
   messageId: "message-1",
   partIndex: 0,

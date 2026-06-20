@@ -628,3 +628,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @virajrajput03789
 - @aptnk
 - @msineath
+- @rohitjyoti

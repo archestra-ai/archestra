@@ -241,10 +241,10 @@ function userContentToAnthropicContent(content: unknown): AnthropicUserContent {
   return blocks as unknown as AnthropicUserContent;
 }
 
-// Maps OpenAI content parts to Anthropic content blocks (text, base64 image,
-// base64 PDF document). Shared by user messages and tool_result blocks. http(s)
-// image URLs and audio are dropped since Anthropic's typed schema models only
-// base64 image/PDF sources here.
+// Maps OpenAI content parts to Anthropic content blocks (text, image, base64
+// PDF document). Shared by user messages and tool_result blocks. Images use a
+// base64 source for data URLs and a url source for http(s) URLs (Anthropic
+// fetches them). Audio is dropped since Anthropic models no audio source here.
 function userContentToAnthropicBlocks(
   content: unknown,
 ): AnthropicToolResultContent {
@@ -264,15 +264,20 @@ function normalizedPartToAnthropicBlock(
       return { type: "text", text: part.text };
     case "image": {
       const inline = parseDataUrl(part.url);
-      if (!inline) return null;
-      return {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: inline.mimeType,
-          data: inline.data,
-        },
-      };
+      if (inline) {
+        return {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: inline.mimeType,
+            data: inline.data,
+          },
+        };
+      }
+      if (/^https?:\/\//i.test(part.url)) {
+        return { type: "image", source: { type: "url", url: part.url } };
+      }
+      return null;
     }
     case "file": {
       const inline = parseDataUrl(part.fileData);

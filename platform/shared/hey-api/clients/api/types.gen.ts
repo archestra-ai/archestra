@@ -1261,6 +1261,9 @@ export type AnthropicMessagesRequestInput = {
                 type: 'base64';
                 media_type: string;
                 data: string;
+            } | {
+                type: 'url';
+                url: string;
             };
             cache_control?: unknown;
         } | {
@@ -1289,6 +1292,9 @@ export type AnthropicMessagesRequestInput = {
                         type: 'base64';
                         media_type: string;
                         data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
                     };
                     cache_control?: unknown;
                 }>;
@@ -1327,6 +1333,9 @@ export type AnthropicMessagesRequestInput = {
                     type: 'base64';
                     media_type: string;
                     data: string;
+                } | {
+                    type: 'url';
+                    url: string;
                 };
                 cache_control?: unknown;
             } | {
@@ -1355,6 +1364,9 @@ export type AnthropicMessagesRequestInput = {
                             type: 'base64';
                             media_type: string;
                             data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
                         };
                         cache_control?: unknown;
                     }>;
@@ -6559,6 +6571,9 @@ export type AnthropicMessagesRequest = {
                 type: 'base64';
                 media_type: string;
                 data: string;
+            } | {
+                type: 'url';
+                url: string;
             };
             cache_control?: unknown;
         } | {
@@ -6587,6 +6602,9 @@ export type AnthropicMessagesRequest = {
                         type: 'base64';
                         media_type: string;
                         data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
                     };
                     cache_control?: unknown;
                 }>;
@@ -6625,6 +6643,9 @@ export type AnthropicMessagesRequest = {
                     type: 'base64';
                     media_type: string;
                     data: string;
+                } | {
+                    type: 'url';
+                    url: string;
                 };
                 cache_control?: unknown;
             } | {
@@ -6653,6 +6674,9 @@ export type AnthropicMessagesRequest = {
                             type: 'base64';
                             media_type: string;
                             data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
                         };
                         cache_control?: unknown;
                     }>;

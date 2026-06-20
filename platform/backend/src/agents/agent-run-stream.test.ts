@@ -1,9 +1,13 @@
-import { describe, expect, test } from "vitest";
+import { type ModelMessage, simulateReadableStream } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
+import { describe, expect, test, vi } from "vitest";
+import { EmptyModelResponseError } from "@/routes/chat/errors";
 import {
   isRetryableEmptyFinishReason,
   probeFirstRenderableEvent,
+  runAgentStream,
   type StreamProbeEvent,
-} from "./stream-probe";
+} from "./agent-run-stream";
 
 // builds a real async iterator over the given events; `onReturn` records whether
 // the iterator was cancelled (which would cancel the underlying stream).
@@ -238,16 +242,209 @@ describe("probeFirstRenderableEvent", () => {
 });
 
 describe("isRetryableEmptyFinishReason", () => {
-  test("retries on stop, length, unknown, error, and other", () => {
-    expect(isRetryableEmptyFinishReason("stop")).toBe(true);
-    expect(isRetryableEmptyFinishReason("length")).toBe(true);
-    expect(isRetryableEmptyFinishReason("unknown")).toBe(true);
-    expect(isRetryableEmptyFinishReason("error")).toBe(true);
-    expect(isRetryableEmptyFinishReason("other")).toBe(true);
-  });
-
   test("does not retry on deterministic terminal reasons", () => {
     expect(isRetryableEmptyFinishReason("content-filter")).toBe(false);
     expect(isRetryableEmptyFinishReason("tool-calls")).toBe(false);
+  });
+});
+
+// A `LanguageModelV3StreamResult` (one per simulated doStream call). The mock
+// model is the only mocked boundary — real `streamText` drives the recovery.
+type StreamResult = Extract<
+  NonNullable<ConstructorParameters<typeof MockLanguageModelV3>[0]>["doStream"],
+  { stream: unknown }
+>;
+type ModelStreamPart =
+  StreamResult["stream"] extends ReadableStream<infer P> ? P : never;
+
+function streamResult(chunks: ModelStreamPart[]): StreamResult {
+  return { stream: simulateReadableStream({ chunks }) };
+}
+
+const usage = {
+  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 1, text: 1, reasoning: 0 },
+};
+
+function finished(unified: "stop" | "tool-calls" | "error") {
+  return { unified, raw: unified };
+}
+
+function renderableChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "1" },
+    { type: "text-delta", id: "1", delta: "hi" },
+    { type: "text-end", id: "1" },
+    { type: "finish", finishReason: finished("stop"), usage },
+  ];
+}
+
+function emptyChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "finish", finishReason: finished("stop"), usage },
+  ];
+}
+
+function abortiveChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "tool-input-start", id: "t1", toolName: "foo" },
+    { type: "tool-input-delta", id: "t1", delta: "{" },
+    { type: "finish", finishReason: finished("tool-calls"), usage },
+  ];
+}
+
+function errorChunks(error: Error): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "error", error },
+    { type: "finish", finishReason: finished("error"), usage },
+  ];
+}
+
+// drains the returned stream's fullStream so simulated streams don't leak.
+async function drain(result: { fullStream: AsyncIterable<unknown> }) {
+  for await (const _ of result.fullStream) {
+    // no-op
+  }
+}
+
+// Returns a fresh simulated stream per `doStream` call (a single-use
+// ReadableStream cannot be replayed across attempts). Calls past the provided
+// list reuse the last entry so an unexpected extra attempt fails loudly on the
+// assertion rather than on stream exhaustion.
+function modelFor(...calls: ModelStreamPart[][]): MockLanguageModelV3 {
+  let attempt = 0;
+  return new MockLanguageModelV3({
+    doStream: async () => {
+      const chunks = calls[Math.min(attempt, calls.length - 1)];
+      attempt++;
+      return streamResult(chunks);
+    },
+  });
+}
+
+describe("runAgentStream", () => {
+  test("returns immediately on a renderable first event, without retrying", async () => {
+    const model = modelFor(renderableChunks());
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(await result.text).toBe("hi");
+  });
+
+  test("retries an empty response to the cap, then throws EmptyModelResponseError", async () => {
+    const model = modelFor(emptyChunks(), emptyChunks(), emptyChunks());
+    const onEmptyResponseExhausted = vi.fn(async () => {});
+
+    await expect(
+      runAgentStream({
+        config: { model, prompt: "hello" },
+        recovery: { onEmptyResponseExhausted },
+      }),
+    ).rejects.toBeInstanceOf(EmptyModelResponseError);
+
+    expect(model.doStreamCalls).toHaveLength(3);
+    expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retries an empty response, then commits the renderable retry", async () => {
+    const model = modelFor(emptyChunks(), renderableChunks());
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(await result.text).toBe("hi");
+  });
+
+  test("retries an abortive tool call, then surfaces the abortive result on exhaustion", async () => {
+    const model = modelFor(abortiveChunks(), abortiveChunks());
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+  });
+
+  test("trims and retries on a context-length rejection when messages are present", async () => {
+    const messages: ModelMessage[] = [
+      { role: "user", content: "a".repeat(400) },
+      { role: "assistant", content: "b".repeat(400) },
+      { role: "user", content: "c".repeat(400) },
+    ];
+    const model = modelFor(
+      errorChunks(new Error("maximum input length of 5 tokens")),
+      renderableChunks(),
+    );
+
+    const { result } = await runAgentStream({
+      config: { model, messages },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    // the retry resends a trimmed (shorter) message list
+    expect(model.doStreamCalls[1].prompt.length).toBeLessThan(
+      model.doStreamCalls[0].prompt.length,
+    );
+    expect(await result.text).toBe("hi");
+  });
+
+  test("does not trim a prompt-only run; returns the errored result for the merge", async () => {
+    const contextError = new Error("maximum input length of 5 tokens");
+    const model = modelFor(errorChunks(contextError));
+
+    const { result, getCapturedStreamError } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(getCapturedStreamError()).toBe(contextError);
+  });
+
+  test("getCapturedStreamError reflects only the committed attempt (discarded retry cleared)", async () => {
+    const messages: ModelMessage[] = [
+      { role: "user", content: "a".repeat(400) },
+      { role: "assistant", content: "b".repeat(400) },
+      { role: "user", content: "c".repeat(400) },
+    ];
+    const model = modelFor(
+      errorChunks(new Error("maximum input length of 5 tokens")),
+      renderableChunks(),
+    );
+
+    const { result, getCapturedStreamError } = await runAgentStream({
+      config: { model, messages },
+    });
+    await drain(result);
+
+    // the discarded trim attempt errored; the committed attempt was clean, so
+    // the capture must not leak the discarded attempt's error.
+    expect(getCapturedStreamError()).toBeUndefined();
+  });
+
+  test("chains the injected onError to a caller-provided onError", async () => {
+    const contextError = new Error("maximum input length of 5 tokens");
+    const callerOnError = vi.fn();
+    const model = modelFor(errorChunks(contextError));
+
+    const { result } = await runAgentStream({
+      config: { model, prompt: "hello", onError: callerOnError },
+    });
+    await drain(result);
+
+    expect(callerOnError).toHaveBeenCalledWith({ error: contextError });
   });
 });

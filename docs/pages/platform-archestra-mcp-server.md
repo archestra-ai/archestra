@@ -1596,7 +1596,7 @@ Required RBAC permission: `skill:read`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | The skill to load, as named by list_skills. |
-| `path` | `string` | No | Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead. |
+| `path` | `string` | No | Optional. Omit (or pass an empty string) to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead. |
 
 
 #### create_skill

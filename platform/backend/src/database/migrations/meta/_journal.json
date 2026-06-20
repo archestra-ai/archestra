@@ -2084,8 +2084,15 @@
     {
       "idx": 297,
       "version": "7",
-      "when": 1781902146682,
-      "tag": "0297_cloudy_triathlon",
+      "when": 1781899258905,
+      "tag": "0297_remove_knowledge_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1781966151604,
+      "tag": "0298_cloudy_triathlon",
       "breakpoints": true
     }
   ]

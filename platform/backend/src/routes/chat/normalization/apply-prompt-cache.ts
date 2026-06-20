@@ -1,5 +1,19 @@
 import type { ModelMessage } from "ai";
 
+// Anthropic-direct and Bedrock expose 1-hour cache TTL support on different
+// model sets. Keep the match provider-specific so unsupported/newer Bedrock
+// models fall back to the 5-minute default instead of sending an invalid ttl.
+//
+// Anthropic-direct: 1h TTL is broadly available across the 4.5+ generation.
+const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
+  /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
+// Bedrock: per AWS docs only the 4.5 generation supports the 1h TTL; 4.6
+// supports 5m only and *rejects* the whole request when sent ttl:"1h". Pinned
+// to 4.5 so newer/unknown ids degrade safely to 5m. Widen this when AWS
+// documents 1h support for a newer Bedrock model (e.g. 4.7+).
+// https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
+
 // Per-provider cache-breakpoint marker, written into a message's
 // `providerOptions`. Anthropic and Amazon Bedrock both require explicit
 // breakpoints and both cap at 4 per request; only the providerOptions key and
@@ -7,24 +21,34 @@ import type { ModelMessage } from "ai";
 //   - Anthropic: `{ anthropic: { cacheControl: { type: "ephemeral" } } }`
 //   - Bedrock:   `{ bedrock:   { cachePoint:   { type: "default"   } } }`
 const CACHE_BREAKPOINTS = {
-  anthropic: { key: "anthropic", field: "cacheControl", type: "ephemeral" },
-  bedrock: { key: "bedrock", field: "cachePoint", type: "default" },
+  anthropic: {
+    key: "anthropic",
+    field: "cacheControl",
+    type: "ephemeral",
+    oneHourCacheModel: CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL,
+  },
+  bedrock: {
+    key: "bedrock",
+    field: "cachePoint",
+    type: "default",
+    oneHourCacheModel: CLAUDE_45_ONE_HOUR_CACHE_MODEL,
+  },
 } as const;
 
 type CacheBreakpointConfig =
   (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS];
 
-// Claude Sonnet/Haiku/Opus 4.5 and newer support a 1-hour cache TTL; older
-// models (and other providers) only support the 5-minute default. Matches bare
-// ids ("claude-sonnet-4-5") and Bedrock inference-profile ids
-// ("us.anthropic.claude-opus-4-6-..."). Claude Sonnet/Opus 4
-// ("claude-sonnet-4-20250514") and Claude 3.x are intentionally excluded.
+// Matches bare ids ("claude-sonnet-4-5") and provider-specific ids
+// ("us.anthropic.claude-opus-4-5-..."). Claude Sonnet/Opus 4
+// ("claude-sonnet-4-20250514") and Claude 3.x are intentionally excluded by
+// both provider-specific regexes.
 // `(?!\d)` stops the minor-version digit from matching the leading digit of a
 // dated id like "claude-sonnet-4-20250514" (Sonnet 4, not 4.5).
-const ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
-
-function supportsOneHourCache(model: string): boolean {
-  return ONE_HOUR_CACHE_MODEL.test(model);
+function supportsOneHourCache(
+  config: CacheBreakpointConfig,
+  model: string,
+): boolean {
+  return config.oneHourCacheModel.test(model);
 }
 
 // Anthropic and Bedrock both reject a request with more than 4 cache
@@ -88,7 +112,7 @@ export function applyPromptCacheBreakpoints(params: {
   // one — so mixing 1h here with those 5m markers can fail the request. Staying
   // uniformly 5m when any marker pre-exists keeps ordering valid.
   const useOneHour =
-    !!model && supportsOneHourCache(model) && existingBreakpoints === 0;
+    !!model && supportsOneHourCache(config, model) && existingBreakpoints === 0;
   const markerValue = useOneHour
     ? { type: config.type, ttl: "1h" }
     : { type: config.type };

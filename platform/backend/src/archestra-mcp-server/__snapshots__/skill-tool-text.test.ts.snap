@@ -190,8 +190,7 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
         "type": "string",
       },
       "path": {
-        "description": "Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
-        "minLength": 1,
+        "description": "Optional. Omit (or pass an empty string) to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
         "type": "string",
       },
     },

@@ -92,6 +92,8 @@ pub struct AgentCreate {
     pub system_prompt: Option<String>,
     #[serde(rename = "toolExposureMode")]
     pub tool_exposure_mode: ToolExposureMode,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub teams: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -379,6 +381,20 @@ impl EvalClient {
             .await?,
             "POST /api/agents",
         )
+    }
+
+    pub async fn create_team(&self, name: &str) -> Result<String, ClientError> {
+        let body = require_dict(
+            self.request(
+                Method::POST,
+                "/api/teams",
+                None,
+                Some(&serde_json::json!({"name": name})),
+            )
+            .await?,
+            "POST /api/teams",
+        )?;
+        require_str_field(&body, "id", "POST /api/teams")
     }
 
     pub async fn list_skills(
@@ -1039,6 +1055,7 @@ mod tests {
             agent_type: "agent".into(),
             system_prompt: None,
             tool_exposure_mode: ToolExposureMode::SearchAndRunOnly,
+            teams: vec![],
         };
         let v = serde_json::to_value(&agent).unwrap();
         assert_eq!(v["toolExposureMode"], "search_and_run_only");

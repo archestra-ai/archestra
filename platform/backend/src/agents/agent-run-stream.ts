@@ -1,56 +1,81 @@
-// Probes a streamText `fullStream` just far enough to decide whether the turn
-// will produce anything renderable, so the chat route can silently retry a
-// clean-but-empty response before committing the stream to the client.
+// The shared agent-run streamText primitive for every agent execution surface
+// (interactive chat SSE, headless/A2A, scheduled, ChatOps). It owns the
+// `streamText` invocation, the empty/abortive/context-length recovery loop, and
+// the stream-level `onError` capture — but not the stop policy: each caller
+// passes its own `stopWhen` in `config` (this module only exports the shared
+// `MAX_AGENT_STEPS`).
+//
+// It probes a streamText `fullStream` just far enough to decide whether the turn
+// will produce anything renderable, so a caller can silently retry a clean-but-
+// empty response before committing the stream to the consumer.
 //
 // It pulls the stream iterator manually (never via `for await`) and returns
 // without calling `iterator.return()` — an early `for await` break would cancel
 // the underlying generation and break the subsequent `toUIMessageStream` merge.
 
-import { type ModelMessage, streamText } from "ai";
+import { streamText } from "ai";
 import logger from "@/logging";
 import {
   parseMaxInputTokens,
   trimMessagesToTokenLimit,
-} from "./context-trimming";
-import { EmptyModelResponseError } from "./errors";
+} from "@/routes/chat/context-trimming";
+import { EmptyModelResponseError } from "@/routes/chat/errors";
 
-export type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
-  messages: ModelMessage[];
-};
+// Maximum agent steps (tool round-trips) per run, shared by every surface. The
+// primitive does not inject this — callers pass `stopWhen: stepCountIs(MAX_AGENT_STEPS)`
+// (plus any surface-specific stops, e.g. chat's swap-agent conditions).
+export const MAX_AGENT_STEPS = 500;
+
+type StreamTextConfig = Parameters<typeof streamText>[0];
 
 /**
  * Run streamText, probing each attempt's stream for its first renderable event
- * before the caller merges it to the client. This lets us, before anything
- * reaches the user:
- *   - trim + retry on a context-length rejection (vLLM/LiteLLM),
+ * before the caller merges it to the consumer. This lets us, before anything
+ * reaches the consumer:
+ *   - trim + retry on a context-length rejection (vLLM/LiteLLM) — `messages`
+ *     input only; a `prompt`-only run skips trimming,
  *   - silently retry a clean-but-empty response (a stupid-model / inference
  *     glitch), then surface a stream error if it persists, and
  *   - retry an abortive tool call (the model started streaming tool input but
  *     the stream ended before a completed `tool-call`), then surface the
  *     existing IncompleteToolCall error if it persists.
- * tee() buffers the stream, so consuming the probe prefix does not drop events
- * from the caller's toUIMessageStream merge. Commit happens on the first
- * *committing* event — content or a completed `tool-call`, not the opening
- * `tool-input-start` — so an abortive tool call is caught before anything
- * reaches the client; the cost is a slightly later tool indicator.
+ * The AI SDK internally buffers `fullStream` per accessor, so reading the probe
+ * prefix here does not drop events from the caller's own consumers (its
+ * toUIMessageStream merge, `.text`/`.usage`/`.finishReason`). Commit happens on
+ * the first *committing* event — content or a completed `tool-call`, not the
+ * opening `tool-input-start` — so an abortive tool call is caught before
+ * anything reaches the consumer; the cost is a slightly later tool indicator.
  *
  * A probed error other than a trimmable context-length rejection returns the
  * errored result so the caller's merge surfaces it through the existing
- * toUIMessageStream onError (preserving e.g. unavailable-tool handling);
- * tee() replays the error.
+ * toUIMessageStream onError (preserving e.g. unavailable-tool handling); the
+ * buffered stream replays the error to the caller's consumers.
+ *
+ * A stream-level `onError` is injected so the committed attempt's error is
+ * captured (exposed via `getCapturedStreamError`, used by A2A to map a generic
+ * NoOutputGeneratedError to its real cause). The capture is reset before each
+ * attempt so a discarded retry's error never leaks into the committed mapping.
+ * The injected callback chains to any caller `config.onError`; if none is set it
+ * logs the error, preserving the observability the AI-SDK default console.error
+ * gave.
  */
-export async function streamTextWithRecovery(params: {
-  config: ChatStreamTextConfig;
-  conversationId: string;
-  /**
-   * Fires when empty-response retries exhaust, right before the
-   * EmptyModelResponseError throw — i.e. while nothing has been merged to the
-   * client yet, so the caller can persist the user messages it would
-   * otherwise lose.
-   */
-  onEmptyResponseExhausted: () => Promise<void>;
-}): Promise<ReturnType<typeof streamText>> {
-  const { config, conversationId, onEmptyResponseExhausted } = params;
+export async function runAgentStream(params: {
+  config: StreamTextConfig;
+  recovery?: {
+    logContext?: Record<string, unknown>;
+    /**
+     * Fires when empty-response retries exhaust, right before the
+     * EmptyModelResponseError throw — i.e. while nothing has been merged to the
+     * consumer yet, so the caller can persist state it would otherwise lose.
+     */
+    onEmptyResponseExhausted?: () => Promise<void>;
+  };
+}): Promise<{
+  result: ReturnType<typeof streamText>;
+  getCapturedStreamError: () => unknown;
+}> {
+  const { config, recovery } = params;
+  const logContext = recovery?.logContext ?? {};
 
   const MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
   // a still-too-long trimmed payload reproduces the same context error (trim
@@ -65,11 +90,37 @@ export async function streamTextWithRecovery(params: {
   let emptyResponseAttempts = 0;
   let contextTrimAttempts = 0;
   let abortiveToolCallAttempts = 0;
+
+  // Capture only the committed attempt's stream error. Reset before each
+  // streamText call so a discarded retry's error never leaks into the mapping.
+  let capturedStreamError: unknown;
+  const callerOnError = config.onError;
+  const onError = (event: { error: unknown }) => {
+    capturedStreamError = event.error;
+    if (callerOnError) {
+      return callerOnError(event);
+    }
+    logger.error(
+      { ...logContext, error: event.error },
+      "[AgentRunStream] stream error",
+    );
+  };
+
   // the config the loop retries from; trim replaces its messages so a later
   // empty-response retry reuses the trimmed payload instead of resending the
   // original (too-large) one.
-  let currentConfig: ChatStreamTextConfig = config;
-  let result = streamText(currentConfig);
+  let currentConfig: StreamTextConfig = { ...config, onError };
+  // Reset before each attempt so a discarded retry's error never leaks into the
+  // committed mapping. This is safe only because the loop always probes an
+  // attempt to a terminal event (finish/error/done) before deciding to retry —
+  // a discarded stream's onError therefore fires during that probe, before the
+  // next reset. Retrying *before* reaching a terminal probe event would break
+  // the "only the committed attempt's error is captured" guarantee.
+  const runAttempt = (): ReturnType<typeof streamText> => {
+    capturedStreamError = undefined;
+    return streamText(currentConfig);
+  };
+  let result = runAttempt();
 
   while (true) {
     const probe = await probeFirstRenderableEvent(
@@ -77,13 +128,14 @@ export async function streamTextWithRecovery(params: {
     );
 
     if (probe.kind === "renderable" || probe.kind === "aborted") {
-      return result;
+      return { result, getCapturedStreamError: () => capturedStreamError };
     }
 
     if (probe.kind === "error") {
       const maxTokens = parseMaxInputTokens(probe.error);
       if (
         maxTokens !== null &&
+        Array.isArray(config.messages) &&
         contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
       ) {
         contextTrimAttempts++;
@@ -95,21 +147,25 @@ export async function streamTextWithRecovery(params: {
         });
         logger.info(
           {
+            ...logContext,
             maxTokens,
             originalMessages: config.messages.length,
             trimmedMessages: trimmed.length,
-            conversationId,
           },
           "[ContextTrimming] retrying with trimmed messages",
         );
+        // `prompt: undefined` keeps the object on the `messages` side of the
+        // streamText `messages | prompt` union after the spread (the trim branch
+        // only runs when `config.messages` is an array, so there is no prompt).
         currentConfig = {
           ...currentConfig,
+          prompt: undefined,
           messages: trimmed,
         };
-        result = streamText(currentConfig);
+        result = runAttempt();
         continue;
       }
-      return result;
+      return { result, getCapturedStreamError: () => capturedStreamError };
     }
 
     if (probe.kind === "abortive") {
@@ -117,26 +173,26 @@ export async function streamTextWithRecovery(params: {
       if (abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS) {
         logger.warn(
           {
-            conversationId,
+            ...logContext,
             finishReason: probe.finishReason,
             rawFinishReason: probe.rawFinishReason,
             attempt: abortiveToolCallAttempts,
           },
           "[AbortiveToolCall] tool call truncated mid-stream, retrying",
         );
-        result = streamText(currentConfig);
+        result = runAttempt();
         continue;
       }
       // Exhausted: surface the abortive turn through the merge so the
       // abortive-turn tracker emits IncompleteToolCall (unchanged end state).
       logger.warn(
         {
-          conversationId,
+          ...logContext,
           attempts: abortiveToolCallAttempts,
         },
         "[AbortiveToolCall] retries exhausted, surfacing incomplete tool call",
       );
-      return result;
+      return { result, getCapturedStreamError: () => capturedStreamError };
     }
 
     // probe.kind === "empty": the provider finished with no content.
@@ -147,20 +203,20 @@ export async function streamTextWithRecovery(params: {
     if (canRetryEmptyResponse) {
       logger.warn(
         {
-          conversationId,
+          ...logContext,
           finishReason: probe.finishReason,
           rawFinishReason: probe.rawFinishReason,
           attempt: emptyResponseAttempts,
         },
         "[EmptyResponse] model produced no content, retrying",
       );
-      result = streamText(currentConfig);
+      result = runAttempt();
       continue;
     }
 
     // Exhausted retries (or a non-retryable finishReason): treat the empty
     // turn as a stream error.
-    await onEmptyResponseExhausted();
+    await recovery?.onEmptyResponseExhausted?.();
     throw new EmptyModelResponseError({
       finishReason: probe.finishReason,
       rawFinishReason: probe.rawFinishReason,
@@ -169,6 +225,7 @@ export async function streamTextWithRecovery(params: {
   }
 }
 
+/** @public — exported for testability */
 export type StreamProbeEvent = {
   type: string;
   finishReason?: unknown;
@@ -176,7 +233,7 @@ export type StreamProbeEvent = {
   error?: unknown;
 };
 
-export type StreamProbeOutcome =
+type StreamProbeOutcome =
   | { kind: "renderable" }
   | { kind: "empty"; finishReason: string; rawFinishReason?: string }
   // The model began streaming a tool call (tool-input-*) but the stream ended
@@ -234,10 +291,12 @@ const RETRYABLE_EMPTY_FINISH_REASONS: ReadonlySet<string> = new Set([
   "other",
 ]);
 
+/** @public — exported for testability */
 export function isRetryableEmptyFinishReason(finishReason: string): boolean {
   return RETRYABLE_EMPTY_FINISH_REASONS.has(finishReason);
 }
 
+/** @public — exported for testability */
 export async function probeFirstRenderableEvent(
   iterator: AsyncIterator<StreamProbeEvent>,
 ): Promise<StreamProbeOutcome> {

@@ -80,12 +80,11 @@ const LoadSkillSchema = z.object({
   path: z
     .string()
     .trim()
-    .min(1)
     .optional()
     .describe(
-      "Optional. Omit to load the skill's instructions and bundled-file list. " +
-        "Pass a resource path from that list (e.g. references/REFERENCE.md) to " +
-        "read one bundled file instead.",
+      "Optional. Omit (or pass an empty string) to load the skill's " +
+        "instructions and bundled-file list. Pass a resource path from that " +
+        "list (e.g. references/REFERENCE.md) to read one bundled file instead.",
     ),
 });
 
@@ -194,7 +193,9 @@ const registry = defineArchestraTools([
       }
       const { version, mounted } = activation;
 
-      if (args.path !== undefined) {
+      // Models express "no path" as both an omitted field and an empty string;
+      // a trimmed-empty path means list, not a (failing) read of "".
+      if (args.path !== undefined && args.path !== "") {
         return readSkillFile({ skill, version, path: args.path });
       }
 

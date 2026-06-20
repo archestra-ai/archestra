@@ -509,6 +509,14 @@ async fn setup_shared_env(
         return Err(e.to_string());
     }
 
+    let team_id = match client.create_team("bench").await {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = instance.shutdown().await;
+            return Err(e.to_string());
+        }
+    };
+
     for sref in &env.skills {
         if let Err(e) = seed_skill_ref(
             &client,
@@ -536,7 +544,7 @@ async fn setup_shared_env(
                 return Err(e.to_string());
             }
         };
-        match setup_lane_agent(&client, env, lane, &mcp).await {
+        match setup_lane_agent(&client, env, lane, &mcp, &team_id).await {
             Ok((agent_id, submit_tool)) => setups.push((lane.clone(), agent_id, submit_tool, mcp)),
             Err(e) => {
                 mcp.stop().await;
@@ -633,6 +641,14 @@ async fn run_isolated_lane(
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
     }
 
+    let team_id = match client.create_team("bench").await {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = instance.shutdown().await;
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
+        }
+    };
+
     for sref in &env.skills {
         if let Err(e) = seed_skill_ref(
             &client,
@@ -657,7 +673,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp).await {
+    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -832,12 +848,14 @@ async fn setup_lane_agent(
     env: &EnvConfig,
     lane: &Lane,
     mcp: &BenchmarkMcp,
+    team_id: &str,
 ) -> Result<(String, String), RunError> {
     let agent_id = ensure_agent(
         client,
         &format!("{}-{}", env.agent_name, lane.slug()),
         &env.agent_system_prompt,
         env.platform.tool_exposure_mode,
+        team_id,
     )
     .await?;
     let submit_tool =
@@ -850,6 +868,7 @@ async fn ensure_agent(
     name: &str,
     system_prompt: &str,
     tool_exposure_mode: ToolExposureMode,
+    team_id: &str,
 ) -> Result<String, RunError> {
     let existing = client.list_agents(Some(name), Some("org")).await?;
     // Reuse by name is intra-run idempotency only: each run boots a fresh per-run database that
@@ -872,6 +891,7 @@ async fn ensure_agent(
             agent_type: "agent".to_string(),
             system_prompt: (!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()),
             tool_exposure_mode,
+            teams: vec![team_id.to_string()],
         })
         .await?;
     Ok(created

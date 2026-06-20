@@ -41,6 +41,32 @@ describe("openaiToAnthropic — multimodal user content", () => {
     ]);
   });
 
+  test("forwards an http image URL as a url source block", () => {
+    const request = req({
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/cat.png" },
+            },
+          ],
+        },
+      ],
+      // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
+    } as any);
+
+    const { anthropicBody } = openaiToAnthropic(request);
+
+    expect(anthropicBody.messages[0].content).toEqual([
+      {
+        type: "image",
+        source: { type: "url", url: "https://example.com/cat.png" },
+      },
+    ]);
+  });
+
   test("forwards a base64 PDF file as a document block", () => {
     const request = req({
       messages: [

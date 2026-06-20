@@ -12,7 +12,7 @@ This skill expects these tools; enable any that are not already active.
 references/REF.md (reference)
 scripts/run.py (script)
 </skill_resources>
-Inspect any resource with load_skill (passing its path) before re-implementing — prefer importing and running the skill's own modules over rewriting them. This skill is mounted in your sandbox at /skills/Research. Run a bundled script via run_command (\`python3 /skills/Research/<script>\`); pass cwd: /skills/Research when a script reads bundled files by relative path. Direct outputs to absolute paths under /home/sandbox — a script computing paths relative to its own file writes under /skills/Research, not your cwd. Use download_file to retrieve generated files, upload_file to add inputs."
+Inspect any resource with archestra__load_skill (passing its path) before re-implementing — prefer importing and running the skill's own modules over rewriting them. This skill is mounted in your sandbox at /skills/Research. Run a bundled script via archestra__run_command (\`python3 /skills/Research/<script>\`); pass cwd: /skills/Research when a script reads bundled files by relative path. Direct outputs to absolute paths under /home/sandbox — a script computing paths relative to its own file writes under /skills/Research, not your cwd. Use archestra__download_file to retrieve generated files, archestra__upload_file to add inputs."
 `;
 
 exports[`formatSkillActivation > pins the full activation text without the sandbox hint 1`] = `
@@ -22,5 +22,5 @@ Do research.
 <skill_resources>
 scripts/run.py (script)
 </skill_resources>
-Inspect any resource with load_skill (passing its path) before re-implementing — prefer importing and running the skill's own modules over rewriting them."
+Inspect any resource with archestra__load_skill (passing its path) before re-implementing — prefer importing and running the skill's own modules over rewriting them."
 `;

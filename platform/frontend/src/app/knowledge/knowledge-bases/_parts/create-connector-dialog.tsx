@@ -179,9 +179,6 @@ export function CreateConnectorDialog({
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const needsEmail = connectorNeedsEmail(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
-  // file uploads have no remote source to schedule a sync against; every other
-  // connector keeps the schedule/advanced section even when it has no inline token
-  const showScheduleAndAdvanced = connectorType !== "file_upload";
   const connectorDocsUrl = selectedType
     ? getConnectorDocsUrl(selectedType)
     : null;
@@ -390,13 +387,6 @@ export function CreateConnectorDialog({
                   emailRequired={emailRequired}
                 />
 
-                {connectorType === "file_upload" && (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    After creating the connector, you can upload text files or
-                    ZIP archives directly from the connector page.
-                  </div>
-                )}
-
                 {Boolean(apiTokenLabel) && (
                   <FormField
                     control={form.control}
@@ -433,22 +423,20 @@ export function CreateConnectorDialog({
                   />
                 )}
 
-                {showScheduleAndAdvanced && (
-                  <Collapsible>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                      <span className="text-sm font-medium">Advanced</span>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-4 space-y-4">
-                      <SchedulePicker form={form} name="schedule" />
-                      <ConnectorAdvancedConfigFields
-                        connectorType={connectorType}
-                        form={form}
-                        mode="create"
-                      />
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
+                <Collapsible>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                    <span className="text-sm font-medium">Advanced</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-4 space-y-4">
+                    <SchedulePicker form={form} name="schedule" />
+                    <ConnectorAdvancedConfigFields
+                      connectorType={connectorType}
+                      form={form}
+                      mode="create"
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
               </DialogBody>
 
               <DialogStickyFooter className="mt-0">

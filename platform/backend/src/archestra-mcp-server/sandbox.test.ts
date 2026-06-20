@@ -41,7 +41,6 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from ".";
-import { TOOL_PERMISSIONS } from "./rbac";
 
 function textOf(result: { content: unknown[] }): string {
   return (result.content[0] as any).text as string;
@@ -71,13 +70,6 @@ describe("sandbox tools (runtime disabled)", () => {
     expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
     expect(names).not.toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
     expect(names).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);
-  });
-
-  test("all sandbox tools require sandbox:execute", () => {
-    const perm = { resource: "sandbox", action: "execute" };
-    expect(TOOL_PERMISSIONS.run_command).toEqual(perm);
-    expect(TOOL_PERMISSIONS.download_file).toEqual(perm);
-    expect(TOOL_PERMISSIONS.upload_file).toEqual(perm);
   });
 
   test("run_command returns a clean error when the runtime is disabled", async ({

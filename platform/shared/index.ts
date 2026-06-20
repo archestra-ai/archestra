@@ -18,7 +18,6 @@ export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interactions";
 export * from "./knowledge-base";
-export * from "./knowledge-files";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./mcp-extensions";

@@ -17,6 +17,7 @@ import {
   FolderKanban,
   FolderOpen,
   Github,
+  Inbox,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -25,6 +26,7 @@ import {
   PencilRuler,
   Route,
   Slack,
+  Sparkles,
   Star,
 } from "lucide-react";
 import Link from "next/link";
@@ -213,24 +215,26 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/skills"),
         subItems: [
           {
-            title: "Skills",
-            url: "/agents/skills",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/skills"),
-          },
-          {
-            title: "Scheduled",
+            title: "Scheduled Tasks",
             url: "/scheduled-tasks",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/scheduled-tasks"),
           },
-          {
-            title: "Triggers",
-            url: "/agents/triggers",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/triggers"),
-          },
         ],
+      },
+      {
+        title: "Skills",
+        url: "/agents/skills",
+        icon: Sparkles,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/skills"),
+      },
+      {
+        title: "Messaging Channels",
+        url: "/agents/triggers",
+        icon: Inbox,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/triggers"),
       },
     ],
   },
@@ -316,7 +320,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Database,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/knowledge") &&
-          !pathname.startsWith("/knowledge/files") &&
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
@@ -324,12 +327,6 @@ const contentNavGroups: NavGroup[] = [
             url: "/knowledge/connectors",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
-          },
-          {
-            title: "Files",
-            url: "/knowledge/files",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/files"),
           },
         ],
       },
@@ -641,6 +638,9 @@ export function AppSidebar() {
         items: group.items
           .filter((item) => {
             if (item.title === "Connect" && !showConnect) return false;
+            // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
+            // var. It's a top-level item now, so gate it here (not in subItems).
+            if (item.url === "/agents/skills" && !skillsEnabled) return false;
             return true;
           })
           .map((item) =>
@@ -648,7 +648,6 @@ export function AppSidebar() {
               ? {
                   ...item,
                   subItems: item.subItems.filter((sub) => {
-                    if (sub.url === "/agents/skills") return skillsEnabled;
                     // With projects on, schedules are managed per-project on the
                     // project detail page, so the standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;

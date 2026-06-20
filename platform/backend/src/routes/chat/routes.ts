@@ -6,7 +6,6 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   isModelSelectionComplete,
-  ResourceVisibilityScopeSchema,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -18,13 +17,16 @@ import {
   generateId,
   generateText,
   hasToolCall,
+  type ModelMessage,
   NoSuchToolError,
   stepCountIs,
+  type streamText,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -54,7 +56,6 @@ import {
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
-import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
@@ -137,25 +138,14 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
-import {
-  type ChatStreamTextConfig,
-  streamTextWithRecovery,
-} from "./stream-probe";
 import { repairHarmonyToolName } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
-const PromoteChatAttachmentResultSchema = z.object({
-  filename: z.string(),
-  status: z.enum([
-    "created",
-    "duplicate",
-    "unsupported",
-    "too_large",
-    "extraction_failed",
-    "failed",
-  ]),
-  fileId: z.string().optional(),
-});
+// The chat route always builds a `messages` (not `prompt`) config, so the
+// `runAgentStream` config is narrowed to require it.
+type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
+  messages: ModelMessage[];
+};
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -796,9 +786,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
-                // Flipped once streamTextWithRecovery returns the committed
-                // result. The probe drains discarded retry attempts before this,
-                // so their onStepFinish callbacks must not emit usage events.
+                // Flipped once runAgentStream returns the committed result. The
+                // probe drains discarded retry attempts before this, so their
+                // onStepFinish callbacks must not emit usage events.
                 let hasCommittedResult = false;
 
                 const streamTextConfig: ChatStreamTextConfig = {
@@ -922,26 +912,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                const result = await streamTextWithRecovery({
+                const { result } = await runAgentStream({
                   config: streamTextConfig,
-                  conversationId,
-                  onEmptyResponseExhausted: async () => {
-                    // Persist before the throw — nothing has merged yet, so the
-                    // stream onError/onFinish won't fire to do it.
-                    if (claimMessagesPersisted()) {
-                      try {
-                        await persistNewMessages(
-                          conversationId,
-                          messages,
-                          "onExecuteError",
-                        );
-                      } catch (persistError) {
-                        logger.error(
-                          { persistError, conversationId },
-                          "Failed to persist messages during empty-response error",
-                        );
+                  recovery: {
+                    logContext: { conversationId },
+                    onEmptyResponseExhausted: async () => {
+                      // Persist before the throw — nothing has merged yet, so the
+                      // stream onError/onFinish won't fire to do it.
+                      if (claimMessagesPersisted()) {
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            messages,
+                            "onExecuteError",
+                          );
+                        } catch (persistError) {
+                          logger.error(
+                            { persistError, conversationId },
+                            "Failed to persist messages during empty-response error",
+                          );
+                        }
                       }
-                    }
+                    },
                   },
                 });
                 // The committed result's steps finish after this point; allow
@@ -1599,56 +1591,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       reply.raw.end(attachment.fileData);
       return reply;
-    },
-  );
-
-  fastify.post(
-    "/api/chat/attachments/:id/promote-to-knowledge-file",
-    {
-      schema: {
-        operationId: RouteId.PromoteChatAttachmentToKnowledgeFile,
-        description:
-          "Promote a conversation attachment into a reusable Knowledge File",
-        tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
-        body: z.object({
-          visibility: ResourceVisibilityScopeSchema.default("personal"),
-          teamIds: z.array(z.string()).default([]),
-          agentIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(PromoteChatAttachmentResultSchema),
-      },
-    },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
-      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
-      if (!attachment) {
-        throw new ApiError(404, "Attachment not found");
-      }
-      if (attachment.organizationId !== organizationId) {
-        throw new ApiError(404, "Attachment not found");
-      }
-
-      const conversation = await findReadableConversationById({
-        conversationId: attachment.conversationId,
-        userId: user.id,
-        organizationId,
-      });
-      if (!conversation) {
-        throw new ApiError(404, "Attachment not found");
-      }
-
-      const result = await fileUploadManager.uploadKnowledgeFile({
-        organizationId,
-        userId: user.id,
-        name: attachment.originalName,
-        mimeType: attachment.mimeType,
-        contentBuffer: attachment.fileData,
-        visibility: body.visibility,
-        teamIds: body.teamIds,
-        agentIds: body.agentIds,
-      });
-
-      return reply.send(result);
     },
   );
 
@@ -2720,7 +2662,7 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
 
 export function buildChatStopConditions() {
   return [
-    stepCountIs(500),
+    stepCountIs(MAX_AGENT_STEPS),
     hasToolCall(getChatStopToolNames().swapAgentToolName),
     hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
   ];

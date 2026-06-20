@@ -31,7 +31,7 @@ const ALL_POLICY_KINDS: PolicyKind[] = [
   "ApplicationNetworkPolicy",
 ];
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.0";
+const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.5";
 const ENGINE_CONTAINER = "dagger-engine";
 // Per-env buildkit cache PVC size; matches the default engine's chart PVC.
 const ENGINE_CACHE_SIZE = "50Gi";

@@ -457,10 +457,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
-  kbUploadedFilesTable: {
-    audited: false,
-    reason: "child of knowledge base; parent audited",
-  },
   llmProviderApiKeyModelsTable: {
     audited: false,
     reason: "join: provider key × model; parent audited",

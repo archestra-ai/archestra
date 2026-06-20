@@ -94,6 +94,7 @@ import {
   calculateInteractionCosts,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
+  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -111,12 +112,8 @@ describe("toSpanUserInfo", () => {
     });
   });
 
-  test("returns null for null input", () => {
-    expect(toSpanUserInfo(null)).toBeNull();
-  });
-
-  test("returns null for undefined input", () => {
-    expect(toSpanUserInfo(undefined)).toBeNull();
+  test.each([null, undefined])("returns null for %s input", (input) => {
+    expect(toSpanUserInfo(input)).toBeNull();
   });
 });
 
@@ -378,17 +375,11 @@ describe("buildInteractionRecord", () => {
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
-  test("includes source when provided", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      source: "chatops:slack",
-    });
-    expect(record.source).toBe("chatops:slack");
-  });
-
-  test("source is undefined when not provided", () => {
-    const record = buildInteractionRecord(baseParams);
-    expect(record.source).toBeUndefined();
+  test("passes source through when provided, undefined otherwise", () => {
+    expect(
+      buildInteractionRecord({ ...baseParams, source: "chatops:slack" }).source,
+    ).toBe("chatops:slack");
+    expect(buildInteractionRecord(baseParams).source).toBeUndefined();
   });
 });
 
@@ -510,5 +501,23 @@ describe("withSessionContext", () => {
     expect(withSpy).not.toHaveBeenCalled();
 
     withSpy.mockRestore();
+  });
+});
+
+describe("shouldForwardAnthropicBeta", () => {
+  test("forwards to real Anthropic (no base-URL override)", () => {
+    expect(shouldForwardAnthropicBeta("claude-opus-4-8", false)).toBe(true);
+  });
+
+  test("forwards to Claude proxied behind a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("claude-3-5-sonnet", true)).toBe(true);
+  });
+
+  test("strips for a non-Claude model on a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", true)).toBe(false);
+  });
+
+  test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
   });
 });

@@ -156,7 +156,7 @@ describe("buildEngineStatefulSet", () => {
       "dagger-engine-abcdef00-1111-2222-3333-444455556666",
     );
     const container = sts.spec?.template.spec?.containers[0];
-    expect(container?.image).toBe("registry.dagger.io/engine:v0.21.0");
+    expect(container?.image).toBe("registry.dagger.io/engine:v0.21.5");
     expect(container?.securityContext?.privileged).toBe(true);
   });
 

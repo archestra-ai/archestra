@@ -91,6 +91,26 @@ fn truncate_long_strings(value: &Value) -> Value {
     }
 }
 
+/// The product's built-in dispatcher that forwards a call to a discovered MCP tool. It is optional
+/// (a deployment can turn it off) but on by default, so most agents reach `submit_result` and other
+/// discovered tools *through* it. Rendered verbatim it reads as a distinct tool the agent "should
+/// have called directly", which the map phase then mis-flags as friction — so unwrap it.
+const RUN_TOOL_DISPATCHER: &str = "archestra__run_tool";
+
+/// If `tool_name` is the `run_tool` dispatcher carrying a string `tool_name` payload, present the
+/// call as the tool it forwards to (`<target> (via run_tool)`) over the inner `tool_args`. Any other
+/// shape — a direct tool, the dispatcher off, or a missing/renamed payload — falls through unchanged,
+/// so this never hides or reshapes a call it does not recognize.
+fn unwrap_dispatch<'a>(tool_name: &'a str, input: &'a Value) -> (String, &'a Value) {
+    if tool_name == RUN_TOOL_DISPATCHER
+        && let Some(target) = input.get("tool_name").and_then(Value::as_str)
+    {
+        let args = input.get("tool_args").unwrap_or(input);
+        return (format!("{target} (via run_tool)"), args);
+    }
+    (tool_name.to_string(), input)
+}
+
 fn render_value(value: &Value) -> String {
     let truncated = truncate_long_strings(value);
     match &truncated {
@@ -124,8 +144,9 @@ pub fn format_to_markdown(events: &[Event]) -> String {
                 out.push_str("\n\n");
             }
             Event::ToolCall { tool_name, input } => {
-                out.push_str(&format!("### Tool call: `{tool_name}`\n```json\n"));
-                out.push_str(&render_value(input));
+                let (display_name, args) = unwrap_dispatch(tool_name, input);
+                out.push_str(&format!("### Tool call: `{display_name}`\n```json\n"));
+                out.push_str(&render_value(args));
                 out.push_str("\n```\n\n");
             }
             Event::ToolOutput { output } => {
@@ -265,6 +286,31 @@ mod tests {
         let md = format_to_markdown(&load_trajectory(&path).unwrap());
         assert!(md.contains("[truncated"));
         assert!(!md.contains(&big));
+    }
+
+    #[test]
+    fn run_tool_dispatch_is_unwrapped_to_its_target() {
+        let (_dir, path) = write_fixture(&[
+            r#"{"kind":"tool_call","tool_call_id":"x","tool_name":"archestra__run_tool","input":{"tool_name":"final_answer-abc__submit_result","tool_args":{"stars":3864}}}"#,
+        ]);
+        let md = format_to_markdown(&load_trajectory(&path).unwrap());
+        // The forwarded tool is what the reader sees, over its inner args — not the dispatcher.
+        assert!(md.contains("### Tool call: `final_answer-abc__submit_result (via run_tool)`"));
+        assert!(md.contains("\"stars\": 3864"));
+        assert!(!md.contains("\"tool_args\""));
+    }
+
+    #[test]
+    fn non_dispatch_tool_call_renders_unchanged() {
+        // A direct call and a malformed dispatch (no string `tool_name`) both pass through as-is.
+        let (_dir, path) = write_fixture(&[
+            r#"{"kind":"tool_call","tool_call_id":"x","tool_name":"archestra__run_command","input":{"command":"ls"}}"#,
+            r#"{"kind":"tool_call","tool_call_id":"y","tool_name":"archestra__run_tool","input":{"oops":true}}"#,
+        ]);
+        let md = format_to_markdown(&load_trajectory(&path).unwrap());
+        assert!(md.contains("### Tool call: `archestra__run_command`"));
+        assert!(md.contains("### Tool call: `archestra__run_tool`"));
+        assert!(md.contains("\"oops\": true"));
     }
 
     #[test]

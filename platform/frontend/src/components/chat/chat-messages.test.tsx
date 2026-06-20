@@ -181,13 +181,6 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
-  usePromoteChatAttachmentToKnowledgeFile: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
-
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: () => ({ data: [] }),
 }));

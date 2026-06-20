@@ -54,6 +54,8 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     "build-essential",
     "nodejs",
     "npm",
+    "unzip",
+    "zip",
 ];
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every
@@ -317,7 +319,7 @@ fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) 
 
 /// Spawn the `dagger session` CLI child and read its `ConnectParams` handshake —
 /// a faithful reimplementation of dagger-sdk's private `CliSession::get_conn`,
-/// pinned to `=0.21.0`. The ordering is load-bearing: take stdout/stderr off the
+/// pinned to `=0.21.5`. The ordering is load-bearing: take stdout/stderr off the
 /// child, build the session handle (which owns the shutdown broadcast — there is
 /// no `Drop`), then drain both pipes in background tasks until teardown, parsing
 /// the first JSON line as `ConnectParams`.
@@ -382,7 +384,7 @@ async fn spawn_and_read_connect_params(
 /// setting the runner host on the spawned CLI **child** only — never the parent
 /// process env. `runner_host = None` lets the child inherit the parent's default
 /// host. This owns the thin glue `dagger_sdk::connect_opts` would run (pinned to
-/// `=0.21.0`), so a per-environment host is bound to one child at spawn instead
+/// `=0.21.5`), so a per-environment host is bound to one child at spawn instead
 /// of mutated into process-global, non-synchronized state.
 async fn connect_target<F, Fut>(
     cfg: Config,
@@ -966,7 +968,7 @@ mod tests {
                 "--label".to_string(),
                 "dagger.io/sdk.name:rust".to_string(),
                 "--label".to_string(),
-                "dagger.io/sdk.version:0.21.0".to_string(),
+                "dagger.io/sdk.version:0.21.5".to_string(),
             ]
         );
     }

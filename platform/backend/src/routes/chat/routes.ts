@@ -17,13 +17,16 @@ import {
   generateId,
   generateText,
   hasToolCall,
+  type ModelMessage,
   NoSuchToolError,
   stepCountIs,
+  type streamText,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -135,12 +138,14 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
-import {
-  type ChatStreamTextConfig,
-  streamTextWithRecovery,
-} from "./stream-probe";
 import { repairHarmonyToolName } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
+
+// The chat route always builds a `messages` (not `prompt`) config, so the
+// `runAgentStream` config is narrowed to require it.
+type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
+  messages: ModelMessage[];
+};
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -781,9 +786,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
-                // Flipped once streamTextWithRecovery returns the committed
-                // result. The probe drains discarded retry attempts before this,
-                // so their onStepFinish callbacks must not emit usage events.
+                // Flipped once runAgentStream returns the committed result. The
+                // probe drains discarded retry attempts before this, so their
+                // onStepFinish callbacks must not emit usage events.
                 let hasCommittedResult = false;
 
                 const streamTextConfig: ChatStreamTextConfig = {
@@ -907,26 +912,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                const result = await streamTextWithRecovery({
+                const { result } = await runAgentStream({
                   config: streamTextConfig,
-                  conversationId,
-                  onEmptyResponseExhausted: async () => {
-                    // Persist before the throw — nothing has merged yet, so the
-                    // stream onError/onFinish won't fire to do it.
-                    if (claimMessagesPersisted()) {
-                      try {
-                        await persistNewMessages(
-                          conversationId,
-                          messages,
-                          "onExecuteError",
-                        );
-                      } catch (persistError) {
-                        logger.error(
-                          { persistError, conversationId },
-                          "Failed to persist messages during empty-response error",
-                        );
+                  recovery: {
+                    logContext: { conversationId },
+                    onEmptyResponseExhausted: async () => {
+                      // Persist before the throw — nothing has merged yet, so the
+                      // stream onError/onFinish won't fire to do it.
+                      if (claimMessagesPersisted()) {
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            messages,
+                            "onExecuteError",
+                          );
+                        } catch (persistError) {
+                          logger.error(
+                            { persistError, conversationId },
+                            "Failed to persist messages during empty-response error",
+                          );
+                        }
                       }
-                    }
+                    },
                   },
                 });
                 // The committed result's steps finish after this point; allow
@@ -2655,7 +2662,7 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
 
 export function buildChatStopConditions() {
   return [
-    stepCountIs(500),
+    stepCountIs(MAX_AGENT_STEPS),
     hasToolCall(getChatStopToolNames().swapAgentToolName),
     hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
   ];

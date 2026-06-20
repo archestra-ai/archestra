@@ -1,7 +1,8 @@
-import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
+import { ChatErrorCode, TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { ProviderError } from "@/routes/chat/errors";
 import {
   type A2AAttachment,
   buildUserContent,
@@ -105,6 +106,27 @@ import { AgentModel, McpServerModel } from "@/models";
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
 // 2732 base64 chars → ~2048 decoded bytes.
 const VALID_IMAGE_BASE64 = "A".repeat(2732);
+
+// runAgentStream probes `fullStream` before committing the attempt; yield a
+// renderable event so a mocked streamText result commits on the first attempt.
+function renderableFullStream(): AsyncIterable<{ type: string }> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield { type: "text-delta" };
+      yield { type: "finish", finishReason: "stop" };
+    },
+  };
+}
+
+// A content-free attempt: the probe sees only `finish`, so runAgentStream treats
+// it as an empty response (retryable).
+function emptyFullStream(): AsyncIterable<{ type: string }> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield { type: "finish", finishReason: "stop" };
+    },
+  };
+}
 
 describe("buildUserContent", () => {
   test("returns null content when no attachments are provided", () => {
@@ -421,6 +443,7 @@ describe("executeA2AMessage model selection", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("Delegated response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -507,6 +530,7 @@ describe("executeA2AMessage isolation scope", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("ok"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -616,6 +640,7 @@ describe("executeA2AMessage unavailable tool errors", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("Recovered response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -700,6 +725,7 @@ describe("executeA2AMessage skill catalog", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("done"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
@@ -749,5 +775,99 @@ describe("executeA2AMessage skill catalog", () => {
     expect(system).toContain("Handle the task.");
     expect(system).not.toContain("<available_skills>");
     expect(system).toContain(TOOL_DENIAL_INSTRUCTION);
+  });
+});
+
+describe("executeA2AMessage stream recovery", () => {
+  function primeAgent() {
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-child",
+      name: "Child Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+  }
+
+  function renderableResult(text: string) {
+    return {
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve(text),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    };
+  }
+
+  test("retries a recoverable empty response, then commits the next attempt", async () => {
+    primeAgent();
+    // first attempt is content-free (probe sees only finish), the retry succeeds.
+    mockStreamText
+      .mockReturnValueOnce({ fullStream: emptyFullStream() })
+      .mockReturnValueOnce(renderableResult("Recovered after empty"));
+
+    const result = await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(result.text).toBe("Recovered after empty");
+  });
+
+  test("maps an exhausted empty response to a ProviderError EmptyResponse", async () => {
+    primeAgent();
+    // every attempt is empty, so recovery exhausts and runAgentStream throws.
+    mockStreamText.mockReturnValue({ fullStream: emptyFullStream() });
+
+    const error = await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as ProviderError).chatErrorResponse.code).toBe(
+      ChatErrorCode.EmptyResponse,
+    );
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
   });
 });

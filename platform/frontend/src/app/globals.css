@@ -107,6 +107,8 @@
   --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
   --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
   --tracking-normal: 0em;
+  --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
 }
 
 @layer base {
@@ -223,7 +225,7 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
 /* Thin scrollbar for sidebar scroll regions */
 @utility scrollbar-sidebar {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-sidebar-accent) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 
   &::-webkit-scrollbar {
     width: 2px;
@@ -232,14 +234,10 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
     background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background-color: var(--color-sidebar-accent);
+    background-color: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(
-      in oklab,
-      var(--color-sidebar-accent-foreground) 30%,
-      transparent
-    );
+    background-color: var(--scrollbar-thumb-hover);
   }
 }

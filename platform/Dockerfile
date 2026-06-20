@@ -66,9 +66,6 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
-    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
-    # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
-    go get github.com/containerd/containerd/v2@v2.2.5 && \
     # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
@@ -80,6 +77,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     go get golang.org/x/crypto@v0.52.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
+    # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
+    # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
+    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby)
+    # transitively pull containerd 2.2.4 and would otherwise downgrade our explicit requirement.
+    go get github.com/containerd/containerd/v2@v2.2.5 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \

@@ -67,7 +67,8 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
-    go get github.com/containerd/containerd/v2@v2.2.4 && \
+    # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
+    go get github.com/containerd/containerd/v2@v2.2.5 && \
     # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0

@@ -33,6 +33,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
 - `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
+- `archestra-dev-image-cve` - use when the "Docker Image Scanning" CI check (Docker Scout) blocks a PR/merge-queue/release-please PR on a CRITICAL/HIGH CVE in the Platform or MCP Server Base image — authoring Go-module / OS / pnpm CVE overrides, including the "fix is too new for the 7-day gate" case.
 
 ## Key URLs
 

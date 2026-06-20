@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +49,10 @@ vi.mock("@/lib/config/config.query", () => ({
 
 // ── Import component under test after mocks ───────────────────────────────────
 
+import {
+  clearAllAppDiagnostics,
+  reportAppDiagnostic,
+} from "@/lib/chat/app-diagnostics-store";
 import { McpAppSection } from "./mcp-app-container";
 import { PinnedCanvasProvider, usePinnedCanvas } from "./pinned-canvas-context";
 
@@ -429,6 +433,7 @@ describe("McpAppSection sidebar pinning", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAllAppDiagnostics();
   });
 
   // Opens the sidebar canvas host (portalTarget) without selecting any canvas,
@@ -466,6 +471,55 @@ describe("McpAppSection sidebar pinning", () => {
     // owned-app iframe into the sidebar target (not left inline).
     expect(target.querySelector("iframe")).toBeInTheDocument();
     expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+
+    target.remove();
+  });
+
+  it("keeps the diagnostics badge out of the stretched canvas wrapper when pinned", async () => {
+    // The error badge must not share the fill-container wrapper with the iframe:
+    // that wrapper applies `[&>div]:!h-full`, so a badge inside it gets stretched
+    // to full height and shoves the iframe below the sidebar fold (blank render).
+    reportAppDiagnostic(APP_ID, 1, {
+      type: "csp-violation",
+      message: "script-src blocked eval",
+    });
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+
+    await act(async () => {
+      render(
+        <PinnedCanvasProvider
+          conversationId="conv-1"
+          canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+        >
+          <SidebarHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </PinnedCanvasProvider>,
+      );
+    });
+
+    const iframe = target.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
+    const badge = within(target).getByText(/runtime error/i);
+
+    // The nearest overflow-hidden wrapper of the iframe is the fill-container
+    // clip box that stretches its `> div` children; the badge must sit OUTSIDE
+    // it, or it gets sized to full height and pushes the iframe off-screen.
+    let clipWrapper: HTMLElement | null = iframe?.parentElement ?? null;
+    while (
+      clipWrapper &&
+      clipWrapper !== target &&
+      !clipWrapper.className.includes("overflow-hidden")
+    ) {
+      clipWrapper = clipWrapper.parentElement;
+    }
+    expect(clipWrapper).not.toBeNull();
+    expect(clipWrapper?.contains(badge)).toBe(false);
 
     target.remove();
   });

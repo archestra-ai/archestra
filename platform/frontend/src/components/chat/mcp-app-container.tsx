@@ -190,11 +190,31 @@ export function McpAppSection({
     return null;
   }
 
+  const diagnosticsBadge =
+    errorCount > 0 || logCount > 0 ? (
+      <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
+        {errorCount > 0 && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+            {errorCount === 1
+              ? "1 runtime error"
+              : `${errorCount} runtime errors`}{" "}
+            in this app
+          </div>
+        )}
+        {logCount > 0 && (
+          <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
+            {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
+          </div>
+        )}
+      </div>
+    ) : null;
+
   const canvas = (
     <McpAppErrorBoundary>
       <McpAppContainer
         displayMode={displayMode}
         onClose={() => setDisplayMode("inline")}
+        diagnostics={diagnosticsBadge}
         size={size}
         inlineCeiling={inlineCeiling}
         onShowInSidebar={
@@ -202,23 +222,6 @@ export function McpAppSection({
         }
         fillContainer={renderInSidebar}
       >
-        {(errorCount > 0 || logCount > 0) && (
-          <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
-            {errorCount > 0 && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-                {errorCount === 1
-                  ? "1 runtime error"
-                  : `${errorCount} runtime errors`}{" "}
-                in this app
-              </div>
-            )}
-            {logCount > 0 && (
-              <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
-                {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
-              </div>
-            )}
-          </div>
-        )}
         <McpAppRuntime
           toolResourceUri={uiResourceUri}
           endpoint={
@@ -316,6 +319,7 @@ function McpAppContainer({
   displayMode,
   onClose,
   children,
+  diagnostics,
   size,
   inlineCeiling,
   onShowInSidebar,
@@ -324,6 +328,12 @@ function McpAppContainer({
   displayMode: McpUiDisplayMode;
   onClose: () => void;
   children: React.ReactNode;
+  /**
+   * Diagnostics badge rendered above the canvas. Kept out of `children` so the
+   * fill/fullscreen `[&>div]:!h-full` stretch only hits the app canvas — a
+   * badge stretched to full height would shove the canvas below the fold.
+   */
+  diagnostics?: React.ReactNode;
   size: { width: number; height: number } | null;
   /** Viewport-derived max height for the inline card; reacts to window resize. */
   inlineCeiling: number;
@@ -448,6 +458,8 @@ function McpAppContainer({
           )}
         </div>
       )}
+
+      {diagnostics && <div className="shrink-0">{diagnostics}</div>}
 
       <div
         style={

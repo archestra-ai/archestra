@@ -160,7 +160,7 @@ describe("validateAppHtmlStatic", () => {
       '<html><head><link href="//assets.example.org/x.css" rel="stylesheet"><link href="//assets.example.org/y.css" rel="stylesheet"></head><body/></html>',
     );
     const hostWarnings = findings.filter((f) =>
-      f.message.includes("assets.example.org"),
+      /references the host "assets\.example\.org"/.test(f.message),
     );
     expect(hostWarnings).toHaveLength(1);
   });

@@ -3,8 +3,15 @@ import type { ModelMessage } from "ai";
 // Anthropic-direct and Bedrock expose 1-hour cache TTL support on different
 // model sets. Keep the match provider-specific so unsupported/newer Bedrock
 // models fall back to the 5-minute default instead of sending an invalid ttl.
+//
+// Anthropic-direct: 1h TTL is broadly available across the 4.5+ generation.
 const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
   /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
+// Bedrock: per AWS docs only the 4.5 generation supports the 1h TTL; 4.6
+// supports 5m only and *rejects* the whole request when sent ttl:"1h". Pinned
+// to 4.5 so newer/unknown ids degrade safely to 5m. Widen this when AWS
+// documents 1h support for a newer Bedrock model (e.g. 4.7+).
+// https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
 const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
 // Per-provider cache-breakpoint marker, written into a message's

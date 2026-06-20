@@ -298,7 +298,7 @@ describe("applyPromptCacheBreakpoints", () => {
 
     const [sonnet46] = applyPromptCacheBreakpoints({
       provider: "bedrock",
-      model: "global.anthropic.claude-sonnet-4-6-20250514-v1:0",
+      model: "global.anthropic.claude-sonnet-4-6-v1:0",
       messages: [userMessage("a")],
     });
     expect(bedrockCachePoint(sonnet46)).toEqual({ type: "default" });

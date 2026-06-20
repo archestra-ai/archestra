@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -55,7 +56,10 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // global error handler still formats 4xx/5xx as JSON.
       },
     },
-    async ({ params: { artifactId }, organizationId, user }, reply) => {
+    async (
+      { params: { artifactId }, organizationId, user, headers },
+      reply,
+    ) => {
       // "wrong owner" and "missing" collapse into the same 404 inside the
       // store so cross-org probes can't tell them apart. Access: the file's
       // author, or anyone with access to the project owning the file. Byte
@@ -79,6 +83,21 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       const { data } = resolved;
 
+      // The download handle (row id / obj_ key) is stable across in-place edits
+      // (edit_file overwrites the same row/key), so a time-based cache would let
+      // the preview keep serving pre-edit bytes while a fresh download shows the
+      // new ones — the two visibly diverge. Revalidate every request against a
+      // content ETag instead: an unchanged file 304s, an edited one re-sends, so
+      // preview and download always reflect the current bytes.
+      const etag = `"${createHash("sha1").update(data).digest("base64url")}"`;
+      if (headers["if-none-match"] === etag) {
+        return reply
+          .code(304)
+          .header("ETag", etag)
+          .header("Cache-Control", "private, no-cache")
+          .send();
+      }
+
       const inlineSafe = isInlineSafeImageMime(resolved.mimeType);
       const filename = safeFilenameFromPath(resolved.filename);
       const disposition = inlineSafe
@@ -94,7 +113,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .header("Content-Disposition", disposition)
         .header("X-Content-Type-Options", "nosniff")
         .header("Content-Security-Policy", "default-src 'none'; sandbox")
-        .header("Cache-Control", "private, max-age=300");
+        .header("ETag", etag)
+        .header("Cache-Control", "private, no-cache");
       return reply.send(data);
     },
   );

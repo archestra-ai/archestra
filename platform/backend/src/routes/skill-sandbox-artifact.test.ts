@@ -136,8 +136,62 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(response.headers["content-security-policy"]).toBe(
       "default-src 'none'; sandbox",
     );
-    expect(response.headers["cache-control"]).toBe("private, max-age=300");
+    expect(response.headers["cache-control"]).toBe("private, no-cache");
+    expect(response.headers.etag).toBeTruthy();
     expect(response.rawPayload).toEqual(PNG_FAKE);
+  });
+
+  test("revalidates with a content ETag so an edited file never previews stale", async () => {
+    // The preview panel and the download button hit this same URL; with a
+    // time-based cache an in-place edit (same row id) made the preview serve
+    // pre-edit bytes while the download showed the new ones. A content ETag +
+    // no-cache keeps them in lockstep.
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("one joke"),
+      path: "/sandbox/skills/example/jokes.txt",
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("private, no-cache");
+    const etag = first.headers.etag as string;
+    expect(etag).toBeTruthy();
+
+    // unchanged file → conditional GET revalidates to 304 (no stale body, no
+    // needless re-transfer).
+    const revalidated = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      headers: { "if-none-match": etag },
+    });
+    expect(revalidated.statusCode).toBe(304);
+
+    // edit the bytes in place (edit_file): same id, same URL, new content.
+    await fileStore.update({
+      file: artifact,
+      mimeType: "text/plain",
+      sizeBytes: Buffer.byteLength("two jokes!!"),
+      data: Buffer.from("two jokes!!"),
+    });
+
+    // the browser's conditional GET with the OLD etag now misses → fresh bytes,
+    // matching what a download would return.
+    const afterEdit = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      headers: { "if-none-match": etag },
+    });
+    expect(afterEdit.statusCode).toBe(200);
+    expect(afterEdit.body).toBe("two jokes!!");
+    expect(afterEdit.headers.etag).not.toBe(etag);
   });
 
   test("serves SVG as attachment + octet-stream (never inline as HTML)", async () => {

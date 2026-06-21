@@ -1,4 +1,7 @@
-import { ARCHESTRA_MCP_CATALOG_ID, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { inArray, isNotNull, or, type SQL, sql } from "drizzle-orm";
 import { schema } from "@/database";
 

@@ -692,9 +692,7 @@ export function AgentDialog({
   // for LLM proxies / MCP gateways it is an attribution label so their
   // inference/usage falls under environment-scoped cost limits.
   const supportsEnvironment =
-    isInternalAgent ||
-    agentType === "llm_proxy" ||
-    agentType === "mcp_gateway";
+    isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
   const environmentHelpText =
     agentType === "llm_proxy"
       ? "The environment this proxy's inference is attributed to, so its usage counts against that environment's cost limits."
@@ -1161,6 +1159,7 @@ export function AgentDialog({
     deleteAgent,
     toolExposureMode,
     accessAllTools,
+    supportsEnvironment,
   ]);
 
   const handleClose = useCallback(() => {

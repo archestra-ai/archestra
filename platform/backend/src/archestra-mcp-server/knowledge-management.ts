@@ -563,8 +563,9 @@ async function handleQueryKnowledgeSources(params: {
               directConnectors,
             )
           : directConnectors
+      )
         // Environment isolation: drop directly-assigned connectors from other envs.
-      ).filter((connector) => connector.environmentId === agentEnvironmentId);
+        .filter((connector) => connector.environmentId === agentEnvironmentId);
 
       const connectorIdsFromVisibleKbs = visibleKbs.length
         ? (

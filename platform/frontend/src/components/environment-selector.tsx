@@ -64,7 +64,6 @@ export function EnvironmentSelector({
     (environment) => !environment.restricted || canDeployRestricted,
   );
   const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
-  const canManageEnvironments = hasEnvAdmin ?? false;
 
   if (hideWhenOnlyDefault && !hasCustomEnvironmentOptions) return null;
 
@@ -122,14 +121,12 @@ export function EnvironmentSelector({
       {!hasCustomEnvironmentOptions ? (
         <p className="text-xs text-muted-foreground">
           Only the default environment is available.{" "}
-          {canManageEnvironments ? (
-            <Link
-              href="/settings/environments"
-              className="underline underline-offset-2"
-            >
-              Manage environments
-            </Link>
-          ) : null}
+          <Link
+            href="/settings/environments"
+            className="underline underline-offset-2"
+          >
+            Manage environments
+          </Link>
         </p>
       ) : null}
     </div>

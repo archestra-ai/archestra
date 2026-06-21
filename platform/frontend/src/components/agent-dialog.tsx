@@ -1283,7 +1283,6 @@ export function AgentDialog({
                     <EnvironmentSelector
                       value={environmentId ?? null}
                       onChange={setEnvironmentId}
-                      hideWhenOnlyDefault
                       helpText={environmentHelpText}
                     />
                   )}

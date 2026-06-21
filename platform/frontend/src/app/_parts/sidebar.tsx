@@ -192,7 +192,7 @@ function SidebarModeToggle({
   );
 
   return (
-    <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
+    <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
       {segment("chats", "Chats", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
     </div>
@@ -672,61 +672,61 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
+        {isAuthenticated && permissionMap && (
+          <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+        )}
       </SidebarHeader>
       <SidebarContent>
-        {isAuthenticated && permissionMap && (
-          <>
-            <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
-            {sidebarMode === "chats" ? (
-              <>
-                <NavPrimary
-                  items={filteredChatsNavItems}
-                  groups={[]}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                  permissionMap={permissionMap}
-                />
-                {/* The chat list (Pinned + Recents, labeled inside
+        {isAuthenticated &&
+          permissionMap &&
+          (sidebarMode === "chats" ? (
+            <>
+              <NavPrimary
+                items={filteredChatsNavItems}
+                groups={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+              {/* The chat list (Pinned + Recents, labeled inside
                     ChatSidebarSection) and the community links below it scroll
                     together within this region, while the nav above stays
                     pinned. The fade hints there is more content below. */}
-                <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
-                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
-                    <ChatSidebarSection slots={15} flat />
-                    <NavSecondary
-                      items={[]}
-                      pathname={pathname}
-                      searchParams={searchParams}
-                      permissionMap={permissionMap}
-                      showCommunityLinks={showCommunityLinks}
-                      starCount={formattedStarCount}
-                      className="mt-2.5"
-                    />
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </>
-            ) : (
-              <>
-                <NavPrimary
-                  items={[]}
-                  groups={filteredNavGroups}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                  permissionMap={permissionMap}
-                />
-                <NavSecondary
-                  items={[]}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                  permissionMap={permissionMap}
-                  showCommunityLinks={showCommunityLinks}
-                  starCount={formattedStarCount}
-                  className="mt-auto"
-                />
-              </>
-            )}
-          </>
-        )}
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                  <ChatSidebarSection slots={15} flat />
+                  <NavSecondary
+                    items={[]}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                    permissionMap={permissionMap}
+                    showCommunityLinks={showCommunityLinks}
+                    starCount={formattedStarCount}
+                    className="mt-2.5"
+                  />
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </>
+          ) : (
+            <>
+              <NavPrimary
+                items={[]}
+                groups={filteredNavGroups}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+              <NavSecondary
+                items={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                showCommunityLinks={showCommunityLinks}
+                starCount={formattedStarCount}
+                className="mt-auto"
+              />
+            </>
+          ))}
         {!isAuthenticated && showCommunityLinks && (
           <NavSecondary
             items={[]}

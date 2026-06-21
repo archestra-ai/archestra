@@ -36,12 +36,12 @@ An environment can be marked **restricted**. Only members with the `environment:
 
 ## Tool and knowledge isolation
 
-An agent, MCP gateway, or LLM proxy assigned to environment `E` can only see and use:
+An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
 
-- MCP tools whose server (catalog item) is in `E`
-- knowledge connectors in `E`
+- MCP tools whose server (catalog item) is in Production
+- knowledge connectors in Production
 
-Matching is strict: a resource in `E` matches only other resources in `E`, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) are exempt and always available.
+Matching is strict: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) are exempt and always available.
 
 This applies to both explicitly assigned tools/knowledge and the implicit "All tools" access mode — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled.
 
@@ -156,7 +156,7 @@ yarnpkg.com
 
 ## Cost limits
 
-Cost limits and per-user default limits can be scoped to an environment. A limit on environment `E` only counts usage attributed to `E` (an interaction's environment is snapshotted from its agent at request time). See [Costs and Limits](/docs/platform-costs-and-limits).
+Cost limits and per-user default limits can be scoped to an environment. A limit on **Production** only counts usage attributed to Production (an interaction's environment is snapshotted from its agent at request time). See [Costs and Limits](/docs/platform-costs-and-limits).
 
 ## Where environments apply
 

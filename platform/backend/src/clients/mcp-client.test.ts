@@ -6278,7 +6278,12 @@ describe("connectAndGetTools network egress enforcement", () => {
       catalogId: catalogItem.id,
       scope: "org",
     });
-    const agent = await makeAgent({ organizationId: org.id });
+    // The agent must share the catalog's environment, otherwise environment
+    // isolation blocks the call before the network-policy guard under test.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      environmentId: env.id,
+    });
     const tool = await ToolModel.createToolIfNotExists({
       name: "blocked-remote__do_thing",
       description: "do thing",

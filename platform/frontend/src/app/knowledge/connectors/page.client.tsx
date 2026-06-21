@@ -219,7 +219,7 @@ function ConnectorsList() {
   return (
     <KnowledgePageLayout
       title="Connectors"
-      description="Manage data connectors that feed into your knowledge bases."
+      description="Connectors sync content from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from it."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}

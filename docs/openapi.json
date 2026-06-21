@@ -90469,9 +90469,6 @@
                         "projectsEnabled": {
                           "type": "boolean"
                         },
-                        "dynamicToolAccessEnabled": {
-                          "type": "boolean"
-                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -90566,7 +90563,6 @@
                         "agentEnvironmentsEnabled",
                         "appsEnabled",
                         "projectsEnabled",
-                        "dynamicToolAccessEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -149398,6 +149394,12 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "environmentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "schedule": {
                             "type": "string"
                           },
@@ -149499,6 +149501,7 @@
                           "connectorType",
                           "config",
                           "secretId",
+                          "environmentId",
                           "schedule",
                           "enabled",
                           "lastSyncAt",
@@ -150663,6 +150666,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "environmentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -151501,6 +151510,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "schedule": {
                       "type": "string"
                     },
@@ -151579,6 +151594,7 @@
                     "connectorType",
                     "config",
                     "secretId",
+                    "environmentId",
                     "schedule",
                     "enabled",
                     "lastSyncAt",
@@ -152676,6 +152692,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "schedule": {
                       "type": "string"
                     },
@@ -152757,6 +152779,7 @@
                     "connectorType",
                     "config",
                     "secretId",
+                    "environmentId",
                     "schedule",
                     "enabled",
                     "lastSyncAt",
@@ -153767,6 +153790,12 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "environmentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -154612,6 +154641,12 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "schedule": {
                       "type": "string"
                     },
@@ -154690,6 +154725,7 @@
                     "connectorType",
                     "config",
                     "secretId",
+                    "environmentId",
                     "schedule",
                     "enabled",
                     "lastSyncAt",

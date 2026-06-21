@@ -25438,7 +25438,6 @@ export type GetConfigResponses = {
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
             projectsEnabled: boolean;
-            dynamicToolAccessEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -39359,6 +39358,7 @@ export type GetConnectorsResponses = {
                 fileTypes?: Array<string>;
             };
             secretId: string | null;
+            environmentId: string | null;
             schedule: string;
             enabled: boolean;
             lastSyncAt: string | null;
@@ -39541,6 +39541,7 @@ export type CreateConnectorData = {
         schedule?: string;
         enabled?: boolean;
         knowledgeBaseIds?: Array<string>;
+        environmentId?: string | null;
     };
     path?: never;
     query?: never;
@@ -39759,6 +39760,7 @@ export type CreateConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
@@ -40080,6 +40082,7 @@ export type GetConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
@@ -40247,6 +40250,7 @@ export type UpdateConnectorData = {
         };
         schedule?: string;
         enabled?: boolean;
+        environmentId?: string | null;
     };
     path: {
         id: string;
@@ -40467,6 +40471,7 @@ export type UpdateConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;

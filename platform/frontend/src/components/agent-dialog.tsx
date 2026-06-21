@@ -680,7 +680,9 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
-  const [accessAllTools, setAccessAllTools] = useState(false);
+  // New agents default to implicit ("All tools") access; editing an existing
+  // agent overwrites this from its stored value.
+  const [accessAllTools, setAccessAllTools] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -701,10 +703,10 @@ export function AgentDialog({
         : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  const dynamicToolAccessEnabled = useFeature("dynamicToolAccessEnabled");
-  // When the dynamic-tool-access feature is gated off, the selector is hidden
-  // and the agent is always treated as "Custom" (explicitly assigned tools).
-  const allToolsMode = accessAllTools && dynamicToolAccessEnabled;
+  // "All tools" (implicit access) is the default for new agents; admins can
+  // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
+  // scoped to tools/knowledge visible to the user AND in the agent's environment.
+  const allToolsMode = accessAllTools;
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -798,11 +800,10 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        // New agents default to "Custom" — explicitly assigned tools. The
-        // "All tools" dynamic-access mode is opt-in (and gated behind the
-        // dynamicToolAccessEnabled feature flag).
+        // New agents default to "All tools" (implicit access); admins can switch
+        // to "Custom" (explicitly assigned tools).
         setToolExposureMode("full");
-        setAccessAllTools(false);
+        setAccessAllTools(true);
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -1542,31 +1543,29 @@ export function AgentDialog({
                   {/* Tools & knowledge */}
                   <div className="space-y-2">
                     <Label>Tools & Knowledge Sources</Label>
-                    {dynamicToolAccessEnabled && (
-                      <Tabs
-                        value={allToolsMode ? "all" : "specific"}
-                        onValueChange={(value) => {
-                          const all = value === "all";
-                          setAccessAllTools(all);
-                          // Dynamic access only works through the search/run
-                          // dispatch surface, so picking it enables that mode.
-                          if (all) {
-                            setToolExposureMode("search_and_run_only");
-                          }
-                        }}
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="all">All</TabsTrigger>
-                          <TabsTrigger value="specific">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    )}
+                    <Tabs
+                      value={allToolsMode ? "all" : "specific"}
+                      onValueChange={(value) => {
+                        const all = value === "all";
+                        setAccessAllTools(all);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (all) {
+                          setToolExposureMode("search_and_run_only");
+                        }
+                      }}
+                    >
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="specific">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                     {allToolsMode && (
                       <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
                           Every MCP tool and knowledge source the chatting user
-                          can access
+                          can access, in this agent's environment
                         </li>
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />

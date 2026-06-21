@@ -1260,16 +1260,6 @@ const config = {
     enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
   },
   /**
-   * Dynamic tool access UI. Ships dark: off by default until ready to surface.
-   * Gates the per-agent "All / Custom" tools selector and the per-server
-   * "Agent connections" (on-behalf-of vs pinned service account) selector. The
-   * backend still honors a stored access_all_tools flag and the per-server
-   * connection policy; this only controls whether those controls are exposed.
-   */
-  dynamicToolAccess: {
-    enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
-  },
-  /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
    * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
    * provider is used for new writes while reads dispatch per row, so a

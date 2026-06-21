@@ -1643,6 +1643,12 @@ export function AgentDialog({
                         <p className="text-xs font-medium text-muted-foreground">
                           Knowledge Sources
                         </p>
+                        <p className="text-xs text-muted-foreground">
+                          Assigning a source gives this{" "}
+                          {agentType === "mcp_gateway" ? "gateway" : "agent"} a{" "}
+                          <code>query_knowledge_sources</code> tool to search
+                          it.
+                        </p>
                         {!isKnowledgeConfigured ? (
                           <>
                             <Button

@@ -4023,6 +4023,109 @@ describe("InteractionModel", () => {
       ).toBe("main");
     });
 
+    test("findAllPaginated classifies a Claude Desktop web-search request as a subagent", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "desktop-subagent";
+
+      const desktopRequest = (overrides: {
+        system: unknown;
+        tools: unknown[];
+        messages: unknown[];
+      }) =>
+        ({
+          model: "claude-3-5-sonnet",
+          max_tokens: 1024,
+          ...overrides,
+        }) as unknown as InsertInteraction["request"];
+
+      // Main Claude Desktop request: multi-turn, and — unlike Claude Code — its
+      // main agent carries NO Task tool. It must still classify as "main".
+      const main = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+          ],
+          tools: [{ name: "Read", description: "read", input_schema: {} }],
+          messages: [
+            { role: "user", content: "help me research heaters" },
+            { role: "assistant", content: "sure" },
+            { role: "user", content: "find local prices" },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // Web-search sub-agent: a fresh thread (new messages[0]), the Agent SDK
+      // sub-agent system prompt, a single directive, and no Task tool.
+      const sub = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+            {
+              type: "text",
+              text: "You are an assistant for performing a web search tool use",
+            },
+          ],
+          tools: [
+            { name: "web_search", description: "search", input_schema: {} },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Perform a web search for the query: waste oil heater prices",
+                },
+              ],
+            },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      const requestTypeOf = (id: string) =>
+        (
+          result.data.find((i) => i.id === id) as
+            | { requestType?: string }
+            | undefined
+        )?.requestType;
+
+      expect(requestTypeOf(sub.id)).toBe("subagent");
+      expect(requestTypeOf(main.id)).toBe("main");
+    });
+
     test("getSessions reconstructs the last interaction request, even when the parent is outside the 20-row window", async ({
       makeAdmin,
     }) => {

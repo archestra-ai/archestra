@@ -66,24 +66,32 @@ function getMessageText(
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
- * Claude Code specific heuristic:
- * - Main requests have the "Task" tool available (can spawn subagents)
- * - Subagent requests don't have the "Task" tool
- * - Utility requests (single message like "count", "quota") are subagents
- * - Prompt suggestion requests (last message contains "prompt suggestion generator") are subagents
+ * Applies to the Claude agentic sources (Claude Code and Claude Desktop, both
+ * built on the Claude Agent SDK); every other source is "main".
  *
- * For other session sources, all requests are considered "main" by default.
+ * Shared heuristics:
+ * - Single short utility messages ("count", "quota") are subagents
+ * - Prompt suggestion generator requests are subagents
+ * - The Agent SDK spawns single-purpose tool sub-agents (e.g. web search) whose
+ *   system prompt is "You are an assistant for performing a <tool> tool use"
+ *
+ * Source-specific: Claude Code main requests carry the "Task" tool (they can
+ * spawn subagents) and subagents don't — so absence of "Task" means subagent.
+ * Claude Desktop main agents do NOT carry the "Task" tool, so that negative
+ * signal can't be used there; a Claude Desktop request that matched none of the
+ * subagent markers is "main".
  */
 function computeRequestType(
   request: unknown,
   sessionSource: string | null,
 ): "main" | "subagent" {
-  // Only apply detection heuristics for Claude Code sessions
-  if (sessionSource !== "claude_code") {
+  // Only apply detection heuristics for Claude sessions
+  if (sessionSource !== "claude_code" && sessionSource !== "claude_desktop") {
     return "main";
   }
 
   const req = request as {
+    system?: string | Array<{ text?: string; type?: string }>;
     tools?: Array<{ name: string }>;
     messages?: Array<{
       content: string | Array<{ text?: string; type?: string }>;
@@ -111,9 +119,20 @@ function computeRequestType(
     }
   }
 
-  const tools = req?.tools ?? [];
-  const hasTaskTool = tools.some((tool) => tool.name === "Task");
-  return hasTaskTool ? "main" : "subagent";
+  // Claude Agent SDK tool sub-agents (e.g. web search) are marked by their
+  // system prompt. This is the reliable signal for Claude Desktop, whose main
+  // agent — unlike Claude Code's — does not carry the Task tool.
+  if (getMessageText(req?.system).includes("an assistant for performing a")) {
+    return "subagent";
+  }
+
+  if (sessionSource === "claude_code") {
+    const tools = req?.tools ?? [];
+    const hasTaskTool = tools.some((tool) => tool.name === "Task");
+    return hasTaskTool ? "main" : "subagent";
+  }
+
+  return "main";
 }
 
 /**

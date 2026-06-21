@@ -62,7 +62,7 @@ See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works an
 
 An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its code sandbox runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools and knowledge it can use are scoped to that environment — the agent only sees tools and knowledge connectors in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
 
-See [Environments](/docs/platform-environments) for the isolation model and [Network Egress Policies](/docs/platform-private-registry#network-egress-policies) for how policies are configured.
+See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
 
 ## Delegation
 

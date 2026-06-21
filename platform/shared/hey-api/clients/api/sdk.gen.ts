@@ -3887,7 +3887,7 @@ export const getMcpServer = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `mcpServerInstallation:update`: Modify installed MCP server configuration
+ * `mcpServerInstallation:create`: Install MCP servers from the registry
  */
 export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(options: Options<ReauthenticateMcpServerData, ThrowOnError>) => (options.client ?? client).patch<ReauthenticateMcpServerResponses, ReauthenticateMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server/{id}/reauthenticate',

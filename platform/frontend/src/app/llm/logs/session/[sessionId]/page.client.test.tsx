@@ -103,6 +103,41 @@ describe("SessionDetailPage", () => {
     ).toBeVisible();
   });
 
+  it.each([
+    ["claude_code", "Claude Code"],
+    ["claude_desktop", "Claude Desktop"],
+  ])("renders the %s source badge as '%s'", async (sessionSource, expectedLabel) => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionSource }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractions).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractions>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText(expectedLabel)).toBeVisible();
+  });
+
+  it("shows no Claude source badge for non-Claude sessions", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionSource: "openai_user" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractions).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractions>);
+
+    renderSessionDetailPage();
+
+    expect(
+      await screen.findByText("No interactions found for this session"),
+    ).toBeVisible();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude Desktop")).not.toBeInTheDocument();
+  });
+
   it("hides the cache line when the session used no caching", async () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: {

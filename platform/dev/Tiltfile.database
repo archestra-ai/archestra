@@ -58,7 +58,10 @@ local_resource(
   dir='../backend',
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  labels=['database']
+  labels=['database'],
+  env={
+    'NODE_ENV': 'development',
+  }
 )
 
 local_resource(

@@ -3,6 +3,11 @@
 import { Boxes, Edit, Globe, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  EnvironmentScopeSelect,
+  GLOBAL_ENVIRONMENT_SCOPE,
+  GLOBAL_ENVIRONMENT_SCOPE_LABEL,
+} from "@/components/environment-scope-select";
 import { FormDialog } from "@/components/form-dialog";
 import {
   CLEANUP_INTERVAL_LABELS,
@@ -22,7 +27,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Table,
   TableBody,
@@ -41,13 +45,8 @@ import {
 import { useEnvironments } from "@/lib/environment.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 
-// Sentinel for the "All environments" (organization-wide, NULL-environment)
-// option in the scope selector, since an empty string is the unselected state.
-const GLOBAL_SCOPE = "__global__";
-const GLOBAL_SCOPE_LABEL = "All environments (default)";
-
 type FormState = {
-  // GLOBAL_SCOPE for the org-wide default, otherwise an environment id.
+  // GLOBAL_ENVIRONMENT_SCOPE for the org-wide default, otherwise an environment id.
   scope: string;
   limitValue: string;
   models: string[];
@@ -103,33 +102,31 @@ export function DefaultUserLimitsSection() {
   const hasGlobal = limits.some((limit) => limit.environmentId === null);
 
   const scopeLabel = (environmentId: string | null) => {
-    if (environmentId === null) return GLOBAL_SCOPE_LABEL;
+    if (environmentId === null) return GLOBAL_ENVIRONMENT_SCOPE_LABEL;
     return (
       environments.find((environment) => environment.id === environmentId)
         ?.name ?? "Unknown environment"
     );
   };
 
-  // Environments that don't yet have a row (creation only — one per env).
-  const availableEnvironments = environments.filter(
-    (environment) =>
-      !limits.some((limit) => limit.environmentId === environment.id),
+  // Scopes that already have a limit. They stay visible in the dropdown but are
+  // disabled, since there's at most one default per environment (and one global).
+  const takenScopes = new Set<string>(
+    limits.map((limit) =>
+      limit.environmentId === null
+        ? GLOBAL_ENVIRONMENT_SCOPE
+        : limit.environmentId,
+    ),
   );
-
-  // Scope options for the create dialog: the org-wide default (if not yet set)
-  // plus any environments without a limit.
-  const scopeOptions = [
-    ...(hasGlobal ? [] : [{ value: GLOBAL_SCOPE, label: GLOBAL_SCOPE_LABEL }]),
-    ...availableEnvironments.map((environment) => ({
-      value: environment.id,
-      label: environment.name,
-      description: environment.description ?? undefined,
-    })),
-  ];
 
   const handleAddOpen = () => {
     setEditing(null);
-    setFormState(EMPTY_FORM_STATE);
+    setFormState({
+      ...EMPTY_FORM_STATE,
+      // Pre-select the org-wide default when it isn't configured yet, so the
+      // environment field can be left untouched for the common case.
+      scope: hasGlobal ? "" : GLOBAL_ENVIRONMENT_SCOPE,
+    });
     setIsDialogOpen(true);
   };
 
@@ -137,7 +134,10 @@ export function DefaultUserLimitsSection() {
     setEditing(limit);
     const models = Array.isArray(limit.model) ? limit.model : [];
     setFormState({
-      scope: limit.environmentId === null ? GLOBAL_SCOPE : limit.environmentId,
+      scope:
+        limit.environmentId === null
+          ? GLOBAL_ENVIRONMENT_SCOPE
+          : limit.environmentId,
       limitValue: String(limit.limitValue),
       models,
       isAllModels: models.length === 0,
@@ -170,7 +170,8 @@ export function DefaultUserLimitsSection() {
     }
 
     const result = await createLimit.mutateAsync({
-      environmentId: formState.scope === GLOBAL_SCOPE ? null : formState.scope,
+      environmentId:
+        formState.scope === GLOBAL_ENVIRONMENT_SCOPE ? null : formState.scope,
       limitValue,
       model,
       cleanupInterval: formState.cleanupInterval,
@@ -186,7 +187,9 @@ export function DefaultUserLimitsSection() {
     setToDelete(null);
   }
 
-  const nothingToAdd = hasGlobal && availableEnvironments.length === 0;
+  // Nothing left to add once the global default and every environment have a row.
+  const nothingToAdd =
+    hasGlobal && environments.every((env) => takenScopes.has(env.id));
 
   return (
     <SettingsBlock
@@ -211,7 +214,7 @@ export function DefaultUserLimitsSection() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Applies to</TableHead>
+              <TableHead>Environment</TableHead>
               <TableHead>Models</TableHead>
               <TableHead>Limit value</TableHead>
               <TableHead>Cleanup interval</TableHead>
@@ -296,23 +299,6 @@ export function DefaultUserLimitsSection() {
         >
           <DialogBody className="space-y-4">
             <div className="space-y-2">
-              <Label>Applies to</Label>
-              {editing ? (
-                <Input value={scopeLabel(editing.environmentId)} disabled />
-              ) : (
-                <SearchableSelect
-                  value={formState.scope}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({ ...current, scope: value }))
-                  }
-                  placeholder="Select scope"
-                  items={scopeOptions}
-                  className="w-full"
-                />
-              )}
-            </div>
-
-            <div className="space-y-2">
               <Label>Models</Label>
               <LlmModelPicker
                 multiple
@@ -358,6 +344,28 @@ export function DefaultUserLimitsSection() {
                   }))
                 }
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Environment (optional)</Label>
+              {editing ? (
+                <Input value={scopeLabel(editing.environmentId)} disabled />
+              ) : (
+                <EnvironmentScopeSelect
+                  value={formState.scope}
+                  onValueChange={(value) =>
+                    setFormState((current) => ({ ...current, scope: value }))
+                  }
+                  environments={environments}
+                  includeGlobalOption
+                  takenValues={takenScopes}
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                Leave as “{GLOBAL_ENVIRONMENT_SCOPE_LABEL}” to set the
+                organization-wide default, or pick an environment to override it
+                there.
+              </p>
             </div>
           </DialogBody>
 

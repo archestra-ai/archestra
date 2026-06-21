@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -918,7 +919,7 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "environment" && (
-                  <SearchableSelect
+                  <EnvironmentScopeSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -926,12 +927,7 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
-                    placeholder="Select environment"
-                    items={environments.map((environment) => ({
-                      value: environment.id,
-                      label: environment.name,
-                      description: environment.description ?? undefined,
-                    }))}
+                    environments={environments}
                     className="w-full sm:flex-1"
                   />
                 )}

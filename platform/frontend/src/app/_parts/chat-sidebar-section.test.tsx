@@ -191,6 +191,11 @@ function makeConv(
 }
 
 describe("ChatSidebarSection", () => {
+  const fadeIn = {
+    pending: () => true,
+    done: () => {},
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockConversations = [];
@@ -198,7 +203,7 @@ describe("ChatSidebarSection", () => {
 
   it("does not render when no conversations exist", () => {
     mockConversations = [];
-    const { container } = render(<ChatSidebarSection />);
+    const { container } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -211,7 +216,7 @@ describe("ChatSidebarSection", () => {
       makeConv("c5", "Chat Five", { updatedAt: "2026-01-01T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     // Should show first 3 recent (conversations come pre-sorted from API)
     expect(screen.getByText("Chat One")).toBeInTheDocument();
@@ -243,7 +248,7 @@ describe("ChatSidebarSection", () => {
       makeConv("c4", "Unpinned One", { updatedAt: "2026-01-02T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     // Section labels
     expect(screen.getByText("Pinned")).toBeInTheDocument();
@@ -272,7 +277,7 @@ describe("ChatSidebarSection", () => {
       makeConv("c4", "Recent Three", { updatedAt: "2026-01-02T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     // Pinned shows in its own section; all 3 recents fit the slot budget.
     expect(screen.getByText("Pinned Chat")).toBeInTheDocument();
@@ -296,7 +301,7 @@ describe("ChatSidebarSection", () => {
       }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Pinned")).toBeInTheDocument();
     expect(screen.getByText("Pinned A")).toBeInTheDocument();
@@ -312,7 +317,7 @@ describe("ChatSidebarSection", () => {
       makeConv("c1", "Only Chat", { updatedAt: "2026-01-01T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();

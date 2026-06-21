@@ -58,6 +58,7 @@ import { useFeature } from "@/lib/config/config.query";
 
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useOnce } from "@/lib/hooks/use-once";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -616,6 +617,7 @@ export function AppSidebar() {
   // Projects and My Files are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
   const projectsEnabled = useFeature("projectsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
+  const chatListFadeIn = useOnce();
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
 
@@ -694,7 +696,7 @@ export function AppSidebar() {
                     pinned. The fade hints there is more content below. */}
               <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
                 <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
-                  <ChatSidebarSection slots={15} flat />
+                  <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
                   <NavSecondary
                     items={[]}
                     pathname={pathname}

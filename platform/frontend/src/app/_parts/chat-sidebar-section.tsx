@@ -10,7 +10,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -56,10 +56,28 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import type { Once } from "@/lib/hooks/use-once";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+
+function ChatListFadeIn({
+  fadeIn,
+  children,
+}: {
+  fadeIn: Once;
+  children: ReactNode;
+}) {
+  // Capture once so regular re-renders don't drop the class mid-animation.
+  const [className] = useState(() =>
+    fadeIn.pending() ? "animate-in fade-in-0 duration-300" : "",
+  );
+
+  useEffect(() => fadeIn.done(), [fadeIn.done]);
+
+  return <div className={className}>{children}</div>;
+}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -73,12 +91,15 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
 export function ChatSidebarSection({
   slots = DEFAULT_SIDEBAR_CHAT_SLOTS,
   flat = false,
+  fadeIn,
 }: {
   /** How many chats to show before the "More" affordance. */
   slots?: number;
   /** Render without the sub-menu indentation (used by the Chats tab). */
   flat?: boolean;
-} = {}) {
+  /** One-shot latch so the list fades in only the first time it's shown this session. */
+  fadeIn: Once;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
@@ -410,7 +431,7 @@ export function ChatSidebarSection({
       {isLoading ? (
         <ChatListSkeleton subClass={subClass} />
       ) : (
-        <div className="animate-in fade-in-0 duration-300">
+        <ChatListFadeIn fadeIn={fadeIn}>
           {pinnedChats.length > 0 && (
             <SidebarGroup className="pt-0">
               <SidebarGroupLabel>Pinned</SidebarGroupLabel>
@@ -453,7 +474,7 @@ export function ChatSidebarSection({
               </SidebarGroupContent>
             </SidebarGroup>
           )}
-        </div>
+        </ChatListFadeIn>
       )}
 
       <DeleteConfirmDialog

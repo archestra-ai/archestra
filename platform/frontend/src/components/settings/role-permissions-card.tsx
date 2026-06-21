@@ -68,15 +68,15 @@ const actionLabels: Record<Action, string> = {
 export function RolePermissionsCard() {
   const { data: session } = useSession();
   const { data: activeOrg } = useActiveOrganization();
-  const { data: role, isLoading: isRoleLoading } = useActiveMemberRole(
-    activeOrg?.id,
-  );
+  const { data: role } = useActiveMemberRole(activeOrg?.id);
   const { data: permissions, isLoading: isPermissionsLoading } =
     useAllPermissions();
 
-  const isLoading = isRoleLoading || isPermissionsLoading;
-
-  if (isLoading) {
+  // Gate the card on the permissions query only. The role query becomes enabled
+  // a tick later (once the active org resolves) and has no cached data, so
+  // folding it into the loading gate makes the whole card flash to a skeleton
+  // after the cached permissions have already rendered. Load the role inline.
+  if (isPermissionsLoading && !permissions) {
     return (
       <Card>
         <CardContent className="space-y-4">
@@ -104,9 +104,7 @@ export function RolePermissionsCard() {
           <span className="flex h-8 items-center text-muted-foreground">
             Role:
           </span>
-          <span className="flex h-8 items-center capitalize">
-            {role || "—"}
-          </span>
+          <span className="flex h-8 items-center capitalize">{role}</span>
         </div>
         {permissions && (
           <>

@@ -27,19 +27,27 @@ export function PlatformTokenCard({
   action,
 }: PlatformTokenCardProps) {
   const showAction = !isLoading && !error && tokenExists;
+  // The loaded state is header-only, with the action button in the header. While
+  // loading, show a button-shaped skeleton in that same slot so it swaps in place
+  // without moving or resizing the card. Only error/empty render a content block.
+  const showContent = error || (!isLoading && !tokenExists);
 
   return (
     <Card>
       <SettingsCardHeader
         title={title}
         description={description}
-        action={showAction ? action : undefined}
+        action={
+          isLoading ? (
+            <Skeleton className="h-9 w-36" />
+          ) : showAction ? (
+            action
+          ) : undefined
+        }
       />
-      {!showAction && (
+      {showContent && (
         <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-10 w-full max-w-sm" />
-          ) : error ? (
+          {error ? (
             <Alert variant="destructive">
               <AlertDescription>
                 Failed to load token. Please try refreshing the page.

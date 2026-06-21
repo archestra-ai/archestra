@@ -1662,6 +1662,11 @@ function handleRuntimeError(
   sandboxId: SandboxId,
   tool: string,
 ) {
+  if (error instanceof FileNameExistsError) {
+    return errorResult(
+      `${error.message}. Choose a different name, or delete the existing file first.`,
+    );
+  }
   if (error instanceof SkillSandboxError) {
     return errorResult(error.message);
   }

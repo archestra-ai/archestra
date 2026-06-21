@@ -34,6 +34,10 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // random token (registry names must be unique per backend, and tool auto-assignment is disabled so a
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
+// Per-lane project name. Each lane gets its own project (distinct id) so file ownership is isolated;
+// the name is neutral and identical across lanes -- like BENCH_MCP_NAME it must not encode lane/model
+// identity or cue the agent it is being evaluated, since it can surface in a file-conflict message.
+const PROJECT_NAME: &str = "Workspace";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
 // the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
@@ -310,6 +314,7 @@ struct SharedLaneSetup {
     submit_tool: String,
     mcp: BenchmarkMcp,
     resolved: ResolvedModel,
+    project_id: String,
 }
 
 /// One unit of work for a lane: that lane's tasks against a single env. A lane drains its stops serially.
@@ -414,6 +419,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                                 setup.mcp,
                                 setup.submit_tool,
                                 setup.agent_id,
+                                Some(setup.project_id),
                                 ctx.root_run_dir.clone(),
                                 setup.resolved,
                                 progress.clone(),
@@ -468,8 +474,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
 
 /// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
 /// partially-prepared env doesn't leak listener tasks for the rest of the run.
-async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
-    for (_, _, _, mcp) in setups {
+async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
+    for (_, _, _, mcp, _) in setups {
         mcp.stop().await;
     }
 }
@@ -534,7 +540,7 @@ async fn setup_shared_env(
         }
     }
 
-    let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
+    let mut setups: Vec<(Lane, String, String, BenchmarkMcp, String)> = Vec::new();
     for lane in &env_plan.lanes {
         let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
@@ -546,7 +552,26 @@ async fn setup_shared_env(
             }
         };
         match setup_lane_agent(&client, env, lane, &mcp, &team_id).await {
-            Ok((agent_id, submit_tool)) => setups.push((lane.clone(), agent_id, submit_tool, mcp)),
+            Ok((agent_id, submit_tool)) => {
+                // One project per lane so lanes no longer collide on the shared user's
+                // `(user_id, filename)` personal-file index when they save identically named
+                // artifacts. The opaque token keeps the name (and its derived slug) unique per the
+                // projects `(user_id, name)` / `(org, slug)` indexes -- all lanes share one user.
+                // Residual: a lane's tasks share this project, so two tasks emitting the *same*
+                // filename would collide on `(project_id, filename)`; today each task uses a distinct
+                // artifact name, so this does not bite. Revisit (per-rollout project) if that changes.
+                let project_name = format!("{PROJECT_NAME} {token}");
+                let project_id = match client.create_project(&project_name).await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        mcp.stop().await;
+                        stop_mcps(&setups).await;
+                        let _ = instance.shutdown().await;
+                        return Err(e.to_string());
+                    }
+                };
+                setups.push((lane.clone(), agent_id, submit_tool, mcp, project_id));
+            }
             Err(e) => {
                 mcp.stop().await;
                 stop_mcps(&setups).await;
@@ -557,7 +582,7 @@ async fn setup_shared_env(
     }
 
     if !env.mcps.is_empty() {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _)| id.clone()).collect();
+        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
         let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
         {
             Ok(registered) => registered,
@@ -586,7 +611,7 @@ async fn setup_shared_env(
 
     let lane_setups = setups
         .into_iter()
-        .map(|(lane, agent_id, submit_tool, mcp)| {
+        .map(|(lane, agent_id, submit_tool, mcp, project_id)| {
             let resolved = resolved[&lane.name].clone();
             (
                 lane.name.clone(),
@@ -596,6 +621,7 @@ async fn setup_shared_env(
                     submit_tool,
                     mcp,
                     resolved,
+                    project_id,
                 },
             )
         })
@@ -674,7 +700,8 @@ async fn run_isolated_lane(
         }
     };
 
-    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await {
+    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await
+    {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -727,6 +754,7 @@ async fn run_isolated_lane(
         mcp,
         submit_tool,
         agent_id,
+        None,
         ctx.root_run_dir.clone(),
         resolved,
         progress,
@@ -1100,6 +1128,7 @@ async fn run_lane(
     mcp: BenchmarkMcp,
     submit_tool: String,
     agent_id: String,
+    project_id: Option<String>,
     root_run_dir: PathBuf,
     resolved: ResolvedModel,
     progress: ProgressBar,
@@ -1118,6 +1147,7 @@ async fn run_lane(
             env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
+            project_id.as_deref(),
             &task,
             &resolved,
         )
@@ -1139,6 +1169,7 @@ async fn run_one(
     tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
+    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
 ) -> RunResult {
@@ -1201,6 +1232,7 @@ async fn run_one(
         agent_system_prompt,
         lane,
         agent_id,
+        project_id,
         task,
         resolved,
         &artifacts,
@@ -1258,7 +1290,9 @@ async fn capture_effective_prompts(
     }
     for error in &outcome.errors {
         warn!("effective-prompt anomaly: {error}");
-        artifacts.append_error("effective_prompt_error", error).await;
+        artifacts
+            .append_error("effective_prompt_error", error)
+            .await;
     }
 }
 
@@ -1270,6 +1304,7 @@ async fn grade_rollout(
     agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
+    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     artifacts: &RunArtifacts,
@@ -1287,6 +1322,7 @@ async fn grade_rollout(
             Some(rollout_key),
             Some(&resolved.model_id),
             Some(&resolved.api_key_id),
+            project_id,
         )
         .await?;
     let conversation_id = conversation

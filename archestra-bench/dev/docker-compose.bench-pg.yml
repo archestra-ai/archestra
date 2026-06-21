@@ -1,0 +1,32 @@
+# Dedicated Postgres for archestra-bench runs.
+#
+# The dev stack's Postgres is only reachable through Tilt's kubectl port-forward,
+# which throttles new-connection establishment under concurrent lanes (p50 grows
+# to seconds) and trips the backend pool's connect timeout, surfacing as
+# agent_error. A directly-published port establishes in single-digit
+# milliseconds, so the benchmark uses its own Postgres instead.
+#
+# Brought up idempotently by the runner (`docker compose up -d --wait`) and left
+# running between runs. Each run still creates and drops its own throwaway
+# database on this server, so nothing accumulates. To point the benchmark at a
+# Postgres you manage yourself, set ARCHESTRA_BENCH_DATABASE_URL and this file is
+# ignored.
+#
+# pgvector image (matching the dev stack's Postgres 18 major): the platform
+# migrations require the `vector` extension, which stock postgres lacks.
+# Host port 5544 avoids the 5433 already published by docker-compose-n8n.yml.
+services:
+  bench-postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5544:5432"
+    command: ["postgres", "-c", "max_connections=200"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 60

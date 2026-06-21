@@ -180,6 +180,8 @@ export async function validateAssignment(
 export async function resolveAppToolsByName(params: {
   organizationId: string;
   toolNames: readonly string[];
+  /** Requesting agent's environment; tools are resolved within it only. */
+  environmentId: string | null;
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
 > {
@@ -197,6 +199,7 @@ export async function resolveAppToolsByName(params: {
   const rows = await ToolModel.findAppAssignableToolsByNames(
     params.organizationId,
     requested,
+    params.environmentId,
   );
   const byName = new Map<string, typeof rows>();
   for (const row of rows) {

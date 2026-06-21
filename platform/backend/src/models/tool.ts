@@ -1579,6 +1579,7 @@ class ToolModel {
   static async findAppAssignableToolsByNames(
     organizationId: string,
     names: readonly string[],
+    environmentId: string | null,
   ): Promise<
     Array<{ id: string; name: string; clonedPendingDiscovery: boolean }>
   > {
@@ -1598,6 +1599,9 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.name, [...names]),
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          // Environment isolation: an app may only be assigned tools in the
+          // requesting agent's environment.
+          toolInEnvironmentPredicate(environmentId),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
@@ -2391,6 +2395,11 @@ class ToolModel {
       return [];
     }
 
+    // Environment isolation: a resource read must not reach a tool whose catalog
+    // is in another environment (mirrors getMcpToolsByAgent so resources/read
+    // cannot bypass the tools/list + execution filtering).
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
     // Push the JSON filter into Postgres to avoid fetching all tools into memory.
     // Checks both the canonical path (_meta.ui.resourceUri) and the deprecated
     // flat key (_meta."ui/resourceUri") for backwards compatibility.
@@ -2404,6 +2413,7 @@ class ToolModel {
             isNotNull(schema.toolsTable.catalogId),
             isNotNull(schema.toolsTable.delegateToAgentId),
           ),
+          toolInEnvironmentPredicate(agentEnvironmentId),
           or(
             sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' = ${resourceUri}`,
             sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' = ${resourceUri}`,

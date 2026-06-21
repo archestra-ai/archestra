@@ -237,14 +237,14 @@ test("KnowledgeBaseConnectorModel.findByOrganization: filters connectors by envi
     organizationId: org.id,
     name: "prod-connector",
     connectorType: "web_crawler",
-    config: { type: "web_crawler", startUrls: ["https://example.com"] },
+    config: { type: "web_crawler", startUrl: "https://example.com" },
     environmentId: prod.id,
   });
   const defaultConnector = await KnowledgeBaseConnectorModel.create({
     organizationId: org.id,
     name: "default-connector",
     connectorType: "web_crawler",
-    config: { type: "web_crawler", startUrls: ["https://example.com"] },
+    config: { type: "web_crawler", startUrl: "https://example.com" },
     environmentId: null,
   });
 

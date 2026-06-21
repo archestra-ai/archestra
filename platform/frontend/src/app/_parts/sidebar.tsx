@@ -700,6 +700,7 @@ export function AppSidebar() {
                       permissionMap={permissionMap}
                       showCommunityLinks={showCommunityLinks}
                       starCount={formattedStarCount}
+                      className="mt-2.5"
                     />
                   </SidebarGroupContent>
                 </SidebarGroup>

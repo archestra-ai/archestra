@@ -26,6 +26,7 @@ export const DocsPage = {
   PlatformDeveloperQuickstart: "platform-developer-quickstart",
   PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
   PlatformEnterpriseManagedAuth: "platform-enterprise-managed-auth",
+  PlatformEnvironments: "platform-environments",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
   PlatformKnowledgeBases: "platform-knowledge-bases",

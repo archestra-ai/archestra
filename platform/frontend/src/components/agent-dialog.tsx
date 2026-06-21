@@ -685,6 +685,20 @@ export function AgentDialog({
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
+  // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
+  // environment. For agents it binds the code sandbox runtime (feature-flagged);
+  // for LLM proxies / MCP gateways it is an attribution label so their
+  // inference/usage falls under environment-scoped cost limits.
+  const supportsEnvironment =
+    isInternalAgent ||
+    agentType === "llm_proxy" ||
+    agentType === "mcp_gateway";
+  const environmentHelpText =
+    agentType === "llm_proxy"
+      ? "The environment this proxy's inference is attributed to, so its usage counts against that environment's cost limits."
+      : agentType === "mcp_gateway"
+        ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
+        : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const dynamicToolAccessEnabled = useFeature("dynamicToolAccessEnabled");
@@ -989,8 +1003,10 @@ export function AgentDialog({
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
-              environmentId: environmentId || null,
               suggestedPrompts: validSuggestedPrompts,
+            }),
+            ...(supportsEnvironment && {
+              environmentId: environmentId || null,
             }),
             ...(supportsIdentityProvider && {
               identityProviderId: identityProviderId || null,
@@ -1028,8 +1044,10 @@ export function AgentDialog({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
-            environmentId: environmentId || null,
             suggestedPrompts: validSuggestedPrompts,
+          }),
+          ...(supportsEnvironment && {
+            environmentId: environmentId || null,
           }),
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
@@ -1252,6 +1270,23 @@ export function AgentDialog({
                     </div>
                   )}
 
+                  {/* Environment assignment (below description).
+                      - Agent: binds the agent's code sandbox to a per-environment
+                        Dagger engine + egress policy (feature-flagged).
+                      - LLM proxy / MCP gateway: assigns the deployment environment
+                        so its usage falls under environment-scoped cost limits.
+                      Hidden when only the default environment is available. */}
+                  {((isInternalAgent && agentEnvironmentsEnabled) ||
+                    agentType === "llm_proxy" ||
+                    agentType === "mcp_gateway") && (
+                    <EnvironmentSelector
+                      value={environmentId ?? null}
+                      onChange={setEnvironmentId}
+                      hideWhenOnlyDefault
+                      helpText={environmentHelpText}
+                    />
+                  )}
+
                   {/* Built-in agent config */}
                   {isPolicyConfigBuiltIn && (
                     <div className="space-y-4">
@@ -1329,19 +1364,6 @@ export function AgentDialog({
                     }
                   />
                 </div>
-              )}
-
-              {/* Sandbox Environment (Agent only): binds the agent's code
-                  sandbox to a per-environment Dagger engine + egress policy.
-                  Feature-flagged off by default; hidden when only the default
-                  environment is available. */}
-              {isInternalAgent && agentEnvironmentsEnabled && (
-                <EnvironmentSelector
-                  value={environmentId ?? null}
-                  onChange={setEnvironmentId}
-                  hideWhenOnlyDefault
-                  className="rounded-lg border bg-card p-4"
-                />
               )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}

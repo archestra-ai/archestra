@@ -489,6 +489,12 @@ async function handleQueryKnowledgeSources(params: {
       return errorResult("Organization context not available.");
     }
 
+    // Environment isolation: the agent may only query knowledge connectors in its
+    // own environment (strict equality, null = Default).
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(
+      contextAgent.id,
+    );
+
     const access =
       context.userId && organizationId
         ? await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -514,6 +520,7 @@ async function handleQueryKnowledgeSources(params: {
         organizationId,
         canReadAll: access.canReadAll,
         viewerTeamIds: access.teamIds,
+        environmentId: agentEnvironmentId,
       });
       connectorIds = connectors.map((connector) => connector.id);
 
@@ -549,12 +556,15 @@ async function handleQueryKnowledgeSources(params: {
       const directConnectors = directConnectorIds.length
         ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
         : [];
-      const visibleDirectConnectors = access
-        ? knowledgeSourceAccessControlService.filterConnectors(
-            access,
-            directConnectors,
-          )
-        : directConnectors;
+      const visibleDirectConnectors = (
+        access
+          ? knowledgeSourceAccessControlService.filterConnectors(
+              access,
+              directConnectors,
+            )
+          : directConnectors
+        // Environment isolation: drop directly-assigned connectors from other envs.
+      ).filter((connector) => connector.environmentId === agentEnvironmentId);
 
       const connectorIdsFromVisibleKbs = visibleKbs.length
         ? (
@@ -563,6 +573,7 @@ async function handleQueryKnowledgeSources(params: {
                 KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
+                  environmentId: agentEnvironmentId,
                 }),
               ),
             )
@@ -607,6 +618,9 @@ async function handleQueryKnowledgeSources(params: {
       queryText: args.query,
       userAcl,
       bypassAcl: access?.canReadAll ?? false,
+      // Defense-in-depth: even though connectorIds is already env-filtered above,
+      // the chunk search re-checks the connector environment.
+      environmentId: agentEnvironmentId,
       limit: 10,
     });
 
@@ -803,17 +817,22 @@ async function handleGetKnowledgeConnectors(params: {
       return errorResult("Organization context not available");
     }
 
-    const access = context.userId
-      ? await knowledgeSourceAccessControlService.buildAccessControlContext({
-          userId: context.userId,
-          organizationId: context.organizationId,
-        })
-      : null;
+    const [access, agentEnvironmentId] = await Promise.all([
+      context.userId
+        ? knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null,
+      AgentModel.findEnvironmentId(context.agent.id),
+    ]);
 
+    // Environment isolation: a gateway only sees connectors in its own environment.
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
       viewerTeamIds: access?.teamIds,
+      environmentId: agentEnvironmentId,
     });
     if (connectors.length === 0) {
       return structuredSuccessResult(

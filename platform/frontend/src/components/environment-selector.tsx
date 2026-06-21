@@ -2,6 +2,7 @@
 
 import { E2eTestId } from "@archestra/shared";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -31,6 +32,12 @@ interface EnvironmentSelectorProps {
   hideWhenOnlyDefault?: boolean;
   /** Applied to the field's root element, e.g. a card wrapper for the agent dialog. */
   className?: string;
+  /**
+   * Short, context-specific explanation of what assigning an environment does
+   * here (the meaning differs for agents vs. LLM proxies vs. knowledge bases),
+   * rendered as muted helper text under the label.
+   */
+  helpText?: ReactNode;
 }
 
 export function EnvironmentSelector({
@@ -38,6 +45,7 @@ export function EnvironmentSelector({
   onChange,
   hideWhenOnlyDefault,
   className,
+  helpText,
 }: EnvironmentSelectorProps) {
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments ?? [];
@@ -80,6 +88,9 @@ export function EnvironmentSelector({
   return (
     <div className={cn("space-y-2", className)}>
       <Label>Environment</Label>
+      {helpText ? (
+        <p className="text-xs text-muted-foreground">{helpText}</p>
+      ) : null}
       <Select
         value={selectedValue}
         disabled={!hasCustomEnvironmentOptions}

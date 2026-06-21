@@ -74,6 +74,7 @@ export async function resolveDynamicTool(params: {
   const accessible = await getAccessibleTools(
     ctx.userId,
     ctx.organizationId,
+    ctx.agentEnvironmentId,
     toolName,
   );
   const tool = accessible[0];
@@ -121,7 +122,11 @@ export async function isDynamicallyAvailableArchestraTool(params: {
     return false;
   }
   return isKnowledgeQuery
-    ? userHasAccessibleKnowledgeConnectors(ctx.userId, ctx.organizationId)
+    ? userHasAccessibleKnowledgeConnectors(
+        ctx.userId,
+        ctx.organizationId,
+        ctx.agentEnvironmentId,
+      )
     : true;
 }
 
@@ -146,8 +151,12 @@ export async function getUnassignedDiscoverableTools(params: {
   }
 
   const [accessibleTools, hasKnowledgeConnectors] = await Promise.all([
-    getAccessibleTools(ctx.userId, ctx.organizationId),
-    userHasAccessibleKnowledgeConnectors(ctx.userId, ctx.organizationId),
+    getAccessibleTools(ctx.userId, ctx.organizationId, ctx.agentEnvironmentId),
+    userHasAccessibleKnowledgeConnectors(
+      ctx.userId,
+      ctx.organizationId,
+      ctx.agentEnvironmentId,
+    ),
   ]);
   return accessibleTools.filter(
     (tool) =>
@@ -171,15 +180,23 @@ export async function dynamicAccessContext(params: {
   agentId: string;
   userId?: string;
   organizationId?: string;
-}): Promise<{ userId: string; organizationId: string } | null> {
+}): Promise<{
+  userId: string;
+  organizationId: string;
+  agentEnvironmentId: string | null;
+} | null> {
   const { agentId, organizationId, userId } = params;
   if (!userId || !organizationId || userId === "system") {
     return null;
   }
-  if (!(await AgentModel.getAccessAllTools(agentId))) {
+  const [accessAllTools, agentEnvironmentId] = await Promise.all([
+    AgentModel.getAccessAllTools(agentId),
+    AgentModel.findEnvironmentId(agentId),
+  ]);
+  if (!accessAllTools) {
     return null;
   }
-  return { userId, organizationId };
+  return { userId, organizationId, agentEnvironmentId };
 }
 
 // === Internal helpers ===
@@ -192,6 +209,7 @@ const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
 async function userHasAccessibleKnowledgeConnectors(
   userId: string,
   organizationId: string,
+  environmentId: string | null,
 ): Promise<boolean> {
   const access =
     await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -202,6 +220,7 @@ async function userHasAccessibleKnowledgeConnectors(
     organizationId,
     canReadAll: access.canReadAll,
     viewerTeamIds: access.teamIds,
+    environmentId,
     limit: 1,
   });
   return connectors.length > 0;
@@ -242,11 +261,13 @@ function isExcludedFromDiscovery(
 async function getAccessibleTools(
   userId: string,
   organizationId: string,
+  environmentId: string | null,
   name?: string,
 ): Promise<Tool[]> {
   return ToolModel.getMcpToolsAccessibleToUser({
     userId,
     organizationId,
+    environmentId,
     isAdmin: await userIsCatalogAdmin(userId, organizationId),
     name,
   });

@@ -44,6 +44,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { toolInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   AssignedTool,
   ExtendedTool,
@@ -539,6 +540,11 @@ class ToolModel {
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
 
+    // The agent's environment scopes which assigned tools it may use (environment
+    // isolation). Knowledge-source surfacing is intentionally env-agnostic; the
+    // knowledge query path enforces isolation.
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
     // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
     const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
@@ -552,7 +558,9 @@ class ToolModel {
     // Return tools that are assigned via junction table AND are either:
     // - MCP tools (have catalogId set) - includes regular MCP server tools and Archestra builtin tools
     // - Delegation tools (have delegateToAgentId set)
-    // Excludes proxy-discovered tools which have agentId set and catalogId null
+    // Excludes proxy-discovered tools which have agentId set and catalogId null.
+    // Environment isolation excludes assigned tools whose catalog belongs to a
+    // different environment (built-in catalogs + delegation tools are exempt).
     const tools =
       assignedToolIds.length > 0
         ? await db
@@ -565,6 +573,7 @@ class ToolModel {
                   isNotNull(schema.toolsTable.catalogId),
                   isNotNull(schema.toolsTable.delegateToAgentId),
                 ),
+                toolInEnvironmentPredicate(agentEnvironmentId),
               ),
             )
             .orderBy(desc(schema.toolsTable.createdAt))
@@ -596,6 +605,12 @@ class ToolModel {
     userId: string;
     organizationId: string;
     isAdmin: boolean;
+    /**
+     * The requesting agent's environment. Dynamic discovery is scoped to tools
+     * in the same environment (built-in catalogs exempt), so search_tools /
+     * run_tool cannot reach cross-environment tools.
+     */
+    environmentId: string | null;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
   }): Promise<Tool[]> {
@@ -618,6 +633,7 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
+          toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
             : undefined,
@@ -1467,6 +1483,10 @@ class ToolModel {
       return [];
     }
 
+    // Environment isolation: never resolve (and therefore never execute) a tool
+    // whose catalog belongs to a different environment than the agent's.
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
@@ -1491,6 +1511,7 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
+          toolInEnvironmentPredicate(agentEnvironmentId),
         ),
       );
 
@@ -1510,6 +1531,10 @@ class ToolModel {
     // Use an exact suffix match via RIGHT() to avoid LIKE pattern injection.
     // The suffix is the separator + raw tool name, e.g. "__refresh-stats".
     const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolNameSuffix}`;
+
+    // Environment isolation: a suffix match must not resolve a cross-environment
+    // duplicate short name.
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
 
     const mcpTools = await db
       .select({
@@ -1535,6 +1560,7 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
+          toolInEnvironmentPredicate(agentEnvironmentId),
         ),
       )
       .limit(1);
@@ -2776,7 +2802,12 @@ class ToolModel {
 
   /**
    * Check if an agent has any knowledge sources — either knowledge bases or
-   * directly-assigned connectors.
+   * directly-assigned connectors. Deliberately environment-agnostic: this only
+   * decides whether to surface the query_knowledge_sources tool (a UX affordance,
+   * even for an empty knowledge base). The query itself enforces environment
+   * isolation (see knowledge-management.ts / queryService), so surfacing the tool
+   * for an agent whose knowledge is all cross-environment is harmless — the query
+   * returns no results rather than leaking another environment's data.
    */
   private static async getAgentHasKnowledgeSources(
     agentId: string,

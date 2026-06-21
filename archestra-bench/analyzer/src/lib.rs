@@ -59,7 +59,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
     }
 }
 
-/// One discovered benchmark rollout with its trajectory already rendered to the markdown fed to map.
+/// One discovered benchmark rollout with its trajectory rendered to markdown in full — the same
+/// untruncated text is both persisted as `trajectory.md` and fed to the map-phase LLM.
 #[derive(Debug)]
 struct Rollout {
     id: RolloutId,
@@ -200,8 +201,8 @@ pub struct PrepareManifest {
 pub fn prepare_run_dir(run_dir: &Path) -> Result<PrepareManifest> {
     let mut rollouts = discover_rollouts(run_dir)?;
 
-    // Persist the rendered trajectory next to its source jsonl (same side effect as `analyze`), so
-    // an external map phase reads the exact markdown the Rust map phase would.
+    // Persist the full rendered trajectory next to its source jsonl (same side effect as `analyze`),
+    // so external tooling reads the complete, untruncated trajectory.
     for rollout in &rollouts {
         let md_path = rollout.dir.join("trajectory.md");
         std::fs::write(&md_path, &rollout.markdown)
@@ -265,8 +266,8 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         format!("● {total} rollouts in {}", cfg.run_dir.display()),
     );
 
-    // Persist the rendered trajectory we feed the map phase next to its source jsonl, so the map
-    // input is inspectable after the fact. `trajectory.md` is never re-discovered (glob wants jsonl).
+    // Persist the full rendered trajectory next to its source jsonl, so the rollout is inspectable
+    // after the fact in full. `trajectory.md` is never re-discovered (glob wants jsonl).
     for rollout in &rollouts {
         let md_path = rollout.dir.join("trajectory.md");
         std::fs::write(&md_path, &rollout.markdown)
@@ -602,8 +603,8 @@ mod tests {
 
         let manifest = prepare_run_dir(run.path()).unwrap();
 
-        // trajectory.md is rendered next to each source jsonl, byte-identical to what
-        // format_to_markdown produces (so the map phase reads exactly the Rust-rendered trajectory).
+        // trajectory.md is rendered next to each source jsonl, byte-identical to the full
+        // trajectory rendering.
         let glm_dir = run.path().join("basic/pi__glm");
         let expected =
             format_to_markdown(&load_trajectory(&glm_dir.join("trajectory.jsonl")).unwrap());

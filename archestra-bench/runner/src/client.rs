@@ -690,9 +690,27 @@ impl EvalClient {
             ("sortBy".to_string(), "createdAt".to_string()),
             ("sortDirection".to_string(), "asc".to_string()),
         ];
-        let body = self
-            .request(Method::GET, "/api/interactions", Some(&params), None)
-            .await?;
+        // Post-run enrichment polls this endpoint repeatedly while many rollouts hammer the same
+        // backend, so a transient transport failure (timeout / dropped connection, surfaced as
+        // status 0) is expected under load. Retry those with linear backoff so one slow poll does
+        // not abort the whole interaction capture; genuine HTTP errors propagate immediately.
+        // Up to this many retries on top of the initial request (so 5 total attempts at worst).
+        const MAX_TRANSIENT_RETRIES: u32 = 4;
+        const RETRY_BACKOFF: Duration = Duration::from_millis(500);
+        let mut attempt = 0u32;
+        let body = loop {
+            match self
+                .request(Method::GET, "/api/interactions", Some(&params), None)
+                .await
+            {
+                Ok(body) => break body,
+                Err(e) if e.status == 0 && attempt < MAX_TRANSIENT_RETRIES => {
+                    attempt += 1;
+                    sleep(RETRY_BACKOFF * attempt).await;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
         let data = body
             .get("data")
             .and_then(JsonValue::as_array)

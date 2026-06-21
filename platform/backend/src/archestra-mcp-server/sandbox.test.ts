@@ -306,6 +306,63 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(clean).not.toContain("binary (NUL) bytes");
     });
 
+    test("surfaces an empty-stderr section on a non-zero exit, but not on success", async () => {
+      const ctx = await makeConversationCtx();
+      const spy = vi.spyOn(skillSandboxRuntimeService, "runCommand");
+
+      // a command failed without writing to stderr: the model must still see an
+      // explicit (empty) stderr section so it can tell "no stderr" from "stderr
+      // withheld" rather than the section silently vanishing.
+      spy.mockResolvedValue({
+        commandId: "cmd-1",
+        sandboxId: "x" as any,
+        command: "exit 1",
+        cwd: null,
+        stdout: "",
+        stderr: "",
+        exitCode: 1,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: false,
+        stagingNotices: [],
+      });
+      const failed = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "exit 1" },
+          ctx,
+        ),
+      );
+      // Assert the empty marker belongs to the stderr section specifically — stdout is
+      // also empty here, so a bare "(empty)" check could pass on the stdout section alone.
+      expect(failed).toContain("stderr:\n(empty)");
+
+      // success with empty stderr stays terse — no stderr section.
+      spy.mockResolvedValue({
+        commandId: "cmd-2",
+        sandboxId: "x" as any,
+        command: "true",
+        cwd: null,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        durationMs: 5,
+        timedOut: false,
+        truncated: false,
+        binaryStripped: false,
+        stagingNotices: [],
+      });
+      const ok = textOf(
+        await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "true" },
+          ctx,
+        ),
+      );
+      expect(ok).not.toContain("stderr:");
+    });
+
     test("omits the truncation warning when output is complete", async () => {
       const ctx = await makeConversationCtx();
       stubRunCommand("x");

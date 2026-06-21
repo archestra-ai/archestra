@@ -608,8 +608,12 @@ export function AgentDialog({
   const environments = environmentsData?.environments ?? [];
   // Scope the agent's MCP list to its environment only when the feature is on
   // for an internal agent (same gate as the environment selector).
+  // Environment isolation is always enforced by the backend for agents and MCP
+  // gateways, so the tool picker reflects it (cross-environment catalogs are
+  // shown disabled). When the org only has the Default environment, nothing is
+  // cross-environment, so this is a no-op.
   const environmentScopingEnabled =
-    agentType === "agent" && !!agentEnvironmentsEnabled;
+    agentType === "agent" || agentType === "mcp_gateway";
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -1718,12 +1722,21 @@ export function AgentDialog({
                                       {connectors.map((connector) => {
                                         const isSelected =
                                           connectorIds.includes(connector.id);
+                                        // Environment isolation: a connector in
+                                        // another environment can't be used by
+                                        // this agent, so it's shown disabled.
+                                        const isEnvIncompatible =
+                                          environmentScopingEnabled &&
+                                          (connector.environmentId ?? null) !==
+                                            (environmentId ?? null);
                                         return (
                                           <CommandItem
                                             key={connector.id}
                                             value={connector.name}
+                                            disabled={isEnvIncompatible}
                                             className="data-[selected=true]:bg-transparent"
                                             onSelect={() => {
+                                              if (isEnvIncompatible) return;
                                               setConnectorIds((prev) =>
                                                 isSelected
                                                   ? prev.filter(
@@ -1747,11 +1760,15 @@ export function AgentDialog({
                                                 {connector.name}
                                               </div>
                                               <div className="truncate text-xs text-muted-foreground">
-                                                {connector.description || (
-                                                  <span className="capitalize">
-                                                    {connector.connectorType}
-                                                  </span>
-                                                )}
+                                                {isEnvIncompatible
+                                                  ? "Different environment"
+                                                  : connector.description || (
+                                                      <span className="capitalize">
+                                                        {
+                                                          connector.connectorType
+                                                        }
+                                                      </span>
+                                                    )}
                                               </div>
                                             </div>
                                             <div className="ml-2 shrink-0">

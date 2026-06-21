@@ -647,7 +647,13 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
-    mcpServerInstallation: ["update"],
+    // Re-authentication re-supplies credentials for a connection the caller can
+    // already install, so it is gated like installation (:create), not :update.
+    // The handler does scope-aware authorization (owner-only for personal,
+    // team-admin for team, etc.) for the finer-grained check. Requiring :update
+    // here locked out members — who have :create but not :update — with a bare
+    // 403 the moment their OAuth token expired and they tried to re-authenticate.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
     mcpServerInstallation: ["update"],

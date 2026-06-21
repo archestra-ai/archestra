@@ -599,6 +599,41 @@ describe("McpClient", () => {
 
         getSecretSpy.mockRestore();
       });
+
+      test("resolves and executes a tool without the heavy server-detail lookup", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__lightweight_resolution",
+          description: "Lightweight resolution tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        // findById() performs a 4-table join plus a per-server mcp_server_user
+        // lookup; the tool-execution hot path must not pay that cost since it
+        // only needs base columns (name/secretId). Resolving with the heavier
+        // query is what produced the N+1 under repeated tool calls.
+        const findByIdSpy = vi.spyOn(McpServerModel, "findById");
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_lightweight", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(findByIdSpy).not.toHaveBeenCalled();
+
+        findByIdSpy.mockRestore();
+      });
     });
 
     // The catalog item defines how agents connect when credentials resolve at
@@ -826,7 +861,10 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "via org service account" }],
           isError: false,
         });
-        const findByIdSpy = vi.spyOn(McpServerModel, "findById");
+        // The resolved target server is the one whose secrets get loaded, so
+        // observe resolution through the lightweight server lookup the secrets
+        // path performs for the chosen target.
+        const findByIdsBasicSpy = vi.spyOn(McpServerModel, "findByIdsBasic");
 
         const result = await mcpClient.executeToolCallForOwner(
           { id: "call_all_mode", name: tool.name, arguments: {} },
@@ -836,8 +874,10 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(false);
         // Resolved via the catalog's org pin, not the static assignment's server.
-        expect(findByIdSpy).toHaveBeenCalledWith(orgServer.id);
-        expect(findByIdSpy).not.toHaveBeenCalledWith(pinnedAwayServer.id);
+        expect(findByIdsBasicSpy).toHaveBeenCalledWith([orgServer.id]);
+        expect(findByIdsBasicSpy).not.toHaveBeenCalledWith([
+          pinnedAwayServer.id,
+        ]);
       });
     });
 

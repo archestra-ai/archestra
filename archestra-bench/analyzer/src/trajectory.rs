@@ -4,30 +4,16 @@
 //! Each line is one `kind`-tagged event. Parsing is clean-or-fail: a non-JSON line or a
 //! known-kind record missing a required field aborts the rollout with its `path:line`; only an
 //! unrecognised `kind` degrades to [`Event::Unknown`] (forward-compat with new event kinds).
+//!
+//! Rendering is verbatim: every field is emitted in full, both for the persisted `trajectory.md`
+//! artifact and for the map-phase LLM input. The trajectory is the analysis's primary evidence, so
+//! nothing in it is truncated — a long tool output or system prompt is signal, not noise to cap.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 use archestra_bench_core::Event;
 use serde_json::Value;
-
-/// Per-field render cap (Unicode scalar values), so a single huge tool blob or reasoning dump
-/// cannot dominate the map prompt.
-const MAX_FIELD_CHARS: usize = 8192;
-
-/// Char-safe truncation: keeps the prefix and appends a marker. Cuts on a char boundary, so it
-/// never panics on multibyte input.
-fn cap_chars(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let cut = s.char_indices().nth(max).map(|(i, _)| i).unwrap_or(s.len());
-    format!(
-        "{}\n[truncated, {} chars total]",
-        &s[..cut],
-        s.chars().count()
-    )
-}
 
 /// A parse failure pinned to its source line, so the operator can find the offending record.
 #[derive(Debug)]
@@ -74,23 +60,6 @@ pub fn load_trajectory(path: &Path) -> Result<Vec<Event>, LoadError> {
     Ok(events)
 }
 
-/// Replace any string longer than `MAX_FIELD_CHARS` with a placeholder, recursing into
-/// nested objects/arrays so a single huge tool output cannot dominate the prompt.
-fn truncate_long_strings(value: &Value) -> Value {
-    match value {
-        Value::String(s) if s.chars().count() > MAX_FIELD_CHARS => {
-            Value::String(format!("[truncated {} chars]", s.chars().count()))
-        }
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .map(|(k, v)| (k.clone(), truncate_long_strings(v)))
-                .collect(),
-        ),
-        Value::Array(items) => Value::Array(items.iter().map(truncate_long_strings).collect()),
-        other => other.clone(),
-    }
-}
-
 /// The product's built-in dispatcher that forwards a call to a discovered MCP tool. It is optional
 /// (a deployment can turn it off) but on by default, so most agents reach `submit_result` and other
 /// discovered tools *through* it. Rendered verbatim it reads as a distinct tool the agent "should
@@ -112,15 +81,15 @@ fn unwrap_dispatch<'a>(tool_name: &'a str, input: &'a Value) -> (String, &'a Val
 }
 
 fn render_value(value: &Value) -> String {
-    let truncated = truncate_long_strings(value);
-    match &truncated {
+    match value {
         Value::String(s) => s.clone(),
         other => serde_json::to_string_pretty(other).unwrap_or_else(|_| other.to_string()),
     }
 }
 
-/// Render the trajectory as readable markdown for an LLM: reasoning, tool calls, tool results,
-/// and terminal errors. Bookkeeping events (token usage, finish, conversation id) are elided.
+/// Render the trajectory as readable markdown: reasoning, tool calls, tool results, and terminal
+/// errors. Bookkeeping events (token usage, finish, conversation id) are elided. Every field is
+/// rendered in full — the trajectory is the analysis's evidence, so nothing is truncated.
 pub fn format_to_markdown(events: &[Event]) -> String {
     let mut out = String::from("# Agent trajectory\n\n");
     for event in events {
@@ -131,16 +100,16 @@ pub fn format_to_markdown(events: &[Event]) -> String {
             } => {
                 if !system_prompt.trim().is_empty() {
                     out.push_str("### System prompt\n");
-                    out.push_str(&cap_chars(system_prompt, MAX_FIELD_CHARS));
+                    out.push_str(system_prompt);
                     out.push_str("\n\n");
                 }
                 out.push_str("### Task\n");
-                out.push_str(&cap_chars(user_message, MAX_FIELD_CHARS));
+                out.push_str(user_message);
                 out.push_str("\n\n");
             }
             Event::AssistantText { text } => {
                 out.push_str("### Agent\n");
-                out.push_str(&cap_chars(text, MAX_FIELD_CHARS));
+                out.push_str(text);
                 out.push_str("\n\n");
             }
             Event::ToolCall { tool_name, input } => {
@@ -169,7 +138,7 @@ pub fn format_to_markdown(events: &[Event]) -> String {
             }
             Event::EffectivePrompt(data) => {
                 out.push_str("### Effective system prompt\n");
-                out.push_str(&cap_chars(&data.system_prompt, MAX_FIELD_CHARS));
+                out.push_str(&data.system_prompt);
                 out.push_str(&format!(
                     "\n\n_tools ({}): {}_\n_sampling: temperature={:?} max_tokens={:?} top_p={:?}_\n_used by {} call(s)_\n\n",
                     data.tools.len(),
@@ -297,25 +266,22 @@ mod tests {
     }
 
     #[test]
-    fn oversized_nested_strings_are_truncated() {
-        let big = "z".repeat(MAX_FIELD_CHARS + 10);
-        let line =
-            format!(r#"{{"kind":"tool_output","tool_call_id":"x","output":{{"log":"{big}"}}}}"#);
-        let (_dir, path) = write_fixture(&[&line]);
-        let events = load_trajectory(&path).unwrap();
-        let md = format_to_markdown(&events);
-        assert!(md.contains("[truncated"));
-        assert!(!md.contains(&big));
-    }
-
-    #[test]
-    fn oversized_assistant_text_is_capped() {
-        let big = "q".repeat(MAX_FIELD_CHARS + 50);
-        let line = format!(r#"{{"kind":"assistant_text","id":"a","text":"{big}"}}"#);
-        let (_dir, path) = write_fixture(&[&line]);
+    fn every_field_renders_in_full_without_truncation() {
+        // The trajectory is the analysis's evidence: a huge tool output, assistant text, and system
+        // prompt must all survive verbatim — no field is ever capped.
+        let big = "z".repeat(40_000);
+        let lines = [
+            format!(r#"{{"kind":"prompts","system_prompt":"{big}","user_message":"{big}"}}"#),
+            format!(r#"{{"kind":"assistant_text","id":"a","text":"{big}"}}"#),
+            format!(r#"{{"kind":"tool_output","tool_call_id":"x","output":{{"log":"{big}"}}}}"#),
+        ];
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let (_dir, path) = write_fixture(&refs);
         let md = format_to_markdown(&load_trajectory(&path).unwrap());
-        assert!(md.contains("[truncated"));
-        assert!(!md.contains(&big));
+        assert!(!md.contains("truncated"), "no field may be truncated");
+        // 3 verbatim copies in the body (system prompt, task, agent text) plus the JSON-escaped tool
+        // output — the raw run all appears at least 3 times.
+        assert!(md.matches(&big).count() >= 3);
     }
 
     #[test]
@@ -341,14 +307,5 @@ mod tests {
         assert!(md.contains("### Tool call: `archestra__run_command`"));
         assert!(md.contains("### Tool call: `archestra__run_tool`"));
         assert!(md.contains("\"oops\": true"));
-    }
-
-    #[test]
-    fn cap_chars_never_splits_multibyte() {
-        // 10 multibyte chars, cap at 4 → must cut on a char boundary without panicking.
-        let s = "héllo wörld".chars().take(10).collect::<String>();
-        let capped = cap_chars(&s, 4);
-        assert!(capped.starts_with("héll"));
-        assert!(capped.contains("[truncated"));
     }
 }

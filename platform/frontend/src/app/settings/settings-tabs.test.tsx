@@ -157,9 +157,7 @@ describe("useSettingsNavGroups", () => {
     });
 
     await waitFor(() => {
-      expect(itemsOf(result.current, "Organization")).toContain(
-        "LLM Defaults",
-      );
+      expect(itemsOf(result.current, "Organization")).toContain("LLM Defaults");
     });
   });
 

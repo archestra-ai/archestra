@@ -1,5 +1,5 @@
 {
-  "id": "02176e30-c116-49cc-b60a-382ff7860a12",
+  "id": "e478a798-f9b3-40cd-b979-5da56496c6d9",
   "prevId": "77f027f7-5621-446a-8999-852daad57d4e",
   "version": "7",
   "dialect": "postgresql",
@@ -7508,12 +7508,6 @@
           "notNull": true,
           "default": "'active'"
         },
-        "environment_id": {
-          "name": "environment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7544,38 +7538,9 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "knowledge_bases_environment_id_idx": {
-          "name": "knowledge_bases_environment_id_idx",
-          "columns": [
-            {
-              "expression": "environment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
-      "foreignKeys": {
-        "knowledge_bases_environment_id_environments_id_fk": {
-          "name": "knowledge_bases_environment_id_environments_id_fk",
-          "tableFrom": "knowledge_bases",
-          "tableTo": "environments",
-          "columnsFrom": [
-            "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

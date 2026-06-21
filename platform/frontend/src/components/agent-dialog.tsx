@@ -34,6 +34,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -137,7 +138,10 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import {
+  useIsKnowledgeBaseConfigured,
+  useKnowledgeBases,
+} from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -584,6 +588,10 @@ export function AgentDialog({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
+  const { data: canAccessKnowledgeSettings } = useHasPermissions({
+    knowledgeSettings: ["read"],
+  });
+  const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
@@ -600,20 +608,18 @@ export function AgentDialog({
   // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
   // Gated behind a feature flag (off by default) until the per-env runtime ships.
   const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
-  const { data: environmentsData } = useEnvironments(
-    open && agentType === "agent" && !!agentEnvironmentsEnabled,
-  );
-  // Used to resolve the selected environment's name for the tools editor; the
-  // EnvironmentSelector owns its own list + permission filtering.
-  const environments = environmentsData?.environments ?? [];
-  // Scope the agent's MCP list to its environment only when the feature is on
-  // for an internal agent (same gate as the environment selector).
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
   // cross-environment, so this is a no-op.
   const environmentScopingEnabled =
     agentType === "agent" || agentType === "mcp_gateway";
+  const { data: environmentsData } = useEnvironments(
+    open && environmentScopingEnabled,
+  );
+  // Used to resolve the selected environment's name for the tools editor; the
+  // EnvironmentSelector owns its own list + permission filtering.
+  const environments = environmentsData?.environments ?? [];
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -674,6 +680,8 @@ export function AgentDialog({
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
+  const agentEnvironmentName =
+    environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
@@ -1597,10 +1605,25 @@ export function AgentDialog({
                         <p className="text-xs font-medium text-muted-foreground">
                           Tools ({selectedToolsCount})
                         </p>
-                        {!agent && selectedToolsCount > 0 && (
+                        {((!agent && selectedToolsCount > 0) ||
+                          environmentScopingEnabled) && (
                           <p className="text-xs text-muted-foreground">
-                            Some recommended {appName} MCP tools are
-                            pre-selected for you
+                            {!agent && selectedToolsCount > 0 && (
+                              <>
+                                Some recommended {appName} MCP tools are
+                                pre-selected for you.{" "}
+                              </>
+                            )}
+                            {environmentScopingEnabled && (
+                              <>
+                                MCP servers are filtered to the selected
+                                environment
+                                {agentEnvironmentName
+                                  ? ` ("${agentEnvironmentName}")`
+                                  : " (Default)"}
+                                .
+                              </>
+                            )}
                           </p>
                         )}
                         <AgentToolsEditor
@@ -1611,19 +1634,64 @@ export function AgentDialog({
                           onSelectedCountChange={setSelectedToolsCount}
                           environmentScopingEnabled={environmentScopingEnabled}
                           agentEnvironmentId={environmentId ?? null}
-                          agentEnvironmentName={
-                            environments.find((env) => env.id === environmentId)
-                              ?.name ?? null
-                          }
+                          agentEnvironmentName={agentEnvironmentName}
                           onConflictsChange={setMcpEnvConflicts}
                           openComboboxOnMount={openToolsCombobox}
                         />
                       </div>
-                      {(knowledgeBases.length > 0 || connectors.length > 0) && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Knowledge Sources
-                          </p>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Knowledge Sources
+                        </p>
+                        {!isKnowledgeConfigured ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              Knowledge not configured
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              Configure embedding and reranking to use knowledge
+                              sources.
+                              {canAccessKnowledgeSettings && (
+                                <>
+                                  {" "}
+                                  <Link
+                                    href="/settings/knowledge"
+                                    className="underline underline-offset-2"
+                                  >
+                                    Configure knowledge
+                                  </Link>
+                                </>
+                              )}
+                            </p>
+                          </>
+                        ) : knowledgeBases.length === 0 &&
+                          connectors.length === 0 ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              No knowledge sources available
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              No knowledge bases or connectors yet.{" "}
+                              <Link
+                                href="/knowledge/connectors"
+                                className="underline underline-offset-2"
+                              >
+                                Add a connector
+                              </Link>
+                              .
+                            </p>
+                          </>
+                        ) : (
                           <Popover modal>
                             <PopoverTrigger asChild>
                               <Button
@@ -1786,8 +1854,8 @@ export function AgentDialog({
                               </Command>
                             </PopoverContent>
                           </Popover>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
 

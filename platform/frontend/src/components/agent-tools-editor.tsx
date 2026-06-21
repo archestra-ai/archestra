@@ -731,13 +731,6 @@ const AgentToolsEditorContent = forwardRef<
           }}
         />
       </div>
-      {environmentScopingEnabled && (
-        <p className="text-xs text-muted-foreground">
-          MCP servers are filtered to the selected environment
-          {agentEnvironmentName ? ` ("${agentEnvironmentName}")` : " (Default)"}
-          .
-        </p>
-      )}
     </div>
   );
 });

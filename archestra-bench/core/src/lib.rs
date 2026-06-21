@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 mod lanes;
@@ -210,9 +210,40 @@ pub enum Event {
         #[serde(default)]
         reason: Option<String>,
     },
+    /// The effective context the model actually received on the wire, recovered post-run from the
+    /// platform's persisted provider request (system prompt + tool names + sampling). Unlike
+    /// [`Event::Prompts`] (the harness-side configured input), this is what was assembled and sent
+    /// server-side. Normally one per conversation; more than one signals a context that drifted.
+    EffectivePrompt(EffectivePromptData),
+    /// A detected anomaly while recovering the effective prompt (fetch failed, unhandled provider
+    /// shape, empty system prompt, no interactions despite turns, or a context that varied). Surfaced
+    /// loudly instead of writing a silent null.
+    EffectivePromptError {
+        error: String,
+    },
     /// Raw stream framing the harness could not classify, plus any future event kinds.
     #[serde(other)]
     Unknown,
+}
+
+/// Normalized decoding parameters, mapped from each provider's own field names
+/// (`max_output_tokens`/`maxOutputTokens` -> `max_tokens`, `topP` -> `top_p`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SamplingParams {
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<i64>,
+    pub top_p: Option<f64>,
+}
+
+/// Payload of [`Event::EffectivePrompt`]. The harness builds and serializes this; the analyzer reads
+/// it back through the enum. `system_prompt` is required — an absent one is an error path, not a null.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EffectivePromptData {
+    pub system_prompt: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    pub sampling: SamplingParams,
+    pub interaction_count: usize,
 }
 
 #[cfg(test)]
@@ -293,5 +324,35 @@ mod tests {
             matches!(no_system, Event::Prompts { system_prompt, user_message }
                 if system_prompt.is_empty() && user_message == "do the task")
         );
+    }
+
+    #[test]
+    fn effective_prompt_round_trips_through_the_enum() {
+        let data = EffectivePromptData {
+            system_prompt: "you are helpful".to_string(),
+            tools: vec!["archestra__search_tools".to_string()],
+            sampling: SamplingParams {
+                temperature: Some(0.0),
+                max_tokens: Some(8192),
+                top_p: None,
+            },
+            interaction_count: 3,
+        };
+        // The harness serializes the payload, then prefixes the kind tag (as RunArtifacts::append does).
+        let mut line = serde_json::to_value(&data).unwrap();
+        line.as_object_mut()
+            .unwrap()
+            .insert("kind".to_string(), "effective_prompt".into());
+        let parsed: Event = serde_json::from_value(line).unwrap();
+        assert!(matches!(parsed, Event::EffectivePrompt(d) if d == data));
+    }
+
+    #[test]
+    fn effective_prompt_error_parses() {
+        let parsed: Event = serde_json::from_str(
+            r#"{"kind":"effective_prompt_error","sequence":4,"error":"context varied"}"#,
+        )
+        .unwrap();
+        assert!(matches!(parsed, Event::EffectivePromptError { error } if error == "context varied"));
     }
 }

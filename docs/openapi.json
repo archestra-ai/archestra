@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.70"
+    "version": "1.2.71"
   },
   "components": {
     "schemas": {
@@ -176754,7 +176754,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:update`: Modify installed MCP server configuration",
+        "description": "Update MCP server secret after re-authentication (clears OAuth refresh errors)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:create`: Install MCP servers from the registry",
         "requestBody": {
           "required": true,
           "content": {
@@ -177248,7 +177248,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:update"
+            "mcpServerInstallation:create"
           ]
         }
       }

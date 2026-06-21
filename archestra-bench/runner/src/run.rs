@@ -17,6 +17,7 @@ use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_
 use crate::client::{AgentCreate, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
+use crate::interactions::extract_effective_prompts;
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
 use crate::mcp_server::{BenchmarkMcp, Submission};
@@ -1216,6 +1217,51 @@ async fn run_one(
     }
 }
 
+/// Recover the effective prompt(s) the model received from the platform's persisted provider requests
+/// and record them in the trajectory. Observability enrichment: every failure is surfaced as a
+/// loud `effective_prompt_error` event plus a warn log, but never propagated — a capture problem must
+/// not fail an otherwise-complete rollout.
+async fn capture_effective_prompts(
+    client: &EvalClient,
+    conversation_id: &str,
+    turn_count: usize,
+    artifacts: &RunArtifacts,
+) {
+    let interactions = match client.fetch_session_interactions(conversation_id).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            let msg = format!("failed to fetch interactions: {e}");
+            warn!("{msg}");
+            artifacts.append_error("effective_prompt_error", &msg).await;
+            return;
+        }
+    };
+
+    if turn_count > 0 && interactions.is_empty() {
+        let msg = "no interactions found despite the conversation taking turns".to_string();
+        warn!("{msg}");
+        artifacts.append_error("effective_prompt_error", &msg).await;
+        return;
+    }
+
+    let outcome = extract_effective_prompts(&interactions);
+    for prompt in &outcome.prompts {
+        match serde_json::to_value(prompt) {
+            Ok(value) => artifacts.append("effective_prompt", value).await,
+            Err(e) => {
+                warn!("failed to serialize effective prompt: {e}");
+                artifacts
+                    .append_error("effective_prompt_error", &e.to_string())
+                    .await;
+            }
+        }
+    }
+    for error in &outcome.errors {
+        warn!("effective-prompt anomaly: {error}");
+        artifacts.append_error("effective_prompt_error", error).await;
+    }
+}
+
 async fn grade_rollout(
     client: EvalClient,
     bench_mcp: BenchmarkMcp,
@@ -1246,7 +1292,8 @@ async fn grade_rollout(
     let conversation_id = conversation
         .get("id")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| RunError::Config("create_conversation returned no `id`".to_string()))?
         .to_string();
     metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
     artifacts
@@ -1336,6 +1383,8 @@ async fn grade_rollout(
         )
         .await?;
     }
+
+    capture_effective_prompts(&client, &conversation_id, run.turn_count, artifacts).await;
 
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);

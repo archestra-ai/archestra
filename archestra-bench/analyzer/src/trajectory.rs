@@ -167,6 +167,22 @@ pub fn format_to_markdown(events: &[Event]) -> String {
             Event::StageComplete { stage } => {
                 out.push_str(&format!("---\n_stage {stage} complete_\n\n"));
             }
+            Event::EffectivePrompt(data) => {
+                out.push_str("### Effective system prompt\n");
+                out.push_str(&cap_chars(&data.system_prompt, MAX_FIELD_CHARS));
+                out.push_str(&format!(
+                    "\n\n_tools ({}): {}_\n_sampling: temperature={:?} max_tokens={:?} top_p={:?}_\n_used by {} call(s)_\n\n",
+                    data.tools.len(),
+                    data.tools.join(", "),
+                    data.sampling.temperature,
+                    data.sampling.max_tokens,
+                    data.sampling.top_p,
+                    data.interaction_count,
+                ));
+            }
+            Event::EffectivePromptError { error } => {
+                out.push_str(&format!("### ⚠️ Effective-prompt capture error\n{error}\n\n"));
+            }
             Event::ConversationCreated | Event::TokenUsage | Event::Finish | Event::Unknown => {}
         }
     }
@@ -225,6 +241,20 @@ mod tests {
             md.contains("bad chunk"),
             "parse_error must render its reason"
         );
+    }
+
+    #[test]
+    fn effective_prompt_and_its_error_render() {
+        let (_dir, path) = write_fixture(&[
+            r#"{"sequence":1,"timestamp":"t","kind":"effective_prompt","system_prompt":"you are helpful","tools":["archestra__search_tools","archestra__run_tool"],"sampling":{"temperature":0.0,"max_tokens":8192,"top_p":null},"interaction_count":5}"#,
+            r#"{"sequence":2,"timestamp":"t","kind":"effective_prompt_error","error":"context varied across 2 interactions"}"#,
+        ]);
+        let md = format_to_markdown(&load_trajectory(&path).unwrap());
+        assert!(md.contains("### Effective system prompt\nyou are helpful"));
+        assert!(md.contains("archestra__search_tools, archestra__run_tool"));
+        assert!(md.contains("used by 5 call(s)"));
+        // The diagnostic must reach the rendered trajectory, not vanish.
+        assert!(md.contains("context varied across 2 interactions"));
     }
 
     #[test]

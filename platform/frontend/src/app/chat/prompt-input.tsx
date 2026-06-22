@@ -34,7 +34,10 @@ import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-con
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
-import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import {
+  chatDraftStorageKey,
+  migrateLegacyNewChatDraft,
+} from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -209,11 +212,19 @@ const PromptInputContent = ({
     skillCommands,
   ]);
 
-  const storageKey = conversationId
-    ? conversationStorageKeys(conversationId).draft
-    : `archestra_chat_draft_new_${agentId}`;
+  // Keyed by conversation only — NOT by agentId. Keying the new-chat draft by
+  // agent made the restore effect below re-run on every agent switch and clear
+  // the input, dropping the user's in-progress prompt.
+  const storageKey = chatDraftStorageKey(conversationId);
 
   const isRestored = useRef(false);
+
+  // One-time migration of pre-upgrade per-agent new-chat drafts to the shared
+  // key, so an unsent draft written before this change is not dropped. Runs
+  // before the restore effect below so the restore reads the migrated value.
+  useEffect(() => {
+    migrateLegacyNewChatDraft(localStorage);
+  }, []);
 
   // Restore draft on mount or conversation change
   useEffect(() => {

@@ -22,6 +22,7 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createLLMModel } from "@/clients/llm-client";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import { test } from "@/test";
@@ -1115,10 +1116,10 @@ describe("buildChatStopConditions", () => {
       iconLogo: null,
     });
 
-    const stopConditions = buildChatStopConditions();
+    const stopConditions = buildChatStopConditions(new ToolCallRepeatTracker());
     const toolNames = getChatStopToolNames();
 
-    expect(stopConditions).toHaveLength(3);
+    expect(stopConditions).toHaveLength(4);
     expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
     expect(toolNames.swapToDefaultAgentToolName).toBe(
       "acme_control_plane__swap_to_default_agent",

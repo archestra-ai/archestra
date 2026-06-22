@@ -81,6 +81,35 @@ describe("fetchAzureModels", () => {
     vi.unstubAllGlobals();
   });
 
+  test("captures the backing model name from data-plane deployments for pricing", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // A deployment whose name differs from the backing model.
+        data: [{ id: "prod-chat", model: "gpt-4o" }, { id: "gpt-4o-mini" }],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/prod-chat",
+    );
+
+    expect(result).toEqual([
+      {
+        id: "prod-chat",
+        displayName: "prod-chat",
+        provider: "azure",
+        underlyingModelName: "gpt-4o",
+      },
+      // No `model` field → underlyingModelName omitted.
+      { id: "gpt-4o-mini", displayName: "gpt-4o-mini", provider: "azure" },
+    ]);
+
+    vi.unstubAllGlobals();
+  });
+
   test("lists deployments from an Azure resource-level base URL", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

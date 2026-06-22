@@ -994,4 +994,100 @@ describe("ModelModel", () => {
       expect(updated?.embeddingDimensions).toBeNull();
     });
   });
+
+  describe("getEffectivePricing — cache prices", () => {
+    test("derives cache prices from the input price via multiplier when none synced", async () => {
+      const model = await ModelModel.create({
+        externalId: "anthropic/derive-cache",
+        provider: "anthropic",
+        modelId: "derive-cache",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000010", // $10/M input
+        completionPricePerToken: "0.000030",
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+      // anthropic multipliers: read 0.1, write 1.25 → $1.00 / $12.50 per M
+      expect(pricing.pricePerMillionCacheRead).toBe("1.00");
+      expect(pricing.pricePerMillionCacheWrite).toBe("12.50");
+      expect(pricing.cacheSource).toBe("derived_multiplier");
+    });
+
+    test("uses synced cache prices when present", async () => {
+      const model = await ModelModel.create({
+        externalId: "anthropic/synced-cache",
+        provider: "anthropic",
+        modelId: "synced-cache",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        cacheReadPricePerToken: "0.0000003", // $0.30/M
+        cacheWritePricePerToken: "0.00000375", // $3.75/M
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+      expect(pricing.pricePerMillionCacheRead).toBe("0.30");
+      expect(pricing.pricePerMillionCacheWrite).toBe("3.75");
+      expect(pricing.cacheSource).toBe("models_dev");
+    });
+
+    test("custom cache overrides win over synced prices", async () => {
+      const model = await ModelModel.create({
+        externalId: "anthropic/custom-cache-eff",
+        provider: "anthropic",
+        modelId: "custom-cache-eff",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        cacheReadPricePerToken: "0.0000003",
+        cacheWritePricePerToken: "0.00000375",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(model.id, {
+        customPricePerMillionCacheRead: "0.50",
+        customPricePerMillionCacheWrite: "4.00",
+      });
+      const updated = await ModelModel.findById(model.id);
+
+      const pricing = ModelModel.getEffectivePricing(updated);
+      expect(pricing.pricePerMillionCacheRead).toBe("0.50");
+      expect(pricing.pricePerMillionCacheWrite).toBe("4.00");
+      expect(pricing.cacheSource).toBe("custom");
+    });
+
+    test("leaves cache unpriced for a provider with no cache pricing model", async () => {
+      const model = await ModelModel.create({
+        externalId: "cohere/no-cache",
+        provider: "cohere",
+        modelId: "no-cache",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000010",
+        completionPricePerToken: "0.000030",
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+      expect(pricing.pricePerMillionCacheRead).toBeNull();
+      expect(pricing.pricePerMillionCacheWrite).toBeNull();
+      expect(pricing.cacheSource).toBeNull();
+    });
+
+    test("derives cache prices from the provider hint when the model is unknown (default tier)", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-unknown-model",
+        "anthropic",
+      );
+      // default input price $50/M, anthropic read multiplier 0.1 → $5.00/M
+      expect(pricing.source).toBe("default");
+      expect(pricing.pricePerMillionCacheRead).toBe("5.00");
+      expect(pricing.cacheSource).toBe("derived_multiplier");
+    });
+  });
 });

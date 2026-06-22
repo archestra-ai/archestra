@@ -9,6 +9,7 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  isBrowserMcpTool,
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
@@ -155,6 +156,13 @@ interface ChatSession {
     toolName: string;
     input: unknown;
   }>;
+  /**
+   * toolCallId of the most recent live browser (Playwright MCP) tool call, set
+   * from onToolCall. Only fires for calls streamed in this session — never for
+   * replayed history — so consumers can auto-open the Browser panel on a new
+   * call without diffing against pre-existing tool calls. Null until one occurs.
+   */
+  lastBrowserToolCallId: string | null;
   setPendingCustomServerToolCall: (
     value: { toolCallId: string; toolName: string } | null,
   ) => void;
@@ -437,6 +445,9 @@ function ChatSessionHook({
       input: unknown;
     }>
   >([]);
+  const [lastBrowserToolCallId, setLastBrowserToolCallId] = useState<
+    string | null
+  >(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
     null,
@@ -803,6 +814,11 @@ function ChatSessionHook({
         ];
       });
 
+      // Surface live browser tool calls so the Browser panel can auto-open.
+      if (isBrowserMcpTool(toolCall.toolName)) {
+        setLastBrowserToolCallId(toolCall.toolCallId);
+      }
+
       if (
         toolShortName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
       ) {
@@ -1112,6 +1128,7 @@ function ChatSessionHook({
       );
     },
     optimisticToolCalls,
+    lastBrowserToolCallId,
     setPendingCustomServerToolCall,
     tokenUsage,
     contextTokensUsed,
@@ -1143,6 +1160,7 @@ function ChatSessionHook({
     pendingMcpElicitation,
     isRecoveringState,
     optimisticToolCalls,
+    lastBrowserToolCallId,
     tokenUsage,
     contextTokensUsed,
     contextWindow,

@@ -341,7 +341,6 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
       render(
         sidebar ? (
           <PinnedCanvasProvider
-            conversationId="conv-1"
             canvases={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
           >
             <SidebarDriver target={document.body} />
@@ -453,7 +452,6 @@ describe("McpAppSection sidebar pinning", () => {
     await act(async () => {
       render(
         <PinnedCanvasProvider
-          conversationId="conv-1"
           canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
         >
           <SidebarHost target={target} />
@@ -489,7 +487,6 @@ describe("McpAppSection sidebar pinning", () => {
     await act(async () => {
       render(
         <PinnedCanvasProvider
-          conversationId="conv-1"
           canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
         >
           <SidebarHost target={target} />
@@ -532,7 +529,6 @@ describe("McpAppSection sidebar pinning", () => {
     await act(async () => {
       render(
         <PinnedCanvasProvider
-          conversationId="conv-1"
           canvases={[
             { toolCallId: "tc1", label: "First App", createdAt: 0 },
             { toolCallId: "tc2", label: "Second App", createdAt: 1 },
@@ -542,15 +538,15 @@ describe("McpAppSection sidebar pinning", () => {
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
-            toolCallId="tc2"
+            toolCallId="tc1"
             preloadedResource={preloadedResource}
           />
         </PinnedCanvasProvider>,
       );
     });
 
-    // tc1 auto-selected, so tc2 shows the placeholder control; clicking it
-    // selects tc2 and portals its canvas into the sidebar target.
+    // tc2 (latest) auto-selected, so tc1 shows the placeholder control;
+    // clicking it selects tc1 and portals its canvas into the sidebar target.
     const pinButton = screen.getByRole("button", { name: /show in sidebar/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
 

@@ -382,9 +382,9 @@ export function useDeleteConversation() {
       // Clean up localStorage keys associated with this conversation
       if (typeof window !== "undefined") {
         const keys = conversationStorageKeys(deletedId);
-        localStorage.removeItem(keys.artifactOpen);
         localStorage.removeItem(keys.draft);
-        localStorage.removeItem(keys.pinnedCanvas);
+        localStorage.removeItem(keys.rightPanelOpen);
+        localStorage.removeItem(keys.rightPanelTab);
       }
 
       toast.success("Conversation deleted");

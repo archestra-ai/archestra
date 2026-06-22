@@ -3,7 +3,6 @@ import {
   type ArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
-  isBrowserMcpTool,
   parseFullToolName,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
@@ -185,12 +184,44 @@ export function deriveCanvasesFromMessages(
         toolCallId,
         label: ownedApp?.appName ?? (parsed.toolName || fullToolName),
         serverName: parsed.serverName,
+        appId: ownedApp?.appId ?? null,
         createdAt: createdAt ?? 0,
       });
     }
   }
 
   return canvases;
+}
+
+/**
+ * Collapse canvases to one entry per app, keeping the latest render of each
+ * owned app (we only ever show the latest version). Canvases without an appId
+ * are kept as-is (already deduped by toolCallId upstream). First-appearance
+ * order is preserved.
+ */
+export function deriveUniqueApps(canvases: CanvasInfo[]): CanvasInfo[] {
+  const latestByApp = new Map<string, CanvasInfo>();
+  for (const canvas of canvases) {
+    if (!canvas.appId) continue;
+    const prev = latestByApp.get(canvas.appId);
+    if (!prev || canvas.createdAt >= prev.createdAt) {
+      latestByApp.set(canvas.appId, canvas);
+    }
+  }
+
+  const seen = new Set<string>();
+  const result: CanvasInfo[] = [];
+  for (const canvas of canvases) {
+    if (!canvas.appId) {
+      result.push(canvas);
+      continue;
+    }
+    if (seen.has(canvas.appId)) continue;
+    seen.add(canvas.appId);
+    const latest = latestByApp.get(canvas.appId);
+    if (latest) result.push(latest);
+  }
+  return result;
 }
 
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
@@ -246,32 +277,6 @@ export function filterOptimisticToolCalls(
   return optimisticToolCalls.filter(
     (toolCall) => !renderedToolCallIds.has(toolCall.toolCallId),
   );
-}
-
-export function collectBrowserToolCallIds(params: {
-  messages: UIMessage[];
-  optimisticToolCalls?: OptimisticToolCall[];
-}): Set<string> {
-  const ids = new Set<string>();
-
-  for (const message of params.messages) {
-    for (const part of message.parts ?? []) {
-      if (!isToolPart(part) || !part.toolCallId) continue;
-
-      const toolName = getToolName(part);
-      if (toolName && isBrowserMcpTool(toolName)) {
-        ids.add(part.toolCallId);
-      }
-    }
-  }
-
-  for (const toolCall of params.optimisticToolCalls ?? []) {
-    if (isBrowserMcpTool(toolCall.toolName)) {
-      ids.add(toolCall.toolCallId);
-    }
-  }
-
-  return ids;
 }
 
 export function identifyCompactToolGroups(

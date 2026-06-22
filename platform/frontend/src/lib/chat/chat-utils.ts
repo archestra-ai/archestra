@@ -32,9 +32,12 @@ export function getChatExternalAgentId(appName: string): string {
  */
 export function conversationStorageKeys(conversationId: string) {
   return {
-    artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
-    pinnedCanvas: `archestra-chat-pinned-canvas-${conversationId}`,
+    // Persisted right-side-panel state, so the panel restores its last
+    // open/closed state and active tab per conversation. A chat started from a
+    // project with files seeds these before navigating to /chat/<id>.
+    rightPanelOpen: `archestra-chat-right-panel-open-${conversationId}`,
+    rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
   };
 }
 

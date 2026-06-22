@@ -2,14 +2,15 @@ import type { UIMessage } from "@ai-sdk/react";
 import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
-  collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
+  deriveUniqueApps,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
 } from "./chat-messages.utils";
+import type { CanvasInfo } from "./pinned-canvas-context";
 
 const getToolShortName = (toolName: string) =>
   getArchestraToolShortName(toolName, { includeDefaultPrefix: true });
@@ -193,52 +194,6 @@ describe("filterOptimisticToolCalls", () => {
   });
 });
 
-describe("collectBrowserToolCallIds", () => {
-  it("collects Playwright browser tool calls from messages and optimistic calls", () => {
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-microsoft__playwright-mcp__browser_navigate",
-            toolCallId: "call_1",
-            state: "input-available",
-            input: { url: "https://example.com" },
-          },
-          {
-            type: "dynamic-tool",
-            toolName: "github__search",
-            toolCallId: "call_2",
-            state: "input-available",
-            input: { q: "example" },
-          },
-        ],
-      },
-    ] as never;
-
-    expect(
-      Array.from(
-        collectBrowserToolCallIds({
-          messages,
-          optimisticToolCalls: [
-            {
-              toolCallId: "call_3",
-              toolName: "browser_click",
-              input: {},
-            },
-            {
-              toolCallId: "call_4",
-              toolName: "github__create_issue",
-              input: {},
-            },
-          ],
-        }),
-      ),
-    ).toEqual(["call_1", "call_3"]);
-  });
-});
-
 describe("deriveCanvasesFromMessages", () => {
   it("returns a canvas for a tool call whose output carries _meta.ui.resourceUri", () => {
     const messages = [
@@ -263,6 +218,7 @@ describe("deriveCanvasesFromMessages", () => {
         toolCallId: "call_1",
         label: "show_board",
         serverName: "pm",
+        appId: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
     ]);
@@ -301,6 +257,7 @@ describe("deriveCanvasesFromMessages", () => {
         toolCallId: "call_1",
         label: "show_board",
         serverName: "pm",
+        appId: null,
         createdAt: 0,
       },
     ]);
@@ -369,6 +326,7 @@ describe("deriveCanvasesFromMessages", () => {
         toolCallId: "call_app",
         label: "To Do App",
         serverName: "archestra",
+        appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
         createdAt: 0,
       },
     ]);
@@ -397,6 +355,36 @@ describe("deriveCanvasesFromMessages", () => {
     expect(deriveCanvasesFromMessages(messages, {}, getToolShortName)).toEqual(
       [],
     );
+  });
+});
+
+describe("deriveUniqueApps", () => {
+  const canvas = (over: Partial<CanvasInfo>): CanvasInfo => ({
+    toolCallId: "tc",
+    label: "App",
+    appId: null,
+    createdAt: 0,
+    ...over,
+  });
+
+  it("collapses repeated renders of the same app to its latest", () => {
+    const result = deriveUniqueApps([
+      canvas({ toolCallId: "tc-1", appId: "app-a", createdAt: 1, label: "v1" }),
+      canvas({ toolCallId: "tc-2", appId: "app-a", createdAt: 3, label: "v2" }),
+      canvas({ toolCallId: "tc-3", appId: "app-b", createdAt: 2, label: "b" }),
+    ]);
+
+    expect(result).toEqual([
+      // app-a keeps the latest render but stays in first-appearance position.
+      canvas({ toolCallId: "tc-2", appId: "app-a", createdAt: 3, label: "v2" }),
+      canvas({ toolCallId: "tc-3", appId: "app-b", createdAt: 2, label: "b" }),
+    ]);
+  });
+
+  it("keeps canvases without an appId as distinct entries", () => {
+    const a = canvas({ toolCallId: "tc-1", createdAt: 1 });
+    const b = canvas({ toolCallId: "tc-2", createdAt: 2 });
+    expect(deriveUniqueApps([a, b])).toEqual([a, b]);
   });
 });
 

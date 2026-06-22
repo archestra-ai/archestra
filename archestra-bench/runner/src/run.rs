@@ -70,6 +70,7 @@ const REQUIRED_TOOL_SHORT_NAMES: &[&str] = &[
     "download_file",
     "list_skills",
     "load_skill",
+    "search_files",
 ];
 const MUTATING_SKILL_TOOL_SHORT_NAMES: &[&str] = &["create_skill", "update_skill"];
 

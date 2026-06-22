@@ -107,6 +107,10 @@ read-only against backend state), and a set of sandbox tasks including —
   count grows without bound, so there is no fixed offline fixture).
 - `lena-png-size` — report the size in KiB (floored) of scikit-image's pinned `lena.png`; the verifier
   checks against recorded ground truth.
+- `purchase-ledger` — clean a transaction CSV into a saved file in one chat, then in a fresh
+  conversation (a `new_conversation` stage) rediscover it from persistent storage via `search_files`
+  and report the completed-purchase total; exercises cross-conversation persistent "My Files". The
+  verifier recomputes the total from the fixture.
 - `ai-sre-fk-drain` — triage a zip of unsorted incident logs (a reconstructed real incident) and
   name the root cause of a crash-looping backend: a foreign-key violation when a conversation is
   deleted mid-drain; the verifier exact-matches a closed-set component/failure-class plus the `runId`

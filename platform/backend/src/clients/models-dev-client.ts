@@ -189,6 +189,28 @@ const ModelsDevApiResponseSchema = z.record(
   ModelsDevProviderSchema,
 );
 
+/**
+ * Convert a models.dev `cost` object (prices per million tokens) into our
+ * per-token string representation. Returns null for any price the registry omits.
+ * @public — shared by the registry client and provider model sync.
+ */
+export function modelsDevCostToPerToken(cost: ModelsDevCost | undefined): {
+  promptPricePerToken: string | null;
+  completionPricePerToken: string | null;
+  cacheReadPricePerToken: string | null;
+  cacheWritePricePerToken: string | null;
+} {
+  const perToken = (perMillion: number | undefined): string | null =>
+    perMillion !== undefined ? (perMillion / 1_000_000).toString() : null;
+
+  return {
+    promptPricePerToken: perToken(cost?.input),
+    completionPricePerToken: perToken(cost?.output),
+    cacheReadPricePerToken: perToken(cost?.cache_read),
+    cacheWritePricePerToken: perToken(cost?.cache_write),
+  };
+}
+
 // ============================================================================
 // Client implementation
 // ============================================================================
@@ -284,14 +306,7 @@ class ModelsDevClient {
     }
 
     // Convert cost from per-million to per-token (store as string for precision)
-    const promptPricePerToken =
-      model.cost?.input !== undefined
-        ? (model.cost.input / 1_000_000).toString()
-        : null;
-    const completionPricePerToken =
-      model.cost?.output !== undefined
-        ? (model.cost.output / 1_000_000).toString()
-        : null;
+    const prices = modelsDevCostToPerToken(model.cost);
 
     return {
       externalId: `${providerId}/${model.id}`,
@@ -302,8 +317,10 @@ class ModelsDevClient {
       inputModalities,
       outputModalities,
       supportsToolCalling: model.tool_call ?? false,
-      promptPricePerToken,
-      completionPricePerToken,
+      promptPricePerToken: prices.promptPricePerToken,
+      completionPricePerToken: prices.completionPricePerToken,
+      cacheReadPricePerToken: prices.cacheReadPricePerToken,
+      cacheWritePricePerToken: prices.cacheWritePricePerToken,
       lastSyncedAt: new Date(),
     };
   }

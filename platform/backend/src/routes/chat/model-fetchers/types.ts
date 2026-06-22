@@ -14,6 +14,10 @@ export interface FetchedModelCapabilities {
   supportsToolCalling?: boolean | null;
   promptPricePerToken?: string | null;
   completionPricePerToken?: string | null;
+  /** Per-token cache-read price (USD), when the provider reports one. */
+  cacheReadPricePerToken?: string | null;
+  /** Per-token cache-write price (USD, default TTL), when the provider reports one. */
+  cacheWritePricePerToken?: string | null;
 }
 
 export interface ModelInfo {
@@ -22,6 +26,11 @@ export interface ModelInfo {
   provider: SupportedProvider;
   createdAt?: string;
   capabilities?: FetchedModelCapabilities;
+  /**
+   * Underlying vendor model name when the stored id is not the canonical model
+   * name (e.g. an Azure deployment's backing model). Used to resolve pricing.
+   */
+  underlyingModelName?: string | null;
 }
 
 export interface StaticModel {

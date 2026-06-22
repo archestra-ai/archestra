@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  CACHE_PRICE_MULTIPLIERS,
+  type SupportedProvider,
+} from "@archestra/shared";
 import {
   and,
   count,
@@ -20,12 +23,20 @@ import type {
 } from "@/types";
 
 /**
- * Effective pricing result with source tracking.
+ * Effective pricing result with source tracking. All prices are per-million
+ * tokens as decimal strings. Cache prices are null when the model's provider has
+ * no cache pricing model (neither explicit nor multiplier-derivable).
  */
 interface EffectivePricing {
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
   source: PriceSource;
+  /** Cache-read price per million tokens, or null when unpriced. */
+  pricePerMillionCacheRead: string | null;
+  /** Cache-write price per million tokens at the default (5m) TTL, or null when unpriced. */
+  pricePerMillionCacheWrite: string | null;
+  /** Source of the cache price, or null when unpriced. */
+  cacheSource: PriceSource | null;
 }
 
 /**
@@ -232,10 +243,12 @@ class ModelModel {
           supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
           promptPricePerToken: data.promptPricePerToken,
           completionPricePerToken: data.completionPricePerToken,
+          cacheReadPricePerToken: data.cacheReadPricePerToken,
+          cacheWritePricePerToken: data.cacheWritePricePerToken,
           embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
-          // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+          // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
           // NOTE: capability fields only backfill when the existing DB value is null
           // to preserve user-edited values while still populating missing metadata
         },
@@ -294,10 +307,12 @@ class ModelModel {
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
+              cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
-              // NOTE: customPricePerMillionInput/Output intentionally NOT updated
+              // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
               // NOTE: capability fields only backfill when the existing DB value is null
               // to preserve user-edited values while still populating missing metadata
             },
@@ -361,9 +376,13 @@ class ModelModel {
               supportsToolCalling: sql`excluded.supports_tool_calling`,
               promptPricePerToken: sql`excluded.prompt_price_per_token`,
               completionPricePerToken: sql`excluded.completion_price_per_token`,
+              cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
+              cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`excluded.embedding_dimensions`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
+              customPricePerMillionCacheRead: sql`NULL`,
+              customPricePerMillionCacheWrite: sql`NULL`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
             },
@@ -456,6 +475,12 @@ class ModelModel {
     if (data.customPricePerMillionOutput !== undefined) {
       set.customPricePerMillionOutput = data.customPricePerMillionOutput;
     }
+    if (data.customPricePerMillionCacheRead !== undefined) {
+      set.customPricePerMillionCacheRead = data.customPricePerMillionCacheRead;
+    }
+    if (data.customPricePerMillionCacheWrite !== undefined) {
+      set.customPricePerMillionCacheWrite = data.customPricePerMillionCacheWrite;
+    }
     if (data.ignored !== undefined) {
       set.ignored = data.ignored;
     }
@@ -501,15 +526,54 @@ class ModelModel {
   }
 
   /**
-   * Get effective pricing for a model using 3-tier priority:
+   * Get effective pricing for a model.
+   *
+   * Input/output price uses 3-tier priority:
    * 1. Custom admin-set price (customPricePerMillionInput/Output) — if non-null
    * 2. models.dev synced price (promptPricePerToken/completionPricePerToken × 1M) — if non-null
    * 3. Default fallback ($30 for mini/haiku/nano models, $50 for others)
+   *
+   * Cache read/write price uses its own 3-tier priority:
+   * 1. Custom admin-set cache price — if non-null
+   * 2. models.dev synced cache price — if non-null
+   * 3. Derived from the effective input price via the provider's cache multiplier
+   *
+   * Cache prices are null when the provider has no cache pricing model and none
+   * was synced/set (so cache cost is not fabricated for non-caching providers).
    */
   static getEffectivePricing(
     model: Model | null,
     modelId?: string,
+    /** Provider hint used for cache-price derivation when `model` is null (default tier). */
+    provider?: SupportedProvider,
   ): EffectivePricing {
+    const { pricePerMillionInput, pricePerMillionOutput, source } =
+      ModelModel.getEffectiveBasePricing(model, modelId);
+    const cache = ModelModel.getEffectiveCachePricing(
+      model,
+      pricePerMillionInput,
+      provider,
+    );
+
+    return {
+      pricePerMillionInput,
+      pricePerMillionOutput,
+      source,
+      ...cache,
+    };
+  }
+
+  /**
+   * Resolve the effective input/output price (per million) and its source.
+   */
+  private static getEffectiveBasePricing(
+    model: Model | null,
+    modelId?: string,
+  ): {
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+    source: PriceSource;
+  } {
     // Tier 1: Custom admin-set price
     if (
       model?.customPricePerMillionInput != null &&
@@ -540,10 +604,73 @@ class ModelModel {
 
     // Tier 3: Default fallback
     const nameForDefault = model?.modelId ?? modelId ?? "";
-    const defaults = getDefaultModelPrice(nameForDefault);
     return {
-      ...defaults,
+      ...getDefaultModelPrice(nameForDefault),
       source: "default",
+    };
+  }
+
+  /**
+   * Resolve the effective cache read/write price (per million) and its source.
+   * `effectivePricePerMillionInput` is the already-resolved input price used for
+   * the multiplier-derived fallback tier.
+   */
+  private static getEffectiveCachePricing(
+    model: Model | null,
+    effectivePricePerMillionInput: string,
+    providerHint?: SupportedProvider,
+  ): {
+    pricePerMillionCacheRead: string | null;
+    pricePerMillionCacheWrite: string | null;
+    cacheSource: PriceSource | null;
+  } {
+    // Tier 1: Custom admin-set cache price
+    if (
+      model?.customPricePerMillionCacheRead != null &&
+      model?.customPricePerMillionCacheWrite != null
+    ) {
+      return {
+        pricePerMillionCacheRead: model.customPricePerMillionCacheRead,
+        pricePerMillionCacheWrite: model.customPricePerMillionCacheWrite,
+        cacheSource: "custom",
+      };
+    }
+
+    // Tier 2: synced cache price (convert per-token to per-million)
+    if (
+      model?.cacheReadPricePerToken != null &&
+      model?.cacheWritePricePerToken != null
+    ) {
+      return {
+        pricePerMillionCacheRead: (
+          Number.parseFloat(model.cacheReadPricePerToken) * 1_000_000
+        ).toFixed(2),
+        pricePerMillionCacheWrite: (
+          Number.parseFloat(model.cacheWritePricePerToken) * 1_000_000
+        ).toFixed(2),
+        cacheSource: "models_dev",
+      };
+    }
+
+    // Tier 3: Derive from the effective input price via the provider multiplier.
+    const provider = model?.provider ?? providerHint;
+    const multiplier = provider
+      ? CACHE_PRICE_MULTIPLIERS[provider]
+      : undefined;
+    if (!multiplier) {
+      // Provider has no cache pricing model; leave cache unpriced.
+      return {
+        pricePerMillionCacheRead: null,
+        pricePerMillionCacheWrite: null,
+        cacheSource: null,
+      };
+    }
+
+    const priceIn = Number.parseFloat(effectivePricePerMillionInput);
+    return {
+      pricePerMillionCacheRead: (priceIn * multiplier.read).toFixed(2),
+      pricePerMillionCacheWrite: (priceIn * multiplier.write).toFixed(2),
+      cacheSource: "derived_multiplier",
     };
   }
 
@@ -560,7 +687,7 @@ class ModelModel {
       provider,
       modelId,
     );
-    const pricing = ModelModel.getEffectivePricing(modelEntry, modelId);
+    const pricing = ModelModel.getEffectivePricing(modelEntry, modelId, provider);
     const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1_000_000;
     return tokensSaved * inputPricePerToken;
   }
@@ -618,6 +745,9 @@ class ModelModel {
         pricePerMillionOutput: null,
         isCustomPrice: false,
         priceSource: "default",
+        pricePerMillionCacheRead: null,
+        pricePerMillionCacheWrite: null,
+        cachePriceSource: null,
       };
     }
 
@@ -632,6 +762,9 @@ class ModelModel {
       pricePerMillionOutput: pricing.pricePerMillionOutput,
       isCustomPrice: pricing.source === "custom",
       priceSource: pricing.source,
+      pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
+      pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
+      cachePriceSource: pricing.cacheSource,
     };
   }
 
@@ -695,6 +828,9 @@ class ModelModel {
       pricePerMillionOutput: caps.pricePerMillionOutput,
       isCustomPrice: caps.isCustomPrice,
       priceSource: caps.priceSource,
+      pricePerMillionCacheRead: caps.pricePerMillionCacheRead,
+      pricePerMillionCacheWrite: caps.pricePerMillionCacheWrite,
+      cachePriceSource: caps.cachePriceSource,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

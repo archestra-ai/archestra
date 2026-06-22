@@ -49,7 +49,8 @@ const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your 
 // the final ask, so the model learns submission is required only on the final stage. Steers the model
 // to do the step's work and end its turn (a chat reply, which advances the runner to the next stage)
 // rather than hunting for a submit tool and looping on the "more steps" rejection.
-const CONTINUE_INSTRUCTION: &str = "When you've finished this step, tell me where things stand and wait for my next message.";
+const CONTINUE_INSTRUCTION: &str =
+    "When you've finished this step, tell me where things stand and wait for my next message.";
 // One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
 // stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
 // omission.
@@ -1303,6 +1304,41 @@ async fn capture_effective_prompts(
     }
 }
 
+/// Create a conversation for the running task and record it. Used both for the task's initial
+/// conversation and for each `new_conversation` stage, which opens a fresh one (same agent, project,
+/// model, and key) so the agent starts from an empty sandbox and chat history.
+async fn open_conversation(
+    client: &EvalClient,
+    agent_id: &str,
+    title: &str,
+    resolved: &ResolvedModel,
+    project_id: Option<&str>,
+    artifacts: &RunArtifacts,
+) -> Result<String, RunError> {
+    let conversation = client
+        .create_conversation(
+            agent_id,
+            Some(title),
+            Some(&resolved.model_id),
+            Some(&resolved.api_key_id),
+            project_id,
+        )
+        .await?;
+    let conversation_id = conversation
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| RunError::Config("create_conversation returned no `id`".to_string()))?
+        .to_string();
+    artifacts
+        .append(
+            "conversation_created",
+            serde_json::json!({"conversation_id": conversation_id}),
+        )
+        .await;
+    Ok(conversation_id)
+}
+
 async fn grade_rollout(
     client: EvalClient,
     bench_mcp: BenchmarkMcp,
@@ -1323,28 +1359,20 @@ async fn grade_rollout(
         .await
         .map_err(|e| RunError::Mcp(e.to_string()))?;
 
-    let conversation = client
-        .create_conversation(
-            agent_id,
-            Some(rollout_key),
-            Some(&resolved.model_id),
-            Some(&resolved.api_key_id),
-            project_id,
-        )
-        .await?;
-    let conversation_id = conversation
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| RunError::Config("create_conversation returned no `id`".to_string()))?
-        .to_string();
+    let mut conversation_id = open_conversation(
+        &client,
+        agent_id,
+        rollout_key,
+        resolved,
+        project_id,
+        artifacts,
+    )
+    .await?;
+    // Every conversation this rollout drives, in order. `new_conversation` stages append to it;
+    // `metadata["conversation_id"]` tracks the current one so run.json points at the conversation that
+    // produced the result, and effective-prompt capture runs over all of them after the loop.
+    let mut conversation_ids = vec![conversation_id.clone()];
     metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
-    artifacts
-        .append(
-            "conversation_created",
-            serde_json::json!({"conversation_id": conversation_id}),
-        )
-        .await;
     artifacts.write_run(metadata).await;
 
     let runtime: HashMap<String, String> = HashMap::from([
@@ -1374,6 +1402,23 @@ async fn grade_rollout(
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
     for (index, stage) in task.stages.iter().enumerate() {
+        // A `new_conversation` stage starts a fresh conversation (empty sandbox + chat history) and
+        // becomes the current one for this and later stages -- so a task can export a file in one chat
+        // and rediscover it from persistent storage in the next. Rejected on the first stage at load
+        // time, since the initial conversation is already created above.
+        if stage.new_conversation {
+            conversation_id = open_conversation(
+                &client,
+                agent_id,
+                rollout_key,
+                resolved,
+                project_id,
+                artifacts,
+            )
+            .await?;
+            conversation_ids.push(conversation_id.clone());
+            metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
+        }
         // Single source of truth: the final stage both opens the server-side submission gate and gets
         // the SUBMIT_INSTRUCTION trailer (earlier stages get CONTINUE_INSTRUCTION). Binding it once
         // keeps the gate and the prompt trailer from drifting apart.
@@ -1381,6 +1426,9 @@ async fn grade_rollout(
         if submission_open {
             bench_mcp.allow_submission(rollout_key).await;
         }
+        // Carry prior chat history only when continuing the same conversation; a freshly opened one
+        // (first stage, or a `new_conversation` stage) starts empty.
+        let expect_prior_history = index > 0 && !stage.new_conversation;
         stage_error = drive_stage_with_retry(
             &client,
             &conversation_id,
@@ -1389,7 +1437,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
-            index > 0,
+            expect_prior_history,
             submission_open,
         )
         .await?;
@@ -1418,6 +1466,7 @@ async fn grade_rollout(
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
             files: Vec::new(),
+            new_conversation: false,
         };
         stage_error = drive_stage_with_retry(
             &client,
@@ -1433,7 +1482,11 @@ async fn grade_rollout(
         .await?;
     }
 
-    capture_effective_prompts(&client, &conversation_id, run.turn_count, artifacts).await;
+    // Capture every conversation the rollout drove, not just the last -- a `new_conversation` task
+    // splits its turns across several, and each one's effective prompts are worth recording.
+    for cid in &conversation_ids {
+        capture_effective_prompts(&client, cid, run.turn_count, artifacts).await;
+    }
 
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);

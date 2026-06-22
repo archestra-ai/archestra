@@ -1,0 +1,9 @@
+id = "file-storage"
+name = "File storage"
+tasks = ["purchase-ledger"]
+
+# A persistence task: the agent exports a file in one chat and must rediscover it from persistent
+# storage in a follow-up chat (a `new_conversation` stage). `search_files` is the discovery tool and is
+# not part of the base sandbox set, so grant it here. The env is isolated by default (no share_backend)
+# -- each lane gets a fresh backend, so the only persistent files present are the ones this task makes.
+tools = ["search_files"]

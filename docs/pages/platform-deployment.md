@@ -839,10 +839,6 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED`** - Exposes the dynamic tool access controls: the per-agent "All / Custom" tools selector and the per-server "Agent connections" (on-behalf-of vs pinned service account) selector. When off, both controls are hidden and new agents stay on "Custom" (explicitly assigned tools).
-  - Default: `false`
-  - Values: `true`, `false`
-
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
 

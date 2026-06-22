@@ -95,6 +95,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [] }),
+  useIsKnowledgeBaseConfigured: () => true,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({

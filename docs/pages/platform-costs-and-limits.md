@@ -27,7 +27,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, virtual API key, or environment. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.
 
 | Scope | Use when |
 | --- | --- |
@@ -36,6 +36,9 @@ Usage limits are guardrails for LLM spend. Archestra supports token-cost limits 
 | User | Individual users need their own budgets. |
 | Agent or LLM proxy | A specific profile needs a budget. |
 | Virtual API key | Spend should be capped per API key. |
+| Environment | A deployment environment (for example, production) needs its own combined budget across all users. |
+
+An environment-scoped limit caps total spend across every user whose agent runs in that environment. A request's environment is resolved from its agent's assigned environment; requests through an agent with no environment are not subject to environment-scoped limits.
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
@@ -43,7 +46,9 @@ Limits are evaluated from recorded model usage, so pricing configuration affects
 
 Admins can configure a default user limit in LLM settings. It applies to every current and future user.
 
-A custom per-user limit overrides the default for that user. Use this when one user needs a different budget.
+You can also set per-environment default user limits in LLM settings — for example, a smaller per-user cap in production than in development. When a request runs in an environment that has a per-environment default, that default applies (counting only the user's usage within that environment) and replaces the org-wide default for that request. Environments without a per-environment default fall back to the org-wide default.
+
+A custom per-user limit overrides both the org-wide and per-environment defaults for that user. Use this when one user needs a different budget.
 
 ## Limit Cleanup
 

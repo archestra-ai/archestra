@@ -784,7 +784,7 @@ describe("search_tools", () => {
   });
 
   describe("parameter enrichment", () => {
-    test("surfaces type, enum, and one-level nested properties", () => {
+    test("surfaces type, enum, and nested properties", () => {
       const summaries = __test.summarizeInputParameters({
         type: "object",
         properties: {
@@ -822,10 +822,38 @@ describe("search_tools", () => {
           enum: null,
           description: null,
           properties: [
-            { name: "id", type: "number", required: true },
-            { name: "note", type: "string", required: false },
+            { name: "id", type: "number", required: true, properties: null },
+            { name: "note", type: "string", required: false, properties: null },
           ],
           hasHiddenDetail: false,
+        },
+      ]);
+    });
+
+    test("expands a second nested level for object-of-object params", () => {
+      const [summary] = __test.summarizeInputParameters({
+        type: "object",
+        properties: {
+          config: {
+            type: "object",
+            properties: {
+              user: {
+                type: "object",
+                properties: { name: { type: "string" } },
+                required: ["name"],
+              },
+            },
+          },
+        },
+      });
+      expect(summary.properties).toEqual([
+        {
+          name: "user",
+          type: "object",
+          required: false,
+          properties: [
+            { name: "name", type: "string", required: true, properties: null },
+          ],
         },
       ]);
     });
@@ -846,7 +874,7 @@ describe("search_tools", () => {
       });
       expect(summary.type).toBe("array");
       expect(summary.properties).toEqual([
-        { name: "content", type: "string", required: true },
+        { name: "content", type: "string", required: true, properties: null },
       ]);
     });
 
@@ -939,6 +967,47 @@ describe("search_tools", () => {
       ).toBe("todos?:array{content!:string}");
     });
 
+    test("expands a second object level inline", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: { name: { type: "string" } },
+                },
+              },
+            },
+          },
+        }),
+      ).toBe("config?:object{user?:object{name?:string}}");
+    });
+
+    test("expands a second level through array-of-object items", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            payload: {
+              type: "object",
+              properties: {
+                rows: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: { id: { type: "number" } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ).toBe("payload?:object{rows?:array{id?:number}}");
+    });
+
     test("renders type, object shape, and enum together", () => {
       expect(
         signatureFor({
@@ -1017,7 +1086,7 @@ describe("search_tools", () => {
         expect(signatureFor(schema)).toBe("meta?:object…");
       });
 
-      test("marks an object nested deeper than the one level shown", () => {
+      test("fully shows an object nested two levels deep, no marker", () => {
         const schema = {
           type: "object",
           properties: {
@@ -1029,8 +1098,88 @@ describe("search_tools", () => {
             },
           },
         };
+        expect(hasHidden(schema)).toBe(false);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{name?}}",
+        );
+      });
+
+      test("marks an object nested deeper than the two levels shown", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: {
+                    address: { type: "object", properties: { city: {} } },
+                  },
+                },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(true);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{address?:object}}…",
+        );
+      });
+
+      test("marks an opaque second-level object", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: { user: { type: "object" } },
+            },
+          },
+        };
         expect(hasHidden(schema)).toBe(true);
         expect(signatureFor(schema)).toBe("config?:object{user?:object}…");
+      });
+
+      // The render resolves array items only when they list properties, while the
+      // marker resolves any object-typed items; this pins that they still agree —
+      // opaque items collapse the array to a bare type and the marker fires.
+      test("marks a second-level array of opaque objects", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                rows: { type: "array", items: { type: "object" } },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(true);
+        expect(signatureFor(schema)).toBe("config?:object{rows?:array}…");
+      });
+
+      test("does not mark a closed second-level object", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: { name: { type: "string" } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(false);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{name?:string}}",
+        );
       });
 
       test("marks an array of freeform objects", () => {

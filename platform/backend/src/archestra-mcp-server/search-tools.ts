@@ -53,46 +53,37 @@ const SearchToolsArgsSchema = z
   })
   .strict();
 
-const NestedParameterSchema = z.object({
-  name: z.string().describe("Nested property name."),
-  type: z.string().nullable().describe("JSON Schema type, if available."),
-  required: z.boolean().describe("Whether the nested property is required."),
-});
+// Internal intermediate only — the model sees the flat `params` string built from
+// these, never the structured form, so a plain recursive type is enough (no Zod,
+// no place in SearchToolsOutputSchema). `properties` carries one further nested
+// level; recursion depth is bounded by MAX_NESTED_DEPTH in summarizeNestedProperties.
+type NestedParameterSummary = {
+  name: string;
+  type: string | null;
+  required: boolean;
+  properties: NestedParameterSummary[] | null;
+};
 
-const InputParameterSchema = z.object({
-  name: z.string().describe("Top-level input parameter name."),
-  required: z.boolean().describe("Whether the parameter is required."),
-  type: z
-    .string()
-    .nullable()
-    .describe("JSON Schema type (e.g. 'string', 'number', 'object')."),
-  enum: z
-    .array(z.unknown())
-    .nullable()
-    .describe("Allowed values when the parameter is constrained by an enum."),
-  description: z
-    .string()
-    .nullable()
-    .describe("Parameter description, if available."),
-  properties: z
-    .array(NestedParameterSchema)
-    .nullable()
-    .describe(
-      "One-level summary of nested properties for object (or array-of-object) parameters.",
-    ),
-  hasHiddenDetail: z
-    .boolean()
-    .describe(
-      "True when the compact summary elides object content — a freeform/extensible object, or nesting deeper than the one level shown. Rendered as a trailing '…' so the model knows to consult the full schema.",
-    ),
-});
-
-type InputParameterSummary = z.infer<typeof InputParameterSchema>;
-type NestedParameterSummary = z.infer<typeof NestedParameterSchema>;
+type InputParameterSummary = {
+  name: string;
+  required: boolean;
+  type: string | null;
+  enum: unknown[] | null;
+  description: string | null;
+  properties: NestedParameterSummary[] | null;
+  // True when the compact summary elides object content — a freeform/extensible
+  // object, or nesting deeper than the levels shown. Rendered as a trailing '…'.
+  hasHiddenDetail: boolean;
+};
 
 // cap on enum values rendered inline in a parameter signature; the full list
 // stays recoverable via run_tool validation feedback.
 const PARAM_ENUM_VALUE_CAP = 20;
+
+// how many nested levels below a top-level param the compact summary expands:
+// the param's children (level 1) and their children (level 2). Object content
+// past this is collapsed behind the hidden-detail marker.
+const MAX_NESTED_DEPTH = 2;
 
 const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
@@ -137,7 +128,8 @@ const SearchToolsOutputSchema = z.object({
         .describe(
           "Compact one-line input signature — a summary, not the full schema. Parameters are " +
             "joined by '; ', each rendered as `name<!|?>:<type>` where `!` marks required and `?` " +
-            "optional. Object parameters are expanded one level as `{child<!|?>:type, …}`, enums as " +
+            "optional. Object parameters are expanded up to two levels as " +
+            "`{child<!|?>:type{grandchild<!|?>:type}, …}`, enums as " +
             "`enum(<json-values>)`, and a trailing ` — description` is added when available. A " +
             "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
             "more deeply nested) — consult the task instructions or the full schema for its shape. " +
@@ -466,25 +458,35 @@ function buildSearchText(params: {
 function summarizeInputParameters(
   schema: Record<string, unknown>,
 ): InputParameterSummary[] {
-  const properties = asRecord(schema.properties);
-  const required = new Set(asStringArray(schema.required));
+  return mapObjectProperties(schema, (paramSchema, name, required) => ({
+    name,
+    required,
+    type: extractSchemaType(paramSchema),
+    enum: Array.isArray(paramSchema.enum) ? paramSchema.enum : null,
+    description:
+      typeof paramSchema.description === "string"
+        ? paramSchema.description
+        : null,
+    properties: summarizeNestedProperties(paramSchema, MAX_NESTED_DEPTH),
+    hasHiddenDetail: objectHasHiddenDetail(paramSchema),
+  }));
+}
 
+// Shared property walk: read an object schema's `properties`/`required`, build a
+// summary per entry, and order required-first then alphabetically. The build
+// callback yields the shape; the {name, required} bound lets the sort stay here.
+function mapObjectProperties<T extends { name: string; required: boolean }>(
+  objectSchema: Record<string, unknown>,
+  build: (
+    childSchema: Record<string, unknown>,
+    name: string,
+    required: boolean,
+  ) => T,
+): T[] {
+  const properties = asRecord(objectSchema.properties);
+  const required = new Set(asStringArray(objectSchema.required));
   return Object.entries(properties)
-    .map(([name, value]) => {
-      const paramSchema = asRecord(value);
-      return {
-        name,
-        required: required.has(name),
-        type: extractSchemaType(paramSchema),
-        enum: Array.isArray(paramSchema.enum) ? paramSchema.enum : null,
-        description:
-          typeof paramSchema.description === "string"
-            ? paramSchema.description
-            : null,
-        properties: summarizeNestedProperties(paramSchema),
-        hasHiddenDetail: objectHasHiddenDetail(paramSchema),
-      };
-    })
+    .map(([name, value]) => build(asRecord(value), name, required.has(name)))
     .sort(
       (left, right) =>
         Number(right.required) - Number(left.required) ||
@@ -510,34 +512,25 @@ function extractSchemaType(
   return null;
 }
 
-// One-level nested summary for object (or array-of-object) parameters, so the
-// model can call run_tool without guessing the nested shape. Intentionally does
-// not recurse further — deeper structure is left to the actual call's
-// validation feedback to keep results bounded.
+// Nested summary for object (or array-of-object) parameters, so the model can
+// call run_tool without guessing the nested shape. Recurses up to `depth` levels
+// (MAX_NESTED_DEPTH from the top-level param); each object child carries its own
+// next level. Structure past the budget is left to the actual call's validation
+// feedback and flagged by objectHasHiddenDetail.
 function summarizeNestedProperties(
   paramSchema: Record<string, unknown>,
-): InputParameterSummary["properties"] {
+  depth: number,
+): NestedParameterSummary[] | null {
   const objectSchema = nestedObjectSchema(paramSchema);
-  if (!objectSchema) {
+  if (!objectSchema || depth <= 0) {
     return null;
   }
-  const properties = asRecord(objectSchema.properties);
-  const required = new Set(asStringArray(objectSchema.required));
-
-  return Object.entries(properties)
-    .map(([name, value]) => {
-      const nestedSchema = asRecord(value);
-      return {
-        name,
-        type: extractSchemaType(nestedSchema),
-        required: required.has(name),
-      };
-    })
-    .sort(
-      (left, right) =>
-        Number(right.required) - Number(left.required) ||
-        left.name.localeCompare(right.name),
-    );
+  return mapObjectProperties(objectSchema, (childSchema, name, required) => ({
+    name,
+    type: extractSchemaType(childSchema),
+    required,
+    properties: summarizeNestedProperties(childSchema, depth - 1),
+  }));
 }
 
 function nestedObjectSchema(
@@ -575,15 +568,27 @@ function isObjectSchema(schema: Record<string, unknown>): boolean {
 }
 
 // Does the compact one-line rendering hide object content the model would need?
-// True for a freeform/extensible object (additionalProperties), an object whose
-// shape isn't shown at all (type object with no listed properties), or nesting
-// deeper than the one level summarizeNestedProperties emits. Resolves through
-// array items so an array of objects is judged by its element shape. Scalars and
-// fully-shown one-level objects return false (no marker). Conservative: an object
-// that merely omits `additionalProperties` is not flagged, to avoid marking every
-// object.
+// Mirrors summarizeNestedProperties' MAX_NESTED_DEPTH budget so the marker fires
+// exactly when content falls past the levels actually shown.
 function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
-  const objectSchema = resolveObjectSchema(paramSchema);
+  return schemaHidesDetailBelow(paramSchema, MAX_NESTED_DEPTH);
+}
+
+// `remainingDepth` is how many more nested levels the compact summary still
+// renders below this schema. Detail is hidden when an object's content can't be
+// shown within that budget: a freeform/extensible object (additionalProperties)
+// or an opaque object with no listed properties at any shown level, or an object
+// child whose own object content falls past the budget. Resolves through array
+// items so an array of objects is judged by its element shape. Scalars and
+// objects fully shown within budget return false. Conservative: an object that
+// merely omits `additionalProperties` is not flagged, to avoid marking every
+// object. Always called with remainingDepth >= 1 (the <= 1 branch never recurses
+// further), so an object's own properties are never themselves unshown here.
+function schemaHidesDetailBelow(
+  schema: Record<string, unknown>,
+  remainingDepth: number,
+): boolean {
+  const objectSchema = resolveObjectSchema(schema);
   if (!objectSchema) {
     return false;
   }
@@ -598,8 +603,15 @@ function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
   if (Object.keys(properties).length === 0) {
     return true;
   }
-  return Object.values(properties).some(
-    (value) => resolveObjectSchema(asRecord(value)) != null,
+  // Last shown level: this object's children render, but their children do not,
+  // so any object child means unshown content.
+  if (remainingDepth <= 1) {
+    return Object.values(properties).some(
+      (value) => resolveObjectSchema(asRecord(value)) != null,
+    );
+  }
+  return Object.values(properties).some((value) =>
+    schemaHidesDetailBelow(asRecord(value), remainingDepth - 1),
   );
 }
 
@@ -650,9 +662,9 @@ function formatParamSignature(param: InputParameterSummary): string {
   return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
 }
 
-// Additive: a parameter can carry a scalar type, a one-level object shape, and an
-// enum constraint at once, so each present part is appended rather than replacing
-// the others (e.g. `sort?:string enum("asc"|"desc")`).
+// Additive: a parameter can carry a scalar type, a nested object shape (up to
+// MAX_NESTED_DEPTH levels), and an enum constraint at once, so each present part
+// is appended rather than replacing the others (e.g. `sort?:string enum("asc"|"desc")`).
 function formatParamType(param: InputParameterSummary): string {
   let type = param.type ?? "";
   if (param.properties && param.properties.length > 0) {
@@ -671,14 +683,17 @@ function formatParamType(param: InputParameterSummary): string {
 }
 
 function formatNestedProperties(properties: NestedParameterSummary[]): string {
-  const inner = properties
-    .map((property) => {
-      const requiredMark = property.required ? "!" : "?";
-      const typeSuffix = property.type ? `:${property.type}` : "";
-      return `${property.name}${requiredMark}${typeSuffix}`;
-    })
-    .join(", ");
-  return `{${inner}}`;
+  return `{${properties.map(formatNestedProperty).join(", ")}}`;
+}
+
+function formatNestedProperty(property: NestedParameterSummary): string {
+  const requiredMark = property.required ? "!" : "?";
+  let type = property.type ?? "";
+  if (property.properties && property.properties.length > 0) {
+    type += formatNestedProperties(property.properties);
+  }
+  const typeSuffix = type ? `:${type}` : "";
+  return `${property.name}${requiredMark}${typeSuffix}`;
 }
 
 // enum values are arbitrary JSON (number/boolean/null/object, or strings that may

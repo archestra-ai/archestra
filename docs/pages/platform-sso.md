@@ -3,7 +3,7 @@ title: "SSO"
 category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
-order: 3
+order: 4
 lastUpdated: 2026-05-06
 ---
 

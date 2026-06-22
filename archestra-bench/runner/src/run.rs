@@ -34,14 +34,25 @@ use crate::verify::{VerifyOutcome, run_verifier};
 // random token (registry names must be unique per backend, and tool auto-assignment is disabled so a
 // lane only ever discovers its own server); isolated lanes own their backend and use the bare name.
 const BENCH_MCP_NAME: &str = "final_answer";
+// Per-lane project name. Each lane gets its own project (distinct id) so file ownership is isolated;
+// the name is neutral and identical across lanes -- like BENCH_MCP_NAME it must not encode lane/model
+// identity or cue the agent it is being evaluated, since it can surface in a file-conflict message.
+const PROJECT_NAME: &str = "Workspace";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
-// Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
-// the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
-// solves the task still closes the loop by finding and calling its submit tool instead of replying in
-// prose.
+// Appended to a stage's user message only when submission is open (the final stage; submit_result is
+// server-gated until then). Kept short and tool-agnostic: it nudges submission without naming the
+// search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that solves
+// the task still closes the loop by finding and calling its submit tool instead of replying in prose.
 const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
-// One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
-// SUBMIT_INSTRUCTION, so this only has to call out the omission.
+// Appended instead of SUBMIT_INSTRUCTION on a non-final stage, where submit_result is still gated.
+// Deliberately says nothing about submitting: a real user does not mention the hand-in protocol until
+// the final ask, so the model learns submission is required only on the final stage. Steers the model
+// to do the step's work and end its turn (a chat reply, which advances the runner to the next stage)
+// rather than hunting for a submit tool and looping on the "more steps" rejection.
+const CONTINUE_INSTRUCTION: &str = "When you've finished this step, tell me where things stand and wait for my next message.";
+// One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
+// stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
+// omission.
 const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
@@ -310,6 +321,7 @@ struct SharedLaneSetup {
     submit_tool: String,
     mcp: BenchmarkMcp,
     resolved: ResolvedModel,
+    project_id: String,
 }
 
 /// One unit of work for a lane: that lane's tasks against a single env. A lane drains its stops serially.
@@ -414,6 +426,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                                 setup.mcp,
                                 setup.submit_tool,
                                 setup.agent_id,
+                                Some(setup.project_id),
                                 ctx.root_run_dir.clone(),
                                 setup.resolved,
                                 progress.clone(),
@@ -468,8 +481,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
 
 /// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
 /// partially-prepared env doesn't leak listener tasks for the rest of the run.
-async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
-    for (_, _, _, mcp) in setups {
+async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
+    for (_, _, _, mcp, _) in setups {
         mcp.stop().await;
     }
 }
@@ -534,7 +547,7 @@ async fn setup_shared_env(
         }
     }
 
-    let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
+    let mut setups: Vec<(Lane, String, String, BenchmarkMcp, String)> = Vec::new();
     for lane in &env_plan.lanes {
         let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
@@ -546,7 +559,26 @@ async fn setup_shared_env(
             }
         };
         match setup_lane_agent(&client, env, lane, &mcp, &team_id).await {
-            Ok((agent_id, submit_tool)) => setups.push((lane.clone(), agent_id, submit_tool, mcp)),
+            Ok((agent_id, submit_tool)) => {
+                // One project per lane so lanes no longer collide on the shared user's
+                // `(user_id, filename)` personal-file index when they save identically named
+                // artifacts. The opaque token keeps the name (and its derived slug) unique per the
+                // projects `(user_id, name)` / `(org, slug)` indexes -- all lanes share one user.
+                // Residual: a lane's tasks share this project, so two tasks emitting the *same*
+                // filename would collide on `(project_id, filename)`; today each task uses a distinct
+                // artifact name, so this does not bite. Revisit (per-rollout project) if that changes.
+                let project_name = format!("{PROJECT_NAME} {token}");
+                let project_id = match client.create_project(&project_name).await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        mcp.stop().await;
+                        stop_mcps(&setups).await;
+                        let _ = instance.shutdown().await;
+                        return Err(e.to_string());
+                    }
+                };
+                setups.push((lane.clone(), agent_id, submit_tool, mcp, project_id));
+            }
             Err(e) => {
                 mcp.stop().await;
                 stop_mcps(&setups).await;
@@ -557,7 +589,7 @@ async fn setup_shared_env(
     }
 
     if !env.mcps.is_empty() {
-        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _)| id.clone()).collect();
+        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
         let registered = match seed_mcp_fixtures(&client, &env.mcps, "org", Some(&agent_ids)).await
         {
             Ok(registered) => registered,
@@ -586,7 +618,7 @@ async fn setup_shared_env(
 
     let lane_setups = setups
         .into_iter()
-        .map(|(lane, agent_id, submit_tool, mcp)| {
+        .map(|(lane, agent_id, submit_tool, mcp, project_id)| {
             let resolved = resolved[&lane.name].clone();
             (
                 lane.name.clone(),
@@ -596,6 +628,7 @@ async fn setup_shared_env(
                     submit_tool,
                     mcp,
                     resolved,
+                    project_id,
                 },
             )
         })
@@ -674,7 +707,8 @@ async fn run_isolated_lane(
         }
     };
 
-    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await {
+    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await
+    {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -727,6 +761,7 @@ async fn run_isolated_lane(
         mcp,
         submit_tool,
         agent_id,
+        None,
         ctx.root_run_dir.clone(),
         resolved,
         progress,
@@ -1100,6 +1135,7 @@ async fn run_lane(
     mcp: BenchmarkMcp,
     submit_tool: String,
     agent_id: String,
+    project_id: Option<String>,
     root_run_dir: PathBuf,
     resolved: ResolvedModel,
     progress: ProgressBar,
@@ -1118,6 +1154,7 @@ async fn run_lane(
             env.platform.tool_exposure_mode,
             &lane,
             &agent_id,
+            project_id.as_deref(),
             &task,
             &resolved,
         )
@@ -1139,6 +1176,7 @@ async fn run_one(
     tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
+    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
 ) -> RunResult {
@@ -1201,6 +1239,7 @@ async fn run_one(
         agent_system_prompt,
         lane,
         agent_id,
+        project_id,
         task,
         resolved,
         &artifacts,
@@ -1258,7 +1297,9 @@ async fn capture_effective_prompts(
     }
     for error in &outcome.errors {
         warn!("effective-prompt anomaly: {error}");
-        artifacts.append_error("effective_prompt_error", error).await;
+        artifacts
+            .append_error("effective_prompt_error", error)
+            .await;
     }
 }
 
@@ -1270,6 +1311,7 @@ async fn grade_rollout(
     agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
+    project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     artifacts: &RunArtifacts,
@@ -1287,6 +1329,7 @@ async fn grade_rollout(
             Some(rollout_key),
             Some(&resolved.model_id),
             Some(&resolved.api_key_id),
+            project_id,
         )
         .await?;
     let conversation_id = conversation
@@ -1310,8 +1353,8 @@ async fn grade_rollout(
     ]);
 
     // Capture once: the agent's configured system prompt plus the expanded stage-0 task text
-    // (pre-SUBMIT_INSTRUCTION, i.e. the human-authored prompt). drive_stage appends
-    // SUBMIT_INSTRUCTION when it actually sends each stage.
+    // (the human-authored prompt, before any trailing instruction). drive_stage appends the trailer
+    // when it sends each stage: SUBMIT_INSTRUCTION on the final stage, CONTINUE_INSTRUCTION otherwise.
     let initial_user_message = task
         .stages
         .first()
@@ -1331,7 +1374,11 @@ async fn grade_rollout(
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
     for (index, stage) in task.stages.iter().enumerate() {
-        if index == final_stage {
+        // Single source of truth: the final stage both opens the server-side submission gate and gets
+        // the SUBMIT_INSTRUCTION trailer (earlier stages get CONTINUE_INSTRUCTION). Binding it once
+        // keeps the gate and the prompt trailer from drifting apart.
+        let submission_open = index == final_stage;
+        if submission_open {
             bench_mcp.allow_submission(rollout_key).await;
         }
         stage_error = drive_stage_with_retry(
@@ -1343,6 +1390,7 @@ async fn grade_rollout(
             artifacts,
             &runtime,
             index > 0,
+            submission_open,
         )
         .await?;
         if stage_error.is_some() {
@@ -1379,6 +1427,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            true,
             true,
         )
         .await?;
@@ -1573,6 +1622,7 @@ async fn drive_stage_with_retry(
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
     expect_prior_history: bool,
+    submission_open: bool,
 ) -> Result<Option<String>, RunError> {
     // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
     // platform builds LLM context from the request body only. The first turn has no history yet;
@@ -1604,6 +1654,7 @@ async fn drive_stage_with_retry(
         runtime,
         &prior_messages,
         &turn_id,
+        submission_open,
     )
     .await?;
     let Some(error) = first else {
@@ -1626,6 +1677,7 @@ async fn drive_stage_with_retry(
         runtime,
         &prior_messages,
         &turn_id,
+        submission_open,
     )
     .await
 }
@@ -1641,6 +1693,18 @@ fn stage_error_is_retryable(error: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Assemble a stage's user message: the (runtime-expanded) stage text plus the trailing instruction.
+/// On the final stage submission is open, so SUBMIT_INSTRUCTION is appended; on earlier stages it is
+/// gated, so CONTINUE_INSTRUCTION is appended instead (which reveals nothing about submission).
+fn stage_message(stage_text: &str, submission_open: bool) -> String {
+    let trailer = if submission_open {
+        SUBMIT_INSTRUCTION
+    } else {
+        CONTINUE_INSTRUCTION
+    };
+    format!("{stage_text}\n\n{trailer}")
+}
+
 async fn drive_stage(
     client: &EvalClient,
     conversation_id: &str,
@@ -1651,6 +1715,7 @@ async fn drive_stage(
     runtime: &HashMap<String, String>,
     prior_messages: &[serde_json::Value],
     turn_id: &str,
+    submission_open: bool,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1665,10 +1730,7 @@ async fn drive_stage(
             data: std::fs::read(task.inputs_dir().join(&f.src)).unwrap_or_default(),
         })
         .collect();
-    let text = format!(
-        "{}\n\n{SUBMIT_INSTRUCTION}",
-        expand_runtime(&stage.text, runtime)
-    );
+    let text = stage_message(&expand_runtime(&stage.text, runtime), submission_open);
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
@@ -2450,6 +2512,24 @@ mod tests {
     fn test_rollout_token() {
         let token = rollout_token("basic/t1/openai/gpt-4", "gpt-4-turbo");
         assert!(token.starts_with("gpt-4-turbo-"));
+    }
+
+    #[test]
+    fn test_stage_message_final_appends_submit() {
+        // Final stage: submission is open, so the hand-in instruction is appended (unchanged behavior).
+        let msg = stage_message("do the thing", true);
+        assert_eq!(msg, format!("do the thing\n\n{SUBMIT_INSTRUCTION}"));
+        assert!(msg.ends_with(SUBMIT_INSTRUCTION));
+    }
+
+    #[test]
+    fn test_stage_message_nonfinal_appends_continue() {
+        // Non-final stage: submission is gated, so the continuation line is appended and the message
+        // reveals nothing about submitting.
+        let msg = stage_message("do the thing", false);
+        assert_eq!(msg, format!("do the thing\n\n{CONTINUE_INSTRUCTION}"));
+        assert!(!msg.contains(SUBMIT_INSTRUCTION));
+        assert!(!msg.to_lowercase().contains("submit"));
     }
 
     #[test]

@@ -245,16 +245,11 @@ const AgentToolsEditorContent = forwardRef<
     [agentEnvironmentId],
   );
 
-  // Catalogs offered for selection. When environment scoping is on, hide
-  // catalogs that don't belong to the agent's environment (already-selected
-  // incompatible ones still render as pills so they can be removed).
-  const visibleCatalogItems = useMemo(
-    () =>
-      environmentScopingEnabled
-        ? sortedCatalogItems.filter(isEnvCompatible)
-        : sortedCatalogItems,
-    [sortedCatalogItems, environmentScopingEnabled, isEnvCompatible],
-  );
+  // All catalogs are offered; when environment scoping is on, catalogs outside
+  // the agent's environment are shown disabled (grayed) in the combobox rather
+  // than hidden, so it's clear why they can't be selected. Already-selected
+  // incompatible ones still render as pills so they can be removed.
+  const visibleCatalogItems = sortedCatalogItems;
 
   // State counter to force re-renders when pendingChangesRef updates
   const [pendingVersion, setPendingVersion] = useState(0);
@@ -591,7 +586,9 @@ const AgentToolsEditorContent = forwardRef<
       const hasNoCredentials =
         catalog.serverType !== "builtin" &&
         !allCredentials?.[catalog.id]?.length;
-      const isDisabled = hasNoTools || hasNoCredentials;
+      const isEnvIncompatible =
+        environmentScopingEnabled && !isEnvCompatible(catalog);
+      const isDisabled = hasNoTools || hasNoCredentials || isEnvIncompatible;
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
@@ -612,11 +609,17 @@ const AgentToolsEditorContent = forwardRef<
             ? `${assignedCount}/${totalCount}`
             : `${totalCount} tools`,
         disabled: isDisabled,
-        disabledReason: hasNoTools
-          ? "Not installed"
-          : hasNoCredentials
+        disabledReason: isEnvIncompatible
+          ? `Not in ${
+              agentEnvironmentName
+                ? `the "${agentEnvironmentName}" environment`
+                : "the Default environment"
+            }`
+          : hasNoTools
             ? "Not installed"
-            : undefined,
+            : hasNoCredentials
+              ? "Not installed"
+              : undefined,
       };
     });
   }, [
@@ -625,6 +628,9 @@ const AgentToolsEditorContent = forwardRef<
     toolCountByCatalog,
     allCredentials,
     pendingVersion,
+    environmentScopingEnabled,
+    isEnvCompatible,
+    agentEnvironmentName,
   ]);
 
   // Filter to only selected catalogs for pills
@@ -725,13 +731,6 @@ const AgentToolsEditorContent = forwardRef<
           }}
         />
       </div>
-      {environmentScopingEnabled && (
-        <p className="text-xs text-muted-foreground">
-          MCP servers are filtered to the selected environment
-          {agentEnvironmentName ? ` ("${agentEnvironmentName}")` : " (Default)"}
-          .
-        </p>
-      )}
     </div>
   );
 });

@@ -195,15 +195,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         ),
       },
       {
-        accessorKey: "assignedCatalogCount",
-        header: "Assigned MCPs",
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {row.original.assignedCatalogCount}
-          </span>
-        ),
-      },
-      {
         accessorKey: "restricted",
         header: "Access",
         cell: ({ row }) =>

@@ -16727,7 +16727,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -16831,7 +16831,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -25438,7 +25438,6 @@ export type GetConfigResponses = {
             agentEnvironmentsEnabled: boolean;
             appsEnabled: boolean;
             projectsEnabled: boolean;
-            dynamicToolAccessEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
@@ -25853,6 +25852,372 @@ export type DeepseekChatCompletionsWithAgentResponses = {
 };
 
 export type DeepseekChatCompletionsWithAgentResponse = DeepseekChatCompletionsWithAgentResponses[keyof DeepseekChatCompletionsWithAgentResponses];
+
+export type ListDefaultUserLimitsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/default-user-limits';
+};
+
+export type ListDefaultUserLimitsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListDefaultUserLimitsError = ListDefaultUserLimitsErrors[keyof ListDefaultUserLimitsErrors];
+
+export type ListDefaultUserLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        environmentId: string | null;
+        limitValue: number;
+        model?: Array<string> | null;
+        cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ListDefaultUserLimitsResponse = ListDefaultUserLimitsResponses[keyof ListDefaultUserLimitsResponses];
+
+export type CreateDefaultUserLimitData = {
+    body: {
+        environmentId?: string | null;
+        limitValue: number;
+        model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/default-user-limits';
+};
+
+export type CreateDefaultUserLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateDefaultUserLimitError = CreateDefaultUserLimitErrors[keyof CreateDefaultUserLimitErrors];
+
+export type CreateDefaultUserLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        environmentId: string | null;
+        limitValue: number;
+        model?: Array<string> | null;
+        cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateDefaultUserLimitResponse = CreateDefaultUserLimitResponses[keyof CreateDefaultUserLimitResponses];
+
+export type DeleteDefaultUserLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/default-user-limits/{id}';
+};
+
+export type DeleteDefaultUserLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteDefaultUserLimitError = DeleteDefaultUserLimitErrors[keyof DeleteDefaultUserLimitErrors];
+
+export type DeleteDefaultUserLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteDefaultUserLimitResponse = DeleteDefaultUserLimitResponses[keyof DeleteDefaultUserLimitResponses];
+
+export type UpdateDefaultUserLimitData = {
+    body: {
+        limitValue?: number;
+        model?: Array<string> | null;
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/default-user-limits/{id}';
+};
+
+export type UpdateDefaultUserLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateDefaultUserLimitError = UpdateDefaultUserLimitErrors[keyof UpdateDefaultUserLimitErrors];
+
+export type UpdateDefaultUserLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        environmentId: string | null;
+        limitValue: number;
+        model?: Array<string> | null;
+        cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateDefaultUserLimitResponse = UpdateDefaultUserLimitResponses[keyof UpdateDefaultUserLimitResponses];
 
 export type ListEnvironmentsData = {
     body?: never;
@@ -29562,6 +29927,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -29640,6 +30006,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -29834,6 +30201,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -29932,6 +30300,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30010,6 +30379,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30088,6 +30458,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30564,6 +30935,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30642,6 +31014,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30720,6 +31093,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30798,6 +31172,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30876,6 +31251,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -30954,6 +31330,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31032,6 +31409,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31108,6 +31486,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31184,6 +31563,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31262,6 +31642,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31340,6 +31721,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -31418,6 +31800,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -32137,6 +32520,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -32215,6 +32599,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -32360,6 +32745,7 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -32971,6 +33357,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33049,6 +33436,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33243,6 +33631,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33341,6 +33730,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33419,6 +33809,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33497,6 +33888,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -33973,6 +34365,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34051,6 +34444,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34129,6 +34523,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34207,6 +34602,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34285,6 +34681,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34363,6 +34760,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34441,6 +34839,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34517,6 +34916,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34593,6 +34993,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34671,6 +35072,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34749,6 +35151,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -34827,6 +35230,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -35546,6 +35950,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -35624,6 +36029,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -35769,6 +36175,7 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
@@ -38951,6 +39358,7 @@ export type GetConnectorsResponses = {
                 fileTypes?: Array<string>;
             };
             secretId: string | null;
+            environmentId: string | null;
             schedule: string;
             enabled: boolean;
             lastSyncAt: string | null;
@@ -39133,6 +39541,7 @@ export type CreateConnectorData = {
         schedule?: string;
         enabled?: boolean;
         knowledgeBaseIds?: Array<string>;
+        environmentId?: string | null;
     };
     path?: never;
     query?: never;
@@ -39351,6 +39760,7 @@ export type CreateConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
@@ -39672,6 +40082,7 @@ export type GetConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
@@ -39839,6 +40250,7 @@ export type UpdateConnectorData = {
         };
         schedule?: string;
         enabled?: boolean;
+        environmentId?: string | null;
     };
     path: {
         id: string;
@@ -40059,6 +40471,7 @@ export type UpdateConnectorResponses = {
             fileTypes?: Array<string>;
         };
         secretId: string | null;
+        environmentId: string | null;
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
@@ -41121,7 +41534,7 @@ export type GetLimitsData = {
     body?: never;
     path?: never;
     query?: {
-        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
     };
@@ -41199,7 +41612,7 @@ export type GetLimitsResponses = {
      */
     200: Array<{
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -41223,7 +41636,7 @@ export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
 
 export type CreateLimitData = {
     body: {
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -41309,7 +41722,7 @@ export type CreateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -41490,7 +41903,7 @@ export type GetLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -41508,8 +41921,6 @@ export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
 
 export type UpdateLimitData = {
     body: {
-        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
-        entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
         mcpServerName?: string | null;
@@ -41596,7 +42007,7 @@ export type UpdateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -51010,9 +51421,6 @@ export type UpdateLlmSettingsData = {
     body: {
         convertToolResultsToToon?: boolean;
         compressionScope?: 'organization' | 'team';
-        defaultUserLimitValue?: number | null;
-        defaultUserLimitModel?: Array<string> | null;
-        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
     };
     path?: never;
     query?: never;

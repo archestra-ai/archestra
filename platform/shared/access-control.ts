@@ -990,6 +990,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },
+  [RouteId.ListDefaultUserLimits]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.CreateDefaultUserLimit]: {
+    llmLimit: ["create"],
+  },
+  [RouteId.UpdateDefaultUserLimit]: {
+    llmLimit: ["update"],
+  },
+  [RouteId.DeleteDefaultUserLimit]: {
+    llmLimit: ["delete"],
+  },
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },

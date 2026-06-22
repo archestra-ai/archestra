@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Database, Pencil, Trash2, Users } from "lucide-react";
+import { Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -27,12 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   useConnectorsPaginated,
@@ -44,11 +38,6 @@ import { formatCronSchedule } from "@/lib/utils/format-cron";
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
-const AGENT_TYPE_LABELS: Record<string, string> = {
-  agent: "Agent",
-  mcp_gateway: "MCP Gateway",
-};
-
 const CONNECTOR_TYPE_OPTIONS = [
   "jira",
   "confluence",
@@ -58,10 +47,6 @@ const CONNECTOR_TYPE_OPTIONS = [
   "perforce",
   "web_crawler",
 ] as ConnectorType[];
-
-function formatAgentType(agentType: string): string {
-  return AGENT_TYPE_LABELS[agentType] ?? agentType;
-}
 
 export default function ConnectorsPage() {
   return (
@@ -209,11 +194,6 @@ function ConnectorsList() {
       },
     },
     {
-      id: "assigned",
-      header: "Assigned",
-      cell: ({ row }) => <AssignedAgentsTooltip connector={row.original} />,
-    },
-    {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
@@ -239,7 +219,7 @@ function ConnectorsList() {
   return (
     <KnowledgePageLayout
       title="Connectors"
-      description="Manage data connectors that feed into your knowledge bases."
+      description="Connectors sync content from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from it."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
@@ -312,39 +292,6 @@ function ConnectorsList() {
         )}
       </div>
     </KnowledgePageLayout>
-  );
-}
-
-function AssignedAgentsTooltip({ connector }: { connector: ConnectorItem }) {
-  const { assignedAgents } = connector;
-
-  if (!assignedAgents || assignedAgents.length === 0) {
-    return <span className="text-xs text-muted-foreground">Not assigned</span>;
-  }
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
-            <span>Assigned to {assignedAgents.length}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          <div className="space-y-1">
-            {assignedAgents.map((agent) => (
-              <div key={agent.id} className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">
-                  {formatAgentType(agent.agentType)}
-                </span>
-                <span>{agent.name}</span>
-              </div>
-            ))}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 }
 

@@ -84,6 +84,7 @@ export {
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
+export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as hookFilesTable } from "./hook-file";

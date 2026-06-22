@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
+  FileNameExistsError,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -253,6 +254,10 @@ class SkillSandboxRuntimeService {
           data,
         });
       } catch (dbError) {
+        // A name collision is a real, actionable conflict — surface it typed so
+        // the caller renders a non-retryable "already exists" message instead of
+        // masking it as a generic, retryable storage error.
+        if (dbError instanceof FileNameExistsError) throw dbError;
         logger.error(
           { err: dbError, sandboxId: params.sandboxId },
           "[SkillSandbox] failed to persist artifact",

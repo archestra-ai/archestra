@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-22
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -65,6 +65,8 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 - optimization reports use it to calculate savings
 - TOON compression savings are reported in dollars using the configured model price
 
+When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly, so Archestra maps them back to the underlying vendor model to recover real prices (including cache prices) where possible.
+
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 
 ## Optimization Rules
@@ -110,3 +112,5 @@ See the upstream TOON format project for the format specification and benchmarks
 Prompt caching lets a provider reuse the unchanging prefix of a request, such as the system prompt, tool definitions, and earlier turns, instead of reprocessing it on every turn. Reused tokens are billed at a fraction of the input price, which matters most for agents with a long system prompt or many tools. The first request to cache a prefix pays a small write surcharge, while later requests that reuse it pay far less, so a multi-turn conversation is a net saving.
 
 Anthropic and Amazon Bedrock require explicit cache markers, which Archestra adds to the stable prefix and the most recent turn; OpenAI, Gemini, and DeepSeek cache eligible prefixes on their own. Caching applies automatically wherever the provider and model support it. Archestra records cache read and write token counts and the resulting savings, so they appear in logs and aggregate cost reporting.
+
+Cache cost uses the model's cache read and write prices when those are known (synced from the registry or set by an admin); otherwise it is estimated from the input price. Configure cache prices per model in the model editor for accurate caching costs.

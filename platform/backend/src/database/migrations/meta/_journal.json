@@ -2108,6 +2108,13 @@
       "when": 1782058452626,
       "tag": "0300_rainy_madrox",
       "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "7",
+      "when": 1782117226973,
+      "tag": "0301_smiling_scalphunter",
+      "breakpoints": true
     }
   ]
 }

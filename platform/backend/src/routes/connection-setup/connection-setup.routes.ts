@@ -10,7 +10,7 @@ import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
-import config, { getConnectionBaseUrlSources } from "@/config";
+import { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
 import {
   AgentModel,
@@ -39,7 +39,6 @@ import {
   type ConnectionSetup,
   type ConnectionSetupClientId,
   ConnectionSetupClientIdSchema,
-  ConnectionSetupPlatformSchema,
   ConnectionSetupProxyAuthSchema,
   constructResponseSchema,
   type Organization,
@@ -69,14 +68,11 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "deepseek",
     "xai",
     "cerebras",
-    "github-copilot",
   ],
 };
 
 const CreateConnectionSetupBodySchema = z.object({
   clientId: ConnectionSetupClientIdSchema,
-  /** Target OS for the generated script; defaults to bash (macOS/Linux). */
-  platform: ConnectionSetupPlatformSchema.default("macos"),
   baseUrl: z.string().url().max(2048),
   mcpGatewayId: z.string().uuid().optional(),
   llmProxyId: z.string().uuid().optional(),
@@ -98,17 +94,6 @@ const CreateConnectionSetupResponseSchema = z.object({
   tokenStart: z.string(),
 });
 
-const CreateConnectionVirtualKeyBodySchema = z.object({
-  provider: SupportedProvidersSchema,
-});
-
-const CreateConnectionVirtualKeyResponseSchema = z.object({
-  /** Raw virtual key value, returned exactly once for the user to paste. */
-  value: z.string(),
-  /** Display name of the key (for revocation guidance). */
-  name: z.string(),
-});
-
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/connection-setups",
@@ -126,7 +111,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const {
         clientId,
-        platform,
         mcpGatewayId,
         llmProxyId,
         provider,
@@ -220,7 +204,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         clientId,
-        platform,
         baseUrl,
         mcpGatewayId: mcpGatewayId ?? null,
         llmProxyId: llmProxyId ?? null,
@@ -238,71 +221,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         command: buildSetupCommand({
           origin: proxyBaseUrlToOrigin(baseUrl),
           rawToken,
-          platform,
         }),
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
       });
-    },
-  );
-
-  fastify.post(
-    "/api/connection-setups/virtual-key",
-    {
-      schema: {
-        operationId: RouteId.CreateConnectionVirtualKey,
-        description:
-          "Provision (or reuse) the caller's personal connection virtual key " +
-          "for a provider and return its value once. Backs the manual " +
-          "/connection flow's virtual-key option; mirrors the auto-provisioning " +
-          "done by the one-command setup. Requires llmVirtualKey:create.",
-        tags: ["Connection Setups"],
-        body: CreateConnectionVirtualKeyBodySchema,
-        response: constructResponseSchema(
-          CreateConnectionVirtualKeyResponseSchema,
-        ),
-      },
-    },
-    async ({ body, organizationId, user }, reply) => {
-      const { provider } = body;
-
-      // Same gate as the virtual-key branch of CreateConnectionSetup: minting a
-      // key requires the dedicated create permission.
-      const canCreateVirtualKey = await userHasPermission(
-        user.id,
-        organizationId,
-        "llmVirtualKey",
-        "create",
-      );
-      if (!canCreateVirtualKey) {
-        throw new ApiError(
-          403,
-          "You need llmVirtualKey:create permission to use a virtual key. Use your own provider key instead.",
-        );
-      }
-
-      const organization = await OrganizationModel.getById(organizationId);
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
-      }
-
-      const virtualApiKeyId = await ensureConnectionVirtualKey({
-        organizationId,
-        userId: user.id,
-        userEmail: user.email,
-        userTeamIds: await TeamModel.getUserTeamIds(user.id),
-        provider,
-        preferredProviderKeyId:
-          organization.connectionDefaultProviderKeys?.[provider] ?? null,
-      });
-
-      const value = await readVirtualKeyValue(virtualApiKeyId);
-      const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
-      if (!value || !virtualKey) {
-        throw new ApiError(500, "Failed to provision a virtual key");
-      }
-
-      return reply.send({ value, name: virtualKey.name });
     },
   );
 
@@ -499,17 +421,6 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
-      // Passthrough Copilot setups run the GitHub device flow inside the
-      // script; virtual-key setups resolve the stored token server-side.
-      githubCopilot:
-        setup.provider === "github-copilot" &&
-        setup.proxyAuth === "provider-key"
-          ? {
-              tokenExchangeUrl: config.llm["github-copilot"].tokenExchangeUrl,
-              deviceAuthBaseUrl: config.llm["github-copilot"].deviceAuthBaseUrl,
-              clientId: config.llm["github-copilot"].clientId,
-            }
-          : null,
     };
   }
 
@@ -542,13 +453,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   }
 
   return {
-    context: {
-      clientId: setup.clientId,
-      platform: setup.platform,
-      appName,
-      mcp,
-      proxy,
-    },
+    context: { clientId: setup.clientId, appName, mcp, proxy },
     skillRender,
   };
 }

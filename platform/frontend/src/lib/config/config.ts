@@ -164,13 +164,11 @@ export const getMcpSandboxBaseUrl = (
   if (typeof window !== "undefined") {
     const browserHost = window.location.hostname;
 
-    // Mode 2: localhost ↔ 127.0.0.1 swap (dev/quickstart, zero-config cross-origin).
-    // Swap the page's OWN origin, not the backend URL, so the sandbox stays on the
-    // port the browser actually reached us on — otherwise it points at the backend
-    // port (e.g. :9000), which is dead behind a tunnel that only forwards the
-    // frontend port (e.g. ssh -L 13000:localhost:3000 → browse localhost:13000).
+    // Mode 2: localhost ↔ 127.0.0.1 swap (dev/quickstart, zero-config cross-origin)
+    // Only when the user is actually on localhost — not in production where the
+    // internal backend URL happens to be localhost but the browser isn't.
     if (browserHost === "localhost" || browserHost === "127.0.0.1") {
-      const swapped = swapLocalhostOrigin(window.location.origin);
+      const swapped = swapLocalhostOrigin(getBackendBaseUrl());
       if (swapped) {
         return { baseUrl: swapped, hasCrossOrigin: true };
       }

@@ -154,7 +154,7 @@ class VirtualApiKeyModel {
     name: string;
     expiresAt?: Date | null;
     scope: ResourceVisibilityScope;
-    authorId: string | null;
+    authorId: string;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
   }): Promise<SelectVirtualApiKey | null> {

@@ -21,7 +21,6 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
-import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -109,17 +108,7 @@ const MAX_TOOL_CACHE_SIZE = 1000;
  * This degrades performance (repeated tool fetches from MCP Gateway) but
  * does not affect correctness - tools will still work, just slower.
  */
-/**
- * A cached tool set plus the `ChatToolContext` its wrappers close over. The
- * context is retained so the per-run `repeatTracker` can be reset on each cache
- * hit (the cache is keyed per agent/user/scope and outlives a single run).
- */
-interface CachedToolSet {
-  tools: Record<string, Tool>;
-  context: ChatToolContext;
-}
-
-const toolCache = new LRUCacheManager<CachedToolSet>({
+const toolCache = new LRUCacheManager<Record<string, Tool>>({
   maxSize: MAX_TOOL_CACHE_SIZE,
   defaultTtl: TOOL_CACHE_TTL_MS,
 });
@@ -734,26 +723,18 @@ export async function getChatMcpTools({
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
-  const cached = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
-  if (cached) {
-    // Reset the per-run repeat tracker: this entry is keyed per agent/user/scope
-    // and lives for the cache TTL, so without this a later run on the same scope
-    // would inherit the previous run's repeat counts. getChatMcpTools is called
-    // once per run, and every wrapper reads the tracker through this context.
-    // Best-effort under concurrency: two overlapping no-abortSignal runs on the
-    // same scope share this context, so a reset can clear the other's in-flight
-    // streak — fail-open (the breaker under-fires, never falsely fires).
-    cached.context.repeatTracker = new ToolCallRepeatTracker();
+  const cachedTools = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
+  if (cachedTools) {
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cached.tools).length,
+        toolCount: Object.keys(cachedTools).length,
       },
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cached.tools, enabledToolIds);
+    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -863,9 +844,6 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       teams,
       userTeams,
-      // One tracker per run. On a cache hit the cached context's tracker is
-      // reset (see above) so repeat counts never carry across runs.
-      repeatTracker: new ToolCallRepeatTracker(),
     };
     const aiTools: Record<string, Tool> = {};
 
@@ -926,7 +904,7 @@ export async function getChatMcpTools({
 
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     if (shouldUseToolCache) {
-      toolCache.set(toolCacheKey, { tools: aiTools, context: toolContext });
+      toolCache.set(toolCacheKey, aiTools);
     }
 
     // Apply filtering if enabledToolIds provided and non-empty
@@ -1057,8 +1035,7 @@ export async function fetchToolUiResource({
 /**
  * Filter tools by enabled tool IDs
  * If enabledToolIds is undefined, returns all tools (no custom selection = all enabled)
- * If enabledToolIds is empty array, returns only archestra built-in tools (a custom
- *   selection of zero user-selectable tools; built-ins always bypass the selection)
+ * If enabledToolIds is empty array, returns no tools (explicit selection of zero tools)
  * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
  *
  * @param tools - All available tools (keyed by tool name)
@@ -1081,15 +1058,25 @@ async function filterToolsByEnabledIds(
     return tools;
   }
 
-  // Fetch tool names for the enabled IDs (empty array -> empty set, leaving only
-  // the built-in bypass below to populate the result)
+  // Empty array = explicit selection of zero tools
+  if (enabledToolIds.length === 0) {
+    logger.info(
+      {
+        totalTools: Object.keys(tools).length,
+        enabledToolIds: 0,
+        reason: "empty array - all tools explicitly disabled",
+      },
+      "All tools filtered out - user disabled all tools",
+    );
+    return {};
+  }
+
+  // Fetch tool names for the enabled IDs
   const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
 
-  // Filter tools to only include enabled ones.
+  // Filter tools to only include enabled ones
   // Archestra built-in tools always bypass custom selection (they are auto-injected
-  // and hidden from the UI, so users cannot select or deselect them). This is what
-  // keeps search_tools/run_tool available to search_and_run_only agents even when a
-  // conversation's custom selection enables zero user-selectable tools.
+  // and hidden from the UI, so users cannot select them)
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {

@@ -1,6 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -14,7 +13,6 @@ import {
   POLICY_CONFIG_SYSTEM_PROMPT,
   PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
-  providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
@@ -139,16 +137,6 @@ export async function syncBuiltInAgents(): Promise<void> {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       } as const,
     },
-    {
-      builtInAgentId: BUILT_IN_AGENT_IDS.APP_RUNTIME,
-      name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
-      description:
-        "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
-      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
-      } as const,
-    },
   ];
 
   for (const organization of organizations) {
@@ -249,8 +237,6 @@ export async function syncBuiltInSkillsForOrganization(
   archestraMcpBranding.syncFromOrganization(organization);
 
   for (const builtInSkill of BUILT_IN_SKILLS) {
-    // Skills tied to a dark feature stay out of the catalog until it ships.
-    if (builtInSkill.requiresAppsFeature && !config.apps.enabled) continue;
     const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
     const shipped = builtInSkillShippedWrite(builtInSkill);
 
@@ -343,7 +329,6 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
-  await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 
@@ -612,15 +597,6 @@ type EnvSeedDecision =
 export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
   const baseUrl = getProviderConfiguredBaseUrl(provider);
 
-  // Per-user providers (GitHub Copilot) must never be seeded as an org-wide key
-  // from a shared env token — each user connects their own account.
-  if (providerRequiresPerUserCredential(provider)) {
-    return {
-      kind: "skip",
-      reason: "per-user provider; each user connects their own account",
-    };
-  }
-
   if (PROVIDERS_REQUIRING_BASE_URL.has(provider) && baseUrl === undefined) {
     return { kind: "skip", reason: "required base URL is not configured" };
   }
@@ -688,7 +664,6 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
-    "github-copilot": "GitHub Copilot",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
     azure: "Azure AI Foundry",

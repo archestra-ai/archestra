@@ -31,32 +31,6 @@ type UpdateInternalMcpCatalogItemParams =
     data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
   };
 
-/**
- * `internal_code` the backend sets when a remote server's URL host is rejected
- * by its environment's network egress policy. The dialogs use it to show the
- * message inline on the Server URL field instead of a generic toast. Keep in
- * sync with the backend constant of the same value.
- */
-export const REMOTE_SERVER_URL_NOT_ALLOWED_CODE =
-  "remote_server_url_not_allowed";
-
-/** Read the backend `internal_code` off an error thrown by a catalog mutation. */
-export function getCatalogMutationErrorCode(
-  error: unknown,
-): string | undefined {
-  return (error as { internalCode?: string } | null)?.internalCode;
-}
-
-/** Convert a hey-api `{ error }` body into a thrown Error carrying its code. */
-function catalogMutationError(body: {
-  message: string;
-  internal_code?: string;
-}): Error {
-  const error = new Error(body.message) as Error & { internalCode?: string };
-  error.internalCode = body.internal_code;
-  return error;
-}
-
 export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
   return useQuery({
     queryKey: ["mcp-catalog"],
@@ -92,30 +66,16 @@ export function useCreateInternalMcpCatalogItem() {
     mutationFn: async (
       data: archestraApiTypes.CreateInternalMcpCatalogItemData["body"],
     ) => {
-      const { data: created, error } = await createInternalMcpCatalogItem({
-        body: data,
-      });
-      if (error) throw catalogMutationError(error.error);
-      return created;
+      const response = await createInternalMcpCatalogItem({ body: data });
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("Catalog item created successfully");
     },
     onError: (error) => {
-      // The network-policy error is shown inline on the Server URL field by the
-      // dialog; everything else falls back to a toast.
-      if (
-        getCatalogMutationErrorCode(error) ===
-        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
-      ) {
-        return;
-      }
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to create catalog item",
-      );
+      console.error("Create error:", error);
+      toast.error("Failed to create catalog item");
     },
   });
 }
@@ -124,12 +84,11 @@ export function useUpdateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: UpdateInternalMcpCatalogItemParams) => {
-      const { data: updated, error } = await updateInternalMcpCatalogItem({
+      const response = await updateInternalMcpCatalogItem({
         path: { id },
         body: data,
       });
-      if (error) throw catalogMutationError(error.error);
-      return updated;
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
@@ -139,19 +98,8 @@ export function useUpdateInternalMcpCatalogItem() {
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
-      // The network-policy error is shown inline on the Server URL field by the
-      // dialog; everything else falls back to a toast.
-      if (
-        getCatalogMutationErrorCode(error) ===
-        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
-      ) {
-        return;
-      }
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update catalog item",
-      );
+      console.error("Edit error:", error);
+      toast.error("Failed to update catalog item");
     },
   });
 }

@@ -296,8 +296,6 @@ describe("ModelSyncService", () => {
         supportsToolCalling: true,
         promptPricePerToken: null,
         completionPricePerToken: null,
-        cacheReadPricePerToken: null,
-        cacheWritePricePerToken: null,
       },
     });
 
@@ -318,8 +316,6 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
-        cacheReadPricePerToken: null,
-        cacheWritePricePerToken: null,
       },
       fetched: {
         contextLength: 64000,

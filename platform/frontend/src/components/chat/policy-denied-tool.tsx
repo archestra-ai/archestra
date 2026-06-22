@@ -14,6 +14,9 @@ import { useOrganization } from "@/lib/organization.query";
 import { EditPolicyDialog } from "./edit-policy-dialog";
 import { ToolStatusRow } from "./tool-status-row";
 
+// Re-export for backward compatibility
+export type { PolicyDeniedPart as PolicyDeniedResult };
+
 type PolicyDeniedToolProps = {
   policyDenied: PolicyDeniedPart;
 } & (

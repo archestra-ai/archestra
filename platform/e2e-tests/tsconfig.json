@@ -5,6 +5,7 @@
     "tests/**/*.ts",
     "utils/**/*.ts"
   ],
+  "exclude": ["test-mcp-servers/**/*"],
   "compilerOptions": {
     "types": ["node"]
   }

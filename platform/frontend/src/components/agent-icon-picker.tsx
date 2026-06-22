@@ -3,7 +3,6 @@
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
   Bot,
-  Folder,
   ImageIcon,
   Layers,
   Network,
@@ -35,7 +34,7 @@ interface AgentIconPickerProps {
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
-  fallbackType?: AgentIconVariant | "server" | "project";
+  fallbackType?: AgentIconVariant | "server";
 }
 
 export function AgentIconPicker({
@@ -111,9 +110,7 @@ export function AgentIconPicker({
         ? Route
         : fallbackType === "server"
           ? Server
-          : fallbackType === "project"
-            ? Folder
-            : Bot;
+          : Bot;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

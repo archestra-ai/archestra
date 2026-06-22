@@ -83,6 +83,7 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   onedrive: CONNECTOR_TYPE_LABELS.onedrive ?? "OneDrive",
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
   web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
+  file_upload: CONNECTOR_TYPE_LABELS.file_upload,
   perforce: CONNECTOR_TYPE_LABELS.perforce,
 };
 
@@ -245,6 +246,7 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       placeholder: "https://docs.example.com/",
       description: "First page to crawl. Crawling stays on the same host.",
     },
+    file_upload: null,
     perforce: {
       fieldName: "config.serverUrl",
       label: "Server URL",
@@ -277,6 +279,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   outline: ({ form }) => <OutlineConfigFields form={form} />,
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
   web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
+  file_upload: () => null,
   perforce: ({ form }) => <PerforceConfigFields form={form} />,
 };
 
@@ -350,6 +353,7 @@ export function getDefaultConnectorConfig(
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
     web_crawler: { type, maxPages: 250, maxDepth: 3, batchSize: 25 },
+    file_upload: { type },
     perforce: { type },
   };
 
@@ -396,6 +400,7 @@ export function getConnectorCredentialConfig(params: {
     onedrive: "Client Secret",
     salesforce: "Password + Security Token",
     web_crawler: undefined,
+    file_upload: undefined,
     perforce: "Login Ticket",
   };
 
@@ -418,6 +423,7 @@ export function getConnectorCredentialConfig(params: {
       onedrive: "Your Azure AD client secret",
       salesforce: "Your Salesforce password followed by your security token",
       web_crawler: undefined,
+      file_upload: undefined,
       perforce: "Ticket from p4 login -a -p",
     };
 
@@ -437,6 +443,7 @@ export function getConnectorCredentialConfig(params: {
     gitlab: "Leave empty to keep existing token",
     linear: "Leave empty to keep existing token",
     asana: "Leave empty to keep existing token",
+    file_upload: undefined,
     onedrive: "Leave empty to keep existing token",
     web_crawler: undefined,
     perforce: "Leave empty to keep existing credentials",
@@ -460,6 +467,7 @@ export function getConnectorCredentialConfig(params: {
     onedrive: "Client secret is required",
     salesforce: "Password and security token are required",
     web_crawler: undefined,
+    file_upload: undefined,
     perforce: "Login ticket is required",
   };
 
@@ -947,6 +955,7 @@ const INLINE_CONFIG_FIELDS: Record<
       )}
     />
   ),
+  file_upload: () => <></>,
   perforce: ({ form, mode }) => (
     <>
       <FormField

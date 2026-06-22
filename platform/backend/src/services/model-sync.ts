@@ -7,7 +7,6 @@ import {
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
-  modelsDevCostToPerToken,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import {
@@ -17,10 +16,6 @@ import {
 } from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
-import {
-  type CrossProviderPrices,
-  resolveCrossProviderPrices,
-} from "@/services/cross-provider-pricing";
 import type {
   CreateModel,
   ModelInputModality,
@@ -242,42 +237,22 @@ interface ProviderModelCapabilities {
   supportsToolCalling: boolean | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
-  cacheReadPricePerToken: string | null;
-  cacheWritePricePerToken: string | null;
 }
 
 export function buildModelsToUpsert(params: {
   provider: SupportedProvider;
-  models: Array<{
-    id: string;
-    capabilities?: FetchedModelCapabilities;
-    /** Underlying vendor model name, when the fetcher can determine it (Azure). */
-    underlyingModelName?: string | null;
-  }>;
+  models: Array<{ id: string; capabilities?: FetchedModelCapabilities }>;
   modelsDevData: ModelsDevApiResponse;
 }): CreateModel[] {
   const { provider, models, modelsDevData } = params;
   const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
   return models.map((model) => {
-    // Bedrock/Azure model ids don't match models.dev keys, so derive pricing
-    // from the underlying vendor entry (which also carries cache prices).
-    const crossProviderPrices =
-      provider === "bedrock" || provider === "azure"
-        ? resolveCrossProviderPrices({
-            provider,
-            modelId: model.id,
-            underlyingModelName: model.underlyingModelName,
-            modelsDevData,
-          })
-        : null;
-
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
       capabilities: capabilitiesMap.get(model.id),
       fetched: model.capabilities,
-      crossProviderPrices,
     });
 
     return {
@@ -291,8 +266,6 @@ export function buildModelsToUpsert(params: {
       supportsToolCalling: capabilities.supportsToolCalling,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
-      cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
-      cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
       embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
       lastSyncedAt: new Date(),
     };
@@ -345,23 +318,18 @@ function inferEmbeddingDimensions(
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
-  /** Capabilities from models.dev enrichment (same-provider match). */
+  /** Capabilities from models.dev enrichment. */
   capabilities?: ProviderModelCapabilities;
   /** Capabilities read directly from the provider's models endpoint. Highest priority. */
   fetched?: FetchedModelCapabilities;
-  /** Prices derived from the underlying vendor entry for Bedrock/Azure. */
-  crossProviderPrices?: CrossProviderPrices | null;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities, fetched, crossProviderPrices } =
-    params;
+  const { provider, modelId, capabilities, fetched } = params;
   const inferredCapabilities = inferModelCapabilities({
     provider,
     modelId,
   });
 
   // Priority per field: fetcher -> models.dev -> hardcoded inference.
-  // Price priority: fetcher -> models.dev (same provider) -> cross-provider
-  // (Bedrock/Azure underlying vendor) -> null.
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
@@ -382,22 +350,10 @@ export function resolveModelCapabilities(params: {
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
-        crossProviderPrices?.promptPricePerToken ??
         null,
       completionPricePerToken:
         fetched?.completionPricePerToken ??
         capabilities?.completionPricePerToken ??
-        crossProviderPrices?.completionPricePerToken ??
-        null,
-      cacheReadPricePerToken:
-        fetched?.cacheReadPricePerToken ??
-        capabilities?.cacheReadPricePerToken ??
-        crossProviderPrices?.cacheReadPricePerToken ??
-        null,
-      cacheWritePricePerToken:
-        fetched?.cacheWritePricePerToken ??
-        capabilities?.cacheWritePricePerToken ??
-        crossProviderPrices?.cacheWritePricePerToken ??
         null,
     },
   });
@@ -419,7 +375,14 @@ function buildCapabilitiesMap(
     }
 
     for (const [, model] of Object.entries(providerData.models ?? {})) {
-      const prices = modelsDevCostToPerToken(model.cost);
+      const promptPrice =
+        model.cost?.input !== undefined
+          ? (model.cost.input / 1_000_000).toString()
+          : null;
+      const completionPrice =
+        model.cost?.output !== undefined
+          ? (model.cost.output / 1_000_000).toString()
+          : null;
 
       // Validate input modalities using Zod schema
       const inputModalities = parseModalities(
@@ -439,10 +402,8 @@ function buildCapabilitiesMap(
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
-        promptPricePerToken: prices.promptPricePerToken,
-        completionPricePerToken: prices.completionPricePerToken,
-        cacheReadPricePerToken: prices.cacheReadPricePerToken,
-        cacheWritePricePerToken: prices.cacheWritePricePerToken,
+        promptPricePerToken: promptPrice,
+        completionPricePerToken: completionPrice,
       });
     }
   }
@@ -579,7 +540,5 @@ function emptyCapabilities(): ProviderModelCapabilities {
     supportsToolCalling: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
-    cacheReadPricePerToken: null,
-    cacheWritePricePerToken: null,
   };
 }

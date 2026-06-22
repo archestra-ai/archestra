@@ -105,8 +105,8 @@ export default function AgentTriggersLayout({
 
   return (
     <PageLayout
-      title="Messaging Channels"
-      description="Manage how agents are invoked through Slack, Microsoft Teams, email, and A2A"
+      title="Triggers"
+      description="Manage how agents are invoked through schedules and messaging channels"
       tabs={tabs}
     >
       {children}

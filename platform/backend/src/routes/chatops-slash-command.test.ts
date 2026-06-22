@@ -1,30 +1,30 @@
 import fastifyFormbody from "@fastify/formbody";
 import { vi } from "vitest";
-import { ChatOpsChannelBindingModel } from "@/models";
+import { SLACK_SLASH_COMMANDS } from "@/agents/chatops/constants";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import chatopsRoutes from "./chatops";
 
 // =============================================================================
-// Mocks — only the network seams (Slack provider I/O) and the rate-limit gate.
-// The real SlackProvider.handleSlashCommand runs against the real PGlite DB,
-// real models, and the real ensureProvisionedUser provisioning path.
+// Mocks — only mock what the route handler directly calls
 // =============================================================================
 
 const {
   getUserEmailMock,
-  getUserNameMock,
   sendReplyMock,
   sendAgentSelectionCardMock,
-  sendDirectMessageMock,
   validateWebhookRequestMock,
+  findByChannelMock,
+  findByEmailMock,
+  findByIdMock,
 } = vi.hoisted(() => ({
   getUserEmailMock: vi.fn(),
-  getUserNameMock: vi.fn(),
   sendReplyMock: vi.fn(),
   sendAgentSelectionCardMock: vi.fn(),
-  sendDirectMessageMock: vi.fn(),
   validateWebhookRequestMock: vi.fn(),
+  findByChannelMock: vi.fn(),
+  findByEmailMock: vi.fn(),
+  findByIdMock: vi.fn(),
 }));
 
 vi.mock("@/agents/chatops/chatops-manager", async () => {
@@ -44,8 +44,8 @@ vi.mock("@/agents/chatops/chatops-manager", async () => {
     sendReply: sendReplyMock,
     sendAgentSelectionCard: sendAgentSelectionCardMock,
     sendEphemeralMessage: vi.fn().mockResolvedValue(undefined),
-    sendDirectMessage: sendDirectMessageMock,
-    getUserName: getUserNameMock,
+    sendDirectMessage: vi.fn().mockResolvedValue(undefined),
+    getUserName: vi.fn().mockResolvedValue("Test User"),
     eventHandler: null,
   };
   // Bind handleSlashCommand so `this` refers to mockProvider
@@ -69,11 +69,41 @@ vi.mock("@/agents/utils", () => ({
   isRateLimited: vi.fn(() => false),
 }));
 
+const autoProvisionUserMock = vi.fn().mockResolvedValue({
+  userId: "auto-provisioned-user-id",
+  invitationId: "auto-invitation-id",
+});
+
+vi.mock("@/agents/chatops/auto-provision", () => ({
+  autoProvisionUser: (...args: unknown[]) => autoProvisionUserMock(...args),
+  isSsoConfigured: vi.fn().mockResolvedValue(false),
+  buildWelcomeMessage: vi.fn().mockReturnValue({
+    text: "Hey there 👋 We created an Archestra account for you.",
+    actionUrl:
+      "http://localhost:3000/auth/sign-up-with-invitation?invitationId=test",
+    actionLabel: "Finish Signup",
+  }),
+}));
+
+vi.mock("@/models", () => ({
+  AgentModel: { findById: findByIdMock },
+  ChatOpsChannelBindingModel: {
+    findByChannel: findByChannelMock,
+    upsertByChannel: vi.fn(),
+    findByOrganization: vi.fn(() => []),
+    deleteByIdAndOrganization: vi.fn(),
+    findByIdAndOrganization: vi.fn(),
+    update: vi.fn(),
+    updateNames: vi.fn(),
+    deleteDuplicateBindings: vi.fn(),
+  },
+  OrganizationModel: { getFirst: vi.fn(() => ({ id: "org-1" })) },
+  UserModel: { findByEmail: findByEmailMock },
+}));
+
 // =============================================================================
 // Helpers
 // =============================================================================
-
-const REGISTERED_EMAIL = "user@test.com";
 
 function makeSlashCommandBody(
   command: string,
@@ -119,25 +149,25 @@ async function injectSlashCommand(
 
 describe("POST /api/webhooks/chatops/slack/slash-command", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     validateWebhookRequestMock.mockResolvedValue(true);
-    getUserEmailMock.mockResolvedValue(REGISTERED_EMAIL);
-    getUserNameMock.mockResolvedValue("Test User");
-    sendDirectMessageMock.mockResolvedValue(undefined);
+    getUserEmailMock.mockResolvedValue("user@test.com");
+    findByEmailMock.mockResolvedValue({ id: "user-1", email: "user@test.com" });
+    findByChannelMock.mockResolvedValue(null);
+    findByIdMock.mockResolvedValue({ id: "agent-1", name: "Test Agent" });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test("/archestra-help returns ephemeral help message", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser({ email: REGISTERED_EMAIL });
-    await makeMember(user.id, org.id);
+  test("SLACK_SLASH_COMMANDS has expected command names", () => {
+    expect(SLACK_SLASH_COMMANDS.SELECT_AGENT).toBe("/archestra-select-agent");
+    expect(SLACK_SLASH_COMMANDS.STATUS).toBe("/archestra-status");
+    expect(SLACK_SLASH_COMMANDS.HELP).toBe("/archestra-help");
+  });
 
+  test("/archestra-help returns ephemeral help message", async () => {
     const app = await createApp();
 
     const response = await injectSlashCommand(app, "/archestra-help");
@@ -152,15 +182,7 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("slugified app-name slash commands are accepted", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser({ email: REGISTERED_EMAIL });
-    await makeMember(user.id, org.id);
-
+  test("slugified app-name slash commands are accepted", async () => {
     const app = await createApp();
 
     const response = await injectSlashCommand(app, "/archestra-staging-help");
@@ -175,15 +197,7 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("/archestra-status returns ephemeral status when no binding", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser({ email: REGISTERED_EMAIL });
-    await makeMember(user.id, org.id);
-
+  test("/archestra-status returns ephemeral status when no binding", async () => {
     const app = await createApp();
 
     const response = await injectSlashCommand(app, "/archestra-status");
@@ -196,25 +210,18 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("/archestra-status returns agent name when binding exists", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser({ email: REGISTERED_EMAIL });
-    await makeMember(user.id, org.id);
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Test Agent",
-    });
-    await ChatOpsChannelBindingModel.create({
-      organizationId: org.id,
+  test("/archestra-status returns agent name when binding exists", async () => {
+    findByChannelMock.mockResolvedValueOnce({
+      id: "binding-1",
+      organizationId: "org-1",
       provider: "slack",
       channelId: "C12345",
       workspaceId: "T12345",
-      agentId: agent.id,
+      agentId: "agent-1",
+      channelName: null,
+      workspaceName: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
     const app = await createApp();
@@ -243,15 +250,7 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("unknown command returns ephemeral error", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser({ email: REGISTERED_EMAIL });
-    await makeMember(user.id, org.id);
-
+  test("unknown command returns ephemeral error", async () => {
     const app = await createApp();
 
     const response = await injectSlashCommand(app, "/archestra-unknown");
@@ -264,13 +263,11 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     await app.close();
   });
 
-  test("unregistered user is auto-provisioned and can use commands", async ({
-    makeOrganization,
-  }) => {
-    // Org exists but the sender has no user/member row yet — the real
-    // ensureProvisionedUser must create them so the command succeeds.
-    const org = await makeOrganization();
-    getUserEmailMock.mockResolvedValue("newcomer@example.com");
+  test("unregistered user is auto-provisioned and can use commands", async () => {
+    // First call returns undefined (user not found), second returns auto-provisioned user
+    findByEmailMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: "auto-user-id", email: "test@example.com" });
 
     const app = await createApp();
 
@@ -281,21 +278,12 @@ describe("POST /api/webhooks/chatops/slack/slash-command", () => {
     expect(json.response_type).toBe("ephemeral");
     // Should get the help text, not a rejection
     expect(json.text).toContain("Available commands");
-
-    // The provisioning path created a real user + member in the org.
-    const { UserModel, MemberModel } = await import("@/models");
-    const provisioned = await UserModel.findByEmail("newcomer@example.com");
-    if (!provisioned) throw new Error("expected a provisioned user");
-    const membership = await MemberModel.getByUserId(provisioned.id, org.id);
-    expect(membership).toBeDefined();
+    expect(autoProvisionUserMock).toHaveBeenCalled();
 
     await app.close();
   });
 
-  test("unresolvable email gets ephemeral rejection", async ({
-    makeOrganization,
-  }) => {
-    await makeOrganization();
+  test("unresolvable email gets ephemeral rejection", async () => {
     getUserEmailMock.mockResolvedValueOnce(null);
 
     const app = await createApp();

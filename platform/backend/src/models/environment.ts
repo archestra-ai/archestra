@@ -1,6 +1,6 @@
 import { and, asc, count, eq, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Environment, NetworkPolicy } from "@/types";
+import type { NetworkPolicy } from "@/types";
 
 // === Public API ===
 
@@ -20,11 +20,6 @@ interface EnvironmentWithAssignedCount {
 }
 
 class EnvironmentModel {
-  /** Every environment across all organizations (control-plane reconcile sweep). */
-  static async listAll(): Promise<Environment[]> {
-    return db.select().from(schema.environmentsTable);
-  }
-
   static async listForOrganization(
     organizationId: string,
   ): Promise<EnvironmentWithAssignedCount[]> {

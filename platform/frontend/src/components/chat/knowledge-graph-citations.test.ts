@@ -99,6 +99,7 @@ describe("extractCitations", () => {
       connectorType: "confluence",
       documentId: "doc-1",
       sourceId: null,
+      knowledgeFileId: null,
     });
     expect(citations[1]).toEqual({
       title: "Another Doc",
@@ -106,7 +107,37 @@ describe("extractCitations", () => {
       connectorType: null,
       documentId: "doc-2",
       sourceId: null,
+      knowledgeFileId: null,
     });
+  });
+
+  it("marks file upload citations as viewable knowledge files", () => {
+    const output = {
+      results: [
+        {
+          citation: {
+            title: "Uploaded Source",
+            sourceUrl: null,
+            connectorType: "file_upload",
+            documentId: "doc-uploaded",
+            sourceId: "file-uploaded",
+          },
+        },
+      ],
+    };
+
+    const citations = extractCitations([makeKbPart(output)]);
+
+    expect(citations).toEqual([
+      {
+        title: "Uploaded Source",
+        sourceUrl: null,
+        connectorType: "file_upload",
+        documentId: "doc-uploaded",
+        sourceId: "file-uploaded",
+        knowledgeFileId: "file-uploaded",
+      },
+    ]);
   });
 
   it("deduplicates citations by documentId", () => {
@@ -268,6 +299,7 @@ describe("extractCitations", () => {
       connectorType: "jira",
       documentId: "doc-wrapped",
       sourceId: null,
+      knowledgeFileId: null,
     });
   });
 

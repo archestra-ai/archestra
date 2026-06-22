@@ -1,4 +1,8 @@
-import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
+import {
+  type ChatMessage,
+  ChatMessageMetadataSchema,
+  type ChatMessagePart,
+} from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";
@@ -8,7 +12,6 @@ import {
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
-import { spliceText } from "./augment-last-user-message";
 
 /**
  * When the last user message was sent via a skill slash command, prepend the
@@ -119,7 +122,7 @@ export async function injectSkillActivation({
   );
 
   const next = [...messages];
-  next[lastUserIndex] = spliceText(
+  next[lastUserIndex] = prependText(
     userMessage,
     formatSkillActivation({
       skill: {
@@ -136,7 +139,26 @@ export async function injectSkillActivation({
         ? await buildSkillActivationPromptContext({ userId, organizationId })
         : null,
     }),
-    "prepend",
   );
   return next;
+}
+
+// ===== Internal helpers =====
+
+/** Prepend `block` to the message's first text part (adding one if absent). */
+function prependText(message: ChatMessage, block: string): ChatMessage {
+  const parts: ChatMessagePart[] = message.parts ? [...message.parts] : [];
+  const textIndex = parts.findIndex((part) => part.type === "text");
+
+  if (textIndex === -1) {
+    return { ...message, parts: [{ type: "text", text: block }, ...parts] };
+  }
+
+  const textPart = parts[textIndex];
+  const existing = typeof textPart.text === "string" ? textPart.text : "";
+  parts[textIndex] = {
+    ...textPart,
+    text: existing ? `${block}\n\n${existing}` : block,
+  };
+  return { ...message, parts };
 }

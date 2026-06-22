@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { callApi } from "@/lib/chat/api-call";
+import { handleApiError } from "@/lib/utils";
 
 const {
   getConversationShare,
@@ -19,13 +19,18 @@ type ShareConversationMutationInput = {
 export function useConversationShare(conversationId: string | undefined) {
   return useQuery({
     queryKey: ["conversation-share", conversationId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!conversationId) return null;
-      return callApi(
-        () => getConversationShare({ path: { id: conversationId } }),
-        null,
-        { silentStatuses: [404] },
-      );
+      const response = await getConversationShare({
+        path: { id: conversationId },
+      });
+      if (response.error) {
+        if (response.response.status !== 404) {
+          handleApiError(response.error);
+        }
+        return null;
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 30 * 1000,
@@ -43,15 +48,17 @@ export function useShareConversation() {
       teamIds,
       userIds,
       suppressSuccessToast: _suppressSuccessToast,
-    }: ShareConversationMutationInput) =>
-      callApi(
-        () =>
-          shareConversation({
-            path: { id: conversationId },
-            body: { visibility, teamIds, userIds },
-          }),
-        null,
-      ),
+    }: ShareConversationMutationInput) => {
+      const { data, error } = await shareConversation({
+        path: { id: conversationId },
+        body: { visibility, teamIds, userIds },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, { conversationId, suppressSuccessToast }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
@@ -70,11 +77,16 @@ export function useUnshareConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (conversationId: string) =>
-      callApi(
-        () => unshareConversation({ path: { id: conversationId } }),
-        null,
-      ),
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await unshareConversation({
+        path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (_data, conversationId) => {
       queryClient.setQueryData(["conversation-share", conversationId], null);
       queryClient.invalidateQueries({
@@ -96,11 +108,17 @@ export function useForkSharedConversation() {
     }: {
       shareId: string;
       agentId: string;
-    }) =>
-      callApi(
-        () => forkSharedConversation({ path: { shareId }, body: { agentId } }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await forkSharedConversation({
+        path: { shareId },
+        body: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -118,15 +136,17 @@ export function useForkConversation() {
     }: {
       conversationId: string;
       agentId: string;
-    }) =>
-      callApi(
-        () =>
-          forkChatConversation({
-            path: { id: conversationId },
-            body: { agentId },
-          }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await forkChatConversation({
+        path: { id: conversationId },
+        body: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });

@@ -60,7 +60,6 @@ import {
   useUpdateVirtualApiKey,
 } from "@/lib/virtual-api-keys.query";
 import { useSetCredentialsAction } from "../layout";
-import { OwnerSelectField, shouldShowOwnerField } from "./owner-select-field";
 
 type VirtualKeyWithParent =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -310,7 +309,6 @@ export default function VirtualKeysPage() {
         visibilityOptions={visibilityOptions}
         teams={teams}
         canReadTeams={!!canReadTeams}
-        isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       />
 
       <EditVirtualKeyDialog
@@ -340,7 +338,6 @@ function CreateVirtualKeyDialog({
   visibilityOptions,
   teams,
   canReadTeams,
-  isVirtualKeyAdmin,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -349,12 +346,10 @@ function CreateVirtualKeyDialog({
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
-  isVirtualKeyAdmin: boolean;
 }) {
   const createMutation = useCreateVirtualApiKey();
 
   const [newKeyName, setNewKeyName] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [scope, setScope] = useState<VirtualKeyScope>(
     getDefaultVirtualKeyScope(visibilityOptions),
@@ -381,13 +376,8 @@ function CreateVirtualKeyDialog({
       setScope(getDefaultVirtualKeyScope(visibilityOptions));
       setTeamIds([]);
       setProviderApiKeyIds({});
-      setOwnerId("");
     }
   }, [open, defaultExpirationSeconds, visibilityOptions]);
-
-  // Admins can mint a personal key on behalf of another org member; left
-  // unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(isVirtualKeyAdmin, scope);
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
@@ -401,7 +391,6 @@ function CreateVirtualKeyDialog({
           scope,
           teams: scope === "team" ? teamIds : [],
           providerApiKeys,
-          ownerId: showOwnerField && ownerId ? ownerId : undefined,
         },
       });
       setNewKeyName("");
@@ -419,8 +408,6 @@ function CreateVirtualKeyDialog({
     newKeyName,
     scope,
     teamIds,
-    showOwnerField,
-    ownerId,
   ]);
 
   return (
@@ -482,10 +469,6 @@ function CreateVirtualKeyDialog({
                 canReadTeams={canReadTeams}
                 visibilityOptions={visibilityOptions}
               />
-
-              {showOwnerField && (
-                <OwnerSelectField value={ownerId} onChange={setOwnerId} />
-              )}
 
               <div className="space-y-2">
                 <ExpirationDateTimeField

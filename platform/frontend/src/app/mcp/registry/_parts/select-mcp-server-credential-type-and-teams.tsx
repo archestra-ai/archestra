@@ -37,17 +37,9 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   onScopeChange?: (scope: McpServerInstallScope) => void;
   /** When true, this is a reinstall - scope is locked to existing value */
   isReinstall?: boolean;
-  /**
-   * When true, this is a re-authentication. Like reinstall, the connection's
-   * scope cannot change — it is locked to the existing value. Without this the
-   * selector treats re-auth as a fresh install and disables the already-used
-   * scope ("already installed"), leaving the owner unable to re-authenticate
-   * their own connection.
-   */
-  isReauth?: boolean;
-  /** The team ID of the existing server being reinstalled/re-authenticated (null/undefined = personal/org) */
+  /** The team ID of the existing server being reinstalled (null/undefined = personal/org) */
   existingTeamId?: string | null;
-  /** The scope of the existing server being reinstalled/re-authenticated */
+  /** The scope of the existing server being reinstalled */
   existingScope?: McpServerInstallScope;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
@@ -66,7 +58,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
   catalogId,
   onScopeChange,
   isReinstall = false,
-  isReauth = false,
   existingTeamId,
   existingScope,
   personalOnly = false,
@@ -75,10 +66,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onCanInstallChange,
   preselectedTeamId,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
-  // Reinstall and re-auth both keep the connection's existing scope — neither
-  // picks a new one, so the scope is locked to the existing value rather than
-  // disabled because the scope is "already installed".
-  const lockToExistingScope = isReinstall || isReauth;
   const { data: installedServers } = useMcpServers();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -135,13 +122,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   const availableTeams = useMemo(() => {
     if (!teams) return [];
-    if (lockToExistingScope) return teams;
+    if (isReinstall) return teams;
     if (!catalogId) return teams;
     return teams.filter((t) => !teamsWithInstallation.includes(t.id));
-  }, [teams, catalogId, teamsWithInstallation, lockToExistingScope]);
+  }, [teams, catalogId, teamsWithInstallation, isReinstall]);
 
   const initialScope: McpServerInstallScope = useMemo(() => {
-    if (lockToExistingScope) {
+    if (isReinstall) {
       return existingScope ?? (existingTeamId ? "team" : "personal");
     }
     if (orgOnly) return "org";
@@ -151,7 +138,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     if (hasPersonalInstallation && availableTeams.length > 0) return "team";
     return "personal";
   }, [
-    lockToExistingScope,
+    isReinstall,
     existingScope,
     existingTeamId,
     orgOnly,
@@ -164,31 +151,31 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   const [scope, setScope] = useState<McpServerInstallScope>(initialScope);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(() => {
-    if (lockToExistingScope) return existingTeamId ?? null;
+    if (isReinstall) return existingTeamId ?? null;
     if (preselectedTeamId) return preselectedTeamId;
     return null;
   });
 
-  // WHY: During reinstall/re-auth, lock scope to existing value (can't change
-  // ownership). Personal is disabled if: reinstalling/re-authing a non-personal
-  // server, or (for new install) already has personal or BYOS enabled.
+  // WHY: During reinstall, lock scope to existing value (can't change ownership).
+  // Personal is disabled if: reinstalling a non-personal server, or (for new install)
+  // already has personal or BYOS enabled.
   const isPersonalDisabled =
     teamOnly || orgOnly
       ? true
       : personalOnly
         ? false
-        : lockToExistingScope
+        : isReinstall
           ? initialScope !== "personal"
           : hasPersonalInstallation;
 
   // WHY: Team options are disabled if:
   // 1. personalOnly or orgOnly mode (only that scope is allowed)
-  // 2. Reinstalling/re-authing a non-team server (can't switch to team)
+  // 2. Reinstalling a non-team server (can't switch to team)
   // 3. User lacks mcpServer:update permission (members can never create team installations)
   const isTeamDisabled =
     personalOnly || orgOnly
       ? true
-      : lockToExistingScope
+      : isReinstall
         ? initialScope !== "team"
         : !hasMcpServerUpdate || availableTeams.length === 0;
 
@@ -198,7 +185,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
       ? true
       : orgOnly
         ? false
-        : lockToExistingScope
+        : isReinstall
           ? initialScope !== "org"
           : !isMcpServerAdmin || hasOrgInstallation;
 
@@ -279,7 +266,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   ]);
 
   useEffect(() => {
-    if (lockToExistingScope) {
+    if (isReinstall) {
       onScopeChange?.(initialScope);
       onTeamChange(initialScope === "team" ? (existingTeamId ?? null) : null);
       return;
@@ -312,7 +299,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     onScopeChange?.(scope);
     onTeamChange(scope === "team" ? selectedTeamId : null);
   }, [
-    lockToExistingScope,
+    isReinstall,
     initialScope,
     existingTeamId,
     visibilityOptions,

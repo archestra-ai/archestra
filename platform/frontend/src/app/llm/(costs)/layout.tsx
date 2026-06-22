@@ -36,7 +36,7 @@ const PAGE_CONFIG: Record<
   "/llm/limits": {
     title: "Limits",
     description:
-      "Control LLM spend with token-cost limits scoped to the organization, teams, agents, users, virtual keys, or environments.",
+      "Control LLM spend with scoped limits for teams and the organization.",
   },
   "/llm/optimization-rules": {
     title: "Optimization Rules",

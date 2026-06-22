@@ -7,9 +7,6 @@ import {
   isAlwaysExposedArchestraToolShortName,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  MCP_GATEWAY_OAUTH_SCOPE,
-  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -50,7 +47,6 @@ import {
   InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  McpOauthClientModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -66,21 +62,19 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import {
-  type AgentAccessContext,
-  type AgentType,
-  agentOwner,
-  type CommonToolCall,
-  type SelectTeamToken,
-  type SelectUserToken,
-  type ToolExposureMode,
+import type {
+  AgentAccessContext,
+  AgentType,
+  CommonToolCall,
+  SelectTeamToken,
+  SelectUserToken,
+  ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -153,7 +147,6 @@ export async function createAgentServer(
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   } as const;
 
   const mcpServer = new McpServer(
@@ -488,9 +481,9 @@ export async function createAgentServer(
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCallForOwner(
+            const r = await mcpClient.executeToolCall(
               toolCall,
-              agentOwner(agentId),
+              agentId,
               tokenAuth,
               {
                 elicitationHandler: async (request) => {
@@ -938,30 +931,6 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
-    // A token audience-bound to a shareable-App connector is valid only at that
-    // connector, never at the MCP gateway — reject it before the user-access
-    // branch would otherwise accept it on team membership alone.
-    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
-      logger.warn(
-        { profileId: params.profileId },
-        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
-      );
-      return null;
-    }
-
-    // Application (client_credentials) tokens minted for an MCP OAuth client
-    // carry no acting user. Authorize them against the client's allowed gateways
-    // instead of a user's team membership.
-    if (
-      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
-    ) {
-      return validateMcpOauthClientToken({
-        accessToken,
-        profileId: params.profileId,
-        organizationId: agent.organizationId,
-      });
-    }
-
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -987,31 +956,18 @@ async function validateOAuthTokenByHash(params: {
       };
     }
 
-    // Non-admin access has two additive sources:
-    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
-    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
-    //      that minted this token — its allowedGatewayIds may grant access to
-    //      gateways the user could not otherwise reach (e.g. a gateway reachable
-    //      only through a specific pre-registered app).
-    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
-      userId,
-      params.profileId,
-      false,
-      agent,
-    );
-    const hasClientGrant =
-      hasRbacAccess || !accessToken.clientId
-        ? false
-        : await mcpOauthClientGrantsGatewayAccess({
-            clientId: accessToken.clientId,
-            profileId: params.profileId,
-            organizationId,
-          });
-
-    if (!hasRbacAccess && !hasClientGrant) {
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (
+      !(await AgentTeamModel.userHasAgentAccess(
+        userId,
+        params.profileId,
+        false,
+        agent,
+      ))
+    ) {
       logger.warn(
         { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
+        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
       );
       return null;
     }
@@ -1034,102 +990,6 @@ async function validateOAuthTokenByHash(params: {
     );
     return null;
   }
-}
-
-/**
- * Authorize a client_credentials access token minted for an MCP OAuth client.
- *
- * These are application tokens (machine-to-machine): there is no acting user,
- * so authorization is the client's explicit `allowedGatewayIds` list rather
- * than team membership. The per-gateway check here is the real authorization
- * gate — a successful result grants access to exactly the requested gateway and
- * nothing broader (teamId/isOrganizationToken stay null/false, so no downstream
- * code re-broadens access).
- *
- * Note: an MCP OAuth client is a shared application credential with no acting
- * user, so gateway tools that resolve per-user/dynamic upstream credentials at
- * call time are not supported — assign shared/org-scoped credentials to those
- * tools.
- */
-async function validateMcpOauthClientToken(params: {
-  accessToken: {
-    id: string;
-    clientId: string | null;
-    referenceId: string | null;
-    scopes: string[] | null;
-  };
-  profileId: string;
-  organizationId: string;
-}): Promise<TokenAuthResult | null> {
-  const { accessToken, profileId, organizationId } = params;
-
-  // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
-  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
-    return null;
-  }
-  if (!accessToken.clientId) {
-    return null;
-  }
-
-  // findByClientId returns null when the client was deleted or disabled.
-  const oauthClient = await McpOauthClientModel.findByClientId(
-    accessToken.clientId,
-  );
-  if (!oauthClient) {
-    return null;
-  }
-
-  // Defense in depth: the token's referenceId must point at this exact client.
-  if (
-    accessToken.referenceId !==
-    `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
-  ) {
-    return null;
-  }
-
-  // Cross-org tokens are never valid for this gateway.
-  if (oauthClient.organizationId !== organizationId) {
-    return null;
-  }
-
-  // The client must be explicitly scoped to the requested gateway.
-  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
-    logger.warn(
-      { profileId, clientId: oauthClient.clientId },
-      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
-    );
-    return null;
-  }
-
-  return {
-    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: null,
-    isOrganizationToken: false,
-    organizationId,
-  };
-}
-
-/**
- * Whether the authorization_code MCP OAuth client that minted a user-bound token
- * grants access to a gateway beyond the user's own RBAC. This is an additive,
- * admin-controlled access grant: only client_credentials clients use
- * allowedGatewayIds as a sole authority, whereas an authorization_code client's
- * list confers extra access to anyone who authenticates through it. Disabled or
- * deleted clients (findByClientId returns null) grant nothing.
- */
-async function mcpOauthClientGrantsGatewayAccess(params: {
-  clientId: string;
-  profileId: string;
-  organizationId: string;
-}): Promise<boolean> {
-  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
-  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
-    return false;
-  }
-  if (oauthClient.organizationId !== params.organizationId) {
-    return false;
-  }
-  return oauthClient.allowedGatewayIds.includes(params.profileId);
 }
 
 /**
@@ -1700,10 +1560,7 @@ async function buildSearchToolsDescription(
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
-export function normalizeToolInputSchema(
-  schema: unknown,
-): McpListTool["inputSchema"] {
+function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }

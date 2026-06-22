@@ -9,8 +9,6 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import { AgentModel } from "@/models";
-import { APP_CONNECTOR_PATH_PREFIX } from "@/services/apps/app-connector-resource";
-import { ApiError } from "@/types";
 import { getPublicRequestOrigin } from "./request-origin";
 
 /**
@@ -54,15 +52,6 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "",
       );
 
-      // An MCP App connector's discovery is dark when the feature is off, so it
-      // does not reveal that an app exists.
-      if (
-        resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX) &&
-        !config.apps.enabled
-      ) {
-        throw new ApiError(404, "Not found");
-      }
-
       // Check if the profile has an external IdP configured
       const authorizationServers = [baseUrl];
       const profileId = await extractProfileIdFromResourcePath(resourcePath);
@@ -100,8 +89,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             issuer: z.string(),
             authorization_endpoint: z.string(),
             token_endpoint: z.string(),
-            // Omitted when dynamic client registration is disabled.
-            registration_endpoint: z.string().optional(),
+            registration_endpoint: z.string(),
             jwks_uri: z.string(),
             response_types_supported: z.array(z.string()),
             grant_types_supported: z.array(z.string()),
@@ -135,12 +123,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         issuer,
         authorization_endpoint: `${browserBaseUrl}${OAUTH_ENDPOINTS.authorize}`,
         token_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.token}`,
-        // Only advertise DCR when it is enabled.
-        ...(config.auth.dynamicClientRegistrationEnabled
-          ? {
-              registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
-            }
-          : {}),
+        registration_endpoint: `${baseUrl}${OAUTH_ENDPOINTS.register}`,
         jwks_uri: `${baseUrl}${OAUTH_ENDPOINTS.jwks}`,
         response_types_supported: ["code"],
         grant_types_supported: [
@@ -156,9 +139,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
         code_challenge_methods_supported: ["S256"],
         scopes_supported: [...OAUTH_SCOPES],
-        // CIMD auto-registration is gated behind the same DCR toggle.
-        client_id_metadata_document_supported:
-          config.auth.dynamicClientRegistrationEnabled,
+        client_id_metadata_document_supported: true,
       };
     },
   );
@@ -176,12 +157,6 @@ export default oauthServerRoutes;
 async function extractProfileIdFromResourcePath(
   resourcePath: string,
 ): Promise<string | null> {
-  // A shareable-App connector resolves only against Archestra's own
-  // authorization server, never a profile's external IdP — so its app id is not
-  // an agent id to look up.
-  if (resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX)) {
-    return null;
-  }
   const segments = resourcePath.split("/").filter(Boolean);
   const lastSegment = segments.at(-1);
   if (!lastSegment) return null;

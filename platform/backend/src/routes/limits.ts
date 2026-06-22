@@ -86,19 +86,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
-      // Org-scoping: the limit's target entity must belong to the caller's
-      // organization (limitsTable has no org column, so this is the tenancy
-      // guard for cross-tenant entity IDs).
-      const inOrg = await LimitModel.isEntityInOrganization(
-        body.entityType,
-        body.entityId,
-        organizationId,
-      );
-      if (!inOrg) {
-        throw new ApiError(404, `${body.entityType} not found`);
-      }
-
+    async ({ body }, reply) => {
       return reply.send(await LimitModel.create(body));
     },
   );
@@ -116,8 +104,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const limit = await LimitModel.findByIdInOrganization(id, organizationId);
+    async ({ params: { id } }, reply) => {
+      const limit = await LimitModel.findById(id);
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
@@ -137,24 +125,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        // entityType/entityId are immutable: changing the target entity would
-        // bypass the create-time org-scoping guard.
-        body: UpdateLimitSchema.omit({
-          entityType: true,
-          entityId: true,
-        }).partial(),
+        body: UpdateLimitSchema.partial(),
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      const existing = await LimitModel.findByIdInOrganization(
-        id,
-        organizationId,
-      );
-      if (!existing) {
-        throw new ApiError(404, "Limit not found");
-      }
-
+    async ({ params: { id }, body }, reply) => {
       const limit = await LimitModel.patch(id, body);
 
       if (!limit) {
@@ -178,15 +153,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
-      const existing = await LimitModel.findByIdInOrganization(
-        id,
-        organizationId,
-      );
-      if (!existing) {
-        throw new ApiError(404, "Limit not found");
-      }
-
+    async ({ params: { id } }, reply) => {
       const deleted = await LimitModel.delete(id);
 
       if (!deleted) {

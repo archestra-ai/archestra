@@ -13,10 +13,6 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
-  AppDataModel,
-  AppModel,
-  AppToolModel,
-  AppVersionModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   ScheduleTriggerModel,
@@ -32,13 +28,9 @@ import {
 import type {
   Agent,
   AgentTool,
-  App,
-  AppTool,
-  AppVersion,
   ConnectorRun,
   InsertAccount,
   InsertAgent,
-  InsertApp,
   InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
@@ -88,10 +80,6 @@ interface TestFixtures {
   makeScheduleTriggerRun: typeof makeScheduleTriggerRun;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
-  makeApp: typeof makeApp;
-  makeAppVersion: typeof makeAppVersion;
-  makeAppTool: typeof makeAppTool;
-  makeAppData: typeof makeAppData;
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
@@ -356,10 +344,7 @@ async function makeScheduleTriggerRun(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<
-      Tool,
-      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
-    >
+    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
   > = {},
 ): Promise<Tool> {
   const toolData = {
@@ -392,98 +377,6 @@ async function makeAgentTool(
   return await AgentToolModel.create(agentId, toolId, {
     mcpServerId: overrides.mcpServerId,
     credentialResolutionMode: overrides.credentialResolutionMode,
-  });
-}
-
-/**
- * Creates a test app (with its version 1) via the App model. Auto-creates an
- * organization if not provided; defaults to org scope.
- */
-async function makeApp(
-  overrides: Partial<InsertApp> & {
-    html?: string;
-    teamIds?: string[];
-  } = {},
-): Promise<App> {
-  let organizationId = overrides.organizationId;
-  if (!organizationId) {
-    const org = await makeOrganization();
-    organizationId = org.id;
-  }
-  const { html, teamIds, ...appOverrides } = overrides;
-
-  const app = await AppModel.create({
-    app: {
-      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
-      scope: "org",
-      ...appOverrides,
-      organizationId,
-    },
-    payload: {
-      html: html ?? "<!doctype html><title>test app</title>",
-      uiPermissions: null,
-    },
-    teamIds,
-  });
-  if (!app) {
-    throw new Error("makeApp: name conflict in the app's visibility namespace");
-  }
-  return app;
-}
-
-/** Forks a new app version (changing the html) and returns the new head version. */
-async function makeAppVersion(
-  appId: string,
-  html?: string,
-): Promise<AppVersion> {
-  const app = await AppModel.update({
-    id: appId,
-    version: {
-      html:
-        html ??
-        `<!doctype html><title>v ${crypto.randomUUID().substring(0, 8)}</title>`,
-      uiPermissions: null,
-    },
-  });
-  if (!app) throw new Error("makeAppVersion: app not found");
-  const head = await AppVersionModel.findByAppAndVersion(
-    appId,
-    app.latestVersion,
-  );
-  if (!head) throw new Error("makeAppVersion: head version missing");
-  return head;
-}
-
-/** Attaches a tool to an app via the AppTool model. */
-async function makeAppTool(
-  appId: string,
-  toolId: string,
-  overrides: Partial<
-    Pick<AppTool, "mcpServerId" | "credentialResolutionMode">
-  > = {},
-) {
-  return await AppToolModel.create(appId, toolId, {
-    mcpServerId: overrides.mcpServerId,
-    credentialResolutionMode: overrides.credentialResolutionMode,
-  });
-}
-
-/** Writes an App Data Store entry (shared partition unless a userId is given). */
-async function makeAppData(
-  appId: string,
-  key: string,
-  value: unknown,
-  userId: string | null = null,
-) {
-  return await AppDataModel.set({
-    appId,
-    userId,
-    key,
-    value,
-    // Fixtures write collaborative (unowned) data; override keeps any future
-    // ownership check a no-op and callerUserId is otherwise unused here.
-    callerUserId: userId ?? "fixture",
-    callerCanOverrideOwner: true,
   });
 }
 
@@ -646,7 +539,6 @@ async function makeInternalMcpCatalog(
       | "scope"
       | "teams"
       | "clonedFrom"
-      | "environmentId"
     >
   > & {
     organizationId?: string;
@@ -1230,18 +1122,6 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAgentTool: async ({}, use) => {
     await use(makeAgentTool);
-  },
-  makeApp: async ({}, use) => {
-    await use(makeApp);
-  },
-  makeAppVersion: async ({}, use) => {
-    await use(makeAppVersion);
-  },
-  makeAppTool: async ({}, use) => {
-    await use(makeAppTool);
-  },
-  makeAppData: async ({}, use) => {
-    await use(makeAppData);
   },
   makeToolPolicy: async ({}, use) => {
     await use(makeToolPolicy);

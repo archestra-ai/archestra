@@ -70,7 +70,6 @@ function makeAsanaConnector(
     visibility: "org-wide",
     teamIds: [],
     connectorType: "asana",
-    environmentId: null,
     config: {
       type: "asana",
       workspaceGid: "1234567890",

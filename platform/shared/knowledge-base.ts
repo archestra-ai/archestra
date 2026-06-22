@@ -62,6 +62,7 @@ export const CONNECTOR_TYPE_LABELS = {
   servicenow: "ServiceNow",
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
+  file_upload: "File Upload",
   dropbox: "Dropbox",
   onedrive: "OneDrive",
   asana: "Asana",

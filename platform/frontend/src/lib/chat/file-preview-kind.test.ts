@@ -17,16 +17,6 @@ describe("getFilePreviewKind", () => {
     expect(getFilePreviewKind("image/svg+xml", "x.svg")).toBe("unsupported");
   });
 
-  it("detects html by mime or extension, before generic text", () => {
-    expect(getFilePreviewKind("text/html", "page")).toBe("html");
-    expect(getFilePreviewKind("application/octet-stream", "report.html")).toBe(
-      "html",
-    );
-    expect(getFilePreviewKind("application/octet-stream", "x.htm")).toBe(
-      "html",
-    );
-  });
-
   it("detects csv before generic text", () => {
     expect(getFilePreviewKind("text/csv", "data")).toBe("csv");
     expect(getFilePreviewKind("application/octet-stream", "data.csv")).toBe(
@@ -48,16 +38,4 @@ describe("getFilePreviewKind", () => {
       ),
     ).toBe("unsupported");
   });
-});
-
-it("falls back to text for txt/log/json extensions when the mime is opaque", () => {
-  expect(getFilePreviewKind("application/octet-stream", "result (1).txt")).toBe(
-    "text",
-  );
-  expect(getFilePreviewKind("application/octet-stream", "run.log")).toBe(
-    "text",
-  );
-  expect(getFilePreviewKind("application/octet-stream", "data.json")).toBe(
-    "text",
-  );
 });

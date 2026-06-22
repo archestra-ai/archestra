@@ -36,13 +36,6 @@ export const MAX_SKILL_FILE_CONTENT_CHARS =
   Math.ceil(MAX_SKILL_FILE_BYTES / 3) * 4;
 /** Cap on resource files copied per skill. */
 export const MAX_FILES_PER_SKILL = 500;
-/**
- * How many `raw.githubusercontent.com` fetches run at once when discovering or
- * importing a whole library. Conservative: enough to turn a serial whole-repo
- * import from minutes into seconds, low enough to stay well under raw-content
- * rate limits without any retry. Lower this if 429s ever appear in practice.
- */
-const SKILL_IMPORT_FETCH_CONCURRENCY = 8;
 /** Number of distinct repo snapshots to keep cached across requests. */
 const REPO_CACHE_MAX_ENTRIES = 50;
 /**
@@ -145,31 +138,17 @@ export async function discoverSkills(params: {
     )
     .map((item) => item.path as string);
 
-  // Fetch every uncached manifest concurrently; an already-cached manifest
-  // (e.g. from an earlier discover within the snapshot TTL) skips the fetch.
-  const fetchedManifests = await mapWithConcurrency({
-    items: manifestPaths,
-    limit: SKILL_IMPORT_FETCH_CONCURRENCY,
-    fn: (manifestPath) =>
-      snapshot.manifests.has(manifestPath)
-        ? Promise.resolve(null)
-        : fetchRawFile(
-            location,
-            snapshot.commitSha,
-            manifestPath,
-            params.githubToken,
-          ),
-  });
-
-  // Parse + cache + assemble sequentially in tree order so the manifest map is
-  // written without a race and the output order is deterministic.
   const skills: DiscoveredSkill[] = [];
-  for (let i = 0; i < manifestPaths.length; i += 1) {
-    const manifestPath = manifestPaths[i];
+  for (const manifestPath of manifestPaths) {
     const skillPath = dirname(manifestPath);
     let parsed = snapshot.manifests.get(manifestPath);
     if (!parsed) {
-      const raw = fetchedManifests[i];
+      const raw = await fetchRawFile(
+        location,
+        snapshot.commitSha,
+        manifestPath,
+        params.githubToken,
+      );
       if (raw === null || raw.encoding !== "utf8") continue;
 
       try {
@@ -230,16 +209,7 @@ export async function importSkills(params: {
   );
   const ref = location.ref ?? snapshot.commitSha;
 
-  // First pass (no resource I/O beyond a rare manifest cache-miss): resolve each
-  // skill's manifest and the resource paths to fetch, so the fetches can then run
-  // as one concurrent batch across all skills.
-  const plans: {
-    skillPath: string;
-    parsed: ParsedSkill;
-    toRelative: (absolutePath: string) => string;
-    resourcePaths: string[];
-    skippedFiles: string[];
-  }[] = [];
+  const imported: ImportedSkill[] = [];
   for (const skillPath of params.skillPaths) {
     const manifestPath = skillPath ? `${skillPath}/SKILL.md` : "SKILL.md";
     let parsed = snapshot.manifests.get(manifestPath);
@@ -284,36 +254,17 @@ export async function importSkills(params: {
       ...candidatePaths.slice(MAX_FILES_PER_SKILL).map(toRelative),
     );
 
-    plans.push({ skillPath, parsed, toRelative, resourcePaths, skippedFiles });
-  }
-
-  // Fetch every resource file across all skills concurrently. The flat job list
-  // and order-preserving map let each skill reassemble its files in tree order.
-  const jobs = plans.flatMap((plan, skillIdx) =>
-    plan.resourcePaths.map((absolutePath) => ({ skillIdx, absolutePath })),
-  );
-  const fetchedFiles = await mapWithConcurrency({
-    items: jobs,
-    limit: SKILL_IMPORT_FETCH_CONCURRENCY,
-    fn: (job) =>
-      fetchRawFile(
+    const files: ImportedSkill["files"] = [];
+    for (const absolutePath of resourcePaths) {
+      const fetched = await fetchRawFile(
         location,
         snapshot.commitSha,
-        job.absolutePath,
+        absolutePath,
         params.githubToken,
-      ),
-  });
-
-  const imported: ImportedSkill[] = [];
-  let cursor = 0;
-  for (const plan of plans) {
-    const files: ImportedSkill["files"] = [];
-    for (const absolutePath of plan.resourcePaths) {
-      const fetched = fetchedFiles[cursor];
-      cursor += 1;
-      const relativePath = plan.toRelative(absolutePath);
+      );
+      const relativePath = toRelative(absolutePath);
       if (fetched === null) {
-        plan.skippedFiles.push(relativePath);
+        skippedFiles.push(relativePath);
         continue;
       }
       files.push({
@@ -325,11 +276,11 @@ export async function importSkills(params: {
     }
 
     imported.push({
-      skillPath: plan.skillPath,
-      parsed: plan.parsed,
+      skillPath,
+      parsed,
       files,
-      skippedFiles: plan.skippedFiles,
-      sourceRef: `${location.owner}/${location.repo}@${ref}:${plan.skillPath}`,
+      skippedFiles,
+      sourceRef: `${location.owner}/${location.repo}@${ref}:${skillPath}`,
       sourceCommit: snapshot.commitSha,
     });
   }
@@ -573,30 +524,4 @@ function dirname(path: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * Map `items` through `fn` with at most `limit` calls in flight. Results stay in
- * input order regardless of completion order, so callers can rely on positional
- * alignment with `items`.
- */
-async function mapWithConcurrency<T, R>(params: {
-  items: T[];
-  limit: number;
-  fn: (item: T, index: number) => Promise<R>;
-}): Promise<R[]> {
-  const { items, limit, fn } = params;
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await fn(items[index], index);
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, worker),
-  );
-  return results;
 }

@@ -3,7 +3,7 @@ title: "Team Sync"
 category: Administration
 subcategory: Identity Providers
 description: "Automatically add and remove users from Archestra teams based on IdP group membership"
-order: 7
+order: 6
 lastUpdated: 2026-05-05
 ---
 

@@ -34,7 +34,6 @@ import {
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   assertCanAssignEnvironment,
-  assertRemoteServerUrlAllowedByNetworkPolicy,
   assertValuesMatchEnvironmentRegex,
 } from "@/services/environments/environment";
 import {
@@ -362,14 +361,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           collectStaticEnvValues(restBody.localConfig?.environment),
           collectStaticUserConfigValues(restBody.userConfig),
         ],
-      });
-      // A remote server is reached over HTTP from the backend; block creating it
-      // in an environment whose egress policy would forbid that outbound hop.
-      await assertRemoteServerUrlAllowedByNetworkPolicy({
-        serverType: restBody.serverType,
-        serverUrl: restBody.serverUrl ?? null,
-        environmentId: restBody.environmentId ?? null,
-        organizationId: request.organizationId,
       });
       // Clone source must resolve within the caller's org — `create` copies
       // the source's tools + guardrail policies, so an unscoped `clonedFrom`
@@ -917,27 +908,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               restBody.userConfig ?? originalCatalogItem.userConfig,
             ),
           ],
-        });
-      }
-
-      // Re-validate a remote server's URL against its environment's egress
-      // policy when the URL, server type, or environment changes. Unchanged
-      // existing servers are grandfathered (no retroactive block).
-      if (
-        environmentChanged ||
-        restBody.serverUrl !== undefined ||
-        restBody.serverType !== undefined
-      ) {
-        await assertRemoteServerUrlAllowedByNetworkPolicy({
-          serverType: restBody.serverType ?? originalCatalogItem.serverType,
-          serverUrl:
-            (restBody.serverUrl !== undefined
-              ? restBody.serverUrl
-              : originalCatalogItem.serverUrl) ?? null,
-          environmentId: ("environmentId" in restBody
-            ? restBody.environmentId
-            : originalCatalogItem.environmentId) as string | null,
-          organizationId: request.organizationId,
         });
       }
 

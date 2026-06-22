@@ -197,7 +197,6 @@ describe("azureResponsesAdapterFactory", () => {
     expect(adapter.getUsage()).toEqual({
       inputTokens: 12,
       outputTokens: 7,
-      reasoningTokens: 0,
     });
     expect(adapter.getFinishReasons()).toEqual(["tool_calls"]);
   });

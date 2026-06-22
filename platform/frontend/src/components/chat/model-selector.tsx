@@ -98,19 +98,6 @@ interface ModelSelectorProps {
   apiKeyId?: string | null;
   /** Whether the model query should be enabled */
   enabled?: boolean;
-  /**
-   * Keep the current (unavailable) model instead of auto-selecting a fallback.
-   * Used when the agent pins a per-user-credential model (e.g. GitHub Copilot)
-   * the viewer hasn't connected: we surface a "connect" prompt on send rather
-   * than silently substituting a different provider's model.
-   */
-  suppressAutoSelect?: boolean;
-  /**
-   * Display name to show when `selectedModel` isn't in the viewer's available
-   * models (e.g. a per-user model they can't access). Without it the trigger
-   * would fall back to the raw model UUID.
-   */
-  fallbackModelName?: string;
 }
 
 /** Map our provider names to logo provider names
@@ -135,7 +122,6 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
-  "github-copilot": "github-copilot",
 };
 
 /**
@@ -537,8 +523,6 @@ export const ModelSelector = memo(function ModelSelector({
   variant = "default",
   apiKeyId,
   enabled = true,
-  suppressAutoSelect = false,
-  fallbackModelName,
 }: ModelSelectorProps) {
   const {
     modelsByProvider,
@@ -643,10 +627,8 @@ export const ModelSelector = memo(function ModelSelector({
       );
       if (model) return model.displayName;
     }
-    // Not in the viewer's available models (e.g. a per-user model they can't
-    // access): prefer the server-resolved name over the raw model UUID.
-    return fallbackModelName ?? selectedModel;
-  }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
+    return selectedModel; // Fall back to ID if not found
+  }, [selectedModel, availableProviders, modelsByProvider]);
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -685,10 +667,6 @@ export const ModelSelector = memo(function ModelSelector({
   // the stale models would incorrectly trigger auto-select for the wrong provider.
   useEffect(() => {
     if (isPlaceholderData) return;
-    // The agent pins a per-user-credential model the viewer hasn't connected;
-    // keep it selected so the send surfaces a connect prompt instead of
-    // silently switching to another provider's model.
-    if (suppressAutoSelect) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
       availableModels: allAvailableModels.map((m) => ({
@@ -703,7 +681,6 @@ export const ModelSelector = memo(function ModelSelector({
   }, [
     isLoading,
     isPlaceholderData,
-    suppressAutoSelect,
     allAvailableModels,
     selectedModel,
     onModelChange,

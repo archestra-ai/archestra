@@ -164,12 +164,6 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   value: {{ .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit | quote }}
 {{- end }}
 {{- end }}
-{{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
-- name: ARCHESTRA_FILE_STORAGE_PROVIDER
-  value: "filesystem"
-- name: ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT
-  value: {{ .Values.archestra.fileStorage.filesystem.mountPath | quote }}
-{{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
@@ -278,13 +272,6 @@ Diagnostics PVC claim name
 {{- end }}
 
 {{/*
-File storage PVC claim name
-*/}}
-{{- define "archestra-platform.fileStorageClaimName" -}}
-{{- default (printf "%s-file-storage" (include "archestra-platform.fullname" .)) .Values.archestra.fileStorage.filesystem.existingClaim -}}
-{{- end }}
-
-{{/*
 ServiceAccount name for the Archestra Platform
 */}}
 {{- define "archestra-platform.serviceAccountName" -}}
@@ -297,9 +284,7 @@ ServiceAccount name for the Archestra Platform
 
 {{/*
 RBAC rules granting the platform ServiceAccount the permissions it needs to
-manage MCP server workloads AND the per-environment Dagger sandbox engine
-(StatefulSet + engine-config ConfigMap + egress NetworkPolicy, reached via
-pods/exec + pods/attach) in a namespace. Shared by the release-namespace Role
+manage MCP server workloads in a namespace. Shared by the release-namespace Role
 and the per-namespace Roles generated from rbac.environmentNamespaces, so both
 grant exactly the same access (no drift).
 */}}
@@ -322,13 +307,8 @@ grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# ConfigMaps for the per-environment Dagger engine config (engine.json).
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Deployments for MCP servers; StatefulSets for the per-environment Dagger engine.
 - apiGroups: ["apps"]
-  resources: ["deployments", "statefulsets"]
+  resources: ["deployments"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]
@@ -534,7 +514,7 @@ are covered by the pre-upgrade migration Job.
 Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumes }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -551,11 +531,6 @@ volumes:
     persistentVolumeClaim:
       claimName: {{ include "archestra-platform.diagnosticsClaimName" . }}
   {{- end }}
-  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
-  - name: file-storage
-    persistentVolumeClaim:
-      claimName: {{ include "archestra-platform.fileStorageClaimName" . }}
-  {{- end }}
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -566,7 +541,7 @@ volumes:
 Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumeMounts }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumeMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -581,11 +556,6 @@ volumeMounts:
   {{- if .Values.archestra.diagnostics.enabled }}
   - name: diagnostics
     mountPath: /var/diagnostics
-    readOnly: false
-  {{- end }}
-  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
-  - name: file-storage
-    mountPath: {{ .Values.archestra.fileStorage.filesystem.mountPath }}
     readOnly: false
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}

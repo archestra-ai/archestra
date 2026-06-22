@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
+Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases. For direct document uploads, use **Knowledge > Files**; see the [Knowledge Files section](/docs/platform-knowledge-bases#files).
 
 ## Visibility
 
@@ -352,10 +352,6 @@ Connectors can be managed from the **Connectors** page. Open a connector to:
 - **Trigger sync** -- runs an immediate sync outside the schedule
 - **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
 - **View runs** -- see sync history with status, document counts, and errors
-
-## Environment
-
-A connector can be assigned a deployment environment. Only agents and gateways in the same environment can use its knowledge — a "dev" agent cannot query a "prod" connector. Unassigned connectors belong to the Default environment. See [Environments](/docs/platform-environments).
 
 ## Adding New Connector Types
 

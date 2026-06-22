@@ -110,7 +110,6 @@ describe("hookDispatcherService", () => {
       durationMs: 5,
       timedOut: false,
       truncated: false,
-      binaryStripped: false,
       stagingNotices: [],
     });
 
@@ -202,7 +201,6 @@ describe("hookDispatcherService", () => {
         durationMs: 5,
         timedOut: false,
         truncated: false,
-        binaryStripped: false,
         stagingNotices: [],
       })
       .mockResolvedValueOnce({
@@ -216,7 +214,6 @@ describe("hookDispatcherService", () => {
         durationMs: 5,
         timedOut: false,
         truncated: false,
-        binaryStripped: false,
         stagingNotices: [],
       });
 
@@ -386,7 +383,6 @@ describe("hookDispatcherService", () => {
       durationMs: 5,
       timedOut: false,
       truncated: false,
-      binaryStripped: false,
       stagingNotices: [],
     });
 

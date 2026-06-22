@@ -180,7 +180,7 @@ export default function RootLayout({
             <ChatProvider>
               <ThemeProvider
                 attribute="class"
-                defaultTheme="system"
+                defaultTheme="light"
                 enableSystem
                 disableTransitionOnChange
               >

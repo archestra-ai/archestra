@@ -7,25 +7,24 @@ import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
-  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  ConversationEnabledToolModel,
+  OrganizationModel,
+  ToolModel,
+} from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
 import { __test } from "./search-tools";
 
-const {
-  makeRankingCandidate,
-  prepareSearchQuery,
-  rankCandidatesByKeyword,
-  findUnmatchedQueryTerms,
-} = __test;
+const { makeRankingCandidate, prepareSearchQuery, rankCandidatesByKeyword } =
+  __test;
 
 function rank(
   candidates: Parameters<typeof makeRankingCandidate>[0][],
@@ -35,16 +34,6 @@ function rank(
     candidates.map(makeRankingCandidate),
     prepareSearchQuery(query),
   ).map((candidate) => candidate.toolName);
-}
-
-function unmatched(
-  candidates: Parameters<typeof makeRankingCandidate>[0][],
-  query: string,
-): string[] {
-  return findUnmatchedQueryTerms(
-    candidates.map(makeRankingCandidate),
-    prepareSearchQuery(query),
-  );
 }
 
 type SearchToolsStructuredContent = {
@@ -149,7 +138,7 @@ describe("search_tools", () => {
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
-  test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({
+  test("includes unassigned tools from catalogs the user can access", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMember,
@@ -163,7 +152,6 @@ describe("search_tools", () => {
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
-      accessAllTools: true,
     });
 
     const catalog = await makeInternalMcpCatalog({
@@ -198,7 +186,7 @@ describe("search_tools", () => {
     );
   });
 
-  test("hides unassigned tools when the agent's access-all-tools setting is off", async ({
+  test("hides unassigned tools when the org disables tool auto-assignment", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMember,
@@ -209,7 +197,6 @@ describe("search_tools", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // default accessAllTools=false — discovery stays assigned-tools-only
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
@@ -223,6 +210,9 @@ describe("search_tools", () => {
       name: "github__search_repositories",
       description: "Search repositories by topic, language, or owner.",
       catalogId: catalog.id,
+    });
+    await OrganizationModel.patch(org.id, {
+      allowToolAutoAssignment: false,
     });
 
     const context: ArchestraContext = {
@@ -261,7 +251,6 @@ describe("search_tools", () => {
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
-      accessAllTools: true,
     });
 
     // user creates the team but is not a member of it
@@ -341,7 +330,7 @@ describe("search_tools", () => {
       total: 0,
       matchCount: 0,
       truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: trusted, data, policy.",
+      hint: "No tools matched. Try broader or different keywords, or switch mode.",
       tools: [],
     });
   });
@@ -426,8 +415,8 @@ describe("search_tools", () => {
   });
 
   // Sandbox built-ins surface in search only while UNassigned (so the model can
-  // discover and run them dynamically), and only for callers who can actually
-  // run them. Seeded but not assigned here to exercise that path.
+  // discover then auto-assign them), and only for callers who can actually run
+  // them. Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
       context: ArchestraContext,
@@ -459,7 +448,6 @@ describe("search_tools", () => {
         const agent = await makeAgent({
           name: "Sandbox Discovery Agent",
           organizationId: org.id,
-          accessAllTools: true,
         });
         // seed (run_command exists in the org-accessible Archestra catalog) but
         // do NOT assign it
@@ -475,57 +463,9 @@ describe("search_tools", () => {
         expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
         expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
         expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-        // Persistent-files tools surface too while the Projects feature is on.
-        expect(names).toContain(TOOL_READ_FILE_FULL_NAME);
       } finally {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
-      }
-    });
-
-    test("drops persistent-files tools from discovery when the Projects feature is off, keeping sandbox-runtime tools", async ({
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const config = (await import("@/config")).default;
-      const originalSandboxEnabled = config.skillsSandbox.enabled;
-      const originalProjectsEnabled = config.projects.enabled;
-      (config.skillsSandbox as { enabled: boolean }).enabled = true;
-      try {
-        const org = await makeOrganization();
-        const user = await makeUser();
-        await makeMember(user.id, org.id, { role: "admin" });
-        const agent = await makeAgent({
-          name: "Projects Discovery Agent",
-          organizationId: org.id,
-          accessAllTools: true,
-        });
-        // Seed with the Projects feature on so the persistent-files catalog rows
-        // exist, then turn it off: the rows persist but discovery must drop them.
-        (config.projects as { enabled: boolean }).enabled = true;
-        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-        (config.projects as { enabled: boolean }).enabled = false;
-
-        const names = await searchSandboxTools({
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId: org.id,
-          userId: user.id,
-        });
-
-        // Runtime tools follow the runtime flag — still discoverable.
-        expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
-        expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
-        expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-        // Persistent-files tools follow the Projects flag — gone.
-        expect(names).not.toContain(TOOL_READ_FILE_FULL_NAME);
-      } finally {
-        (config.skillsSandbox as { enabled: boolean }).enabled =
-          originalSandboxEnabled;
-        (config.projects as { enabled: boolean }).enabled =
-          originalProjectsEnabled;
       }
     });
 
@@ -549,7 +489,6 @@ describe("search_tools", () => {
         const agent = await makeAgent({
           name: "Sandbox Discovery Agent",
           organizationId: org.id,
-          accessAllTools: true,
         });
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
@@ -566,67 +505,41 @@ describe("search_tools", () => {
           originalSandboxEnabled;
       }
     });
-  });
 
-  describe("knowledge-source discovery", () => {
-    test("surfaces query_knowledge_sources only when the user can access a connector", async ({
+    test("hides sandbox tools when the org disables tool auto-assignment", async ({
       makeAgent,
       makeMember,
       makeOrganization,
       makeUser,
     }) => {
-      const { KnowledgeBaseConnectorModel } = await import("@/models");
-      const {
-        getArchestraToolFullName,
-        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-      } = await import("@archestra/shared");
-      const kbToolName = getArchestraToolFullName(
-        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-      );
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({
-        name: "Knowledge Discovery Agent",
-        organizationId: org.id,
-        accessAllTools: true,
-      });
-      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "admin" });
+        const agent = await makeAgent({
+          name: "Sandbox Discovery Agent",
+          organizationId: org.id,
+        });
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+        await OrganizationModel.patch(org.id, {
+          allowToolAutoAssignment: false,
+        });
 
-      const context: ArchestraContext = {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      };
-      const search = async () => {
-        const result = await executeArchestraTool(
-          TOOL_SEARCH_TOOLS_FULL_NAME,
-          { query: "query knowledge sources search", limit: 20 },
-          context,
-        );
-        expect(result.isError).toBe(false);
-        return (
-          result.structuredContent as SearchToolsStructuredContent
-        ).tools.map((tool) => tool.toolName);
-      };
+        const names = await searchSandboxTools({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
 
-      // agent has no knowledge sources and the user has no connector yet
-      expect(await search()).not.toContain(kbToolName);
-
-      await KnowledgeBaseConnectorModel.create({
-        organizationId: org.id,
-        name: "Search Discovery Connector",
-        connectorType: "jira",
-        config: {
-          type: "jira",
-          jiraBaseUrl: "https://test.atlassian.net",
-          isCloud: true,
-          projectKey: "PROJ",
-        },
-      });
-
-      expect(await search()).toContain(kbToolName);
+        expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+      }
     });
   });
 
@@ -727,64 +640,6 @@ describe("search_tools", () => {
     });
   });
 
-  describe("unmatched query terms (golden cases)", () => {
-    test("reports every term when the whole query is absent from the corpus", () => {
-      expect(
-        unmatched([{ toolName: "slack__post_message" }], "send carrier pigeon"),
-      ).toEqual(["send", "carrier", "pigeon"]);
-    });
-
-    test("reports only the absent term on a partial match", () => {
-      const candidates = [
-        {
-          toolName: "slack__post_message",
-          description: "Post a message to a channel",
-        },
-      ];
-      // 'message' hits the description; 'gif' appears nowhere -> only 'gif'.
-      expect(rank(candidates, "message gif")).toEqual(["slack__post_message"]);
-      expect(unmatched(candidates, "message gif")).toEqual(["gif"]);
-    });
-
-    test("does not report a term that only matches via substring boost", () => {
-      const candidates = [{ toolName: "github__search_repositories" }];
-      // 'repo' has no token match (indexed token is 'repositories') but drives a
-      // result through the whole-query name substring boost, so it is matched.
-      expect(rank(candidates, "repo")).toEqual(["github__search_repositories"]);
-      expect(unmatched(candidates, "repo")).toEqual([]);
-    });
-
-    test("reports nothing when every query term hits some tool text", () => {
-      expect(
-        unmatched(
-          [{ toolName: "github__search_repositories" }],
-          "search repositories",
-        ),
-      ).toEqual([]);
-    });
-
-    test("treats a term found in any field (e.g. argument names) as matched", () => {
-      const candidates = [
-        {
-          toolName: "x__tool",
-          parameters: {
-            properties: { channel: { type: "string" } },
-          },
-        },
-      ];
-      expect(unmatched(candidates, "channel")).toEqual([]);
-    });
-
-    test("reports a term that is only a substring of an unrelated word", () => {
-      // "gif" sits inside the description token "gift" but is neither an indexed
-      // token nor a name/title substring, so it contributes no ranking signal.
-      const candidates = [
-        { toolName: "store__redeem", description: "Redeem a gift card" },
-      ];
-      expect(unmatched(candidates, "gif")).toEqual(["gif"]);
-    });
-  });
-
   describe("regex mode", () => {
     test("matches tool names by anchored pattern", () => {
       const result = __test.rankCandidatesByRegex(
@@ -833,7 +688,7 @@ describe("search_tools", () => {
   });
 
   describe("parameter enrichment", () => {
-    test("surfaces type, enum, and nested properties", () => {
+    test("surfaces type, enum, and one-level nested properties", () => {
       const summaries = __test.summarizeInputParameters({
         type: "object",
         properties: {
@@ -862,7 +717,6 @@ describe("search_tools", () => {
           enum: ["open", "closed"],
           description: "Issue state.",
           properties: null,
-          hasHiddenDetail: false,
         },
         {
           name: "payload",
@@ -871,37 +725,8 @@ describe("search_tools", () => {
           enum: null,
           description: null,
           properties: [
-            { name: "id", type: "number", required: true, properties: null },
-            { name: "note", type: "string", required: false, properties: null },
-          ],
-          hasHiddenDetail: false,
-        },
-      ]);
-    });
-
-    test("expands a second nested level for object-of-object params", () => {
-      const [summary] = __test.summarizeInputParameters({
-        type: "object",
-        properties: {
-          config: {
-            type: "object",
-            properties: {
-              user: {
-                type: "object",
-                properties: { name: { type: "string" } },
-                required: ["name"],
-              },
-            },
-          },
-        },
-      });
-      expect(summary.properties).toEqual([
-        {
-          name: "user",
-          type: "object",
-          required: false,
-          properties: [
-            { name: "name", type: "string", required: true, properties: null },
+            { name: "id", type: "number", required: true },
+            { name: "note", type: "string", required: false },
           ],
         },
       ]);
@@ -923,7 +748,7 @@ describe("search_tools", () => {
       });
       expect(summary.type).toBe("array");
       expect(summary.properties).toEqual([
-        { name: "content", type: "string", required: true, properties: null },
+        { name: "content", type: "string", required: true },
       ]);
     });
 
@@ -1016,47 +841,6 @@ describe("search_tools", () => {
       ).toBe("todos?:array{content!:string}");
     });
 
-    test("expands a second object level inline", () => {
-      expect(
-        signatureFor({
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: {
-                user: {
-                  type: "object",
-                  properties: { name: { type: "string" } },
-                },
-              },
-            },
-          },
-        }),
-      ).toBe("config?:object{user?:object{name?:string}}");
-    });
-
-    test("expands a second level through array-of-object items", () => {
-      expect(
-        signatureFor({
-          type: "object",
-          properties: {
-            payload: {
-              type: "object",
-              properties: {
-                rows: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: { id: { type: "number" } },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      ).toBe("payload?:object{rows?:array{id?:number}}");
-    });
-
     test("renders type, object shape, and enum together", () => {
       expect(
         signatureFor({
@@ -1108,194 +892,6 @@ describe("search_tools", () => {
     test("returns an empty string when there are no parameters", () => {
       expect(__test.formatParamsSignature([])).toBe("");
       expect(signatureFor({ type: "object", properties: {} })).toBe("");
-    });
-
-    describe("hidden-detail marker", () => {
-      const hasHidden = (schema: Record<string, unknown>) =>
-        __test.summarizeInputParameters(schema)[0]?.hasHiddenDetail;
-
-      test("marks an explicit additionalProperties object (freeform)", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            result: { type: "object", additionalProperties: true },
-          },
-          required: ["result"],
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe("result!:object…");
-      });
-
-      test("marks an opaque object with no listed properties", () => {
-        const schema = {
-          type: "object",
-          properties: { meta: { type: "object" } },
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe("meta?:object…");
-      });
-
-      test("fully shows an object nested two levels deep, no marker", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: {
-                user: { type: "object", properties: { name: {} } },
-              },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(false);
-        expect(signatureFor(schema)).toBe(
-          "config?:object{user?:object{name?}}",
-        );
-      });
-
-      test("marks an object nested deeper than the two levels shown", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: {
-                user: {
-                  type: "object",
-                  properties: {
-                    address: { type: "object", properties: { city: {} } },
-                  },
-                },
-              },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe(
-          "config?:object{user?:object{address?:object}}…",
-        );
-      });
-
-      test("marks an opaque second-level object", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: { user: { type: "object" } },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe("config?:object{user?:object}…");
-      });
-
-      // The render resolves array items only when they list properties, while the
-      // marker resolves any object-typed items; this pins that they still agree —
-      // opaque items collapse the array to a bare type and the marker fires.
-      test("marks a second-level array of opaque objects", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: {
-                rows: { type: "array", items: { type: "object" } },
-              },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe("config?:object{rows?:array}…");
-      });
-
-      test("does not mark a closed second-level object", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            config: {
-              type: "object",
-              properties: {
-                user: {
-                  type: "object",
-                  properties: { name: { type: "string" } },
-                  additionalProperties: false,
-                },
-              },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(false);
-        expect(signatureFor(schema)).toBe(
-          "config?:object{user?:object{name?:string}}",
-        );
-      });
-
-      test("marks an array of freeform objects", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            rows: {
-              type: "array",
-              items: { type: "object", additionalProperties: true },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(true);
-        expect(signatureFor(schema)).toBe("rows?:array…");
-      });
-
-      test("does not mark an array of fully-shown objects", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            todos: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: { content: { type: "string" } },
-                required: ["content"],
-              },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(false);
-        expect(signatureFor(schema)).toBe("todos?:array{content!:string}");
-      });
-
-      test("does not mark scalars", () => {
-        expect(
-          hasHidden({ type: "object", properties: { q: { type: "string" } } }),
-        ).toBe(false);
-      });
-
-      test("does not mark a fully-shown object that merely omits additionalProperties", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            payload: {
-              type: "object",
-              properties: { id: { type: "number" } },
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(false);
-        expect(signatureFor(schema)).toBe("payload?:object{id?:number}");
-      });
-
-      test("does not mark a closed object with explicit additionalProperties:false", () => {
-        const schema = {
-          type: "object",
-          properties: {
-            payload: {
-              type: "object",
-              properties: { id: { type: "number" } },
-              additionalProperties: false,
-            },
-          },
-        };
-        expect(hasHidden(schema)).toBe(false);
-      });
     });
   });
 
@@ -1406,147 +1002,6 @@ describe("search_tools", () => {
       expect(structured.matchCount).toBe(0);
       expect(structured.hint).toContain("No tools matched");
       expect(structured.hint).toContain("GitHub MCP");
-    });
-
-    test("a partial match reports the query terms that hit no tool text", async ({
-      makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeMember,
-      makeOrganization,
-      makeTool,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({
-        name: "Partial",
-        organizationId: org.id,
-      });
-      const catalog = await makeInternalMcpCatalog({
-        organizationId: org.id,
-        name: "Slack MCP",
-      });
-      const tool = await makeTool({
-        name: "slack__post_message",
-        description: "Post a message to a channel",
-        catalogId: catalog.id,
-        parameters: {},
-      });
-      await makeAgentTool(agent.id, tool.id);
-
-      const context: ArchestraContext = {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      };
-      const result = await executeArchestraTool(
-        TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "message gif", limit: 5 },
-        context,
-      );
-      const structured =
-        result.structuredContent as SearchToolsStructuredContent;
-      expect(structured.matchCount).toBe(1);
-      expect(structured.hint).toContain("No tool text matches");
-      expect(structured.hint).toContain("gif");
-      expect(structured.hint).not.toContain("message");
-    });
-
-    test("composes the truncation and unmatched-terms clauses", async ({
-      makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeMember,
-      makeOrganization,
-      makeTool,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({ name: "Both", organizationId: org.id });
-      const catalog = await makeInternalMcpCatalog({
-        organizationId: org.id,
-        name: "GitHub MCP",
-      });
-      for (const name of [
-        "github__search_repositories",
-        "github__search_issues",
-        "github__search_code",
-      ]) {
-        const tool = await makeTool({
-          name,
-          description: "github search",
-          catalogId: catalog.id,
-          parameters: {},
-        });
-        await makeAgentTool(agent.id, tool.id);
-      }
-
-      const context: ArchestraContext = {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      };
-      // 'search' matches all three (-> truncated at limit 1); 'zzznope' matches
-      // nothing -> both clauses must appear.
-      const result = await executeArchestraTool(
-        TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "search zzznope", limit: 1 },
-        context,
-      );
-      const structured =
-        result.structuredContent as SearchToolsStructuredContent;
-      expect(structured.truncated).toBe(true);
-      expect(structured.hint).toContain("top 1 of 3");
-      expect(structured.hint).toContain("No tool text matches");
-      expect(structured.hint).toContain("zzznope");
-    });
-
-    test("regex mode never appends an unmatched-terms clause", async ({
-      makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeMember,
-      makeOrganization,
-      makeTool,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({ name: "Regex", organizationId: org.id });
-      const catalog = await makeInternalMcpCatalog({
-        organizationId: org.id,
-        name: "GitHub MCP",
-      });
-      const tool = await makeTool({
-        name: "github__search_repositories",
-        description: "search",
-        catalogId: catalog.id,
-        parameters: {},
-      });
-      await makeAgentTool(agent.id, tool.id);
-
-      const context: ArchestraContext = {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      };
-      const result = await executeArchestraTool(
-        TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "^github__", limit: 5, mode: "regex" },
-        context,
-      );
-      const structured =
-        result.structuredContent as SearchToolsStructuredContent;
-      expect(structured.matchCount).toBe(1);
-      expect(structured.hint).toBeNull();
     });
   });
 

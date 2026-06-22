@@ -23,7 +23,6 @@ function makePayload(
       scope: "org", // Should be overridden to personal
       considerContextUntrusted: false,
       toolExposureMode: "full",
-      accessAllTools: false,
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: "private",
       incomingEmailAllowedDomain: null,

@@ -33,14 +33,6 @@ interface OAuthConfirmationDialogProps {
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
   orgOnly?: boolean;
-  /**
-   * When true, the dialog re-authorizes an existing connection rather than
-   * installing a new one. Re-auth keeps the connection's existing scope, so the
-   * scope/credential-type selector is skipped — rendering it would surface an
-   * "Already installed" dead-end (no scope is installable) and hide the
-   * "Continue to Authorization" button.
-   */
-  isReauth?: boolean;
 }
 
 export function OAuthConfirmationDialog({
@@ -53,7 +45,6 @@ export function OAuthConfirmationDialog({
   preselectedTeamId,
   personalOnly = false,
   orgOnly = false,
-  isReauth = false,
 }: OAuthConfirmationDialogProps) {
   const [scope, setScope] = useState<McpServerInstallScope>(
     orgOnly ? "org" : preselectedTeamId ? "team" : "personal",
@@ -128,22 +119,15 @@ export function OAuthConfirmationDialog({
         </Alert>
       ) : null}
 
-      {isReauth ? (
-        <p className="text-muted-foreground text-sm">
-          You'll re-authorize your existing {serverName} connection. Its access
-          settings stay the same.
-        </p>
-      ) : (
-        <SelectMcpServerCredentialTypeAndTeams
-          onTeamChange={setSelectedTeamId}
-          onScopeChange={setScope}
-          catalogId={catalogId}
-          onCanInstallChange={setCanInstall}
-          preselectedTeamId={preselectedTeamId}
-          personalOnly={personalOnly}
-          orgOnly={orgOnly}
-        />
-      )}
+      <SelectMcpServerCredentialTypeAndTeams
+        onTeamChange={setSelectedTeamId}
+        onScopeChange={setScope}
+        catalogId={catalogId}
+        onCanInstallChange={setCanInstall}
+        preselectedTeamId={preselectedTeamId}
+        personalOnly={personalOnly}
+        orgOnly={orgOnly}
+      />
     </StandardFormDialog>
   );
 }

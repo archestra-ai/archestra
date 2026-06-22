@@ -2,9 +2,7 @@ import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
   isModelSelectionComplete,
-  providerRequiresPerUserCredential,
   RouteId,
-  type SupportedProvider,
 } from "@archestra/shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -155,14 +153,31 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmSettings,
         description:
-          "Update LLM settings (TOON compression, compression scope)",
+          "Update LLM settings (TOON compression, compression scope, default user limit)",
         tags: ["Organization"],
         body: UpdateLlmSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      const normalizedBody =
+        body.defaultUserLimitValue === null
+          ? {
+              ...body,
+              defaultUserLimitModel: null,
+              defaultUserLimitCleanupInterval: null,
+            }
+          : {
+              ...body,
+              ...(body.defaultUserLimitModel?.length === 0
+                ? { defaultUserLimitModel: null }
+                : {}),
+            };
+
+      const organization = await OrganizationModel.patch(
+        organizationId,
+        normalizedBody,
+      );
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -306,18 +321,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(
               400,
               `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
-            );
-          }
-          // Per-user providers (GitHub Copilot) can't back a shared default:
-          // each user connects their own account at setup time, so an admin
-          // default would be meaningless (and the connection flow would refuse
-          // to wrap someone else's personal key).
-          if (
-            providerRequiresPerUserCredential(provider as SupportedProvider)
-          ) {
-            throw new ApiError(
-              400,
-              `${provider} is per-user — each user connects their own account, so it can't be set as a default provider key for setup commands.`,
             );
           }
         }

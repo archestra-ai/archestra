@@ -137,53 +137,6 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/connection-settings - default provider keys", () => {
-    test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
-      const key = await LlmProviderApiKeyModel.create({
-        organizationId,
-        secretId: null,
-        name: "Copilot",
-        provider: "github-copilot",
-        scope: "personal",
-        userId: user.id,
-        teamId: null,
-      });
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/connection-settings",
-        payload: {
-          connectionDefaultProviderKeys: { "github-copilot": key.id },
-        },
-      });
-
-      expect(response.statusCode, response.body).toBe(400);
-      expect(response.json().error.message).toMatch(/per-user/);
-    });
-
-    test("accepts a non-per-user provider default key", async () => {
-      const key = await LlmProviderApiKeyModel.create({
-        organizationId,
-        secretId: null,
-        name: "Anthropic",
-        provider: "anthropic",
-        scope: "org",
-        userId: null,
-        teamId: null,
-      });
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/connection-settings",
-        payload: {
-          connectionDefaultProviderKeys: { anthropic: key.id },
-        },
-      });
-
-      expect(response.statusCode, response.body).toBe(200);
-    });
-  });
-
   describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
     test("rejects enabling slash commands while skill tools are off", async () => {
       const response = await app.inject({
@@ -559,6 +512,42 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         compressionScope: "team",
         convertToolResultsToToon: true,
+      });
+    });
+
+    test("allows clearing the default user limit", async () => {
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          defaultUserLimitValue: 100,
+          defaultUserLimitModel: ["gpt-4o"],
+          defaultUserLimitCleanupInterval: "12h",
+        },
+      });
+
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json()).toMatchObject({
+        defaultUserLimitValue: 100,
+        defaultUserLimitModel: ["gpt-4o"],
+        defaultUserLimitCleanupInterval: "12h",
+      });
+
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/llm-settings",
+        payload: {
+          defaultUserLimitValue: null,
+          defaultUserLimitModel: null,
+          defaultUserLimitCleanupInterval: null,
+        },
+      });
+
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json()).toMatchObject({
+        defaultUserLimitValue: null,
+        defaultUserLimitModel: null,
+        defaultUserLimitCleanupInterval: null,
       });
     });
   });

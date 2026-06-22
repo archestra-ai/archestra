@@ -125,7 +125,6 @@ describe("config routes", () => {
       "cohere",
       "deepseek",
       "gemini",
-      "github-copilot",
       "groq",
       "minimax",
       "mistral",

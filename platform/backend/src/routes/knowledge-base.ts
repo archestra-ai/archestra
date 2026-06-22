@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -15,6 +16,8 @@ import {
 } from "@/knowledge-base";
 import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
+import { getBlobStorageProvider } from "@/knowledge-base/file-upload/blob-storage-providers";
+import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -23,12 +26,13 @@ import {
   ConnectorRunModel,
   GithubAppConfigModel,
   KbDocumentModel,
+  KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
+  TeamModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -39,13 +43,20 @@ import {
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  EmbeddingStatusSchema,
+  ErrorResponsesSchema,
   KnowledgeSourceVisibilitySchema,
   SelectConnectorRunListSchema,
   SelectConnectorRunSchema,
   SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
+  UploadedFileProcessingStatusSchema,
 } from "@/types";
+import {
+  isSafeInlineMimeType,
+  sanitizeAttachmentContentType,
+} from "./chat/attachment-content-type";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -381,6 +392,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             offset,
             search,
             connectorType,
+            excludeConnectorTypes: ["file_upload"],
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
           });
@@ -483,7 +495,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
-          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -492,11 +503,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
 
-      await assertEnvironmentAssignable({
-        userId: user.id,
-        organizationId,
-        environmentId: body.environmentId ?? null,
-      });
+      if (body.connectorType === "file_upload") {
+        throw new ApiError(
+          400,
+          "File uploads are managed from Knowledge > Files",
+        );
+      }
 
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
         throw new ApiError(
@@ -584,7 +596,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectorType: body.connectorType,
         config: body.config,
         secretId,
-        environmentId: body.environmentId ?? null,
         schedule: body.schedule,
         enabled: body.enabled,
       });
@@ -772,7 +783,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
-          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -783,14 +793,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
-
-      if (body.environmentId !== undefined) {
-        await assertEnvironmentAssignable({
-          userId: user.id,
-          organizationId,
-          environmentId: body.environmentId,
-        });
-      }
 
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
@@ -1314,40 +1316,331 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(run);
     },
   );
+
+  // ===== Knowledge File Schemas =====
+
+  const UploadResultSchema = z.object({
+    filename: z.string(),
+    status: z.enum([
+      "created",
+      "duplicate",
+      "unsupported",
+      "too_large",
+      "extraction_failed",
+      "failed",
+    ]),
+    fileId: z.string().optional(),
+  });
+
+  const UploadedFileSchema = z.object({
+    id: z.string(),
+    connectorId: z.string(),
+    ownerId: z.string().nullable().optional(),
+    visibility: ResourceVisibilityScopeSchema.optional(),
+    teamIds: z.array(z.string()).optional(),
+    originalName: z.string().min(1),
+    mimeType: z.string(),
+    fileSize: z.number().int().nonnegative(),
+    contentHash: z.string(),
+    blobStorageProvider: z.string().nullable().optional(),
+    createdAt: z.string(),
+    processingStatus: UploadedFileProcessingStatusSchema,
+    processingError: z.string().nullable(),
+    embeddingStatus: EmbeddingStatusSchema,
+  });
+
+  const KnowledgeFileSchema = UploadedFileSchema.extend({
+    visibility: ResourceVisibilityScopeSchema,
+    teamIds: z.array(z.string()),
+    assignedAgents: z.array(AssignedAgentSummarySchema),
+  });
+
+  const KnowledgeFileUploadBodySchema = z.object({
+    visibility: ResourceVisibilityScopeSchema.default("personal"),
+    teamIds: z.array(z.string()).default([]),
+    agentIds: z.array(z.string()).default([]),
+    files: z
+      .array(
+        z.object({
+          name: z.string(),
+          mimeType: z.string(),
+          content: z
+            .string()
+            .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid base64 content")
+            .refine((value) => value.length % 4 === 0, {
+              message: "Invalid base64 content",
+            }),
+        }),
+      )
+      .max(20),
+  });
+
+  // ===== Knowledge File Routes =====
+
+  fastify.get(
+    "/api/knowledge-files/config",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeFileUploadConfig,
+        description: "Get Knowledge Files upload configuration",
+        tags: ["Knowledge Files"],
+        response: constructResponseSchema(
+          z.object({
+            maxFileSizeBytes: z.number(),
+            externalBlobStorageEnabled: z.boolean(),
+            blobStorageProvider: z.string(),
+          }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(fileUploadManager.getSupportedFileUploadConfig());
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-files",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeFiles,
+        description: "List uploaded Knowledge Files",
+        tags: ["Knowledge Files"],
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(KnowledgeFileSchema),
+        ),
+      },
+    },
+    async (
+      { query: { limit, offset, search }, organizationId, user },
+      reply,
+    ) => {
+      const access = await buildKnowledgeFileAccessContext({
+        userId: user.id,
+        organizationId,
+      });
+      const [uploadedFiles, total] = await Promise.all([
+        KbUploadedFileModel.findByOrganizationPaginated({
+          organizationId,
+          userId: user.id,
+          userTeamIds: access.teamIds,
+          canReadAll: access.canReadAll,
+          limit,
+          offset,
+          search,
+        }),
+        KbUploadedFileModel.countByOrganization({
+          organizationId,
+          userId: user.id,
+          userTeamIds: access.teamIds,
+          canReadAll: access.canReadAll,
+          search,
+        }),
+      ]);
+
+      const data = await enrichKnowledgeFiles({
+        files: uploadedFiles,
+        organizationId,
+      });
+
+      return reply.send({
+        data,
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/knowledge-files",
+    {
+      bodyLimit: config.api.bodyLimit,
+      schema: {
+        operationId: RouteId.UploadKnowledgeFiles,
+        description: "Upload files into Knowledge Files",
+        tags: ["Knowledge Files"],
+        body: KnowledgeFileUploadBodySchema,
+        response: constructResponseSchema(
+          z.object({ results: z.array(UploadResultSchema) }),
+        ),
+      },
+    },
+    async ({ body, organizationId, user }, reply) => {
+      const settledResults = await Promise.allSettled(
+        body.files.map((file) =>
+          fileUploadManager.uploadKnowledgeFile({
+            organizationId,
+            userId: user.id,
+            name: file.name,
+            mimeType: file.mimeType,
+            content: file.content,
+            visibility: body.visibility,
+            teamIds: body.teamIds,
+            agentIds: body.agentIds,
+          }),
+        ),
+      );
+      const results: z.infer<typeof UploadResultSchema>[] = settledResults.map(
+        (result, index) => {
+          if (result.status === "fulfilled") {
+            return result.value;
+          }
+
+          logger.warn(
+            { error: result.reason, filename: body.files[index]?.name },
+            "Failed to upload knowledge file",
+          );
+          return {
+            filename: body.files[index]?.name ?? "unknown",
+            status: "failed",
+          };
+        },
+      );
+      return reply.send({ results });
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeFile,
+        description: "Get an uploaded Knowledge File by ID",
+        tags: ["Knowledge Files"],
+        params: z.object({ fileId: z.string() }),
+        response: constructResponseSchema(KnowledgeFileSchema),
+      },
+    },
+    async ({ params: { fileId }, organizationId, user }, reply) => {
+      const file = await findKnowledgeFileOrThrow({
+        fileId,
+        organizationId,
+        userId: user.id,
+      });
+      const [enriched] = await enrichKnowledgeFiles({
+        files: [file],
+        organizationId,
+      });
+      return reply.send(enriched);
+    },
+  );
+
+  fastify.get(
+    "/api/knowledge-files/:fileId/content",
+    {
+      schema: {
+        operationId: RouteId.GetKnowledgeFileContent,
+        description: "Stream uploaded Knowledge File bytes by ID",
+        tags: ["Knowledge Files"],
+        params: z.object({ fileId: z.string() }),
+        querystring: z.object({ download: z.coerce.boolean().optional() }),
+        response: ErrorResponsesSchema,
+      },
+    },
+    async (
+      { params: { fileId }, query: { download }, organizationId, user },
+      reply,
+    ) => {
+      const metadata = await findKnowledgeFileOrThrow({
+        fileId,
+        organizationId,
+        userId: user.id,
+      });
+      const file = await KbUploadedFileModel.findByIdWithData(fileId);
+      if (!file || file.organizationId !== metadata.organizationId) {
+        throw new ApiError(404, "File not found");
+      }
+
+      const blobProvider = getBlobStorageProvider(file.blobStorageProvider);
+      const data = await blobProvider.get({
+        key: file.blobStorageKey,
+        dbData: file.fileData,
+      });
+      const safeMime = sanitizeAttachmentContentType(file.mimeType);
+      const disposition =
+        download || !isSafeInlineMimeType(safeMime) ? "attachment" : "inline";
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": safeMime,
+        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(file.originalName)}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+        "Cache-Control": "private, max-age=3600",
+        "Content-Length": String(data.byteLength),
+      });
+      reply.raw.end(data);
+      return reply;
+    },
+  );
+
+  fastify.put(
+    "/api/knowledge-files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.UpdateKnowledgeFile,
+        description: "Update an uploaded Knowledge File",
+        tags: ["Knowledge Files"],
+        params: z.object({ fileId: z.string() }),
+        body: z.object({
+          visibility: ResourceVisibilityScopeSchema,
+          teamIds: z.array(z.string()).default([]),
+          agentIds: z.array(z.string()).default([]),
+        }),
+        response: constructResponseSchema(KnowledgeFileSchema),
+      },
+    },
+    async ({ params: { fileId }, body, organizationId, user }, reply) => {
+      await findKnowledgeFileOrThrow({
+        fileId,
+        organizationId,
+        userId: user.id,
+      });
+      const updated = await fileUploadManager.updateKnowledgeFile({
+        organizationId,
+        fileId,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
+        agentIds: body.agentIds,
+      });
+      if (!updated) {
+        throw new ApiError(404, "File not found");
+      }
+      const [enriched] = await enrichKnowledgeFiles({
+        files: [updated],
+        organizationId,
+      });
+      return reply.send(enriched);
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-files/:fileId",
+    {
+      schema: {
+        operationId: RouteId.DeleteKnowledgeFile,
+        description: "Delete an uploaded Knowledge File and indexed content",
+        tags: ["Knowledge Files"],
+        params: z.object({ fileId: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { fileId }, organizationId, user }, reply) => {
+      await findKnowledgeFileOrThrow({
+        fileId,
+        organizationId,
+        userId: user.id,
+      });
+      await fileUploadManager.deleteKnowledgeFile({ organizationId, fileId });
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default knowledgeBaseRoutes;
 
 // ===== Internal Helpers =====
-
-/**
- * Gate assigning a knowledge base / connector to an environment. Mirrors the
- * agent + MCP-catalog write paths: a restricted environment (or a restricted
- * org default when environmentId is null/omitted) requires
- * environment:deploy-to-restricted (environment:admin implies it). Also
- * validates the environment belongs to the org, preventing cross-tenant binding.
- */
-async function assertEnvironmentAssignable(params: {
-  userId: string;
-  organizationId: string;
-  environmentId: string | null;
-}): Promise<void> {
-  const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
-  ]);
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
-  });
-}
 
 async function findKnowledgeBaseOrThrow(params: {
   id: string;
@@ -1381,6 +1674,118 @@ async function findConnectorOrThrow(params: {
     throw new ApiError(404, "Connector not found");
   }
   return connector;
+}
+
+async function buildKnowledgeFileAccessContext(params: {
+  userId: string;
+  organizationId: string;
+}) {
+  const [canReadAll, teamIds] = await Promise.all([
+    userHasPermission(
+      params.userId,
+      params.organizationId,
+      "knowledgeFile",
+      "admin",
+    ),
+    TeamModel.getUserTeamIds(params.userId),
+  ]);
+
+  return { canReadAll, teamIds };
+}
+
+async function findKnowledgeFileOrThrow(params: {
+  fileId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const file = await KbUploadedFileModel.findById(params.fileId);
+  if (!file || file.organizationId !== params.organizationId) {
+    throw new ApiError(404, "File not found");
+  }
+
+  const access = await buildKnowledgeFileAccessContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  if (!canAccessKnowledgeFile({ file, userId: params.userId, access })) {
+    throw new ApiError(404, "File not found");
+  }
+
+  return file;
+}
+
+function canAccessKnowledgeFile(params: {
+  file: Awaited<ReturnType<typeof KbUploadedFileModel.findById>>;
+  userId: string;
+  access: { canReadAll: boolean; teamIds: string[] };
+}) {
+  const { file, userId, access } = params;
+  if (!file) return false;
+  if (access.canReadAll) return true;
+  if (file.visibility === "org") return true;
+  if (file.visibility === "personal") return file.ownerId === userId;
+  const userTeamIds = new Set(access.teamIds);
+  return file.teamIds.some((teamId) => userTeamIds.has(teamId));
+}
+
+async function enrichKnowledgeFiles(params: {
+  files: Awaited<ReturnType<typeof KbUploadedFileModel.findById>>[];
+  organizationId: string;
+}) {
+  const files = params.files.filter((file): file is NonNullable<typeof file> =>
+    Boolean(file),
+  );
+  const connectorIds = files.map((file) => file.connectorId);
+  const agentIdsByConnector =
+    await AgentConnectorAssignmentModel.getAgentIdsForConnectors(connectorIds);
+  const agentIds = [...new Set([...agentIdsByConnector.values()].flat())];
+  const agentDetails = await AgentModel.findBasicByOrganizationIdAndIds({
+    organizationId: params.organizationId,
+    agentIds,
+  });
+  const agentById = new Map(agentDetails.map((agent) => [agent.id, agent]));
+  const docs = await KbDocumentModel.findByConnectorSourcePairs(
+    files.map((file) => ({
+      connectorId: file.connectorId,
+      sourceId: file.id,
+    })),
+  );
+  const docByFileId = new Map(
+    docs
+      .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc))
+      .map((doc) => [doc.sourceId, doc]),
+  );
+
+  return files.map((file) => ({
+    id: file.id,
+    connectorId: file.connectorId,
+    ownerId: file.ownerId,
+    visibility: file.visibility,
+    teamIds: file.teamIds,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    fileSize: file.fileSize,
+    contentHash: file.contentHash,
+    blobStorageProvider: file.blobStorageProvider,
+    createdAt: file.createdAt.toISOString(),
+    processingStatus: file.processingStatus,
+    processingError: file.processingError ?? null,
+    embeddingStatus: docByFileId.get(file.id)?.embeddingStatus ?? "pending",
+    assignedAgents: (agentIdsByConnector.get(file.connectorId) ?? []).flatMap(
+      (id) => {
+        const agent = agentById.get(id);
+        return agent
+          ? [
+              {
+                id: agent.id,
+                name: agent.name,
+                agentType: agent.agentType,
+              },
+            ]
+          : [];
+      },
+    ),
+  }));
 }
 
 /**

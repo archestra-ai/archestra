@@ -46,17 +46,6 @@ const RETRY_CONFIG = {
 
 /**
  * Cost information for a model (prices per million tokens in USD)
- *
- * Only input/output + cache_read/cache_write are persisted and used in cost
- * calculation. Intentionally NOT persisted:
- * - `reasoning`: reasoning/thinking tokens are a subset of output tokens and are
- *   billed at the output rate (reasoning === output for current models), so a
- *   separate reasoning price would double-count what output pricing already covers.
- * - `input_audio` / `output_audio`: genuinely distinct rates, but nothing
- *   captures audio token counts yet (no adapter usage parsing, interaction
- *   columns, or o11y attributes), so persisting them would be dead data. Persist
- *   these as step 0 of an end-to-end audio cost-tracking feature, not on their own.
- *
  * @public — exported for testability
  */
 export type ModelsDevCost = {
@@ -200,28 +189,6 @@ const ModelsDevApiResponseSchema = z.record(
   ModelsDevProviderSchema,
 );
 
-/**
- * Convert a models.dev `cost` object (prices per million tokens) into our
- * per-token string representation. Returns null for any price the registry omits.
- * @public — shared by the registry client and provider model sync.
- */
-export function modelsDevCostToPerToken(cost: ModelsDevCost | undefined): {
-  promptPricePerToken: string | null;
-  completionPricePerToken: string | null;
-  cacheReadPricePerToken: string | null;
-  cacheWritePricePerToken: string | null;
-} {
-  const perToken = (perMillion: number | undefined): string | null =>
-    perMillion !== undefined ? (perMillion / 1_000_000).toString() : null;
-
-  return {
-    promptPricePerToken: perToken(cost?.input),
-    completionPricePerToken: perToken(cost?.output),
-    cacheReadPricePerToken: perToken(cost?.cache_read),
-    cacheWritePricePerToken: perToken(cost?.cache_write),
-  };
-}
-
 // ============================================================================
 // Client implementation
 // ============================================================================
@@ -317,7 +284,14 @@ class ModelsDevClient {
     }
 
     // Convert cost from per-million to per-token (store as string for precision)
-    const prices = modelsDevCostToPerToken(model.cost);
+    const promptPricePerToken =
+      model.cost?.input !== undefined
+        ? (model.cost.input / 1_000_000).toString()
+        : null;
+    const completionPricePerToken =
+      model.cost?.output !== undefined
+        ? (model.cost.output / 1_000_000).toString()
+        : null;
 
     return {
       externalId: `${providerId}/${model.id}`,
@@ -328,10 +302,8 @@ class ModelsDevClient {
       inputModalities,
       outputModalities,
       supportsToolCalling: model.tool_call ?? false,
-      promptPricePerToken: prices.promptPricePerToken,
-      completionPricePerToken: prices.completionPricePerToken,
-      cacheReadPricePerToken: prices.cacheReadPricePerToken,
-      cacheWritePricePerToken: prices.cacheWritePricePerToken,
+      promptPricePerToken,
+      completionPricePerToken,
       lastSyncedAt: new Date(),
     };
   }
@@ -430,8 +402,6 @@ class ModelsDevClient {
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
       azure: ["azure/"],
-      // Not synced via models.dev (subscription-dependent /models endpoint)
-      "github-copilot": [],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

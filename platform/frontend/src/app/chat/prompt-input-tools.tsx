@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type ContextWindowBreakdown,
   E2eTestId,
   getSupportedFileTypesDescription,
   type ModelInputModality,
@@ -17,7 +16,6 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
-import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
@@ -64,14 +62,6 @@ export interface ChatPromptInputToolsProps {
   cachedTokens?: number;
   /** Maximum context length of the selected model (for context indicator) */
   maxContextLength?: number | null;
-  /** Per-category breakdown of the assembled request (for context usage panel) */
-  contextWindow?: ContextWindowBreakdown | null;
-  /** Most recent compaction result, surfaced as a marker in the context panel */
-  lastCompaction?: {
-    originalTokenEstimate?: number;
-    compactedTokenEstimate?: number;
-    trigger?: "auto" | "manual";
-  } | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
@@ -86,17 +76,6 @@ export interface ChatPromptInputToolsProps {
   modelSource?: ModelSource | null;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
-  /**
-   * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
-   * the viewer hasn't connected. Keep the agent's model selected (no auto-swap)
-   * so sending surfaces an inline connect prompt instead of silently switching.
-   */
-  agentRequiresPerUserConnect?: boolean;
-  /**
-   * Server-resolved model name to show in the read-only chip when the agent's
-   * per-user model isn't in the viewer's available models (avoids a raw UUID).
-   */
-  agentModelDisplayName?: string;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -114,8 +93,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   tokensUsed = 0,
   cachedTokens,
   maxContextLength,
-  contextWindow,
-  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   selectorAgentId,
@@ -123,8 +100,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   onResetModelOverride,
-  agentRequiresPerUserConnect = false,
-  agentModelDisplayName,
   textareaRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
@@ -280,8 +255,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             ? currentConversationChatApiKeyId
                             : initialApiKeyId
                         }
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        fallbackModelName={agentModelDisplayName}
                       />
                     </div>
                   </>
@@ -291,27 +264,12 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                       Context
                     </p>
-                    <ContextWindowDialog
-                      breakdown={contextWindow ?? null}
+                    <ContextIndicator
                       tokensUsed={tokensUsed}
                       cachedTokens={cachedTokens}
                       maxTokens={maxContextLength}
-                      lastCompaction={lastCompaction}
-                    >
-                      <button
-                        type="button"
-                        aria-label="Context usage"
-                        data-testid={E2eTestId.ChatContextUsageTrigger}
-                        className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <ContextIndicator
-                          tokensUsed={tokensUsed}
-                          maxTokens={maxContextLength}
-                          size="sm"
-                          hideTooltip
-                        />
-                      </button>
-                    </ContextWindowDialog>
+                      size="sm"
+                    />
                   </div>
                 )}
               </div>
@@ -433,8 +391,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     ? currentConversationChatApiKeyId
                     : initialApiKeyId
                 }
-                suppressAutoSelect={agentRequiresPerUserConnect}
-                fallbackModelName={agentModelDisplayName}
               />
               {modelSource && (
                 <Badge
@@ -457,27 +413,12 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {tokensUsed > 0 && maxContextLength && (
-            <ContextWindowDialog
-              breakdown={contextWindow ?? null}
+            <ContextIndicator
               tokensUsed={tokensUsed}
               cachedTokens={cachedTokens}
               maxTokens={maxContextLength}
-              lastCompaction={lastCompaction}
-            >
-              <button
-                type="button"
-                aria-label="Context usage"
-                data-testid={E2eTestId.ChatContextUsageTrigger}
-                className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ContextIndicator
-                  tokensUsed={tokensUsed}
-                  maxTokens={maxContextLength}
-                  size="sm"
-                  hideTooltip
-                />
-              </button>
-            </ContextWindowDialog>
+              size="sm"
+            />
           )}
         </>
       )}

@@ -16,8 +16,6 @@ const OpenRouterGenerationModelsResponseSchema = z.object({
         .object({
           prompt: z.string().optional(),
           completion: z.string().optional(),
-          input_cache_read: z.string().optional(),
-          input_cache_write: z.string().optional(),
         })
         .partial()
         .optional(),
@@ -143,8 +141,6 @@ function toFetchedCapabilities(
       : null,
     promptPricePerToken: normalizePrice(model.pricing?.prompt),
     completionPricePerToken: normalizePrice(model.pricing?.completion),
-    cacheReadPricePerToken: normalizePrice(model.pricing?.input_cache_read),
-    cacheWritePricePerToken: normalizePrice(model.pricing?.input_cache_write),
   };
 }
 

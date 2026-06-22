@@ -88,10 +88,6 @@ const KNOWLEDGE_MODEL_POPOVER_CLASS =
 const KNOWLEDGE_MODEL_POPOVER_LIST_CLASS =
   "max-h-[min(220px,calc(var(--radix-popover-content-available-height)-3rem))]";
 
-// Static highlight for the next incomplete setup step. A still ring guides the
-// eye without the constant blinking of `animate-pulse`.
-const SETUP_HIGHLIGHT_CLASS = "ring-2 ring-primary/50";
-
 function CardRow({
   label,
   children,
@@ -213,7 +209,6 @@ function AddApiKeyDialog({
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
             hideScopeAndPrimary
-            forEmbedding={forEmbedding}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -288,7 +283,7 @@ function ApiKeySelector({
               type="button"
               variant="outline"
               size="sm"
-              className={cn(pulse && SETUP_HIGHLIGHT_CLASS)}
+              className={cn(pulse && "animate-pulse ring-2 ring-primary/40")}
               onClick={() => setShowAddDialog(true)}
             >
               <Plus className="h-3 w-3 mr-1" />
@@ -317,7 +312,10 @@ function ApiKeySelector({
         setApiKeySelectorOpen(false);
       }}
       triggerVariant="select"
-      triggerClassName={cn("w-full", pulse && SETUP_HIGHLIGHT_CLASS)}
+      triggerClassName={cn(
+        "w-full",
+        pulse && "animate-pulse ring-2 ring-primary/40",
+      )}
       popoverClassName="w-[var(--radix-popover-trigger-width)]"
       emptyTriggerLabel={`Select ${label}...`}
     />
@@ -379,7 +377,7 @@ function RerankerModelSelector({
       onValueChange={(v) => onChange(v || null)}
       options={rerankerItems}
       placeholder="Select reranking model..."
-      className={cn("w-full", pulse && SETUP_HIGHLIGHT_CLASS)}
+      className={cn("w-full", pulse && "animate-pulse ring-2 ring-primary/40")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
       popoverSide="bottom"
@@ -615,7 +613,7 @@ function KnowledgeSettingsContent() {
                       className={cn(
                         "w-full",
                         embeddingSetupStep === "select-model" &&
-                          SETUP_HIGHLIGHT_CLASS,
+                          "animate-pulse ring-2 ring-primary/40",
                       )}
                       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
                       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}

@@ -95,7 +95,6 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [] }),
-  useIsKnowledgeBaseConfigured: () => true,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -343,7 +342,6 @@ const baseAgent = {
   systemPrompt: null,
   agentType: "agent" as const,
   toolExposureMode: "full" as const,
-  accessAllTools: false,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
@@ -364,7 +362,6 @@ const baseAgent = {
   modelId: null,
   considerContextUntrusted: false,
   identityProviderId: null,
-  environmentId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
   incomingEmailEnabled: false,
@@ -466,7 +463,6 @@ describe.skip("AgentDialog", () => {
           systemPrompt: null,
           agentType: "agent",
           toolExposureMode: "full",
-          accessAllTools: false,
           scope: "personal",
           isDefault: false,
           isPersonalGateway: false,
@@ -487,7 +483,6 @@ describe.skip("AgentDialog", () => {
           modelId: null,
           considerContextUntrusted: false,
           identityProviderId: null,
-          environmentId: null,
           builtInAgentConfig: null,
           passthroughHeaders: null,
           incomingEmailEnabled: false,

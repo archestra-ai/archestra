@@ -3,11 +3,6 @@
  */
 
 import { TimeInMs } from "@archestra/shared";
-import {
-  MAX_ATTACHMENT_SIZE,
-  MAX_ATTACHMENTS_PER_EMAIL,
-  MAX_TOTAL_ATTACHMENTS_SIZE,
-} from "@/agents/incoming-email/constants";
 import type { ChatOpsConnectionMode } from "@/types";
 
 /**
@@ -100,7 +95,10 @@ export { SLACK_SLASH_COMMANDS } from "@archestra/shared";
  * Reuses the same limits as the incoming email module for consistency.
  */
 export const CHATOPS_ATTACHMENT_LIMITS = {
-  MAX_ATTACHMENT_SIZE,
-  MAX_TOTAL_ATTACHMENTS_SIZE,
-  MAX_ATTACHMENTS_PER_MESSAGE: MAX_ATTACHMENTS_PER_EMAIL,
+  /** Maximum size for a single attachment in bytes (10MB) */
+  MAX_ATTACHMENT_SIZE: 10 * 1024 * 1024,
+  /** Maximum total size for all attachments per message in bytes (25MB) */
+  MAX_TOTAL_ATTACHMENTS_SIZE: 25 * 1024 * 1024,
+  /** Maximum number of attachments to process per message */
+  MAX_ATTACHMENTS_PER_MESSAGE: 20,
 } as const;

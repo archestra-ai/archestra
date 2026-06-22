@@ -75,7 +75,6 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   teamIds: true,
   config: true,
   secretId: true,
-  environmentId: true,
   schedule: true,
   enabled: true,
   lastSyncAt: true,

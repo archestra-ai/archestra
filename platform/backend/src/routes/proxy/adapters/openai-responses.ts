@@ -352,12 +352,6 @@ class OpenAiResponsesResponseAdapter
     return {
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
-      reasoningTokens:
-        (
-          this.response.usage?.output_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0,
     };
   }
 
@@ -431,12 +425,6 @@ class OpenAiResponsesStreamAdapter
         this.state.usage = {
           inputTokens: chunk.response.usage.input_tokens ?? 0,
           outputTokens: chunk.response.usage.output_tokens ?? 0,
-          reasoningTokens:
-            (
-              chunk.response.usage.output_tokens_details as
-                | { reasoning_tokens?: number }
-                | undefined
-            )?.reasoning_tokens ?? 0,
         };
       }
     }

@@ -6,7 +6,6 @@ export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
 export { deepseekAdapterFactory } from "./deepseek";
 export { geminiAdapterFactory } from "./gemini";
-export { githubCopilotAdapterFactory } from "./github-copilot";
 export { groqAdapterFactory } from "./groq";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";

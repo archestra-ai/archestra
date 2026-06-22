@@ -14,7 +14,6 @@ import type {
   ConnectorType,
 } from "@/types";
 import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
-import environmentsTable from "./environment";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
 
@@ -35,15 +34,6 @@ const knowledgeBaseConnectorsTable = pgTable(
     secretId: uuid("secret_id").references(() => secretTable.id, {
       onDelete: "set null",
     }),
-    /**
-     * Optional deployment Environment this connector belongs to. Null = the org
-     * default environment. Referential only; the write path validates org
-     * ownership. ON DELETE SET NULL falls the row back to the default.
-     */
-    environmentId: uuid("environment_id").references(
-      () => environmentsTable.id,
-      { onDelete: "set null" },
-    ),
     schedule: text("schedule").notNull().default("0 */6 * * *"),
     enabled: boolean("enabled").notNull().default(true),
     lastSyncAt: timestamp("last_sync_at", { mode: "date" }),
@@ -59,9 +49,6 @@ const knowledgeBaseConnectorsTable = pgTable(
   (table) => [
     index("knowledge_base_connectors_organization_id_idx").on(
       table.organizationId,
-    ),
-    index("knowledge_base_connectors_environment_id_idx").on(
-      table.environmentId,
     ),
   ],
 );

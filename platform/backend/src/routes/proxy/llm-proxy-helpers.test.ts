@@ -40,10 +40,7 @@ const mockCalculateCacheCost =
       provider: string,
       readTokens: number,
       writeTokens: number,
-    ) => Promise<
-      | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
-      | undefined
-    >
+    ) => Promise<{ cacheCost: number; cacheSavings: number } | undefined>
   >();
 vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
   const original =
@@ -94,7 +91,6 @@ import {
   calculateInteractionCosts,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
-  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -112,8 +108,12 @@ describe("toSpanUserInfo", () => {
     });
   });
 
-  test.each([null, undefined])("returns null for %s input", (input) => {
-    expect(toSpanUserInfo(input)).toBeNull();
+  test("returns null for null input", () => {
+    expect(toSpanUserInfo(null)).toBeNull();
+  });
+
+  test("returns null for undefined input", () => {
+    expect(toSpanUserInfo(undefined)).toBeNull();
   });
 });
 
@@ -183,7 +183,6 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCacheCost.mockResolvedValue({
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
-      cacheReadSavings: 0.001,
     });
 
     const result = await calculateInteractionCosts({
@@ -198,7 +197,6 @@ describe("calculateInteractionCosts", () => {
       actualCost: 0.0005,
       cacheCost: 0.0001,
       cacheSavings: 0.0009,
-      cacheReadSavings: 0.001,
     });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
     const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
@@ -248,7 +246,6 @@ describe("calculateInteractionCosts", () => {
       actualCost: undefined,
       cacheCost: undefined,
       cacheSavings: undefined,
-      cacheReadSavings: undefined,
     });
   });
 });
@@ -375,11 +372,17 @@ describe("buildInteractionRecord", () => {
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
-  test("passes source through when provided, undefined otherwise", () => {
-    expect(
-      buildInteractionRecord({ ...baseParams, source: "chatops:slack" }).source,
-    ).toBe("chatops:slack");
-    expect(buildInteractionRecord(baseParams).source).toBeUndefined();
+  test("includes source when provided", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      source: "chatops:slack",
+    });
+    expect(record.source).toBe("chatops:slack");
+  });
+
+  test("source is undefined when not provided", () => {
+    const record = buildInteractionRecord(baseParams);
+    expect(record.source).toBeUndefined();
   });
 });
 
@@ -501,23 +504,5 @@ describe("withSessionContext", () => {
     expect(withSpy).not.toHaveBeenCalled();
 
     withSpy.mockRestore();
-  });
-});
-
-describe("shouldForwardAnthropicBeta", () => {
-  test("forwards to real Anthropic (no base-URL override)", () => {
-    expect(shouldForwardAnthropicBeta("claude-opus-4-8", false)).toBe(true);
-  });
-
-  test("forwards to Claude proxied behind a custom base URL", () => {
-    expect(shouldForwardAnthropicBeta("claude-3-5-sonnet", true)).toBe(true);
-  });
-
-  test("strips for a non-Claude model on a custom base URL", () => {
-    expect(shouldForwardAnthropicBeta("kimi-k2", true)).toBe(false);
-  });
-
-  test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
-    expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
   });
 });

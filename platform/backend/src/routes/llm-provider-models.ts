@@ -30,9 +30,7 @@ import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
   constructResponseSchema,
-  type LinkedApiKey,
   type LlmProviderApiKeyWithScopeInfo,
-  type Model,
   ModelCapabilitiesSchema,
   ModelWithApiKeysSchema,
   PatchModelBodySchema,
@@ -258,12 +256,32 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const response = [
-        ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
-          toModelWithApiKeysResponse({ model, isBest, apiKeys }),
-        ),
-        ...unlinkedLlmProxyModels.map((model) =>
-          toModelWithApiKeysResponse({ model, isBest: false, apiKeys: [] }),
-        ),
+        ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) => {
+          const pricing = ModelModel.toCapabilities(model);
+          return {
+            ...model,
+            isBest,
+            apiKeys,
+            pricePerMillionInput: pricing.pricePerMillionInput,
+            pricePerMillionOutput: pricing.pricePerMillionOutput,
+            isCustomPrice: pricing.isCustomPrice,
+            priceSource: pricing.priceSource,
+            isFree: isFreeModel(model),
+          };
+        }),
+        ...unlinkedLlmProxyModels.map((model) => {
+          const pricing = ModelModel.toCapabilities(model);
+          return {
+            ...model,
+            isBest: false,
+            apiKeys: [],
+            pricePerMillionInput: pricing.pricePerMillionInput,
+            pricePerMillionOutput: pricing.pricePerMillionOutput,
+            isCustomPrice: pricing.isCustomPrice,
+            priceSource: pricing.priceSource,
+            isFree: isFreeModel(model),
+          };
+        }),
       ];
 
       logger.debug(
@@ -513,30 +531,4 @@ function shouldHandleWithSystemKeySync(apiKey: {
   }
 
   return false;
-}
-
-/**
- * Shape a model row into the models-with-API-keys response, attaching the
- * computed effective pricing (input/output + cache) and price sources.
- */
-function toModelWithApiKeysResponse(params: {
-  model: Model;
-  isBest: boolean;
-  apiKeys: LinkedApiKey[];
-}) {
-  const { model, isBest, apiKeys } = params;
-  const pricing = ModelModel.toCapabilities(model);
-  return {
-    ...model,
-    isBest,
-    apiKeys,
-    pricePerMillionInput: pricing.pricePerMillionInput,
-    pricePerMillionOutput: pricing.pricePerMillionOutput,
-    isCustomPrice: pricing.isCustomPrice,
-    priceSource: pricing.priceSource,
-    pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
-    pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
-    cachePriceSource: pricing.cachePriceSource,
-    isFree: isFreeModel(model),
-  };
 }

@@ -77,8 +77,6 @@ class KbChunkModel {
     dimensions: number;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
-    /** Defense-in-depth env isolation: require the connector to be in this env. */
-    environmentId?: string | null;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -87,7 +85,6 @@ class KbChunkModel {
       dimensions,
       userAcl,
       bypassAcl = false,
-      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -104,11 +101,6 @@ class KbChunkModel {
           sql`, `,
         );
 
-    const envFilter =
-      environmentId !== undefined
-        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
-        : sql``;
-
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
     const rows = await db.execute(sql`
@@ -122,7 +114,6 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.${col} IS NOT NULL
-        ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
@@ -136,8 +127,6 @@ class KbChunkModel {
     queryText: string;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
-    /** Defense-in-depth env isolation: require the connector to be in this env. */
-    environmentId?: string | null;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -145,7 +134,6 @@ class KbChunkModel {
       queryText,
       userAcl,
       bypassAcl = false,
-      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -161,11 +149,6 @@ class KbChunkModel {
           sql`, `,
         );
 
-    const envFilter =
-      environmentId !== undefined
-        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
-        : sql``;
-
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
     const rows = await db.execute(sql`
@@ -179,7 +162,6 @@ class KbChunkModel {
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
         AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
-        ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
       LIMIT ${limit}

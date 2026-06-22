@@ -5,7 +5,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  isSandboxArchestraToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -15,19 +15,9 @@ import config from "@/config";
 import { ToolModel } from "@/models";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
-import {
-  toolEntries as appDataToolEntries,
-  tools as appDataTools,
-} from "./app-data";
-import {
-  toolEntries as appLlmToolEntries,
-  tools as appLlmTools,
-} from "./app-llm";
-import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
-import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
   errorResult,
@@ -78,7 +68,11 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { toolDiscoverySteer } from "./tool-recovery-messages";
+import { resolveToolGrant } from "./tool-auto-assign";
+import {
+  toolDiscoverySteer,
+  toolNotAssignedAskAdminMessage,
+} from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -103,27 +97,7 @@ const toolEntries: Partial<
   ...runToolEntries,
   ...skillToolEntries,
   ...sandboxToolEntries,
-  ...appToolEntries,
-  ...appDataToolEntries,
-  ...appLlmToolEntries,
 };
-
-// App tools are registered above so they remain unit-testable, but when the
-// feature is dark they must not be dispatchable even by exact name.
-const appToolFullNames = new Set<string>([
-  ...Object.keys(appToolEntries),
-  ...Object.keys(appDataToolEntries),
-  ...Object.keys(appLlmToolEntries),
-]);
-
-// search_files / read_file / save_result / edit_file / delete_file are the
-// persistent-files (Projects) surface of the sandbox tool group. Registered above
-// for unit tests, but hidden and non-dispatchable when the projects feature is dark.
-// Derived from the shared subgroup so this gate and the always-exposed /
-// dynamic-access logic stay in lockstep.
-const projectGatedSandboxFullNames = new Set<string>(
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
-);
 
 export function getArchestraMcpTools() {
   const tools = [
@@ -140,14 +114,7 @@ export function getArchestraMcpTools() {
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
-    ...(config.skillsSandbox.enabled
-      ? config.projects.enabled
-        ? sandboxTools
-        : sandboxTools.filter((t) => !projectGatedSandboxFullNames.has(t.name))
-      : []),
-    ...(config.apps.enabled
-      ? [...appTools, ...appDataTools, ...appLlmTools]
-      : []),
+    ...(config.skillsSandbox.enabled ? sandboxTools : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -193,8 +160,8 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. A narrow
-  // set of built-ins is exempt under dynamic tool access (see below).
+  // Archestra tool the user has RBAC for, regardless of assignment. Unassigned
+  // sandbox built-ins go through the grant flow rather than running (see below).
   const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
@@ -206,28 +173,6 @@ export async function executeArchestraTool(
     ? toolEntries[resolvedToolName as ArchestraToolFullName]
     : undefined;
   if (!toolEntry) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.apps.enabled &&
-    resolvedToolName &&
-    appToolFullNames.has(resolvedToolName)
-  ) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.projects.enabled &&
-    resolvedToolName &&
-    projectGatedSandboxFullNames.has(resolvedToolName)
-  ) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
@@ -300,26 +245,38 @@ async function checkToolAssignedToAgent(
   });
 }
 
-// Assignment gate with the dynamic-access relaxation: an unassigned sandbox
-// built-in (feature on) or query_knowledge_sources (user can access a knowledge
-// connector) executes anyway when the agent's "access all tools" setting and
-// the org kill-switch allow it — nothing is assigned. RBAC already ran before
-// this gate, so e.g. the sandbox tools still require sandbox:execute.
+// Assignment gate. Sandbox built-ins are never auto-assigned: when an unassigned
+// sandbox tool reaches here (RBAC sandbox:execute already passed), the grant flow
+// — chat proposes it, the user confirms, the assign endpoint writes it, then the
+// call resumes assigned — is what puts it on the agent. So reaching here means it
+// was not granted; only upgrade the message to "ask an admin" when the user could
+// not have granted it anyway.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
 ): Promise<CallToolResult | null> {
   const notAssigned = await checkToolAssignedToAgent(toolName, context);
   if (!notAssigned) return null;
-  if (!context.agentId) return notAssigned;
 
-  const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (
+    !context.agentId ||
+    shortName == null ||
+    !config.skillsSandbox.enabled ||
+    !isSandboxArchestraToolShortName(shortName)
+  ) {
+    return notAssigned;
+  }
+
+  const grant = await resolveToolGrant({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
   });
-  return dynamicallyAvailable ? null : notAssigned;
+  return grant === "forbidden"
+    ? errorResult(toolNotAssignedAskAdminMessage(toolName))
+    : notAssigned;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

@@ -21,7 +21,6 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "azure",
-  "github-copilot",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -46,7 +45,6 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "minimax:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
-  "github-copilot:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -83,7 +81,6 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
-  "github-copilot": "GitHub Copilot",
 };
 
 /**
@@ -108,26 +105,6 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "azure",
   "vllm",
 ]);
-
-/**
- * Providers whose credential is an individual user's token rather than a shared
- * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
- * account's Copilot seat). Sharing one token across users is a ToS gray area
- * and breaks per-user attribution, so for these providers:
- * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
- * - request-time resolution uses ONLY the acting user's personal key — never an
- *   agent's attached key, a conversation key, a team/org key, or the shared env
- *   fallback;
- * - a missing personal key surfaces a "link your account" prompt, not a fallback.
- */
-export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
-  new Set<SupportedProvider>(["github-copilot"]);
-
-export function providerRequiresPerUserCredential(
-  provider: SupportedProvider,
-): boolean {
-  return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
-}
 
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
@@ -198,7 +175,6 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   azure: "https://<resource>.openai.azure.com/openai",
-  "github-copilot": "https://api.githubcopilot.com",
 };
 
 /**
@@ -287,13 +263,6 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "claude-sonnet",
     "amazon.nova-pro",
   ],
-  "github-copilot": [
-    "claude-opus",
-    "claude-sonnet",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
 };
 
 /**
@@ -318,28 +287,6 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   bedrock: "anthropic.claude-opus-4-8",
   minimax: "MiniMax-M3",
   azure: "gpt-5.5",
-  "github-copilot": "gpt-4o",
-};
-
-/**
- * Cache token price as a multiple of the model's per-token INPUT price.
- * `read` = cache-read (cheap reuse); `write` = cache-creation (5-minute TTL)
- * surcharge; `write1h` = 1-hour TTL cache-write surcharge.
- *
- * Used as the fallback when a model has no explicit (synced or admin-set) cache
- * price: Anthropic/Bedrock bill a separate write surcharge (1.25x at 5m, 2x at
- * 1h), while OpenAI/Gemini/DeepSeek auto-cache with only a read discount and no
- * write surcharge. Providers absent from this map have no cache pricing model,
- * so cache cost/savings are not derived for them.
- */
-export const CACHE_PRICE_MULTIPLIERS: Partial<
-  Record<SupportedProvider, { read: number; write: number; write1h?: number }>
-> = {
-  anthropic: { read: 0.1, write: 1.25, write1h: 2 },
-  bedrock: { read: 0.1, write: 1.25, write1h: 2 },
-  openai: { read: 0.25, write: 0 },
-  gemini: { read: 0.25, write: 0 },
-  deepseek: { read: 0.1, write: 0 },
 };
 
 /**
@@ -385,9 +332,6 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
     "amazon-bedrock": null,
     azure: null,
-    // GitHub Copilot model availability depends on the user's subscription tier,
-    // so models are synced from Copilot's own /models endpoint, not models.dev
-    "github-copilot": null,
     perplexity: null,
     nvidia: null,
   };

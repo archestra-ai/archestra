@@ -1,6 +1,5 @@
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
   KnowledgeBaseConnector,
@@ -19,12 +18,6 @@ class KnowledgeBaseConnectorModel {
     offset?: number;
     canReadAll?: boolean;
     viewerTeamIds?: string[];
-    /**
-     * When provided (including explicit `null` = Default), restrict to connectors
-     * in that environment (environment isolation). Omit to return all
-     * environments (e.g. the management UI listing).
-     */
-    environmentId?: string | null;
   }): Promise<KnowledgeBaseConnector[]> {
     let query = db
       .select()
@@ -39,9 +32,6 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params.canReadAll,
             teamIds: params.viewerTeamIds,
           }),
-          params.environmentId !== undefined
-            ? connectorInEnvironmentPredicate(params.environmentId)
-            : undefined,
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
@@ -139,8 +129,6 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
-      /** When provided (incl. `null` = Default), restrict to this environment. */
-      environmentId?: string | null;
     },
   ): Promise<KnowledgeBaseConnector[]> {
     return await db
@@ -154,7 +142,6 @@ class KnowledgeBaseConnectorModel {
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
-        environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
@@ -182,9 +169,6 @@ class KnowledgeBaseConnectorModel {
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
           }),
-          params?.environmentId !== undefined
-            ? connectorInEnvironmentPredicate(params.environmentId)
-            : undefined,
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
@@ -209,7 +193,6 @@ class KnowledgeBaseConnectorModel {
         connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
         config: schema.knowledgeBaseConnectorsTable.config,
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
-        environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,

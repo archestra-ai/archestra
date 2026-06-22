@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { callApi } from "@/lib/chat/api-call";
+import { handleApiError } from "@/lib/utils";
 
 const { updateChatMessage } = archestraApiSdk;
 
@@ -18,15 +18,19 @@ export function useUpdateChatMessage(conversationId?: string) {
       partIndex: number;
       text: string;
       deleteSubsequentMessages?: boolean;
-    }) =>
-      callApi(
-        () =>
-          updateChatMessage({
-            path: { id: messageId },
-            body: { partIndex, text, deleteSubsequentMessages },
-          }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await updateChatMessage({
+        path: { id: messageId },
+        body: { partIndex, text, deleteSubsequentMessages },
+      });
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return data;
+    },
     onSuccess: () => {
       if (!conversationId) {
         return;

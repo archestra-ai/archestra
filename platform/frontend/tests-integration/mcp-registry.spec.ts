@@ -1,9 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test.describe("MCP Registry", () => {
-  // FIXME(flaky): first-touch route cold-compile under `next dev` exceeds the
-  // visibility budget on loaded CI runners (passes on main). Quarantined until de-flaked.
-  test.fixme("lists catalog items and opens the edit form when one is clicked", async ({
+  test("lists catalog items and opens the edit form when one is clicked", async ({
     mcpRegistryPage,
     page,
   }) => {

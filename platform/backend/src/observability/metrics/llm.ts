@@ -11,7 +11,6 @@
 import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
-import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
@@ -54,7 +53,6 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
-  "github-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };
@@ -71,8 +69,6 @@ let llmTokensCounter: client.Counter<string>;
 let llmCacheTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
 let llmCostTotal: client.Counter<string>;
-let llmCacheCostTotal: client.Counter<string>;
-let llmCacheSavingsTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
 let llmTokensPerSecond: client.Histogram<string>;
 let llmTokenUsage: client.Histogram<string>;
@@ -98,8 +94,6 @@ export function initializeMetrics(labelKeys: string[]): void {
     llmCacheTokensCounter &&
     llmBlockedToolCounter &&
     llmCostTotal &&
-    llmCacheCostTotal &&
-    llmCacheSavingsTotal &&
     llmTimeToFirstToken &&
     llmTokensPerSecond &&
     llmTokenUsage
@@ -128,12 +122,6 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmCostTotal) {
       client.register.removeSingleMetric("llm_cost_total");
-    }
-    if (llmCacheCostTotal) {
-      client.register.removeSingleMetric("llm_cache_cost_total");
-    }
-    if (llmCacheSavingsTotal) {
-      client.register.removeSingleMetric("llm_cache_savings_total");
     }
     if (llmTimeToFirstToken) {
       client.register.removeSingleMetric("llm_time_to_first_token_seconds");
@@ -197,27 +185,6 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmCostTotal = new client.Counter({
     name: "llm_cost_total",
     help: "Total estimated cost in USD",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
-    enableExemplars: true,
-  });
-
-  // Cost attributable to prompt-cache tokens alone (read + write, TTL-aware).
-  // Separate from llm_cost_total (which is the full request cost) so caching ROI
-  // can be charted on its own.
-  llmCacheCostTotal = new client.Counter({
-    name: "llm_cache_cost_total",
-    help: "Estimated cost in USD attributable to prompt-cache tokens (read + write)",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
-    enableExemplars: true,
-  });
-
-  // Gross USD saved by cache reads (reads billed at a discount vs full input
-  // price). Read-side only and always >= 0, so it is a valid monotonic counter;
-  // the signed net-of-write-surcharge savings is persisted per interaction
-  // (interactions.cache_savings) since counters cannot decrease.
-  llmCacheSavingsTotal = new client.Counter({
-    name: "llm_cache_savings_total",
-    help: "Gross estimated USD saved by cache reads (discounted vs full input price)",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     enableExemplars: true,
   });
@@ -469,52 +436,6 @@ export function reportLLMCost(
 }
 
 /**
- * Reports prompt-cache cost and savings for an LLM request in USD.
- * `cacheCost` is the spend attributable to cache tokens; `cacheReadSavings` is
- * the gross (always >= 0) amount saved by cache reads being discounted. Both are
- * no-ops when undefined or non-positive, so requests without caching emit nothing.
- * @param provider The LLM provider
- * @param profile The Archestra profile
- * @param model The model name
- * @param cache Cache cost breakdown in USD
- * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
- */
-export function reportLLMCacheCost(
-  provider: SupportedProvider,
-  profile: Agent,
-  model: string,
-  cache: { cacheCost?: number | null; cacheReadSavings?: number | null },
-  source: InteractionSource,
-  externalAgentId?: string,
-): void {
-  if (!llmCacheCostTotal || !llmCacheSavingsTotal) {
-    logger.warn("LLM metrics not initialized, skipping cache cost reporting");
-    return;
-  }
-
-  const labels = buildMetricLabels(
-    profile,
-    { provider },
-    model,
-    source,
-    externalAgentId,
-  );
-  const exemplarLabels = getExemplarLabels();
-
-  if (cache.cacheCost && cache.cacheCost > 0) {
-    llmCacheCostTotal.inc({ labels, value: cache.cacheCost, exemplarLabels });
-  }
-  if (cache.cacheReadSavings && cache.cacheReadSavings > 0) {
-    llmCacheSavingsTotal.inc({
-      labels,
-      value: cache.cacheReadSavings,
-      exemplarLabels,
-    });
-  }
-}
-
-/**
  * Reports time to first token (TTFT) for streaming LLM requests.
  * This metric helps application developers understand streaming latency
  * and choose models with lower initial response times.
@@ -614,12 +535,6 @@ export function getObservableFetch(
     url: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
-    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults (and
-    // `init`) untouched. See @/clients/llm-upstream-dispatcher.
-    const dispatcher = getLlmUpstreamDispatcher();
-    const dispatchedInit = dispatcher
-      ? ({ ...init, dispatcher } as RequestInit)
-      : init;
     logger.info(
       {
         url: typeof url === "string" ? url : url.toString(),
@@ -629,7 +544,7 @@ export function getObservableFetch(
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return fetch(url, dispatchedInit);
+      return fetch(url, init);
     }
 
     // Extract model from request body if available
@@ -648,7 +563,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await fetch(url, dispatchedInit);
+      response = await fetch(url, init);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 

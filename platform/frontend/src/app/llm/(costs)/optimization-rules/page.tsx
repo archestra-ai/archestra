@@ -70,7 +70,6 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     deepseek: "deepseek",
     minimax: "minimax",
     azure: "azure",
-    "github-copilot": "github-copilot",
   } as const;
 
   return logoNames[provider];

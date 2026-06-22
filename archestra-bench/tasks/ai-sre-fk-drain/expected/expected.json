@@ -1,5 +1,0 @@
-{
-  "evidence_id": "run_b7e44d18",
-  "failure_class": "fk_violation_on_cascade_delete",
-  "root_cause_component": "chat-active-run-drain"
-}

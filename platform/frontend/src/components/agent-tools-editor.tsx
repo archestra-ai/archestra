@@ -46,9 +46,7 @@ import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
-  computeMcpEnvConflicts,
   getDefaultArchestraToolIds,
-  isCatalogInEnvironment,
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
@@ -78,15 +76,11 @@ interface PendingCatalogChanges {
   isActive?: boolean;
 }
 
-export type McpEnvConflict = { catalogId: string; name: string };
-
 export interface AgentToolsEditorRef {
   saveChanges: (params?: {
     agentId?: string;
     resourceLabel?: string;
   }) => Promise<void>;
-  /** Unselect every MCP catalog flagged as not belonging to the agent's environment. */
-  removeIncompatibleTools: () => void;
 }
 
 interface AgentToolsEditorProps {
@@ -94,23 +88,6 @@ interface AgentToolsEditorProps {
   assignmentScope?: AgentScope;
   assignmentTeamIds?: string[];
   onSelectedCountChange?: (count: number) => void;
-  /**
-   * When true (the agent-environments feature is on), scope the MCP list to
-   * `agentEnvironmentId` and report cross-environment selections via
-   * `onConflictsChange`. When false, all catalogs are shown and no conflicts
-   * are computed.
-   */
-  environmentScopingEnabled?: boolean;
-  /** The agent's environment id; `null` = the Default runtime bucket. */
-  agentEnvironmentId?: string | null;
-  /** Display name of the agent's environment for the filter hint (null = Default runtime). */
-  agentEnvironmentName?: string | null;
-  /**
-   * Reports MCP catalogs that are selected but don't belong to the agent's
-   * environment. Pass a referentially-stable callback (e.g. a `useState`
-   * setter) to avoid effect loops.
-   */
-  onConflictsChange?: (conflicts: McpEnvConflict[]) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
   /** When true, the "Add MCP server" combobox starts open. */
@@ -126,10 +103,6 @@ export const AgentToolsEditor = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
-    environmentScopingEnabled,
-    agentEnvironmentId,
-    agentEnvironmentName,
-    onConflictsChange,
     layout = "pills",
     openComboboxOnMount,
   },
@@ -141,10 +114,6 @@ export const AgentToolsEditor = forwardRef<
       assignmentScope={assignmentScope}
       assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
-      environmentScopingEnabled={environmentScopingEnabled}
-      agentEnvironmentId={agentEnvironmentId}
-      agentEnvironmentName={agentEnvironmentName}
-      onConflictsChange={onConflictsChange}
       layout={layout}
       openComboboxOnMount={openComboboxOnMount}
       ref={ref}
@@ -161,10 +130,6 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
-    environmentScopingEnabled = false,
-    agentEnvironmentId = null,
-    agentEnvironmentName,
-    onConflictsChange,
     layout = "pills",
     openComboboxOnMount,
   },
@@ -236,21 +201,6 @@ const AgentToolsEditorContent = forwardRef<
     );
   }, [catalogItems, assignedToolsByCatalog, toolCountByCatalog]);
 
-  // A catalog belongs to the agent's environment when it's a builtin (always
-  // available everywhere, e.g. the Archestra platform tools) or its environment
-  // matches — `null` (Default runtime) is its own bucket.
-  const isEnvCompatible = useCallback(
-    (catalog: InternalMcpCatalogItem) =>
-      isCatalogInEnvironment(catalog, agentEnvironmentId ?? null),
-    [agentEnvironmentId],
-  );
-
-  // All catalogs are offered; when environment scoping is on, catalogs outside
-  // the agent's environment are shown disabled (grayed) in the combobox rather
-  // than hidden, so it's clear why they can't be selected. Already-selected
-  // incompatible ones still render as pills so they can be removed.
-  const visibleCatalogItems = sortedCatalogItems;
-
   // State counter to force re-renders when pendingChangesRef updates
   const [pendingVersion, setPendingVersion] = useState(0);
 
@@ -266,10 +216,6 @@ const AgentToolsEditorContent = forwardRef<
 
   // Track whether default tools have been pre-selected for new agent creation
   const defaultToolsInitializedRef = useRef(false);
-
-  // Latest cross-environment conflicts, mirrored to a ref so the imperative
-  // `removeIncompatibleTools()` can read them without a render dependency.
-  const conflictsRef = useRef<McpEnvConflict[]>([]);
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
@@ -456,20 +402,6 @@ const AgentToolsEditorContent = forwardRef<
       // Clear all pending changes after save
       pendingChangesRef.current.clear();
     },
-    removeIncompatibleTools: () => {
-      for (const { catalogId } of conflictsRef.current) {
-        const catalog = catalogItems.find((c) => c.id === catalogId);
-        if (!catalog) continue;
-        const pending = pendingChangesRef.current.get(catalogId);
-        registerPendingChanges(catalogId, {
-          selectedToolIds: new Set(),
-          credentialSourceId: pending?.credentialSourceId ?? null,
-          catalogItem: catalog,
-          selectAll: false,
-          isActive: false,
-        });
-      }
-    },
   }));
 
   // Compute which catalog IDs are "selected" (have tools assigned or pending)
@@ -489,39 +421,6 @@ const AgentToolsEditorContent = forwardRef<
     }
     return ids;
   }, [sortedCatalogItems, assignedToolsByCatalog, pendingVersion]);
-
-  // Catalogs that are selected but don't belong to the agent's environment.
-  // Builtins are exempt. Empty when scoping is off.
-  const mcpEnvConflicts = useMemo<McpEnvConflict[]>(
-    () =>
-      environmentScopingEnabled
-        ? computeMcpEnvConflicts(
-            catalogItems,
-            selectedCatalogIds,
-            agentEnvironmentId ?? null,
-          )
-        : [],
-    [
-      environmentScopingEnabled,
-      selectedCatalogIds,
-      catalogItems,
-      agentEnvironmentId,
-    ],
-  );
-
-  // Mirror conflicts to a ref for the imperative remove, and report upward.
-  // `mcpEnvConflicts` is recomputed (new array) on every render because its
-  // dependency chain bottoms out in non-stable query results, so we diff by
-  // content and only call up on a real change — otherwise the parent's setState
-  // would re-render us in an infinite loop.
-  useEffect(() => {
-    const prev = conflictsRef.current;
-    const changed =
-      prev.length !== mcpEnvConflicts.length ||
-      mcpEnvConflicts.some((c, i) => prev[i]?.catalogId !== c.catalogId);
-    conflictsRef.current = mcpEnvConflicts;
-    if (changed) onConflictsChange?.(mcpEnvConflicts);
-  }, [mcpEnvConflicts, onConflictsChange]);
 
   // Handle toggling a catalog on/off from the combobox
   const handleCatalogToggle = useCallback(
@@ -576,7 +475,7 @@ const AgentToolsEditorContent = forwardRef<
   // Build combobox items
   // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
   const comboboxItems: AssignmentComboboxItem[] = useMemo(() => {
-    return visibleCatalogItems.map((catalog) => {
+    return sortedCatalogItems.map((catalog) => {
       const pending = pendingChangesRef.current.get(catalog.id);
       const assignedCount = pending
         ? pending.selectedToolIds.size
@@ -586,9 +485,7 @@ const AgentToolsEditorContent = forwardRef<
       const hasNoCredentials =
         catalog.serverType !== "builtin" &&
         !allCredentials?.[catalog.id]?.length;
-      const isEnvIncompatible =
-        environmentScopingEnabled && !isEnvCompatible(catalog);
-      const isDisabled = hasNoTools || hasNoCredentials || isEnvIncompatible;
+      const isDisabled = hasNoTools || hasNoCredentials;
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
@@ -609,28 +506,19 @@ const AgentToolsEditorContent = forwardRef<
             ? `${assignedCount}/${totalCount}`
             : `${totalCount} tools`,
         disabled: isDisabled,
-        disabledReason: isEnvIncompatible
-          ? `Not in ${
-              agentEnvironmentName
-                ? `the "${agentEnvironmentName}" environment`
-                : "the Default environment"
-            }`
-          : hasNoTools
+        disabledReason: hasNoTools
+          ? "Not installed"
+          : hasNoCredentials
             ? "Not installed"
-            : hasNoCredentials
-              ? "Not installed"
-              : undefined,
+            : undefined,
       };
     });
   }, [
-    visibleCatalogItems,
+    sortedCatalogItems,
     assignedToolsByCatalog,
     toolCountByCatalog,
     allCredentials,
     pendingVersion,
-    environmentScopingEnabled,
-    isEnvCompatible,
-    agentEnvironmentName,
   ]);
 
   // Filter to only selected catalogs for pills
@@ -659,7 +547,7 @@ const AgentToolsEditorContent = forwardRef<
   if (layout === "cards") {
     return (
       <div className="grid grid-cols-3 gap-2">
-        {visibleCatalogItems.map((catalog) => {
+        {sortedCatalogItems.map((catalog) => {
           const isSelected = selectedCatalogIds.includes(catalog.id);
           const pending = pendingChangesRef.current.get(catalog.id);
           const assignedCount = pending
@@ -694,43 +582,39 @@ const AgentToolsEditorContent = forwardRef<
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {selectedCatalogs.map((catalog) => (
-          <McpServerPill
-            key={catalog.id}
-            catalogItem={catalog}
-            displayName={
-              catalog.id === ARCHESTRA_MCP_CATALOG_ID
-                ? catalogName
-                : catalog.name
-            }
-            assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
-            assignmentScope={assignmentScope}
-            assignmentTeamIds={assignmentTeamIds}
-            initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
-            onPendingChanges={registerPendingChanges}
-            onClearPendingChanges={clearPendingChanges}
-            onRemove={handleCatalogToggle}
-            autoOpen={catalog.id === autoOpenCatalogId}
-            onAutoOpened={() => setAutoOpenCatalogId(null)}
-          />
-        ))}
-        <AssignmentCombobox
-          items={comboboxItems}
-          selectedIds={selectedCatalogIds}
-          onToggle={handleCatalogToggle}
-          onItemAdded={setAutoOpenCatalogId}
-          placeholder="Search MCP servers..."
-          emptyMessage="No MCP servers found."
-          testId={E2eTestId.AgentToolsAddButton}
-          defaultOpen={openComboboxOnMount}
-          createAction={{
-            label: "Install New MCP Server",
-            href: "/mcp/registry",
-          }}
+    <div className="flex flex-wrap gap-2">
+      {selectedCatalogs.map((catalog) => (
+        <McpServerPill
+          key={catalog.id}
+          catalogItem={catalog}
+          displayName={
+            catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name
+          }
+          assignedTools={assignedToolsByCatalog.get(catalog.id) ?? []}
+          assignmentScope={assignmentScope}
+          assignmentTeamIds={assignmentTeamIds}
+          initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
+          onPendingChanges={registerPendingChanges}
+          onClearPendingChanges={clearPendingChanges}
+          onRemove={handleCatalogToggle}
+          autoOpen={catalog.id === autoOpenCatalogId}
+          onAutoOpened={() => setAutoOpenCatalogId(null)}
         />
-      </div>
+      ))}
+      <AssignmentCombobox
+        items={comboboxItems}
+        selectedIds={selectedCatalogIds}
+        onToggle={handleCatalogToggle}
+        onItemAdded={setAutoOpenCatalogId}
+        placeholder="Search MCP servers..."
+        emptyMessage="No MCP servers found."
+        testId={E2eTestId.AgentToolsAddButton}
+        defaultOpen={openComboboxOnMount}
+        createAction={{
+          label: "Install New MCP Server",
+          href: "/mcp/registry",
+        }}
+      />
     </div>
   );
 });

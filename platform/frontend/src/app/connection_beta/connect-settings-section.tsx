@@ -2,13 +2,12 @@
 
 import {
   providerDisplayNames,
-  providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { AgentSelector } from "@/components/agent-selector";
+import { AgentIcon } from "@/components/agent-icon";
 import { CodeText } from "@/components/code-text";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -225,19 +224,26 @@ export function ConnectSettingsSection() {
                 title="Default MCP Gateway"
                 description="Pre-selected for everyone; users can still switch."
               >
-                <AgentSelector
-                  mode="single"
-                  flat
+                <SingleSelectCombobox
                   className="w-60"
-                  agents={gatewayItems}
                   value={gatewayId ?? DEFAULT_VALUE}
-                  onValueChange={(value) =>
+                  onChange={(value) =>
                     setGatewayId(value === DEFAULT_VALUE ? null : value)
                   }
-                  personalDefaultOption={{
-                    value: DEFAULT_VALUE,
-                    label: "Each user personal",
-                  }}
+                  options={[
+                    { value: DEFAULT_VALUE, label: "Each user personal" },
+                    ...gatewayItems.map((g) => ({
+                      value: g.id,
+                      label: g.name,
+                      icon: (
+                        <AgentIcon
+                          icon={g.icon}
+                          fallbackType="mcp_gateway"
+                          size={16}
+                        />
+                      ),
+                    })),
+                  ]}
                   searchPlaceholder="Search gateways…"
                   disabled={locked}
                 />
@@ -247,19 +253,28 @@ export function ConnectSettingsSection() {
                 title="Default LLM Proxy"
                 description="Pre-selected for everyone; users can still switch."
               >
-                <AgentSelector
-                  mode="single"
-                  flat
+                <SingleSelectCombobox
                   className="w-60"
-                  agents={proxyItems.filter((p) => !p.isDefault)}
                   value={proxyId ?? DEFAULT_VALUE}
-                  onValueChange={(value) =>
+                  onChange={(value) =>
                     setProxyId(value === DEFAULT_VALUE ? null : value)
                   }
-                  personalDefaultOption={{
-                    value: DEFAULT_VALUE,
-                    label: "Each user personal",
-                  }}
+                  options={[
+                    { value: DEFAULT_VALUE, label: "Each user personal" },
+                    ...proxyItems
+                      .filter((p) => !p.isDefault)
+                      .map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                        icon: (
+                          <AgentIcon
+                            icon={p.icon}
+                            fallbackType="llm_proxy"
+                            size={16}
+                          />
+                        ),
+                      })),
+                  ]}
                   searchPlaceholder="Search proxies…"
                   disabled={locked}
                 />
@@ -303,65 +318,49 @@ export function ConnectSettingsSection() {
                 ) : (
                   <div className="grid gap-2">
                     {[...providerKeysByProvider.entries()].map(
-                      ([provider, keys]) => {
-                        // Per-user providers (GitHub Copilot) can't have a
-                        // shared default — each user connects their own account
-                        // at setup time (and the backend rejects such a default
-                        // on save). Show the row read-only so it's discoverable
-                        // and explained rather than silently missing.
-                        const isPerUser = providerRequiresPerUserCredential(
-                          provider as SupportedProvider,
-                        );
-                        return (
-                          <div
-                            key={provider}
-                            className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <ProviderIcon
-                                provider={provider as SupportedProvider}
-                              />
-                              <span className="truncate text-sm">
-                                {providerDisplayNames[
-                                  provider as SupportedProvider
-                                ] ?? provider}
-                              </span>
-                            </div>
-                            {isPerUser ? (
-                              <span className="text-xs text-muted-foreground">
-                                Per-user — each user connects their own account
-                              </span>
-                            ) : (
-                              <SingleSelectCombobox
-                                className="w-full"
-                                value={
-                                  defaultProviderKeys[provider] ?? DEFAULT_VALUE
-                                }
-                                onChange={(value) =>
-                                  setDefaultProviderKeys((prev) => {
-                                    const next = { ...prev };
-                                    if (value === DEFAULT_VALUE) {
-                                      delete next[provider];
-                                    } else {
-                                      next[provider] = value;
-                                    }
-                                    return next;
-                                  })
-                                }
-                                options={[
-                                  { value: DEFAULT_VALUE, label: "Automatic" },
-                                  ...keys.map((key) => ({
-                                    value: key.id,
-                                    label: key.name,
-                                  })),
-                                ]}
-                                searchPlaceholder="Search keys…"
-                                disabled={locked}
-                              />
-                            )}
+                      ([provider, keys]) => (
+                        <div
+                          key={provider}
+                          className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ProviderIcon
+                              provider={provider as SupportedProvider}
+                            />
+                            <span className="truncate text-sm">
+                              {providerDisplayNames[
+                                provider as SupportedProvider
+                              ] ?? provider}
+                            </span>
                           </div>
-                        );
-                      },
+                          <SingleSelectCombobox
+                            className="w-full"
+                            value={
+                              defaultProviderKeys[provider] ?? DEFAULT_VALUE
+                            }
+                            onChange={(value) =>
+                              setDefaultProviderKeys((prev) => {
+                                const next = { ...prev };
+                                if (value === DEFAULT_VALUE) {
+                                  delete next[provider];
+                                } else {
+                                  next[provider] = value;
+                                }
+                                return next;
+                              })
+                            }
+                            options={[
+                              { value: DEFAULT_VALUE, label: "Automatic" },
+                              ...keys.map((key) => ({
+                                value: key.id,
+                                label: key.name,
+                              })),
+                            ]}
+                            searchPlaceholder="Search keys…"
+                            disabled={locked}
+                          />
+                        </div>
+                      ),
                     )}
                   </div>
                 )}

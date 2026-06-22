@@ -33,7 +33,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/settings/environments": {
     title: "Environments",
     description:
-      "Manage deployment environments — namespaces, network egress, and access. Environments also isolate which tools and knowledge agents and gateways can use, and scope cost limits.",
+      "Manage deployment environments, namespaces, access, and network egress.",
   },
   "/settings/identity-providers": {
     title: "Identity Providers",
@@ -47,8 +47,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
   "/settings/llm": {
     title: "LLM",
-    description:
-      "Configure platform-wide LLM behavior, like tool-result compression and default cost limits.",
+    description: "Configure platform-wide LLM defaults and behavior.",
   },
   "/settings/organization": {
     title: "Organization",

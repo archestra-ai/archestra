@@ -55,39 +55,13 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 }
 `;
 
-exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
-{
-  "description": "Permanently delete a persistent file (My Files), identified by \`id\` (from search_files / save_result) or by \`filename\`. In a project chat only the project's files can be deleted. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Permanently delete a persistent file (My Files). In a project chat only the project's files can be deleted.",
-    "properties": {
-      "filename": {
-        "description": "Filename to delete instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "id": {
-        "description": "Id of the file to delete (from search_files / save_result).",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "type": "object",
-  },
-  "name": "archestra__delete_file",
-  "title": "Delete File",
-}
-`;
-
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
   "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -100,19 +74,38 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
         "type": "string",
       },
       "target": {
-        "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
-        "properties": {
-          "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
-            "type": "boolean",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
+            "properties": {
+              "fresh": {
+                "const": true,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
           },
-          "id": {
-            "description": "An existing sandbox id (UUID) returned by an earlier call.",
-            "type": "string",
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
+              "id": {
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+            ],
+            "type": "object",
           },
-        },
-        "type": "object",
+        ],
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
       },
     },
     "required": [
@@ -122,50 +115,6 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
   },
   "name": "archestra__download_file",
   "title": "Download File",
-}
-`;
-
-exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
-{
-  "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited.",
-    "properties": {
-      "filename": {
-        "description": "Filename to edit instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "id": {
-        "description": "Id of the file to edit (from search_files / save_result).",
-        "minLength": 1,
-        "type": "string",
-      },
-      "new_string": {
-        "description": "The text to insert in place of old_string.",
-        "type": "string",
-      },
-      "old_string": {
-        "description": "The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "replace_all": {
-        "default": false,
-        "description": "Replace every occurrence of old_string. Default false replaces a single occurrence and errors if old_string is not unique.",
-        "type": "boolean",
-      },
-    },
-    "required": [
-      "old_string",
-      "new_string",
-    ],
-    "type": "object",
-  },
-  "name": "archestra__edit_file",
-  "title": "Edit File",
 }
 `;
 
@@ -194,7 +143,8 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
         "type": "string",
       },
       "path": {
-        "description": "Optional. Omit (or pass an empty string) to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
+        "description": "Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
+        "minLength": 1,
         "type": "string",
       },
     },
@@ -205,44 +155,6 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
   },
   "name": "archestra__load_skill",
   "title": "Load Skill",
-}
-`;
-
-exports[`skill and sandbox tool text > archestra__read_file 1`] = `
-{
-  "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, use the download URL or copy the file into the sandbox with upload_file and inspect it with run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), use the download URL or upload_file + run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
-    "properties": {
-      "filename": {
-        "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "id": {
-        "description": "Id or ref of the file to read — the \`id\` or \`ref\` from search_files, or a fileId from save_result.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "limit": {
-        "description": "Maximum number of lines to read. Defaults to 2000.",
-        "maximum": 9007199254740991,
-        "minimum": 1,
-        "type": "integer",
-      },
-      "offset": {
-        "description": "1-based line number to start reading from. Defaults to 1.",
-        "maximum": 9007199254740991,
-        "minimum": 1,
-        "type": "integer",
-      },
-    },
-    "type": "object",
-  },
-  "name": "archestra__read_file",
-  "title": "Read File",
 }
 `;
 
@@ -266,19 +178,38 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
         "type": "string",
       },
       "target": {
-        "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
-        "properties": {
-          "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
-            "type": "boolean",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
+            "properties": {
+              "fresh": {
+                "const": true,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
           },
-          "id": {
-            "description": "An existing sandbox id (UUID) returned by an earlier call.",
-            "type": "string",
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
+              "id": {
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+            ],
+            "type": "object",
           },
-        },
-        "type": "object",
+        ],
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
       },
       "timeoutSeconds": {
         "description": "Optional wall-clock limit in seconds, capped at the deployment maximum.",
@@ -294,71 +225,6 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
   },
   "name": "archestra__run_command",
   "title": "Run Command",
-}
-`;
-
-exports[`skill and sandbox tool text > archestra__save_result 1`] = `
-{
-  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file is saved to the project.",
-    "properties": {
-      "content": {
-        "description": "UTF-8 text content of the file.",
-        "type": "string",
-      },
-      "contentBase64": {
-        "description": "Base64-encoded binary content.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "filename": {
-        "description": "Plain filename including extension (e.g. "joke.md"). No paths.",
-        "maxLength": 256,
-        "minLength": 1,
-        "type": "string",
-      },
-      "mimeType": {
-        "description": "Optional MIME type. Sniffed from the bytes when omitted.",
-        "minLength": 1,
-        "type": "string",
-      },
-      "overwrite": {
-        "default": false,
-        "description": "Replace an existing file of the same name in place, keeping its id and download URL. Default false errors if the name is already taken.",
-        "type": "boolean",
-      },
-    },
-    "required": [
-      "filename",
-    ],
-    "type": "object",
-  },
-  "name": "archestra__save_result",
-  "title": "Save Result",
-}
-`;
-
-exports[`skill and sandbox tool text > archestra__search_files 1`] = `
-{
-  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only — each result carries a stable \`ref\`. To work on a found file, pass its \`ref\` to read_file (read its content), or to upload_file's my_file source (copy it into the sandbox). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "additionalProperties": false,
-    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations. In a project chat, searches the project's files instead.",
-    "properties": {
-      "query": {
-        "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "type": "object",
-  },
-  "name": "archestra__search_files",
-  "title": "Search Files",
 }
 `;
 
@@ -425,7 +291,7 @@ exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
 {
-  "description": "Upload a file into the conversation's sandbox from a chat attachment, inline base64, inline text, or a file from the user's persistent storage (the my_file source). The bytes become part of the sandbox recipe, so the file is present on every later run_command and download_file call. Note: files the user attached to the chat are already auto-staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or upload into a non-default sandbox. Requires \`sandbox:execute\`.",
+  "description": "Upload a file into the conversation's sandbox from a chat attachment, inline base64, or inline text. The bytes become part of the sandbox recipe, so the file is present on every later run_command and download_file call. Note: files the user attached to the chat are already auto-staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or upload into a non-default sandbox. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -437,7 +303,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
         "type": "string",
       },
       "source": {
-        "description": "Where the file bytes come from. One of four shapes, each tagged by a \`type\`: a chat attachment (\`{"type":"chat_attachment","attachmentId":...}\`), inline base64 (\`{"type":"base64","dataBase64":...}\`), inline text (\`{"type":"text","text":"print(1)"}\`), or a file from the user's persistent storage (\`{"type":"my_file","filename":...}\`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
+        "description": "Where the file bytes come from: a chat attachment, inline base64, or inline text. Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
         "oneOf": [
           {
             "additionalProperties": false,
@@ -514,45 +380,41 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             ],
             "type": "object",
           },
+        ],
+      },
+      "target": {
+        "anyOf": [
           {
             "additionalProperties": false,
-            "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
             "properties": {
-              "filename": {
-                "description": "Exact filename of a persistent file (when you have no id).",
-                "minLength": 1,
-                "type": "string",
+              "fresh": {
+                "const": true,
+                "type": "boolean",
               },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
               "id": {
-                "description": "Id or ref of a persistent file, as returned by search_files (\`id\` for stored files, \`ref\` for hand-placed ones).",
-                "type": "string",
-              },
-              "type": {
-                "const": "my_file",
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                 "type": "string",
               },
             },
             "required": [
-              "type",
+              "id",
             ],
             "type": "object",
           },
         ],
-      },
-      "target": {
-        "additionalProperties": false,
-        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
-        "properties": {
-          "fresh": {
-            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
-            "type": "boolean",
-          },
-          "id": {
-            "description": "An existing sandbox id (UUID) returned by an earlier call.",
-            "type": "string",
-          },
-        },
-        "type": "object",
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
       },
     },
     "required": [

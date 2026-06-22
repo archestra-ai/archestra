@@ -3,7 +3,7 @@ title: "Okta SSO + Token Exchange"
 category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
-order: 9
+order: 8
 lastUpdated: 2026-05-07
 ---
 

@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
 } from "@archestra/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -104,7 +103,6 @@ async function handleMcpPostRequest(
               extensions: {
                 ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
                 ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-                ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
               },
               tools: { listChanged: false },
             },

@@ -4,7 +4,6 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
-  isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -27,9 +26,9 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
 } from "@/archestra-mcp-server";
+import { isToolGrantApprovable } from "@/archestra-mcp-server/tool-auto-assign";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
-import type { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -42,7 +41,7 @@ import {
   startActiveMcpSpan,
 } from "@/observability/tracing";
 import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
-import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -87,12 +86,6 @@ export interface ChatToolContext {
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
-  /**
-   * Per-run guard against the model re-issuing the identical tool call forever.
-   * One instance per getChatMcpTools call (shared by every tool wrapper), so it
-   * carries no cross-run state.
-   */
-  repeatTracker: ToolCallRepeatTracker;
 }
 
 /**
@@ -113,6 +106,7 @@ export function buildMcpGatewayTool(params: {
     ...needsApprovalProps({
       toolName: mcpTool.name,
       ctx,
+      allowRunToolGrant: true,
     }),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
@@ -125,17 +119,6 @@ export function buildMcpGatewayTool(params: {
         abortLogMessage: "MCP tool execution aborted",
         failureLogMessage: "MCP tool execution failed",
         run: async ({ span, startTime }) => {
-          const repeatNudge = applyRepeatedCallBreaker({
-            ctx,
-            toolName: mcpTool.name,
-            toolArguments,
-            span,
-            startTime,
-          });
-          if (repeatNudge !== null) {
-            return repeatNudge;
-          }
-
           // PreToolUse lifecycle hook: a block short-circuits execution
           // and returns an explanatory tool-result instead of running.
           const preBlockReason = await firePreToolUseHook({
@@ -157,6 +140,7 @@ export function buildMcpGatewayTool(params: {
           }
 
           let toolResult: string | { content: string; [key: string]: unknown };
+          // Check if this is an Archestra tool - handle directly without DB lookup
           if (archestraMcpBranding.isToolName(mcpTool.name)) {
             logger.debug(
               {
@@ -193,7 +177,6 @@ export function buildMcpGatewayTool(params: {
                 sessionId: ctx.sessionId,
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
-                elicitation: ctx.elicitation,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
                 approvalRequiredPoliciesHandled: true,
                 tokenAuth: buildTokenAuthContext({
@@ -290,6 +273,7 @@ export function buildAgentDelegationTool(params: {
     chatOpsThreadId: ctx.chatOpsThreadId,
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
+    // Pass delegation chain for tracking delegated agent calls
     delegationChain: ctx.delegationChain,
     abortSignal: ctx.abortSignal,
     tokenAuth: buildTokenAuthContext({
@@ -305,6 +289,7 @@ export function buildAgentDelegationTool(params: {
     ...needsApprovalProps({
       toolName: agentTool.name,
       ctx,
+      allowRunToolGrant: false,
     }),
     execute: async (args: Record<string, unknown>, options) =>
       executeWithToolSpan({
@@ -316,19 +301,6 @@ export function buildAgentDelegationTool(params: {
         abortLogMessage: "Agent tool execution aborted",
         failureLogMessage: "Agent tool execution failed",
         run: async ({ span, startTime }) => {
-          // Repeated identical delegation calls loop too — and each one spawns a
-          // child-agent run, so breaking the loop here matters more, not less.
-          const repeatNudge = applyRepeatedCallBreaker({
-            ctx,
-            toolName: agentTool.name,
-            toolArguments: args,
-            span,
-            startTime,
-          });
-          if (repeatNudge !== null) {
-            return repeatNudge;
-          }
-
           const toolExecutionContext = await evaluateToolExecutionContextTrust({
             messages: options.messages,
             agentId: ctx.agentId,
@@ -384,58 +356,11 @@ export function mcpToolToModelOutput({
         structuredContent?: unknown;
         rawContent?: unknown;
       };
-}):
-  | { type: "text"; value: string }
-  | {
-      type: "content";
-      value: Array<
-        | { type: "text"; text: string }
-        | { type: "media"; data: string; mediaType: string }
-      >;
-    } {
-  if (typeof output === "string") return { type: "text", value: output };
-  const images = extractModelOutputImages(output.rawContent);
-  if (images.length === 0) return { type: "text", value: output.content };
+}): { type: "text"; value: string } {
   return {
-    type: "content",
-    value: [
-      { type: "text" as const, text: output.content },
-      ...images.map((img) => ({
-        type: "media" as const,
-        data: img.data,
-        mediaType: img.mediaType,
-      })),
-    ],
+    type: "text",
+    value: typeof output === "string" ? output : output.content,
   };
-}
-
-// A tool result's images only reach the model when bounded: a base64 payload
-// larger than this, or more than a couple of images, is dropped (the text
-// summary still goes through). Matches the screenshot ingest cap.
-const MAX_MODEL_OUTPUT_IMAGE_BASE64_LENGTH = 2_000_000;
-const MAX_MODEL_OUTPUT_IMAGES = 2;
-const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
-function extractModelOutputImages(
-  rawContent: unknown,
-): Array<{ data: string; mediaType: string }> {
-  if (!Array.isArray(rawContent)) return [];
-  const images: Array<{ data: string; mediaType: string }> = [];
-  for (const block of rawContent) {
-    if (
-      isRecord(block) &&
-      block.type === "image" &&
-      typeof block.data === "string" &&
-      typeof block.mimeType === "string" &&
-      block.data.length <= MAX_MODEL_OUTPUT_IMAGE_BASE64_LENGTH &&
-      // reject a history-stripped placeholder (the strip pass blanks the base64
-      // but leaves the image block) so it isn't re-forwarded as garbage media
-      BASE64_PATTERN.test(block.data)
-    ) {
-      images.push({ data: block.data, mediaType: block.mimeType });
-      if (images.length >= MAX_MODEL_OUTPUT_IMAGES) break;
-    }
-  }
-  return images;
 }
 
 /**
@@ -461,52 +386,11 @@ export async function buildArchestraToolOutput(params: {
     }
 > {
   const { response, toolName, toolArguments, agentId } = params;
-  // Never stringify an image block into the text summary — its base64 would
-  // bloat context and evade the history image-stripper. Images ride rawContent
-  // and reach the model as bounded media parts via toModelOutput instead.
   const text = response.content
-    .map((item) =>
-      item.type === "text"
-        ? item.text
-        : item.type === "image"
-          ? "[image]"
-          : JSON.stringify(item),
-    )
+    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
     .join("\n");
 
-  // Carry self-captured images (e.g. a get_app_diagnostics render screenshot)
-  // through so the model can see them — toModelOutput turns them into media
-  // parts, bounded by size/count there. Image-free results are unaffected.
-  if (!response.isError && response.content.some((c) => c.type === "image")) {
-    return { content: text, rawContent: response.content as ContentBlock[] };
-  }
-
   const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
-
-  // App-management results identify an owned app via structuredContent.id;
-  // the chat frontend mounts the app-bound runtime from it, so keep the rich
-  // shape. Scoped to the app trio — other Archestra tools stay plain text
-  // (e.g. knowledge-source citations parse the plain output).
-  const targetShortName = archestraMcpBranding.getToolShortName(targetToolName);
-  // run_tool also accepts bare archestra short names (see run-tool.ts routing);
-  // a bare name can only be a run_tool target — direct chat tool names are
-  // always server-prefixed.
-  const matchesAppTrio =
-    targetShortName !== null
-      ? isAppRenderingArchestraToolShortName(targetShortName)
-      : isAppRenderingArchestraToolShortName(targetToolName);
-  if (
-    matchesAppTrio &&
-    !response.isError &&
-    isRecord(response.structuredContent)
-  ) {
-    return {
-      content: text,
-      structuredContent: response.structuredContent,
-      rawContent: response.content as ContentBlock[],
-    };
-  }
-
   if (targetToolName === toolName) {
     // Not a run_tool dispatch — no UI resource to attach.
     return text;
@@ -571,23 +455,47 @@ function getChatExternalAgentId(): string {
 function needsApprovalProps(params: {
   toolName: string;
   ctx: ChatToolContext;
+  /** Only run_tool can propose granting an accessible-but-unassigned target. */
+  allowRunToolGrant: boolean;
 }): Pick<Tool, "needsApproval"> | Record<string, never> {
-  const { toolName, ctx } = params;
+  const { toolName, ctx, allowRunToolGrant } = params;
   if (ctx.blockOnApprovalRequired) {
     return {};
   }
   return {
     needsApproval: async (args: unknown) => {
       const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-      return ToolInvocationPolicyModel.checkApprovalRequired(
-        approvalTarget.toolName,
-        approvalTarget.toolInput,
-        {
-          teamIds: [],
-          externalAgentId: getChatExternalAgentId(),
-        },
-        ctx.globalToolPolicy,
-      );
+      if (
+        await ToolInvocationPolicyModel.checkApprovalRequired(
+          approvalTarget.toolName,
+          approvalTarget.toolInput,
+          {
+            teamIds: [],
+            externalAgentId: getChatExternalAgentId(),
+          },
+          ctx.globalToolPolicy,
+        )
+      ) {
+        return true;
+      }
+      // Grant approval: only run_tool can target a tool the agent
+      // does not yet have. Propose granting an accessible-but-
+      // unassigned target so the user confirms (and the tool is added
+      // to the agent) before it runs. The frontend assigns the tool,
+      // then resumes this same call — by which point it is assigned.
+      if (
+        !allowRunToolGrant ||
+        archestraMcpBranding.getToolShortName(toolName) !==
+          TOOL_RUN_TOOL_SHORT_NAME
+      ) {
+        return false;
+      }
+      return isToolGrantApprovable({
+        toolName: approvalTarget.toolName,
+        agentId: ctx.agentId,
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+      });
     },
   };
 }
@@ -761,17 +669,18 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     }
   }
 
+  // Execute via mcpClient
   const toolCall = {
     id: randomUUID(),
     name: toolName,
     arguments: toolArguments ?? {},
   };
 
-  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
   try {
-    result = await mcpClient.executeToolCallForOwner(
+    result = await mcpClient.executeToolCall(
       toolCall,
-      agentOwner(agentId),
+      agentId,
       mcpGwToken
         ? {
             tokenId: mcpGwToken.tokenId,
@@ -839,6 +748,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     };
   }
 
+  // Sync browser state if needed
   logger.debug(
     { isolationKey, toolName, isEnabled: browserStreamFeature.isEnabled() },
     "[executeMcpTool] Checking browser sync conditions",
@@ -1252,57 +1162,6 @@ function buildPreToolUseBlockedResult(reason: string | null): string {
   return `Tool call blocked by a PreToolUse hook. Reason: ${reason ?? "no reason given"}. Do not retry; explain the block to the user.`;
 }
 
-/**
- * Tool-result text returned in place of executing a tool call that has repeated
- * with identical arguments past the threshold (see ToolCallRepeatTracker). The
- * call is not executed; this message replaces its result.
- */
-function buildRepeatedCallNudge(toolName: string, count: number): string {
-  return `You have called \`${toolName}\` with identical arguments ${count} times in a row, so it was not executed again — repeating it will not produce a different result. Change the arguments, use a different tool, or give your best final answer with what you already know.`;
-}
-
-/**
- * Circuit breaker for repeated identical tool calls. Records the call on the
- * per-run tracker and, once the same (tool + args) repeats past the threshold,
- * returns the nudge text to use in place of executing the tool; returns null
- * below the threshold so the caller proceeds normally. A skip is reported as a
- * non-error tool call: nothing failed — the loop was just short-circuited — so
- * it must not inflate tool error metrics. Shared by the MCP and delegation
- * tool wrappers, which hold one tracker per run via ctx.
- */
-function applyRepeatedCallBreaker(params: {
-  ctx: ChatToolContext;
-  toolName: string;
-  toolArguments: Record<string, unknown> | undefined;
-  span: Parameters<Parameters<typeof startActiveMcpSpan>[0]["callback"]>[0];
-  startTime: number;
-}): string | null {
-  const { ctx, toolName, toolArguments, span, startTime } = params;
-  const repeat = ctx.repeatTracker.record(toolName, toolArguments);
-  if (!repeat.shouldNudge) {
-    return null;
-  }
-  logger.warn(
-    {
-      agentId: ctx.agentId,
-      conversationId: ctx.conversationId ?? null,
-      sessionId: ctx.sessionId ?? null,
-      toolName,
-      count: repeat.count,
-    },
-    "Skipping repeated identical tool call; nudging the model",
-  );
-  span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, false);
-  reportToolMetrics({
-    toolName,
-    agentId: ctx.agentId,
-    agentName: ctx.agentName,
-    startTime,
-    isError: false,
-  });
-  return buildRepeatedCallNudge(toolName, repeat.count);
-}
-
 /** Max chars of tool output passed to a PostToolUse hook payload. */
 const POST_TOOL_USE_RESPONSE_CAP = 50_000;
 
@@ -1403,6 +1262,7 @@ function normalizeJsonSchema(schema: unknown): JSONSchema7 {
     additionalProperties: false,
   };
 
+  // If schema is missing or invalid, return a minimal valid schema
   if (!isRecord(schema)) {
     return fallbackSchema;
   }
@@ -1438,6 +1298,7 @@ function addAdditionalPropertiesFalse(
       result.additionalProperties = false;
     }
 
+    // Recurse into properties
     if (isRecord(result.properties)) {
       const newProps: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(result.properties)) {
@@ -1449,6 +1310,7 @@ function addAdditionalPropertiesFalse(
     }
   }
 
+  // Recurse into array items
   if (result.type === "array" && isRecord(result.items)) {
     result.items = addAdditionalPropertiesFalse(result.items);
   }

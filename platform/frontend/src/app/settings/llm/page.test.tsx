@@ -3,6 +3,7 @@
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockOrganization: Record<string, unknown> | null = null;
@@ -77,8 +78,27 @@ describe("LlmSettingsPage", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  // The org-wide default user limit is no longer edited from the LLM settings
-  // save bar (the old "Unset" button). It now lives in the unified
-  // "Default user limits" list (a NULL-environment row with its own delete
-  // action), whose CRUD is covered by the default-user-limit route tests.
+  it("lets admins unset the default user limit", async () => {
+    mockOrganization = {
+      compressionScope: "organization",
+      convertToolResultsToToon: true,
+      defaultUserLimitValue: 500,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: "1w",
+    };
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Unset" }));
+
+    expect(screen.getByPlaceholderText("Disabled")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockUpdateLlmSettingsMutateAsync).toHaveBeenCalledWith({
+      defaultUserLimitValue: null,
+      defaultUserLimitModel: null,
+      defaultUserLimitCleanupInterval: null,
+    });
+  });
 });

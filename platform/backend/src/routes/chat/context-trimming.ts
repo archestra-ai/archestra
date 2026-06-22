@@ -5,9 +5,8 @@
  */
 import type { SupportedProvider } from "@archestra/shared";
 import { APICallError, type ModelMessage } from "ai";
-import { TOKEN_ESTIMATE } from "./normalization/estimate-message-tokens";
 
-const CHARS_PER_TOKEN = TOKEN_ESTIMATE.charsPerToken;
+const CHARS_PER_TOKEN = 4;
 
 /**
  * Gemini can emit tool-call chunks before any text. Probing textStream to detect

@@ -1,6 +1,5 @@
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import { agentOwner } from "@/types";
 import { resolveEnterpriseAssertion } from "./assertion-resolver";
 
 describe("resolveEnterpriseAssertion", () => {
@@ -40,7 +39,7 @@ describe("resolveEnterpriseAssertion", () => {
     });
 
     const result = await resolveEnterpriseAssertion({
-      owner: agentOwner(agent.id),
+      agentId: agent.id,
       identityProviderId: identityProvider.id,
       tokenAuth: {
         tokenId: "user-token",

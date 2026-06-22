@@ -51,62 +51,16 @@ export function toolNotEnabledForConversationMessage(toolName: string): string {
 }
 
 /**
- * Recovery message for the LLM-proxy guardrail path, where one or more tools the
- * model tried to call were filtered out because they are disabled for the
- * conversation. Distinct from the run_tool dispatcher's per-call recovery: here
- * the calls were already emitted and dropped, so the steer also says not to
- * retry them.
+ * Recovery message for a tool that exists and is visible to the user but is
+ * not assigned to the agent, when the user lacks permission to modify the
+ * agent's tools (so run_tool could not auto-assign it). The actionable next
+ * step lies with the user, not the model.
  */
-export function disabledToolsNotRunMessage(toolNames: string[]): string {
-  const searchToolsName = archestraMcpBranding.getToolName(
-    TOOL_SEARCH_TOOLS_SHORT_NAME,
-  );
-  const toolList = toolNames.join(", ");
+export function toolNotAssignedAskAdminMessage(toolName: string): string {
   return (
-    `The tools "${toolList}" are not enabled for this conversation and were ` +
-    `not run. Do not call them again here. Use a tool that is available to ` +
-    `you, or call ${searchToolsName} to discover the tools you can use.`
-  );
-}
-
-/**
- * Soft warning prepended to a successful run_tool result when a short name was
- * recovered to its exact `server__tool` form. The call ran; this steers the
- * model to pass the exact name next time so the implicit short-name fallback is
- * not relied on.
- */
-export function recoveredShortNameNotice(
-  requestedName: string,
-  fullName: string,
-): string {
-  const runToolName = archestraMcpBranding.getToolName(
-    TOOL_RUN_TOOL_SHORT_NAME,
-  );
-  return (
-    `Note: "${requestedName}" is not an exact tool name; it was interpreted as ` +
-    `"${fullName}". Call ${runToolName} with the exact full name "${fullName}" ` +
-    "(the server__tool form) next time — short names are accepted only as a " +
-    "fallback and may stop resolving if another tool matches the same short name."
-  );
-}
-
-/**
- * Recovery message when a short name matches more than one tool available to the
- * agent. Lists the candidate full names and asks the model to pick one rather
- * than guessing — the disambiguation half of the implicit short-name fallback.
- */
-export function ambiguousShortNameMessage(
-  requestedName: string,
-  candidates: string[],
-): string {
-  const runToolName = archestraMcpBranding.getToolName(
-    TOOL_RUN_TOOL_SHORT_NAME,
-  );
-  const list = candidates.map((name) => `"${name}"`).join(", ");
-  return (
-    `The name "${requestedName}" is ambiguous — it matches multiple tools ` +
-    `available to this agent: ${list}. Call ${runToolName} again with the exact ` +
-    "full name (the server__tool form) you intend. Do not guess tool names."
+    `Tool "${toolName}" exists but is not assigned to this agent, and the ` +
+    "current user is not allowed to change the agent's tools. Tell the user " +
+    `to ask an admin to assign "${toolName}" to this agent, then retry.`
   );
 }
 

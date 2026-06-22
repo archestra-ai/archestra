@@ -1,7 +1,4 @@
-import {
-  ArchestraInternalErrorCode,
-  type SupportedProvider,
-} from "@archestra/shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -276,17 +273,13 @@ export class OpenAIEmbeddingStreamAdapter
 export class OpenAIRequestAdapter
   implements LLMRequestAdapter<OpenAiRequest, OpenAiMessages>
 {
-  readonly provider: SupportedProvider;
+  readonly provider = "openai" as const;
   private request: OpenAiRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  // `provider` overrides which provider this adapter attributes to (logs,
-  // metrics, interactions). OpenAI-compatible providers (DeepSeek, GitHub
-  // Copilot, …) reuse this adapter via createOpenAiCompatibleAdapterFactory.
-  constructor(request: OpenAiRequest, provider: SupportedProvider = "openai") {
+  constructor(request: OpenAiRequest) {
     this.request = request;
-    this.provider = provider;
   }
 
   // ---------------------------------------------------------------------------
@@ -846,15 +839,11 @@ export function stripImageBlocksFromContent(content: unknown): string {
 export class OpenAIResponseAdapter
   implements LLMResponseAdapter<OpenAiResponse>
 {
-  readonly provider: SupportedProvider;
+  readonly provider = "openai" as const;
   private response: OpenAiResponse;
 
-  constructor(
-    response: OpenAiResponse,
-    provider: SupportedProvider = "openai",
-  ) {
+  constructor(response: OpenAiResponse) {
     this.response = response;
-    this.provider = provider;
   }
 
   getId(): string {
@@ -920,7 +909,7 @@ export class OpenAIResponseAdapter
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
+    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
       this.response.usage,
     );
     return {
@@ -928,7 +917,6 @@ export class OpenAIResponseAdapter
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
-      reasoningTokens: reasoning,
     };
   }
 
@@ -970,12 +958,11 @@ export class OpenAIResponseAdapter
 export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
-  readonly provider: SupportedProvider;
+  readonly provider = "openai" as const;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
 
-  constructor(provider: SupportedProvider = "openai") {
-    this.provider = provider;
+  constructor() {
     this.state = {
       responseId: "",
       model: "",
@@ -1012,12 +999,6 @@ export class OpenAIStreamAdapter
             | { cached_tokens?: number }
             | undefined
         )?.cached_tokens ?? 0;
-      const reasoningTokens =
-        (
-          chunk.usage.completion_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0;
       this.state.usage = {
         inputTokens: Math.max(
           0,
@@ -1026,7 +1007,6 @@ export class OpenAIStreamAdapter
         outputTokens: chunk.usage.completion_tokens ?? 0,
         cacheReadTokens,
         cacheWriteTokens: 0,
-        reasoningTokens,
       };
     }
 
@@ -1364,18 +1344,11 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
   const cacheRead =
     (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
       ?.cached_tokens ?? 0;
-  const reasoning =
-    (
-      usage.completion_tokens_details as
-        | { reasoning_tokens?: number }
-        | undefined
-    )?.reasoning_tokens ?? 0;
   return {
     input: Math.max(0, usage.prompt_tokens - cacheRead),
     output: usage.completion_tokens,
     cacheRead,
     cacheWrite: 0,
-    reasoning,
   };
 }
 

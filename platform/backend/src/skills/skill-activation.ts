@@ -1,13 +1,9 @@
 import {
   buildUserSystemPromptContext,
-  TOOL_DOWNLOAD_FILE_SHORT_NAME,
-  TOOL_LOAD_SKILL_SHORT_NAME,
-  TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_UPLOAD_FILE_SHORT_NAME,
   type UserSystemPromptContext,
 } from "@archestra/shared";
-import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { TeamModel, UserModel } from "@/models";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { renderSystemPrompt } from "@/templating";
 import type { Skill, SkillFile } from "@/types";
 
@@ -61,32 +57,25 @@ export function formatSkillActivation({
       ? (renderSystemPrompt(skill.content, promptContext) ?? skill.content)
       : skill.content;
   const skillRoot = `/skills/${neutralizeFrameTags(skill.name)}`;
-  const runCommand = archestraMcpBranding.getToolName(
-    TOOL_RUN_COMMAND_SHORT_NAME,
-  );
-  const downloadFile = archestraMcpBranding.getToolName(
-    TOOL_DOWNLOAD_FILE_SHORT_NAME,
-  );
-  const uploadFile = archestraMcpBranding.getToolName(
-    TOOL_UPLOAD_FILE_SHORT_NAME,
-  );
-  const loadSkill = archestraMcpBranding.getToolName(
-    TOOL_LOAD_SKILL_SHORT_NAME,
-  );
   const sandboxHint = canRunSandbox
-    ? ` This skill is mounted in your sandbox at ${skillRoot}. Run a bundled ` +
-      `script via ${runCommand} (\`python3 ${skillRoot}/<script>\`); pass cwd: ${skillRoot} ` +
-      "when a script reads bundled files by relative path. Direct outputs to " +
-      "absolute paths under /home/sandbox — a script computing paths relative to " +
-      `its own file writes under ${skillRoot}, not your cwd. Use ${downloadFile} to ` +
-      `retrieve generated files, ${uploadFile} to add inputs.`
+    ? ` This skill is mounted in your sandbox at ${skillRoot} and is on ` +
+      "PYTHONPATH, so its modules import directly in run_command (no path " +
+      `setup of any kind). Run a bundled script via run_command (\`python3 ${skillRoot}` +
+      `/<script>\`); pass cwd: ${skillRoot} only when a script reads bundled ` +
+      "files by relative path — direct outputs to absolute paths under " +
+      "/home/sandbox, and note that a script computing paths relative to its " +
+      `own file writes under ${skillRoot}, not your cwd. Python is the uv ` +
+      "project venv at /home/sandbox (`python3`) — install packages with " +
+      `\`uv add --project /home/sandbox <pkg>\`. Files the user attached are ` +
+      `under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. Use download_file to retrieve ` +
+      "generated files, upload_file to add inputs."
     : "";
   const resources =
     files.length > 0
       ? `\n<skill_resources>\n${files
           .map((file) => `${neutralizeFrameTags(file.path)} (${file.kind})`)
           .join("\n")}\n</skill_resources>\n` +
-        `Inspect any resource with ${loadSkill} (passing its path) before ` +
+        "Inspect any resource with load_skill (passing its path) before " +
         "re-implementing — prefer importing and running the skill's own modules " +
         "over rewriting them." +
         sandboxHint

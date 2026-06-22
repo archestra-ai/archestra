@@ -14,7 +14,6 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useSession } from "@/lib/auth/auth.query";
-import { callApi } from "@/lib/chat/api-call";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
@@ -83,16 +82,21 @@ export function mergeUpdatedConversationIntoCache(
 export function useConversation(conversationId?: string) {
   return useQuery({
     queryKey: ["conversation", conversationId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!conversationId) return null;
-      // 400/404 are handled gracefully by the UI, so suppress their toast.
-      return callApi(
-        () => getChatConversation({ path: { id: conversationId } }),
-        null,
-        {
-          silentStatuses: [400, 404],
-        },
-      );
+      const response = await getChatConversation({
+        path: { id: conversationId },
+      });
+      // Return null for any error - handled gracefully by UI
+      if (response.error) {
+        const status = response.response.status;
+        // Only show toast for unexpected errors (not 400/404 which are handled gracefully)
+        if (status !== 400 && status !== 404) {
+          handleApiError(response.error);
+        }
+        return null;
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
@@ -105,13 +109,15 @@ export function useConversation(conversationId?: string) {
 export function useConversationFiles(conversationId?: string) {
   return useQuery({
     queryKey: ["conversation-files", conversationId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!conversationId) return null;
-      return callApi(
-        () => getChatConversationFiles({ path: { id: conversationId } }),
-        null,
-        { silent: true },
-      );
+      const response = await getChatConversationFiles({
+        path: { id: conversationId },
+      });
+      if (response.error) {
+        return null;
+      }
+      return response.data;
     },
     enabled: !!conversationId,
     staleTime: 0,
@@ -129,15 +135,18 @@ export function useConversations({
 }) {
   return useQuery({
     queryKey: ["conversations", search],
-    queryFn: () => {
+    queryFn: async () => {
       const trimmedSearch = search?.trim();
-      return callApi(
-        () =>
-          getChatConversations({
-            query: trimmedSearch ? { search: trimmedSearch } : undefined,
-          }),
-        [],
-      );
+
+      const { data, error } = await getChatConversations({
+        query: trimmedSearch ? { search: trimmedSearch } : undefined,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data;
     },
     enabled,
     staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
@@ -155,21 +164,21 @@ export function useCreateConversation() {
       modelId,
       chatApiKeyId,
       title,
-      projectId,
-    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) =>
-      callApi(
-        () =>
-          createChatConversation({
-            body: {
-              agentId,
-              modelId,
-              chatApiKeyId: chatApiKeyId ?? undefined,
-              title,
-              projectId: projectId ?? undefined,
-            },
-          }),
-        null,
-      ),
+    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
+      const { data, error } = await createChatConversation({
+        body: {
+          agentId,
+          modelId,
+          chatApiKeyId: chatApiKeyId ?? undefined,
+          title,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (newConversation) => {
       if (!newConversation) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -195,15 +204,23 @@ export function useUpdateConversation() {
       pinnedAt,
     }: { id: string } & NonNullable<
       archestraApiTypes.UpdateChatConversationData["body"]
-    >) =>
-      callApi(
-        () =>
-          updateChatConversation({
-            path: { id },
-            body: { title, modelId, chatApiKeyId, agentId, pinnedAt },
-          }),
-        null,
-      ),
+    >) => {
+      const { data, error } = await updateChatConversation({
+        path: { id },
+        body: {
+          title,
+          modelId,
+          chatApiKeyId,
+          agentId,
+          pinnedAt,
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.setQueryData(
@@ -245,11 +262,14 @@ export function useUpdateConversation() {
 export function useMemberDefaultModel() {
   return useQuery({
     queryKey: ["member-default-model"],
-    queryFn: () =>
-      callApi(() => getMemberDefaultModel(), {
-        modelId: null,
-        chatApiKeyId: null,
-      }),
+    queryFn: async () => {
+      const response = await getMemberDefaultModel();
+      if (response.error) {
+        handleApiError(response.error);
+        return { modelId: null, chatApiKeyId: null };
+      }
+      return response.data;
+    },
   });
 }
 
@@ -265,7 +285,14 @@ export function useUpdateMemberDefaultModel() {
     mutationFn: async (body: {
       modelId: string | null;
       chatApiKeyId: string | null;
-    }) => callApi(() => updateMemberDefaultModel({ body }), null),
+    }) => {
+      const { data, error } = await updateMemberDefaultModel({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data) => {
       if (data) {
         queryClient.setQueryData(["member-default-model"], data);
@@ -289,8 +316,18 @@ export function useCompactConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      callApi(() => compactChatConversation({ path: { id } }), null),
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await compactChatConversation({
+        path: { id },
+      });
+
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+
+      return data;
+    },
     onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.setQueryData(
@@ -314,11 +351,17 @@ export function useToggleHooksDebug() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      callApi(
-        () => setConversationHooksDebug({ path: { id }, body: { enabled } }),
-        null,
-      ),
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      const { data, error } = await setConversationHooksDebug({
+        path: { id },
+        body: { enabled },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, variables) => {
       if (!data) return;
       toast.success(
@@ -398,8 +441,16 @@ export function useDeleteConversation() {
 
 export function useStopChatStream() {
   return useMutation({
-    mutationFn: (conversationId: string) =>
-      callApi(() => stopChatStream({ path: { id: conversationId } }), null),
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await stopChatStream({
+        path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
   });
 }
 
@@ -419,15 +470,17 @@ export function useResolveChatMcpElicitation() {
       conversationId: string;
       action: ResolveChatMcpElicitationBody["action"];
       content?: ResolveChatMcpElicitationBody["content"];
-    }) =>
-      callApi(
-        () =>
-          resolveChatMcpElicitation({
-            path: { id },
-            body: { conversationId, action, content },
-          }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await resolveChatMcpElicitation({
+        path: { id },
+        body: { conversationId, action, content },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
   });
 }
 
@@ -441,12 +494,17 @@ export function useGenerateConversationTitle() {
     }: {
       id: string;
       regenerate?: boolean;
-    }) =>
-      callApi(
-        () =>
-          generateChatConversationTitle({ path: { id }, body: { regenerate } }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await generateChatConversationTitle({
+        path: { id },
+        body: { regenerate },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, variables) => {
       if (!data) {
         return;
@@ -471,9 +529,16 @@ export function useGenerateConversationTitle() {
 export function useChatProfileMcpTools(agentId: string | undefined) {
   return useQuery({
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
-    queryFn: () => {
+    queryFn: async () => {
       if (!agentId) return [];
-      return callApi(() => getChatAgentMcpTools({ path: { agentId } }), []);
+      const { data, error } = await getChatAgentMcpTools({
+        path: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      return data;
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -515,8 +580,8 @@ export function useConversationEnabledTools(
     queryFn: async () => {
       if (!conversationId) return null;
       const result = await fetchConversationEnabledTools(conversationId);
-      if (!result.data) {
-        if (result.status !== 404) {
+      if (!result?.data) {
+        if (result?.status !== 404) {
           handleApiError({
             error: new Error("Failed to fetch enabled tools"),
           });
@@ -545,15 +610,17 @@ export function useUpdateConversationEnabledTools() {
     }: {
       conversationId: string;
       toolIds: string[];
-    }) =>
-      callApi(
-        () =>
-          updateConversationEnabledTools({
-            path: { id: conversationId },
-            body: { toolIds },
-          }),
-        null,
-      ),
+    }) => {
+      const { data, error } = await updateConversationEnabledTools({
+        path: { id: conversationId },
+        body: { toolIds },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.invalidateQueries({
@@ -570,11 +637,16 @@ export function useClearConversationEnabledTools() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (conversationId: string) =>
-      callApi(
-        () => deleteConversationEnabledTools({ path: { id: conversationId } }),
-        null,
-      ),
+    mutationFn: async (conversationId: string) => {
+      const { data, error } = await deleteConversationEnabledTools({
+        path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, conversationId) => {
       if (!data) return;
       queryClient.invalidateQueries({
@@ -585,17 +657,24 @@ export function useClearConversationEnabledTools() {
 }
 
 /**
+ * Get profile tools with IDs (for the manage tools dialog)
+ * Returns full tool objects including IDs needed for enabled tools junction table
+ */
+/**
  * Fetch MCP tools for an agent (raw function for use with useQueries).
  */
 export async function fetchAgentMcpTools(agentId: string | undefined) {
   if (!agentId) return [];
-  return callApi(() => getAgentTools({ path: { agentId } }), []);
+  const { data, error } = await getAgentTools({
+    path: { agentId },
+  });
+  if (error) {
+    handleApiError(error);
+    return [];
+  }
+  return data;
 }
 
-/**
- * Get profile tools with IDs (for the manage tools dialog)
- * Returns full tool objects including IDs needed for enabled tools junction table
- */
 export function useProfileToolsWithIds(agentId: string | undefined) {
   return useQuery({
     queryKey: ["agents", agentId, "tools", "mcp-only"],
@@ -616,10 +695,14 @@ export function useAgentDelegationTools(agentId: string | undefined) {
     queryKey: ["agents", agentId, "delegation-tools"],
     queryFn: async () => {
       if (!agentId) return [];
-      const data = await callApi(
-        () => getAgentTools({ path: { agentId } }),
-        [],
-      );
+      const { data, error } = await getAgentTools({
+        path: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return [];
+      }
+      // Filter for delegation tools (tools with name starting with "delegate_to_")
       return (data ?? []).filter((tool) =>
         tool.name.startsWith("delegate_to_"),
       );
@@ -647,18 +730,20 @@ function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
   onInstallCompleteRef.current = onInstallComplete;
 
   const installMutation = useMutation({
-    mutationFn: (agentId: string) =>
-      callApi(
-        () =>
-          installMcpServer({
-            body: {
-              name: PLAYWRIGHT_MCP_SERVER_NAME,
-              catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
-              agentIds: [agentId],
-            },
-          }),
-        null,
-      ),
+    mutationFn: async (agentId: string) => {
+      const { data, error } = await installMcpServer({
+        body: {
+          name: PLAYWRIGHT_MCP_SERVER_NAME,
+          catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+          agentIds: [agentId],
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data, agentId) => {
       if (data?.id) {
         setInstallingServerId(data.id);
@@ -668,11 +753,17 @@ function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
   });
 
   const reinstallMutation = useMutation({
-    mutationFn: (serverId: string) =>
-      callApi(
-        () => reinstallMcpServer({ path: { id: serverId }, body: {} }),
-        null,
-      ),
+    mutationFn: async (serverId: string) => {
+      const { data, error } = await reinstallMcpServer({
+        path: { id: serverId },
+        body: {},
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
     onSuccess: (data) => {
       if (data?.id) {
         setInstallingServerId(data.id);

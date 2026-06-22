@@ -1,15 +1,14 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   ConversationModel,
-  FileModel,
   SkillModel,
   SkillSandboxConversationGoneError,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
-import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 
@@ -226,7 +225,6 @@ describe("SkillSandboxReplayEventModel", () => {
     });
     const upload = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
-      userId: user.id,
       path: "/home/sandbox/input.csv",
       mimeType: "text/csv",
       originalName: "input.csv",
@@ -270,7 +268,7 @@ describe("SkillSandboxReplayEventModel", () => {
     }
     expect(a.command.id).toBe(commandA.id);
     expect(u.upload.id).toBe(upload.id);
-    expect(u.upload.data?.toString("utf8")).toBe("a,b");
+    expect(u.upload.data.toString("utf8")).toBe("a,b");
     expect(m.mount.skillName).toBe("alpha");
     // SKILL.md is carried as the version body; requirements.txt as a version file.
     expect(m.content).toBe("# alpha");
@@ -280,51 +278,6 @@ describe("SkillSandboxReplayEventModel", () => {
     // the allocator advanced past every appended event.
     const refreshed = await SkillSandboxModel.findById(sandbox.id);
     expect(refreshed?.nextReplaySequence).toBe(4);
-  });
-
-  test("appendCommand strips NUL bytes from output so binary output does not crash the insert", async ({
-    makeOrganization,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/home/sandbox",
-    });
-
-    // Binary piped to stdout (e.g. `curl <url> | head`) embeds NUL bytes that
-    // a Postgres `text` column rejects (code 22021/22P05); the captured output
-    // is sanitized at the write boundary so the insert never crashes. command/
-    // cwd are left intact (they are rejected upstream when they carry NUL).
-    const NUL = String.fromCharCode(0);
-    const row = await SkillSandboxReplayEventModel.appendCommand({
-      sandboxId: sandbox.id,
-      organizationId: org.id,
-      command: "cat image.png",
-      cwd: "/home/sandbox",
-      stdout: `PNG${NUL}data${NUL}IHDR`,
-      stderr: `warn${NUL}ing`,
-      exitCode: 0,
-      durationMs: 1,
-      timeoutSeconds: 30,
-    });
-
-    expect(row.command).toBe("cat image.png");
-    expect(row.cwd).toBe("/home/sandbox");
-    expect(row.stdout).toBe("PNGdataIHDR");
-    expect(row.stderr).toBe("warning");
-
-    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
-    const [event] = log;
-    if (event?.kind !== "command") {
-      throw new Error("expected a command replay event");
-    }
-    expect(event.command.command).toBe("cat image.png");
-    expect(event.command.stdout).toBe("PNGdataIHDR");
-    expect(event.command.stderr).toBe("warning");
   });
 
   test("appendSkillMount records every install command in order within the mount transaction", async ({
@@ -426,32 +379,88 @@ describe("SkillSandboxReplayEventModel", () => {
       conversationId: null,
       defaultCwd: "/home/sandbox",
     });
-    // a non-upload file row (kind is unconstrained text); seed it raw since the
-    // artifact write path now targets the `files` table.
-    const artifactId = crypto.randomUUID();
-    await db.execute(sql`
-      INSERT INTO skill_sandbox_files
-        (id, kind, sandbox_id, path, mime_type, size_bytes, data)
-      VALUES
-        (${artifactId}, 'artifact', ${sandbox.id}, 'out/report.txt',
-         'text/plain', 1, ${Buffer.from("a")})
-    `);
+    const artifact = await SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      path: "out/report.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 1,
+      data: Buffer.from("a"),
+    });
 
-    // file_kind is generated as 'upload', so pointing file_id at a non-upload
-    // row violates the (file_id, file_kind) -> (id, kind) composite FK.
+    // file_kind is generated as 'upload', so pointing file_id at an artifact row
+    // violates the (file_id, file_kind) -> (id, kind) composite FK.
     await expect(
       db.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: sandbox.id,
         sequence: 0,
         kind: "upload",
-        fileId: artifactId,
+        fileId: artifact.id,
       }),
     ).rejects.toThrow();
   });
 });
 
+describe("SkillSandboxFileModel (artifacts)", () => {
+  test("createArtifact stores raw bytes and findArtifactById round-trips", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+
+    const payload = Buffer.from("hello, world", "utf8");
+    const artifact = await SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      path: "out/report.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: payload.byteLength,
+      data: payload,
+    });
+
+    const fetched = await SkillSandboxFileModel.findArtifactById(artifact.id);
+    if (!fetched) throw new Error("artifact not found");
+    expect(fetched.kind).toBe("artifact");
+    expect(fetched.path).toBe("out/report.txt");
+    expect(Buffer.from(fetched.data).toString("utf8")).toBe("hello, world");
+  });
+
+  test("findArtifactById ignores upload-kind rows", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+    const upload = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/in.csv",
+      mimeType: "text/csv",
+      originalName: null,
+      sizeBytes: 1,
+      data: Buffer.from("a"),
+    });
+    if (!upload) throw new Error("upload not appended");
+
+    // an upload is a file row too, but the artifact lookup is kind-scoped.
+    expect(await SkillSandboxFileModel.findArtifactById(upload.id)).toBeNull();
+  });
+});
+
 describe("Cascade behavior", () => {
-  test("deleting a sandbox removes its replay log and mounts; persistent files survive with sandbox_id nulled", async ({
+  test("deleting a sandbox removes its replay log, mounts, files, and artifacts", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -482,16 +491,11 @@ describe("Cascade behavior", () => {
       organizationId: org.id,
       mount: mountRef(skill, await latestVersionId(skill)),
     });
-    // a persistent file produced by this sandbox: it references the sandbox
-    // only as provenance (ON DELETE SET NULL), so it must outlive the sandbox.
-    const file = await fileStore.put({
-      organizationId: org.id,
-      userId: user.id,
-      projectId: null,
-      conversationId: null,
+    const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
-      filename: "a.txt",
+      path: "out/a.txt",
       mimeType: "text/plain",
+      originalName: null,
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
@@ -507,40 +511,13 @@ describe("Cascade behavior", () => {
     expect(
       await SkillSandboxModel.listMountedSkillIds(sandbox.id),
     ).toHaveLength(0);
-    // the persistent file survives, with its sandbox provenance nulled out.
-    const survivor = await FileModel.findById(file.id);
-    expect(survivor).not.toBeNull();
-    expect(survivor?.sandboxId).toBeNull();
+    expect(
+      await SkillSandboxFileModel.findArtifactById(artifact.id),
+    ).toBeNull();
     // the pinned version survives (RESTRICT would block deleting it, not the
     // sandbox); the mount row is gone via cascade.
     expect(
       await SkillVersionModel.findBySkillAndVersion(skill.id, 1),
     ).not.toBeNull();
-  });
-});
-
-describe("SkillSandboxReplayEventModel (upload origin)", () => {
-  test("appendUpload stores origin", async ({ makeUser, makeOrganization }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/home/sandbox",
-    });
-
-    const row = await SkillSandboxReplayEventModel.appendUpload({
-      sandboxId: sandbox.id,
-      userId: user.id,
-      path: "/home/sandbox/pulled.txt",
-      mimeType: "text/plain",
-      originalName: "pulled.txt",
-      sizeBytes: 5,
-      data: Buffer.from("bytes"),
-      origin: "my_file",
-    });
-    expect(row?.origin).toBe("my_file");
-    expect(row?.kind).toBe("upload");
   });
 });

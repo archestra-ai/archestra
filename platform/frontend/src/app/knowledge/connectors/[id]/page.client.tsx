@@ -375,9 +375,11 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <MetadataItem label="Documents">
               <div>{connector.totalDocsIngested}</div>
             </MetadataItem>
-            <MetadataItem label="Schedule">
-              <div>{formatCronSchedule(connector.schedule)}</div>
-            </MetadataItem>
+            {connector.connectorType !== "file_upload" && (
+              <MetadataItem label="Schedule">
+                <div>{formatCronSchedule(connector.schedule)}</div>
+              </MetadataItem>
+            )}
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
         </div>

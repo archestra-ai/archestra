@@ -34,7 +34,6 @@ type ScheduleTriggerListFilters = {
   actorUserIds?: string[];
   excludeActorUserId?: string;
   name?: string;
-  projectId?: string;
 };
 
 class ScheduleTriggerModel {
@@ -48,7 +47,6 @@ class ScheduleTriggerModel {
       | "actorUserIds"
       | "excludeActorUserId"
       | "name"
-      | "projectId"
     >,
   ): Promise<number> {
     const filters = buildListFilters(params);
@@ -256,7 +254,6 @@ function buildListFilters(
     | "actorUserIds"
     | "excludeActorUserId"
     | "name"
-    | "projectId"
   >,
 ): SQL[] | null {
   if (
@@ -312,10 +309,6 @@ function buildListFilters(
     );
   }
 
-  if (params.projectId !== undefined) {
-    filters.push(eq(schema.scheduleTriggersTable.projectId, params.projectId));
-  }
-
   return filters;
 }
 
@@ -325,7 +318,6 @@ function triggerColumns() {
     organizationId: schema.scheduleTriggersTable.organizationId,
     name: schema.scheduleTriggersTable.name,
     agentId: schema.scheduleTriggersTable.agentId,
-    projectId: schema.scheduleTriggersTable.projectId,
     messageTemplate: schema.scheduleTriggersTable.messageTemplate,
     cronExpression: schema.scheduleTriggersTable.cronExpression,
     timezone: schema.scheduleTriggersTable.timezone,

@@ -100,7 +100,6 @@ export async function importAgentFromPayload(
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
       toolExposureMode: data.agent.toolExposureMode,
-      accessAllTools: data.agent.accessAllTools,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,

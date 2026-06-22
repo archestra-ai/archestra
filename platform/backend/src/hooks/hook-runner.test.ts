@@ -25,7 +25,6 @@ const ok = (o = {}) => ({
   durationMs: 5,
   timedOut: false,
   truncated: false,
-  binaryStripped: false,
   stagingNotices: [],
   ...o,
 });

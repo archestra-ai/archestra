@@ -1,8 +1,4 @@
-import {
-  BUILT_IN_AGENT_IDS,
-  providerRequiresPerUserCredential,
-  type SupportedProvider,
-} from "@archestra/shared";
+import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@archestra/shared";
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { createDirectLLMModel } from "@/clients/llm-client";
@@ -286,11 +282,7 @@ async function resolveBuiltInAgentSelection(params: {
 
   return {
     provider: config.chat.defaultProvider,
-    // Per-user providers (GitHub Copilot) must never use the shared env token —
-    // it would be one account's token for this system subagent.
-    apiKey: providerRequiresPerUserCredential(config.chat.defaultProvider)
-      ? undefined
-      : getProviderEnvApiKey(config.chat.defaultProvider),
+    apiKey: getProviderEnvApiKey(config.chat.defaultProvider),
     modelName: config.chat.defaultModel,
     baseUrl: null,
   };

@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/select";
 
 export type LimitCleanupInterval = NonNullable<
-  archestraApiTypes.CreateLimitData["body"]["cleanupInterval"]
+  NonNullable<
+    archestraApiTypes.UpdateLlmSettingsData["body"]
+  >["defaultUserLimitCleanupInterval"]
 >;
 
 export const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval =

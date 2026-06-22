@@ -141,37 +141,6 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
-  search_files: { resource: "sandbox", action: "execute" },
-  read_file: { resource: "sandbox", action: "execute" },
-  save_result: { resource: "sandbox", action: "execute" },
-  edit_file: { resource: "sandbox", action: "execute" },
-  delete_file: { resource: "sandbox", action: "execute" },
-
-  // MCP Apps. The data-store tools gate on app:read/update; the running app's
-  // appId is route-bound (set by the app MCP proxy), so the permission check
-  // plus that binding together confine a caller to apps it may use.
-  scaffold_app: { resource: "app", action: "create" },
-  // refine mutates the app head (persists its spec), mirroring edit_app.
-  refine_app: { resource: "app", action: "update" },
-  list_apps: { resource: "app", action: "read" },
-  render_app: { resource: "app", action: "read" },
-  read_app: { resource: "app", action: "read" },
-  edit_app: { resource: "app", action: "update" },
-  // validate_app only reads the head html and reports static findings.
-  validate_app: { resource: "app", action: "read" },
-  // publish_app changes the app's visibility scope; the scope-promotion gate
-  // (assertCallerMayModifyApp) is the real authority, app:update is the floor.
-  publish_app: { resource: "app", action: "update" },
-  delete_app: { resource: "app", action: "delete" },
-  // Authoring intent: the preview is exercised while building/fixing an app.
-  preview_app_tool: { resource: "app", action: "update" },
-  get_app_diagnostics: { resource: "app", action: "read" },
-  app_data_get: { resource: "app", action: "read" },
-  app_data_set: { resource: "app", action: "update" },
-  app_data_list: { resource: "app", action: "read" },
-  app_data_delete: { resource: "app", action: "update" },
-  // A viewer who can use an app can run its archestra.llm.complete() calls.
-  llm_complete: { resource: "app", action: "read" },
 };
 
 /**

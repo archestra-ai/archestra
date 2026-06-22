@@ -7,11 +7,6 @@ export interface ArtifactBytes {
 
 export interface CheckSessionInput {
   traceparent?: string
-  /**
-   * The isolation target for this session; omit (null) for the process-default
-   * engine. The Dagger address is built in the backend from this.
-   */
-  environment?: EnvironmentTarget
 }
 
 export interface CommandExecution {
@@ -21,17 +16,6 @@ export interface CommandExecution {
   durationMs: number
   timedOut: boolean
   truncated: boolean
-}
-
-/**
- * JS input identifying a per-environment isolation target. Omitting it (null)
- * runs on the process-default engine. The Dagger transport address (`kube-pod://…`)
- * is constructed inside the Dagger backend from this — it is never carried
- * across the public API.
- */
-export interface EnvironmentTarget {
-  environmentId: string
-  namespace: string
 }
 
 export interface Limits {
@@ -52,11 +36,6 @@ export interface ReadArtifactInput {
    * the same directory as the original commands.
    */
   defaultCwd: string
-  /**
-   * The isolation target the artifact must be read from — the same engine the
-   * sandbox ran on; omit (null) for the process-default engine.
-   */
-  environment?: EnvironmentTarget
 }
 
 export interface ReplayCommand {
@@ -109,11 +88,6 @@ export interface RunSandboxInput {
   command: string
   cwd: string
   timeoutSeconds: number
-  /**
-   * The isolation target for this run; omit (null) for the process-default
-   * engine. The Dagger address is built in the backend from this.
-   */
-  environment?: EnvironmentTarget
 }
 
 export interface SnapshotFile {

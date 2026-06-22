@@ -32,7 +32,9 @@ archestra-bench benchmark \
   --out /work/run/report.md
 bench_status=$?
 set -e
-echo "${bench_status}" > /work/run/exit_status.txt
+# The bench exits non-zero whenever any rollout failed, which is normal for a model benchmark — so the
+# exit code is logged for diagnostics but is NOT the CI health signal. CI gates on the pass count in
+# aggregate.json instead (zero passes ⇒ broken harness).
 echo "benchmark exited with status ${bench_status}"
 
 # Package the run dir into one checksummed blob: `kubectl cp` silently truncates large/odd trees, so CI

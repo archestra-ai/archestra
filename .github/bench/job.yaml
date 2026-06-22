@@ -28,7 +28,7 @@ spec:
       serviceAccountName: ${PLATFORM_SA}
       initContainers:
         - name: postgres
-          image: pgvector/pgvector:pg17
+          image: pgvector/pgvector:pg17@sha256:be400b50812ab2cc908ed78593fda2e51e3b45fe774fa637f1c7b16e68531d95
           restartPolicy: Always # native sidecar: stays up alongside the bench container, torn down with the pod
           env:
             - name: POSTGRES_PASSWORD

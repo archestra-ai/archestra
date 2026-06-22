@@ -61,7 +61,8 @@ jobs:
           [ -n "${PLATFORM_SA}" ] || PLATFORM_SA=default
           DAGGER_RUNNER_HOST=$(get '{range .spec.template.spec.containers[0].env[?(@.name=="ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")]}{.value}{end}')
           if [ -z "${PLATFORM_IMAGE}" ] || [ -z "${DAGGER_RUNNER_HOST}" ]; then
-            echo "::error::could not resolve platform image / dagger host from the live Deployment"
+            echo "::error::could not resolve platform image / dagger host from the live Deployment \
+(is the dagger host a literal env .value on containers[0], not a valueFrom/envFrom ref?)"
             exit 1
           fi
           # Dagger namespace for the RBAC preflight: the namespace= query param of the kube-pod:// host,
@@ -107,9 +108,14 @@ jobs:
         run: |
           set -euo pipefail
           BENCH_IMAGE="${GAR_REGISTRY}/bench-runner:${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          CACHE_REF="${GAR_REGISTRY}/bench-runner:buildcache"
+          # Registry cache keeps the (stable) musl Rust compile warm across daily runs; only the final
+          # FROM ${PLATFORM_IMAGE} layers re-resolve when staging redeploys.
           docker buildx build --platform linux/amd64 --push \
             -f .github/bench/Dockerfile \
             --build-arg "PLATFORM_IMAGE=${PLATFORM_IMAGE}" \
+            --cache-from "type=registry,ref=${CACHE_REF}" \
+            --cache-to "type=registry,ref=${CACHE_REF},mode=max" \
             -t "${BENCH_IMAGE}" .
           echo "bench_image=${BENCH_IMAGE}" >> "${GITHUB_OUTPUT}"
 
@@ -183,6 +189,7 @@ jobs:
           exit 1
 
       - name: Copy and extract run directory
+        id: extract
         if: steps.wait.outputs.result == 'done'
         env:
           POD: ${{ steps.wait.outputs.pod }}
@@ -209,11 +216,16 @@ jobs:
           kubectl logs "${POD}" -n archestra -c bench --tail=-1 > logs/bench.log 2>&1 || true
           kubectl logs "${POD}" -n archestra -c postgres --tail=-1 > logs/postgres.log 2>&1 || true
 
-      - name: Delete benchmark Job
+      - name: Clean up Job and secret
         if: always() && steps.apply.outputs.run_number != ''
         env:
           RUN_NUMBER: ${{ steps.apply.outputs.run_number }}
-        run: kubectl delete job -n archestra -l "app=archestra-bench,run=${RUN_NUMBER}" --ignore-not-found
+        run: |
+          set -uo pipefail
+          # Best-effort: ttlSecondsAfterFinished / activeDeadlineSeconds are the teardown backstop, so a
+          # transient API error here must not red the job or skip later steps.
+          kubectl delete job -n archestra -l "app=archestra-bench,run=${RUN_NUMBER}" --ignore-not-found || true
+          kubectl delete secret archestra-bench-secrets -n archestra --ignore-not-found || true
 
       - name: Upload run directory artifact
         if: always() && steps.wait.outputs.result == 'done'
@@ -225,17 +237,32 @@ jobs:
             logs
 
       - name: Set up uv
-        if: steps.wait.outputs.result == 'done'
+        if: steps.extract.outcome == 'success'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
 
       - name: Export to TensorBoard and upload to GCS
-        if: steps.wait.outputs.result == 'done'
+        if: steps.extract.outcome == 'success'
         run: |
           set -euo pipefail
           uv run archestra-bench/scripts/export_tensorboard.py --run-dir run --out tb
           gcloud storage rsync -r tb "${GCS_BUCKET}/tb/staging/daily"
           gcloud storage cp run/aggregate.json "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/aggregate.json"
           gcloud storage cp run/report.md "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/report.md"
+
+      # Zero passes signals a broken harness (missing tool surface / feature flags), not a hard task set
+      # — the exact silent-failure the plan guards against. A normal run with some failures stays green;
+      # this runs after the GCS upload so the broken run's data is still captured for debugging.
+      - name: Assert benchmark health (pass rate > 0)
+        if: steps.extract.outcome == 'success'
+        run: |
+          set -euo pipefail
+          PASSED=$(jq -r '.passed' run/aggregate.json)
+          TOTAL=$(jq -r '.total' run/aggregate.json)
+          echo "passed=${PASSED} total=${TOTAL}"
+          if [ "${TOTAL}" -eq 0 ] || [ "${PASSED}" -eq 0 ]; then
+            echo "::error::benchmark produced ${PASSED}/${TOTAL} passed — harness likely broken"
+            exit 1
+          fi
 
       - name: Post Slack summary
         if: always()
@@ -250,9 +277,17 @@ jobs:
             exit 0
           fi
           if [ "${WAIT_RESULT}" = "done" ] && [ -f run/aggregate.json ]; then
-            TEXT=$(jq -r '"Staging benchmark: \(.passed)/\(.total) passed (\((.pass_rate*100)|floor)%) · outcomes \(.outcomes)"' run/aggregate.json)
+            PASSED=$(jq -r '.passed' run/aggregate.json)
+            TOTAL=$(jq -r '.total' run/aggregate.json)
+            RATE=$(jq -r '(.pass_rate * 100) | floor' run/aggregate.json)
+            OUTCOMES=$(jq -r '.outcomes | to_entries | map("\(.key)=\(.value)") | join(" ")' run/aggregate.json)
+            if [ "${PASSED}" -eq 0 ]; then
+              TEXT="⚠️ Staging benchmark: 0/${TOTAL} passed — harness likely broken · ${OUTCOMES}"
+            else
+              TEXT="✅ Staging benchmark: ${PASSED}/${TOTAL} passed (${RATE}%) · ${OUTCOMES}"
+            fi
           else
-            TEXT="Staging benchmark FAILED (${WAIT_RESULT:-error}) — no aggregate produced"
+            TEXT="❌ Staging benchmark FAILED (${WAIT_RESULT:-error}) — no aggregate produced"
           fi
           PAYLOAD=$(jq -n --arg text "${TEXT} | ${RUN_URL}" '{text: $text}')
           curl -fsS -X POST -H 'Content-type: application/json' --data "${PAYLOAD}" "${SLACK_WEBHOOK_URL}"

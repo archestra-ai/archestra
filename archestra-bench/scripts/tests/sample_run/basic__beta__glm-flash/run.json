@@ -1,0 +1,11 @@
+{
+  "env_id": "basic",
+  "task_id": "beta",
+  "lane": "glm-flash",
+  "provider": "anthropic",
+  "model": "glm-4.5-air",
+  "outcome": "failed",
+  "turn_count": 3,
+  "tool_call_count": 1,
+  "total_tokens": null
+}

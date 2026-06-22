@@ -5,12 +5,12 @@
 ARG PLATFORM_IMAGE
 # Pinned static-musl uv image; a named stage is required because COPY --from cannot expand a variable
 # inside the image reference.
-ARG UV_VERSION=0.5.18
+ARG UV_VERSION=0.5.18@sha256:e2101b9e627153b8fe4e8a1249cc4194f1b38ece7f28a5a9b8f958e3b560e69c
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 # Compile the bench binary against musl so it runs unchanged in the alpine-based platform image.
-FROM rust:1-alpine AS bench-builder
+FROM rust:1-alpine@sha256:f87aa870663e2b57ec8c69de82c7eedf7383bee987eef7612c0359635eaadb41 AS bench-builder
 RUN apk add --no-cache musl-dev
 WORKDIR /src
 COPY archestra-bench ./archestra-bench

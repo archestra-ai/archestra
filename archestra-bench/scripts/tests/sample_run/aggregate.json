@@ -1,20 +1,21 @@
 {
-  "total": 2,
-  "passed": 1,
+  "total": 4,
+  "passed": 2,
   "pass_rate": 0.5,
   "avg_turns": 3.0,
   "avg_tokens": 1500.0,
-  "total_turns": 6,
-  "total_tokens": 1500,
-  "outcomes": { "passed": 1, "failed": 1 },
+  "total_turns": 12,
+  "total_tokens": 3000,
+  "outcomes": { "passed": 2, "failed": 2 },
   "per_env": [
-    { "env_id": "basic", "total": 2, "passed": 1, "pass_rate": 0.5, "outcomes": { "passed": 1, "failed": 1 } }
+    { "env_id": "basic", "total": 4, "passed": 2, "pass_rate": 0.5, "outcomes": { "passed": 2, "failed": 2 } }
   ],
   "per_task": [
-    { "task_id": "alpha", "total": 1, "passed": 1, "pass_rate": 1.0, "outcomes": { "passed": 1 } },
-    { "task_id": "beta", "total": 1, "passed": 0, "pass_rate": 0.0, "outcomes": { "failed": 1 } }
+    { "task_id": "alpha", "total": 2, "passed": 2, "pass_rate": 1.0, "outcomes": { "passed": 2 } },
+    { "task_id": "beta", "total": 2, "passed": 0, "pass_rate": 0.0, "outcomes": { "failed": 2 } }
   ],
   "per_lane": [
-    { "lane": "glm", "total": 2, "passed": 1, "pass_rate": 0.5, "avg_turns": 3.0, "avg_tokens": 1500.0, "total_turns": 6, "total_tokens": 1500, "outcomes": { "passed": 1, "failed": 1 } }
+    { "lane": "glm", "total": 2, "passed": 1, "pass_rate": 0.5, "avg_turns": 3.0, "avg_tokens": 1500.0, "total_turns": 6, "total_tokens": 1500, "outcomes": { "passed": 1, "failed": 1 } },
+    { "lane": "glm-flash", "total": 2, "passed": 1, "pass_rate": 0.5, "avg_turns": 3.0, "avg_tokens": 1500.0, "total_turns": 6, "total_tokens": 1500, "outcomes": { "passed": 1, "failed": 1 } }
   ]
 }

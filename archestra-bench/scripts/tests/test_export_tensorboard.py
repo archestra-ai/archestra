@@ -41,10 +41,10 @@ def test_export_emits_expected_tags(tmp_path):
 
     overall = _read_scalars(tmp_path / "overall")
     assert overall["overall/pass_rate"] == [(step, 0.5)]
-    assert overall["overall/total"] == [(step, 2.0)]
-    assert overall["overall/passed"] == [(step, 1.0)]
-    assert overall["outcomes/passed"] == [(step, 1.0)]
-    assert overall["outcomes/failed"] == [(step, 1.0)]
+    assert overall["overall/total"] == [(step, 4.0)]
+    assert overall["overall/passed"] == [(step, 2.0)]
+    assert overall["outcomes/passed"] == [(step, 2.0)]
+    assert overall["outcomes/failed"] == [(step, 2.0)]
 
     lane = _read_scalars(tmp_path / "lane=glm")
     assert lane["pass_rate"] == [(step, 0.5)]
@@ -58,6 +58,15 @@ def test_export_emits_expected_tags(tmp_path):
 
     # A null metric is skipped, never written as 0.0.
     assert "tokens/basic/beta" not in lane
+
+    # Sibling lanes share identical per-task tag names — the whole point of lane=<lane> run dirs, so
+    # the two series line up in TensorBoard for comparison.
+    flash = _read_scalars(tmp_path / "lane=glm-flash")
+    shared = {t for t in lane if t.startswith(("pass/", "turns/", "tokens/", "tool_calls/"))}
+    assert shared, "expected per-task tags in the glm lane"
+    assert shared.issubset(flash.keys())
+    assert flash["pass/basic/alpha"] == [(step, 1.0)]
+    assert flash["tool_calls/basic/alpha"] == [(step, 4.0)]
 
 
 def test_default_step_combines_run_number_and_attempt(monkeypatch):

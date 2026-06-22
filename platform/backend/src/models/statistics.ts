@@ -167,41 +167,24 @@ class StatisticsModel {
   }
 
   /**
-   * Round timestamp to bucket interval
+   * Round a timestamp down to the start of its bucket.
+   *
+   * Buckets are aligned to whole multiples of the interval measured from the
+   * Unix epoch (1970-01-01T00:00:00Z) and computed entirely in UTC, so the
+   * result stays consistent with the UTC `.toISOString()` returned here and
+   * with the SQL `DATE_TRUNC` that produced the input. Working purely in epoch
+   * milliseconds also avoids the previous local-time `getFullYear()`/`setDate()`
+   * arithmetic, which mistook "days since the epoch" for "day of year" and
+   * projected multi-day buckets (e.g. the 90d view) decades into the future.
    */
   private static roundToBucket(
     timestamp: string,
     intervalMinutes: number,
   ): string {
-    const date = new Date(timestamp);
-
-    if (intervalMinutes >= 1440) {
-      // 1 day or more
-      const days = Math.floor(intervalMinutes / 1440);
-      const dayOfYear = Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
-      const roundedDay = Math.floor(dayOfYear / days) * days;
-
-      const startOfYear = new Date(date.getFullYear(), 0, 1);
-      startOfYear.setDate(startOfYear.getDate() + roundedDay);
-      startOfYear.setHours(0, 0, 0, 0);
-      return startOfYear.toISOString();
-    } else if (intervalMinutes >= 60) {
-      // 1 hour or more
-      const hours = Math.floor(intervalMinutes / 60);
-      const hourOfDay = date.getHours();
-      const roundedHour = Math.floor(hourOfDay / hours) * hours;
-
-      date.setHours(roundedHour, 0, 0, 0);
-      return date.toISOString();
-    } else {
-      // Less than 1 hour
-      const minutes = date.getMinutes();
-      const roundedMinutes =
-        Math.floor(minutes / intervalMinutes) * intervalMinutes;
-
-      date.setMinutes(roundedMinutes, 0, 0);
-      return date.toISOString();
-    }
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const ms = new Date(timestamp).getTime();
+    const rounded = Math.floor(ms / intervalMs) * intervalMs;
+    return new Date(rounded).toISOString();
   }
 
   /**
@@ -380,18 +363,11 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for 1h timeframe only
-    if (timeframe === "1h") {
-    }
-
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
       "teamId",
     );
-
-    if (timeframe === "1h") {
-    }
 
     // Get team member counts
     const teamMemberCounts = await db
@@ -557,18 +533,11 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for 1h timeframe only
-    if (timeframe === "1h") {
-    }
-
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
       "agentId",
     );
-
-    if (timeframe === "1h") {
-    }
 
     // Aggregate data by agent
     const agentMap = new Map<string, AgentStatistics>();
@@ -799,20 +768,6 @@ class StatisticsModel {
   }
 
   /**
-   * Calculate actual cost: cost - toon_savings
-   * This represents the final cost after all optimizations
-   * - cost = cost after model optimization
-   * - toonSavings = savings from TOON compression
-   * - actual cost = cost after both model optimization and TOON
-   */
-  private static calculateActualCost(
-    cost: number,
-    toonSavings: number,
-  ): number {
-    return cost - toonSavings;
-  }
-
-  /**
    * Get cost savings statistics
    */
   static async getCostSavingsStatistics(
@@ -951,13 +906,31 @@ class StatisticsModel {
     let totalCacheSavings = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
-      const baselineCost = Number(row.baselineCost);
-      const cost = Number(row.actualCost);
+      // `row.actualCost` is SUM(interactions.cost): the real spend. It already
+      // reflects every applied optimization — the cheaper model, TOON's reduced
+      // billed token count, and the prompt-cache discount — so it is the true
+      // "Actual Cost". (The previous code subtracted toonSavings from it, which
+      // double-counted savings already baked into `cost` and reported an actual
+      // cost below what was really spent.)
+      const actualCost = Number(row.actualCost);
+      // `row.baselineCost` is SUM(interactions.baseline_cost): the same usage
+      // priced at the original (pre-optimization) model.
+      const baselineModelCost = Number(row.baselineCost);
       const toonSavings = Number(row.toonSavings);
       const cacheSavings = Number(row.cacheSavings);
 
-      const actualCost = StatisticsModel.calculateActualCost(cost, toonSavings);
-      const optimizationSavings = baselineCost - cost;
+      // Savings from optimization rules alone: identical token usage, original
+      // model vs. the model actually used.
+      const optimizationSavings = baselineModelCost - actualCost;
+
+      // "Non-optimized" cost: what the request would have cost with none of the
+      // optimizations applied (original model, uncompressed tokens, no cache).
+      // Adding each realized saving back onto the real spend keeps this line
+      // exactly `optimizationSavings + toonSavings + cacheSavings` above the
+      // actual-cost line, so the savings-breakdown chart reconciles with the
+      // gap shown in the non-optimized-vs-actual chart.
+      const baselineCost =
+        actualCost + optimizationSavings + toonSavings + cacheSavings;
 
       totalBaselineCost += baselineCost;
       totalActualCost += actualCost;

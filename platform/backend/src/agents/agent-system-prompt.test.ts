@@ -149,18 +149,15 @@ describe("buildAgentSystemPrompt", () => {
       });
       expect(withSandbox).toContain("code execution environment");
 
-      // a bare agent (no sandbox tools assigned) never gets the instruction
-      const bareAgent = await makeAgent({
-        systemPrompt: "Base.",
-        toolExposureMode: "full",
-        organizationId: agent.organizationId,
-      });
+      // the same agent gets no instruction once the sandbox is disabled on the
+      // deployment, even with the tools assigned and the permission granted
+      (config.skillsSandbox as { enabled: boolean }).enabled = false;
       const withoutSandbox = await buildAgentSystemPrompt({
-        agent: bareAgent,
+        agent,
         mcpTools: {},
-        organizationId: bareAgent.organizationId,
+        organizationId: agent.organizationId,
         userId: user.id,
-        agentId: bareAgent.id,
+        agentId: agent.id,
       });
       expect(withoutSandbox).not.toContain("code execution environment");
     } finally {

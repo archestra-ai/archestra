@@ -10,7 +10,11 @@ import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamModel, UserModel } from "@/models";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import { promptNeedsRendering, renderSystemPrompt, type UserSystemPromptContext } from "@/templating";
+import {
+  promptNeedsRendering,
+  renderSystemPrompt,
+  type UserSystemPromptContext,
+} from "@/templating";
 import type { ToolExposureMode } from "@/types";
 
 /** @public — canonical instruction text, asserted by the assembler tests. */
@@ -45,7 +49,15 @@ export async function buildAgentSystemPrompt(params: {
   /** Context injected by SessionStart hooks (chat only), appended last. */
   hookSessionContext?: string;
 }): Promise<string | undefined> {
-  const { agent, mcpTools, organizationId, userId, agentId, user, hookSessionContext } = params;
+  const {
+    agent,
+    mcpTools,
+    organizationId,
+    userId,
+    agentId,
+    user,
+    hookSessionContext,
+  } = params;
 
   const renderedPrompt = await renderAgentPrompt({
     systemPrompt: agent.systemPrompt,
@@ -55,9 +67,12 @@ export async function buildAgentSystemPrompt(params: {
   });
 
   const toolLoadingInstructions =
-    agent.toolExposureMode === "search_and_run_only" ? buildLoadToolsWhenNeededSystemPrompt() : null;
+    agent.toolExposureMode === "search_and_run_only"
+      ? buildLoadToolsWhenNeededSystemPrompt()
+      : null;
 
-  const toolResultInstructions = Object.keys(mcpTools).length > 0 ? TOOL_UI_RESULT_INSTRUCTION : null;
+  const toolResultInstructions =
+    Object.keys(mcpTools).length > 0 ? TOOL_UI_RESULT_INSTRUCTION : null;
 
   // eagerly list the agent's skills in the prompt (like Claude Code /
   // opencode), but only when the agent can actually load them.
@@ -68,7 +83,9 @@ export async function buildAgentSystemPrompt(params: {
     isSkillSandboxAvailableForAgent({ userId, organizationId, agentId }),
   ]);
 
-  const sandboxFallbackInstruction = sandboxAvailable ? buildSandboxFallbackInstruction() : null;
+  const sandboxFallbackInstruction = sandboxAvailable
+    ? buildSandboxFallbackInstruction()
+    : null;
 
   return (
     [
@@ -113,13 +130,19 @@ async function renderAgentPrompt(params: {
 }
 
 function buildSandboxFallbackInstruction(): string {
-  const runCommand = archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME);
+  const runCommand = archestraMcpBranding.getToolName(
+    TOOL_RUN_COMMAND_SHORT_NAME,
+  );
   return `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace. When the available tools do not cover a task, you can fall back to it — for example to compute, transform files, or fetch data over the network.`;
 }
 
 function buildLoadToolsWhenNeededSystemPrompt(): string {
-  const searchToolsName = archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME);
-  const runToolName = archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME);
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
 
   return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.
 

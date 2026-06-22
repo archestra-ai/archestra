@@ -8,7 +8,9 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -1336,6 +1338,44 @@ class ToolModel {
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 
+  /**
+   * Assign the code-execution sandbox tools to a single agent based on the
+   * deployment's runtime/Projects flags. No-op when the sandbox runtime is off.
+   *
+   * - Runtime tools (run_command/upload_file/download_file): assigned when the
+   *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
+   * - Persistent-files (Projects) tools (search_files/read_file/save_result/
+   *   edit_file/delete_file): also require the Projects flag
+   *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
+   *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
+   *   avoids assigned-but-hidden rows.
+   *
+   * Called from `AgentModel.create` so new agents inherit the sandbox surface.
+   * With the runtime dark the sandbox tools are not even seeded, so there is
+   * nothing to assign.
+   */
+  static async assignSandboxToolsToAgent(
+    agentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    if (!config.skillsSandbox.enabled) return;
+
+    const shortNames: ArchestraToolShortName[] = [
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    if (config.projects.enabled) {
+      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
+    }
+
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      shortNames,
+    );
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
   private static async getToolIdsForOrgByShortNames(
     organizationId: string,
     shortNames: readonly ArchestraToolShortName[],
@@ -1412,9 +1452,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // sandbox tools (run_command / upload_file / download_file) are not
-    // auto-assigned — they require explicit per-agent assignment plus
-    // sandbox:execute, like the rest of the skill-execution surface.
+    // The sandbox runtime + Projects file tools are auto-assigned separately by
+    // `assignSandboxToolsToAgent` (flag-gated), not here. This default set is the
+    // always-on baseline only.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];

@@ -39,13 +39,20 @@ const BENCH_MCP_NAME: &str = "final_answer";
 // identity or cue the agent it is being evaluated, since it can surface in a file-conflict message.
 const PROJECT_NAME: &str = "Workspace";
 const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
-// Appended to every user message. Kept short and tool-agnostic: it nudges submission without naming
-// the search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that
-// solves the task still closes the loop by finding and calling its submit tool instead of replying in
-// prose.
+// Appended to a stage's user message only when submission is open (the final stage; submit_result is
+// server-gated until then). Kept short and tool-agnostic: it nudges submission without naming the
+// search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that solves
+// the task still closes the loop by finding and calling its submit tool instead of replying in prose.
 const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
-// One-shot follow-up sent when a lane ends its turn without submitting. drive_stage still appends
-// SUBMIT_INSTRUCTION, so this only has to call out the omission.
+// Appended instead of SUBMIT_INSTRUCTION on a non-final stage, where submit_result is still gated.
+// Deliberately says nothing about submitting: a real user does not mention the hand-in protocol until
+// the final ask, so the model learns submission is required only on the final stage. Steers the model
+// to do the step's work and end its turn (a chat reply, which advances the runner to the next stage)
+// rather than hunting for a submit tool and looping on the "more steps" rejection.
+const CONTINUE_INSTRUCTION: &str = "When you've finished this step, tell me where things stand and wait for my next message.";
+// One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
+// stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
+// omission.
 const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
@@ -1346,8 +1353,8 @@ async fn grade_rollout(
     ]);
 
     // Capture once: the agent's configured system prompt plus the expanded stage-0 task text
-    // (pre-SUBMIT_INSTRUCTION, i.e. the human-authored prompt). drive_stage appends
-    // SUBMIT_INSTRUCTION when it actually sends each stage.
+    // (the human-authored prompt, before any trailing instruction). drive_stage appends the trailer
+    // when it sends each stage: SUBMIT_INSTRUCTION on the final stage, CONTINUE_INSTRUCTION otherwise.
     let initial_user_message = task
         .stages
         .first()
@@ -1367,7 +1374,11 @@ async fn grade_rollout(
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
     for (index, stage) in task.stages.iter().enumerate() {
-        if index == final_stage {
+        // Single source of truth: the final stage both opens the server-side submission gate and gets
+        // the SUBMIT_INSTRUCTION trailer (earlier stages get CONTINUE_INSTRUCTION). Binding it once
+        // keeps the gate and the prompt trailer from drifting apart.
+        let submission_open = index == final_stage;
+        if submission_open {
             bench_mcp.allow_submission(rollout_key).await;
         }
         stage_error = drive_stage_with_retry(
@@ -1379,6 +1390,7 @@ async fn grade_rollout(
             artifacts,
             &runtime,
             index > 0,
+            submission_open,
         )
         .await?;
         if stage_error.is_some() {
@@ -1415,6 +1427,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
+            true,
             true,
         )
         .await?;
@@ -1609,6 +1622,7 @@ async fn drive_stage_with_retry(
     artifacts: &RunArtifacts,
     runtime: &HashMap<String, String>,
     expect_prior_history: bool,
+    submission_open: bool,
 ) -> Result<Option<String>, RunError> {
     // Resend prior turns so the agent keeps task context across stages and submit-nudges; the
     // platform builds LLM context from the request body only. The first turn has no history yet;
@@ -1640,6 +1654,7 @@ async fn drive_stage_with_retry(
         runtime,
         &prior_messages,
         &turn_id,
+        submission_open,
     )
     .await?;
     let Some(error) = first else {
@@ -1662,6 +1677,7 @@ async fn drive_stage_with_retry(
         runtime,
         &prior_messages,
         &turn_id,
+        submission_open,
     )
     .await
 }
@@ -1677,6 +1693,18 @@ fn stage_error_is_retryable(error: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Assemble a stage's user message: the (runtime-expanded) stage text plus the trailing instruction.
+/// On the final stage submission is open, so SUBMIT_INSTRUCTION is appended; on earlier stages it is
+/// gated, so CONTINUE_INSTRUCTION is appended instead (which reveals nothing about submission).
+fn stage_message(stage_text: &str, submission_open: bool) -> String {
+    let trailer = if submission_open {
+        SUBMIT_INSTRUCTION
+    } else {
+        CONTINUE_INSTRUCTION
+    };
+    format!("{stage_text}\n\n{trailer}")
+}
+
 async fn drive_stage(
     client: &EvalClient,
     conversation_id: &str,
@@ -1687,6 +1715,7 @@ async fn drive_stage(
     runtime: &HashMap<String, String>,
     prior_messages: &[serde_json::Value],
     turn_id: &str,
+    submission_open: bool,
 ) -> Result<Option<String>, RunError> {
     let files: Vec<FilePart> = stage
         .files
@@ -1701,10 +1730,7 @@ async fn drive_stage(
             data: std::fs::read(task.inputs_dir().join(&f.src)).unwrap_or_default(),
         })
         .collect();
-    let text = format!(
-        "{}\n\n{SUBMIT_INSTRUCTION}",
-        expand_runtime(&stage.text, runtime)
-    );
+    let text = stage_message(&expand_runtime(&stage.text, runtime), submission_open);
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
@@ -2486,6 +2512,24 @@ mod tests {
     fn test_rollout_token() {
         let token = rollout_token("basic/t1/openai/gpt-4", "gpt-4-turbo");
         assert!(token.starts_with("gpt-4-turbo-"));
+    }
+
+    #[test]
+    fn test_stage_message_final_appends_submit() {
+        // Final stage: submission is open, so the hand-in instruction is appended (unchanged behavior).
+        let msg = stage_message("do the thing", true);
+        assert_eq!(msg, format!("do the thing\n\n{SUBMIT_INSTRUCTION}"));
+        assert!(msg.ends_with(SUBMIT_INSTRUCTION));
+    }
+
+    #[test]
+    fn test_stage_message_nonfinal_appends_continue() {
+        // Non-final stage: submission is gated, so the continuation line is appended and the message
+        // reveals nothing about submitting.
+        let msg = stage_message("do the thing", false);
+        assert_eq!(msg, format!("do the thing\n\n{CONTINUE_INSTRUCTION}"));
+        assert!(!msg.contains(SUBMIT_INSTRUCTION));
+        assert!(!msg.to_lowercase().contains("submit"));
     }
 
     #[test]

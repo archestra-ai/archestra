@@ -29,6 +29,7 @@ import {
 } from "@/archestra-mcp-server";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import type { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -86,6 +87,12 @@ export interface ChatToolContext {
   mcpGwToken: McpGatewayToken;
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
+  /**
+   * Per-run guard against the model re-issuing the identical tool call forever.
+   * One instance per getChatMcpTools call (shared by every tool wrapper), so it
+   * carries no cross-run state.
+   */
+  repeatTracker: ToolCallRepeatTracker;
 }
 
 /**
@@ -118,6 +125,33 @@ export function buildMcpGatewayTool(params: {
         abortLogMessage: "MCP tool execution aborted",
         failureLogMessage: "MCP tool execution failed",
         run: async ({ span, startTime }) => {
+          // Circuit breaker: a model re-issuing the identical call gets the same
+          // result forever, burning steps until MAX_AGENT_STEPS. Once the same
+          // (tool + args) repeats past the threshold, skip execution and return a
+          // nudge so the result changes and the model can break out of the loop.
+          const repeat = ctx.repeatTracker.record(mcpTool.name, toolArguments);
+          if (repeat.shouldNudge) {
+            logger.warn(
+              {
+                agentId: ctx.agentId,
+                conversationId: ctx.conversationId ?? null,
+                sessionId: ctx.sessionId ?? null,
+                toolName: mcpTool.name,
+                count: repeat.count,
+              },
+              "Skipping repeated identical tool call; nudging the model",
+            );
+            span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
+            reportToolMetrics({
+              toolName: mcpTool.name,
+              agentId: ctx.agentId,
+              agentName: ctx.agentName,
+              startTime,
+              isError: true,
+            });
+            return buildRepeatedCallNudge(mcpTool.name, repeat.count);
+          }
+
           // PreToolUse lifecycle hook: a block short-circuits execution
           // and returns an explanatory tool-result instead of running.
           const preBlockReason = await firePreToolUseHook({
@@ -1219,6 +1253,15 @@ async function firePreToolUseHook(params: {
 /** Tool-result text returned to the model when a PreToolUse hook blocks a call. */
 function buildPreToolUseBlockedResult(reason: string | null): string {
   return `Tool call blocked by a PreToolUse hook. Reason: ${reason ?? "no reason given"}. Do not retry; explain the block to the user.`;
+}
+
+/**
+ * Tool-result text returned in place of executing a tool call that has repeated
+ * with identical arguments past the threshold (see ToolCallRepeatTracker). The
+ * call is not executed; this message replaces its result.
+ */
+function buildRepeatedCallNudge(toolName: string, count: number): string {
+  return `You have called \`${toolName}\` with identical arguments ${count} times in a row, so it was not executed again — repeating it will not produce a different result. Change the arguments, use a different tool, or give your best final answer with what you already know.`;
 }
 
 /** Max chars of tool output passed to a PostToolUse hook payload. */

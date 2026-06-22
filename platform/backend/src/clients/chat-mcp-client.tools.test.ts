@@ -20,6 +20,7 @@ import { resolveSessionExternalIdpToken } from "@/services/identity-providers/se
 import { beforeEach, describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
+import { MAX_IDENTICAL_TOOL_CALLS } from "./tool-call-repeat-tracker";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -555,6 +556,120 @@ describe("getChatMcpTools approval gating", () => {
         execOptions(),
       ),
     ).resolves.toBe(false);
+  });
+});
+
+describe("getChatMcpTools repeated-call circuit breaker", () => {
+  test("nudges instead of executing once an identical call repeats past the threshold", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "external result" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      const result = await tools.extsrv__fetch_data.execute?.(
+        { query: "stuck" },
+        execOptions(`call-${i}`),
+      );
+      expect(toolResultContent(result)).toContain("external result");
+    }
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
+
+    const nudged = await tools.extsrv__fetch_data.execute?.(
+      { query: "stuck" },
+      execOptions("call-over"),
+    );
+    expect(toolResultContent(nudged)).toContain("identical arguments");
+    // The over-threshold call is not forwarded to the gateway.
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
+  });
+
+  test("a different call resets the streak so a repeated call executes again", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__a"), externalTool("extsrv__b")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await tools.extsrv__a.execute?.({ query: "x" }, execOptions(`a-${i}`));
+    }
+    // A different tool resets the consecutive counter.
+    await tools.extsrv__b.execute?.({ query: "y" }, execOptions("b-1"));
+
+    const afterReset = await tools.extsrv__a.execute?.(
+      { query: "x" },
+      execOptions("a-after"),
+    );
+    expect(toolResultContent(afterReset)).toContain("ok");
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS + 2,
+    );
+  });
+
+  test("the tracker does not leak across separate getChatMcpTools runs", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+
+    // Both runs pass an abortSignal (as every executing path does), so each
+    // bypasses the tool cache and gets its own tracker.
+    const abortSignal = new AbortController().signal;
+    const runOne = await chatClient.getChatMcpTools({
+      ...baseParams,
+      abortSignal,
+    });
+    for (let i = 0; i <= MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await runOne.extsrv__fetch_data.execute?.(
+        { query: "stuck" },
+        execOptions(`one-${i}`),
+      );
+    }
+
+    vi.mocked(mcpClient.executeToolCallForOwner).mockClear();
+    const runTwo = await chatClient.getChatMcpTools({
+      ...baseParams,
+      abortSignal,
+    });
+    const fresh = await runTwo.extsrv__fetch_data.execute?.(
+      { query: "stuck" },
+      execOptions("two-0"),
+    );
+    // A fresh run executes the same call rather than carrying over the nudge.
+    expect(toolResultContent(fresh)).toContain("ok");
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
   });
 });
 

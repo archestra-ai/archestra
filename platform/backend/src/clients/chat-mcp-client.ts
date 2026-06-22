@@ -21,6 +21,7 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -844,6 +845,11 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       teams,
       userTeams,
+      // Built fresh per run on this cache-miss path. The tool cache (above) only
+      // serves the non-executing `GET .../tools` listing endpoint — every path
+      // that executes tools passes an abortSignal, which bypasses the cache — so
+      // the tracker never spans two runs.
+      repeatTracker: new ToolCallRepeatTracker(),
     };
     const aiTools: Record<string, Tool> = {};
 

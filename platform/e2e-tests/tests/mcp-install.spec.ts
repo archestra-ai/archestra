@@ -58,8 +58,16 @@ test.describe("MCP Install", () => {
     // Submit the pre-filled form to add server to registry
     await submitAddServer(adminPage);
 
-    // Install dialog opens automatically after adding to registry
-    // Wait for the install dialog to be visible
+    // Creating a server continues the setup wizard at the Test Connection
+    // step; install from there.
+    await adminPage.waitForURL(/\/mcp\/registry\/[^/]+\/edit/, {
+      timeout: 30_000,
+    });
+    await adminPage
+      .getByRole("button", { name: "Install", exact: true })
+      .click();
+
+    // The registry install dialog opens via the install deep link
     await waitForInstallDialog(adminPage, { titlePattern: /Install -/ });
 
     // fill the api key (just fake value)
@@ -71,6 +79,7 @@ test.describe("MCP Install", () => {
     await installMcpServer(adminPage);
 
     // Wait for the card to appear in the registry after installation
+    await goToMcpRegistry(adminPage);
     await waitForMcpServerCard(adminPage, CONTEXT7_CATALOG_ITEM_NAME);
 
     // Check that tools are discovered
@@ -152,6 +161,9 @@ rl.on("line", (line) => {
     await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
     await adminPage.waitForLoadState("domcontentloaded");
 
+    // Wizard step 1: configure manually.
+    await adminPage.getByRole("button", { name: "Start from scratch" }).click();
+
     await adminPage
       .getByRole("button", {
         name: "Self-hosted",
@@ -174,6 +186,15 @@ rl.on("line", (line) => {
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
     await adminPage.waitForLoadState("domcontentloaded");
 
+    // Creating a server continues the setup wizard at the Test Connection
+    // step; install from there.
+    await adminPage.waitForURL(/\/mcp\/registry\/[^/]+\/edit/, {
+      timeout: 30_000,
+    });
+    await adminPage
+      .getByRole("button", { name: "Install", exact: true })
+      .click();
+
     // Wait for install dialog and install the server
     await adminPage
       .getByRole("dialog")
@@ -183,6 +204,7 @@ rl.on("line", (line) => {
     await adminPage.waitForLoadState("domcontentloaded");
 
     // Wait for the server card to appear
+    await goToMcpRegistry(adminPage);
     const serverCard = adminPage.getByTestId(
       `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
     );

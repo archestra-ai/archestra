@@ -3140,6 +3140,50 @@ describe("ToolModel", () => {
       expect(ids1).toEqual(ids2);
     });
 
+    test("exposes MCP annotations stored in the tool's meta", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "AnnotationsAgent" });
+      const catalog = await makeInternalMcpCatalog();
+
+      const [withMeta] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "annotated-tool",
+          description: "Tool with annotations",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          meta: {
+            _meta: {},
+            annotations: { readOnlyHint: true, destructiveHint: false },
+          },
+        },
+      ]);
+      const plain = await ToolModel.create({
+        name: "plain-tool",
+        description: "Tool without meta",
+        parameters: {},
+      });
+      await makeAgentTool(agent.id, withMeta.id);
+      await makeAgentTool(agent.id, plain.id);
+
+      const result = await ToolModel.findAllWithAssignments({
+        userId: admin.id,
+        isAgentAdmin: true,
+      });
+
+      const annotated = result.data.find((t) => t.id === withMeta.id);
+      expect(annotated?.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+      });
+      const unannotated = result.data.find((t) => t.id === plain.id);
+      expect(unannotated?.annotations).toBeNull();
+    });
+
     test("excludes the white-labeled knowledge tool from assignment listings", async ({
       makeOrganization,
       makeAgent,

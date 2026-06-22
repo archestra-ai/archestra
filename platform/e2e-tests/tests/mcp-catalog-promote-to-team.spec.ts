@@ -45,10 +45,17 @@ test.describe("MCP Catalog promotion", () => {
       .getByTestId(`${E2eTestId.McpServerSettingsButton}-${name}`)
       .click();
 
-    const settingsDialog = editorPage.getByRole("dialog", {
-      name: new RegExp(`${name} Settings`, "i"),
-    });
-    await expect(settingsDialog).toBeVisible({ timeout: 30_000 });
+    // The pencil opens the catalog item detail page since the registry
+    // redesign; the edit form lives on the dedicated edit page behind the
+    // header Edit button.
+    const settingsDialog = editorPage.locator("body");
+    await expect(
+      editorPage.getByRole("heading", { name, exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await editorPage.getByRole("link", { name: "Edit", exact: true }).click();
+    await expect(
+      editorPage.getByRole("heading", { name: `Edit ${name}` }),
+    ).toBeVisible({ timeout: 30_000 });
 
     // Switch visibility Personal -> Teams. The visibility selector renders
     // collapsed (showing only the current Personal option), so expand it

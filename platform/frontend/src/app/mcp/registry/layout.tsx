@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -24,20 +24,34 @@ export default function McpCatalogLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
   const contextValue = useMemo(() => ({ setActionButton }), []);
   const registryActionButton = isRegistryPage ? (
     <PermissionButton
       permissions={{ mcpRegistry: ["create"] }}
-      onClick={() =>
-        window.dispatchEvent(new CustomEvent("mcp-registry:create"))
-      }
+      onClick={() => router.push("/mcp/registry/new")}
     >
       <Plus className="h-4 w-4" />
       Add MCP Server
     </PermissionButton>
   ) : undefined;
+
+  // Detail, edit, and create pages carry their own headers — skip the
+  // registry page header band and render bare content for them.
+  const isFullPageRoute =
+    !isRegistryPage &&
+    !pathname.startsWith("/mcp/registry/installation-requests");
+  if (isFullPageRoute) {
+    return (
+      <McpRegistryLayoutContext.Provider value={contextValue}>
+        {/* No overflow wrapper: <main> is the scrollport, so in-page
+            `sticky bottom-0` footers (wizard CTAs) pin to the viewport. */}
+        <div className="mx-auto w-full px-6 py-6 md:px-6">{children}</div>
+      </McpRegistryLayoutContext.Provider>
+    );
+  }
 
   return (
     <McpRegistryLayoutContext.Provider value={contextValue}>

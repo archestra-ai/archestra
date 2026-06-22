@@ -230280,6 +230280,11 @@
                               }
                             ]
                           },
+                          "annotations": {
+                            "nullable": true,
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
                           "catalogId": {
                             "nullable": true,
                             "type": "string"
@@ -230369,6 +230374,7 @@
                           "id",
                           "name",
                           "description",
+                          "annotations",
                           "catalogId",
                           "createdAt",
                           "updatedAt",

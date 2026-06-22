@@ -260,12 +260,11 @@ export async function addSharedLocalConnection(params: {
   timeoutMs?: number;
 }): Promise<void> {
   await openManageCredentialsDialog(params.page, params.catalogItemName);
-  const visibleDialog = params.page
-    .getByRole("dialog")
-    .filter({ visible: true })
-    .last();
-  await visibleDialog
-    .getByRole("button", { name: /^Install\b/ })
+  // The credentials view renders on the item detail page (or in the
+  // standalone reauth dialog); the install menu trigger has a stable testid
+  // in both, so target it page-wide.
+  await params.page
+    .getByTestId(E2eTestId.ManageCredentialsAddToTeamButton)
     .click({ timeout: params.timeoutMs ?? 15_000 });
   await params.page
     .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
@@ -285,7 +284,7 @@ export async function addSharedLocalConnection(params: {
     }
 
     await expect(
-      visibleDialog.getByTestId(
+      params.page.getByTestId(
         E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
       ),
     ).not.toBeVisible({

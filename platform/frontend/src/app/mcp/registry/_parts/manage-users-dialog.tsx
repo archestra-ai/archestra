@@ -26,7 +26,6 @@ import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -394,7 +393,7 @@ export function ManageUsersContent({
         </DialogHeader>
       )}
 
-      <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
+      <div className={hideHeader ? "space-y-4" : "space-y-4 pb-4"}>
         {catalogItem && (
           <AgentConnectionsSection
             item={catalogItem}
@@ -445,43 +444,45 @@ export function ManageUsersContent({
 
           return (
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <h4 className="text-sm font-medium">Connections</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Accounts connected to this server.
-                  </p>
-                </div>
-                {installMenu}
-              </div>
-              <Card>
-                <CardContent className="p-0">
-                  {hasContent ? (
-                    <UnifiedConnectionsTable
-                      myPersonalServer={split.myPersonalServer}
-                      otherPersonalServers={split.otherPersonalServers}
-                      teamServers={split.teamServers}
-                      orgServers={split.orgServers}
-                      isOAuthServer={isOAuthServer}
-                      getCredentialOwnerName={getCredentialOwnerName}
-                      canReauthenticate={canReauthenticate}
-                      getReauthTooltip={getReauthTooltip}
-                      canRevoke={canRevoke}
-                      getRevokeTooltip={getRevokeTooltip}
-                      handleReauthenticate={handleReauthenticate}
-                      handleRevoke={handleRevoke}
-                      isDeleting={deleteMcpServerMutation.isPending}
-                      deploymentStatuses={deploymentStatuses}
-                      onOpenPodLogs={onOpenPodLogs}
-                      availableTeamsForShared={split.availableTeamsForShared}
-                    />
-                  ) : (
-                    <p className="text-sm text-muted-foreground px-4 py-3">
-                      No callers yet.
+              {hideHeader ? (
+                <div className="flex justify-end">{installMenu}</div>
+              ) : (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <h4 className="text-sm font-medium">Connections</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Accounts connected to this server.
                     </p>
-                  )}
-                </CardContent>
-              </Card>
+                  </div>
+                  {installMenu}
+                </div>
+              )}
+              <div className="overflow-hidden rounded-lg border">
+                {hasContent ? (
+                  <UnifiedConnectionsTable
+                    myPersonalServer={split.myPersonalServer}
+                    otherPersonalServers={split.otherPersonalServers}
+                    teamServers={split.teamServers}
+                    orgServers={split.orgServers}
+                    isOAuthServer={isOAuthServer}
+                    getCredentialOwnerName={getCredentialOwnerName}
+                    canReauthenticate={canReauthenticate}
+                    getReauthTooltip={getReauthTooltip}
+                    canRevoke={canRevoke}
+                    getRevokeTooltip={getRevokeTooltip}
+                    handleReauthenticate={handleReauthenticate}
+                    handleRevoke={handleRevoke}
+                    isDeleting={deleteMcpServerMutation.isPending}
+                    deploymentStatuses={deploymentStatuses}
+                    onOpenPodLogs={onOpenPodLogs}
+                    availableTeamsForShared={split.availableTeamsForShared}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground px-4 py-3">
+                    No callers yet.
+                  </p>
+                )}
+              </div>
             </div>
           );
         })()}
@@ -793,13 +794,13 @@ function UnifiedConnectionsTable({
     <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[220px]">Owner</TableHead>
+          <TableHead className="whitespace-nowrap">Owner</TableHead>
           {hasDeploymentStatuses && (
-            <TableHead className="w-[260px]">Pod</TableHead>
+            <TableHead className="whitespace-nowrap">Pod</TableHead>
           )}
-          <TableHead>Secret Storage</TableHead>
-          <TableHead>Created At</TableHead>
-          <TableHead>Action</TableHead>
+          <TableHead className="whitespace-nowrap">Secret Storage</TableHead>
+          <TableHead className="whitespace-nowrap">Created At</TableHead>
+          <TableHead className="whitespace-nowrap">Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -888,8 +889,11 @@ function UnifiedConnectionsTable({
             <TableCell className="text-muted-foreground">
               {formatSecretStorageType(server.secretStorageType)}
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {format(new Date(server.createdAt), "PPp")}
+            <TableCell
+              className="whitespace-nowrap text-muted-foreground"
+              title={format(new Date(server.createdAt), "PPpp")}
+            >
+              {format(new Date(server.createdAt), "PP")}
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">

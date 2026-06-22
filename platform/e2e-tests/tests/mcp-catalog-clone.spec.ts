@@ -54,18 +54,25 @@ test.describe("MCP Catalog clone", () => {
         .getByTestId(`${E2eTestId.McpServerSettingsButton}-${sourceName}`)
         .click();
 
-      const settingsDialog = adminPage.getByRole("dialog", {
-        name: new RegExp(`${sourceName} Settings`, "i"),
-      });
-      await expect(settingsDialog).toBeVisible({ timeout: 30_000 });
-      await settingsDialog
-        .getByRole("button", { name: "Clone", exact: true })
+      // The pencil opens the catalog item detail page since the registry
+      // redesign; Clone lives in the header's overflow menu there and opens
+      // the Add MCP Server page pre-filled.
+      await expect(
+        adminPage.getByRole("heading", { name: sourceName, exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
+      await adminPage
+        .getByRole("button", { name: "More actions", exact: true })
+        .click();
+      await adminPage
+        .getByRole("menuitem", { name: "Clone", exact: true })
         .click();
 
-      const cloneDialog = adminPage.getByRole("dialog", {
-        name: /Add MCP Server to the Private Registry/i,
-      });
-      await expect(cloneDialog).toBeVisible({ timeout: 30_000 });
+      await adminPage.waitForURL(/\/mcp\/registry\/new/, { timeout: 30_000 });
+      await expect(
+        adminPage.getByRole("heading", {
+          name: /Add MCP Server to the Private Registry/i,
+        }),
+      ).toBeVisible({ timeout: 30_000 });
       // Clone form is pre-filled (name becomes `<source>-copy`); submit as-is.
       await submitAddServer(adminPage);
 

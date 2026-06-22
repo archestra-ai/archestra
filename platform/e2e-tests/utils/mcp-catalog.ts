@@ -33,10 +33,20 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  const createDialog = page.getByRole("dialog", {
-    name: /Add MCP Server to the Private Registry/i,
-  });
-  await expect(createDialog).toBeVisible({ timeout: 30_000 });
+  // The create flow lives on a dedicated page (/mcp/registry/new) since the
+  // registry redesign; scope form interactions to the page body.
+  await page.waitForURL(/\/mcp\/registry\/new/, { timeout: 30_000 });
+  const createDialog = page.locator("body");
+  await expect(
+    page.getByRole("heading", {
+      name: /Add MCP Server to the Private Registry/i,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // Wizard step 1: choose the source, then configure manually.
+  await createDialog
+    .getByRole("button", { name: "Start from scratch" })
+    .click();
 
   await createDialog.getByRole("button", { name: "Self-hosted" }).click();
   await createDialog
@@ -172,10 +182,6 @@ export async function addCustomSelfHostedCatalogItem({
   }
 
   const createdCatalogItem = newCatalogItem as { id: string; name: string };
-
-  if (await createDialog.isVisible().catch(() => false)) {
-    await page.keyboard.press("Escape").catch(() => undefined);
-  }
 
   return {
     id: createdCatalogItem.id,

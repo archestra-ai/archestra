@@ -103,6 +103,15 @@ export const MCP_CATALOG_INSTALL_PATH = "/mcp/registry";
 export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
 
 /**
+ * Optional companions to `?install={catalogId}` for pre-targeting the
+ * connection: `&scope=personal|team|org` and, for team scope, `&team={teamId}`.
+ * Used by the catalog item detail page's add-connection actions, which hand
+ * off to the registry page's install flow.
+ */
+export const MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM = "scope";
+export const MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM = "team";
+
+/**
  * Query params for deep-linking to the re-authentication dialog.
  * Append `?reauth={catalogId}&server={mcpServerId}` to auto-open
  * the credential dialog for in-place re-authentication.
@@ -118,3 +127,11 @@ export const MCP_CATALOG_SERVER_QUERY_PARAM = "server";
  * access-denied message, and unknown/invisible ids are silently ignored.
  */
 export const MCP_CATALOG_EDIT_QUERY_PARAM = "edit";
+
+/**
+ * Query param for deep-linking to the catalog "Add MCP Server" dialog
+ * pre-filled from an existing item. Append `?clone={catalogId}` to open the
+ * create dialog with the item's configuration cloned. Used by the catalog
+ * item detail page, which has no create dialog of its own.
+ */
+export const MCP_CATALOG_CLONE_QUERY_PARAM = "clone";

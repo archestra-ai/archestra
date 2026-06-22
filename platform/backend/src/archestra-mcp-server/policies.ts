@@ -22,6 +22,8 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
+  apiResult,
+  callArchestraApi,
   catchError,
   defineArchestraTool,
   defineArchestraTools,
@@ -234,10 +236,6 @@ const TrustedDataPolicyOutputSchema = z.object({
   ),
 });
 
-const DeletePolicyOutputSchema = z.object({
-  success: z.literal(true).describe("Whether the delete succeeded."),
-});
-
 const GetToolInvocationPolicyToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe("The ID of the tool invocation policy."),
@@ -310,7 +308,6 @@ const registry = defineArchestraTools([
     title: "Create Tool Invocation Policy",
     description: "Create a new tool invocation policy",
     schema: createToolInvocationPolicySchema,
-    outputSchema: ToolInvocationPolicyOutputSchema,
     handler: ({ args, context }) =>
       handleCreateToolInvocationPolicy(args, context),
   }),
@@ -328,7 +325,6 @@ const registry = defineArchestraTools([
     title: "Update Tool Invocation Policy",
     description: "Update a tool invocation policy",
     schema: updateToolInvocationPolicySchema,
-    outputSchema: ToolInvocationPolicyOutputSchema,
     handler: ({ args, context }) =>
       handleUpdateToolInvocationPolicy(args, context),
   }),
@@ -337,7 +333,6 @@ const registry = defineArchestraTools([
     title: "Delete Tool Invocation Policy",
     description: "Delete a tool invocation policy by ID",
     schema: DeleteToolInvocationPolicyToolArgsSchema,
-    outputSchema: DeletePolicyOutputSchema,
     handler: ({ args, context }) =>
       handleDeleteToolInvocationPolicy(args, context),
   }),
@@ -354,7 +349,6 @@ const registry = defineArchestraTools([
     title: "Create Trusted Data Policy",
     description: "Create a new trusted data policy",
     schema: createTrustedDataPolicySchema,
-    outputSchema: TrustedDataPolicyOutputSchema,
     handler: ({ args, context }) =>
       handleCreateTrustedDataPolicy(args, context),
   }),
@@ -371,7 +365,6 @@ const registry = defineArchestraTools([
     title: "Update Trusted Data Policy",
     description: "Update a trusted data policy",
     schema: updateTrustedDataPolicySchema,
-    outputSchema: TrustedDataPolicyOutputSchema,
     handler: ({ args, context }) =>
       handleUpdateTrustedDataPolicy(args, context),
   }),
@@ -380,7 +373,6 @@ const registry = defineArchestraTools([
     title: "Delete Trusted Data Policy",
     description: "Delete a trusted data policy by ID",
     schema: DeleteTrustedDataPolicyToolArgsSchema,
-    outputSchema: DeletePolicyOutputSchema,
     handler: ({ args, context }) =>
       handleDeleteTrustedDataPolicy(args, context),
   }),
@@ -455,14 +447,18 @@ async function handleCreateToolInvocationPolicy(
   );
 
   try {
-    const validated = ToolInvocation.InsertToolInvocationPolicySchema.parse({
-      toolId: args.toolId,
-      conditions: args.conditions ?? [],
-      action: args.action,
-      reason: args.reason ?? null,
+    const response = await callArchestraApi({
+      method: "POST",
+      path: "/api/autonomy-policies/tool-invocation",
+      body: {
+        toolId: args.toolId,
+        conditions: args.conditions ?? [],
+        action: args.action,
+        reason: args.reason ?? null,
+      },
+      context,
     });
-    const policy = await ToolInvocationPolicyModel.create(validated);
-    return structuredSuccessResult({ policy }, JSON.stringify(policy, null, 2));
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "creating tool invocation policy");
   }
@@ -502,24 +498,20 @@ async function handleUpdateToolInvocationPolicy(
     "update_tool_invocation_policy tool called",
   );
 
+  const rawUpdate: Record<string, unknown> = {};
+  if (args.toolId !== undefined) rawUpdate.toolId = args.toolId;
+  if (args.conditions !== undefined) rawUpdate.conditions = args.conditions;
+  if (args.action !== undefined) rawUpdate.action = args.action;
+  if (args.reason !== undefined) rawUpdate.reason = args.reason ?? null;
+
   try {
-    const rawUpdate: Record<string, unknown> = {};
-    if (args.toolId !== undefined) rawUpdate.toolId = args.toolId;
-    if (args.conditions !== undefined) rawUpdate.conditions = args.conditions;
-    if (args.action !== undefined) rawUpdate.action = args.action;
-    if (args.reason !== undefined) rawUpdate.reason = args.reason ?? null;
-
-    const updateData =
-      ToolInvocation.InsertToolInvocationPolicySchema.partial().parse(
-        rawUpdate,
-      );
-
-    const policy = await ToolInvocationPolicyModel.update(args.id, updateData);
-    if (!policy) {
-      return errorResult("Tool invocation policy not found");
-    }
-
-    return structuredSuccessResult({ policy }, JSON.stringify(policy, null, 2));
+    const response = await callArchestraApi({
+      method: "PUT",
+      path: `/api/autonomy-policies/tool-invocation/${args.id}`,
+      body: rawUpdate,
+      context,
+    });
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "updating tool invocation policy");
   }
@@ -537,15 +529,12 @@ async function handleDeleteToolInvocationPolicy(
   );
 
   try {
-    const success = await ToolInvocationPolicyModel.delete(args.id);
-    if (!success) {
-      return errorResult("Tool invocation policy not found");
-    }
-
-    return structuredSuccessResult(
-      { success: true },
-      JSON.stringify({ success: true }, null, 2),
-    );
+    const response = await callArchestraApi({
+      method: "DELETE",
+      path: `/api/autonomy-policies/tool-invocation/${args.id}`,
+      context,
+    });
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "deleting tool invocation policy");
   }
@@ -584,14 +573,18 @@ async function handleCreateTrustedDataPolicy(
   );
 
   try {
-    const validated = TrustedData.InsertTrustedDataPolicySchema.parse({
-      toolId: args.toolId,
-      conditions: args.conditions ?? [],
-      action: args.action,
-      description: args.description ?? null,
+    const response = await callArchestraApi({
+      method: "POST",
+      path: "/api/trusted-data-policies",
+      body: {
+        toolId: args.toolId,
+        conditions: args.conditions ?? [],
+        action: args.action,
+        description: args.description ?? null,
+      },
+      context,
     });
-    const policy = await TrustedDataPolicyModel.create(validated);
-    return structuredSuccessResult({ policy }, JSON.stringify(policy, null, 2));
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "creating trusted data policy");
   }
@@ -631,23 +624,21 @@ async function handleUpdateTrustedDataPolicy(
     "update_trusted_data_policy tool called",
   );
 
+  const rawUpdate: Record<string, unknown> = {};
+  if (args.toolId !== undefined) rawUpdate.toolId = args.toolId;
+  if (args.conditions !== undefined) rawUpdate.conditions = args.conditions;
+  if (args.action !== undefined) rawUpdate.action = args.action;
+  if (args.description !== undefined)
+    rawUpdate.description = args.description ?? null;
+
   try {
-    const rawUpdate: Record<string, unknown> = {};
-    if (args.toolId !== undefined) rawUpdate.toolId = args.toolId;
-    if (args.conditions !== undefined) rawUpdate.conditions = args.conditions;
-    if (args.action !== undefined) rawUpdate.action = args.action;
-    if (args.description !== undefined)
-      rawUpdate.description = args.description ?? null;
-
-    const updateData =
-      TrustedData.InsertTrustedDataPolicySchema.partial().parse(rawUpdate);
-
-    const policy = await TrustedDataPolicyModel.update(args.id, updateData);
-    if (!policy) {
-      return errorResult("Trusted data policy not found");
-    }
-
-    return structuredSuccessResult({ policy }, JSON.stringify(policy, null, 2));
+    const response = await callArchestraApi({
+      method: "PUT",
+      path: `/api/trusted-data-policies/${args.id}`,
+      body: rawUpdate,
+      context,
+    });
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "updating trusted data policy");
   }
@@ -665,15 +656,12 @@ async function handleDeleteTrustedDataPolicy(
   );
 
   try {
-    const success = await TrustedDataPolicyModel.delete(args.id);
-    if (!success) {
-      return errorResult("Trusted data policy not found");
-    }
-
-    return structuredSuccessResult(
-      { success: true },
-      JSON.stringify({ success: true }, null, 2),
-    );
+    const response = await callArchestraApi({
+      method: "DELETE",
+      path: `/api/trusted-data-policies/${args.id}`,
+      context,
+    });
+    return apiResult(response);
   } catch (error) {
     return catchError(error, "deleting trusted data policy");
   }

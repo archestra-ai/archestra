@@ -3,12 +3,31 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import { vi } from "vitest";
+import { fastifyAuthPlugin, loopbackGateway } from "@/auth";
 import { AgentModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import agentRoutes from "@/routes/agent";
+import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { ARCHESTRA_API_DEPRECATION_NOTE } from "./helpers";
+
+// The loopback PUT /api/agents/:id route touches Prometheus exemplar counters,
+// which require an OpenMetrics registry the test process does not provide. Stub
+// the metrics process boundary the same way the canonical agent route test does
+// (src/routes/agent.test.ts) — the tool → loopback → route → DB path stays real.
+vi.mock("@/observability", () => ({
+  initializeObservabilityMetrics: vi.fn(),
+  metrics: {
+    llm: { initializeMetrics: vi.fn() },
+    mcp: { initializeMcpMetrics: vi.fn() },
+    agentExecution: { initializeAgentExecutionMetrics: vi.fn() },
+  },
+}));
 
 describe("llm proxy tool execution", () => {
+  let app: FastifyInstanceWithZod;
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
@@ -25,6 +44,16 @@ describe("llm proxy tool execution", () => {
       userId: user.id,
       organizationId: organization.id,
     };
+
+    app = createFastifyInstance();
+    await app.register(fastifyAuthPlugin);
+    await app.register(agentRoutes);
+    loopbackGateway.setServer(app);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
   });
 
   test("create_llm_proxy creates a proxy successfully", async () => {
@@ -37,6 +66,10 @@ describe("llm proxy tool execution", () => {
     expect(result.isError).toBe(false);
     expect((result.content[0] as any).text).toContain(
       "Successfully created llm proxy",
+    );
+    // create_llm_proxy is a deprecated platform tool, so the note is appended.
+    expect((result.content.at(-1) as any).text).toContain(
+      "Deprecated: prefer the archestra__api tool",
     );
   });
 
@@ -65,9 +98,7 @@ describe("llm proxy tool execution", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully updated llm proxy",
-    );
+    expect(result.structuredContent?.status).toBe(200);
 
     const updated = await AgentModel.findById(
       llmProxy.id,
@@ -77,6 +108,30 @@ describe("llm proxy tool execution", () => {
     expect(updated?.name).toBe("Updated LLM Proxy");
     expect(updated?.labels).toContainEqual(
       expect.objectContaining({ key: "team", value: "platform" }),
+    );
+
+    expect((result.content.at(-1) as any).text).toBe(
+      ARCHESTRA_API_DEPRECATION_NOTE,
+    );
+    expect(ARCHESTRA_API_DEPRECATION_NOTE).toContain(
+      "Deprecated: prefer the archestra__api tool",
+    );
+  });
+
+  test("edit_llm_proxy on a non-existent id returns a 404 error result", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_llm_proxy`,
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "Does Not Matter",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.status).toBe(404);
+    expect((result.content.at(-1) as any).text).toBe(
+      ARCHESTRA_API_DEPRECATION_NOTE,
     );
   });
 });

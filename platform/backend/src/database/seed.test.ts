@@ -5,6 +5,9 @@ import {
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  TOOL_API_FULL_NAME,
+  TOOL_CREATE_AGENT_FULL_NAME,
+  TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach } from "vitest";
@@ -19,7 +22,57 @@ import {
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { decideEnvSeed, syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+import {
+  decideEnvSeed,
+  seedArchestraCatalogAndTools,
+  syncBuiltInAgents,
+  syncBuiltInSkills,
+} from "./seed";
+
+async function approvalPoliciesForTool(toolName: string) {
+  const [tool] = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.name, toolName));
+  if (!tool) return [];
+  return db
+    .select()
+    .from(schema.toolInvocationPoliciesTable)
+    .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+}
+
+describe("seedArchestraCatalogAndTools default approval policies", () => {
+  test("seeds require_approval for archestra__api and governance-mutating tools, but not other platform tools", async () => {
+    await seedArchestraCatalogAndTools();
+
+    const apiPolicies = await approvalPoliciesForTool(TOOL_API_FULL_NAME);
+    expect(apiPolicies).toHaveLength(1);
+    expect(apiPolicies[0].action).toBe("require_approval");
+
+    const policyToolPolicies = await approvalPoliciesForTool(
+      TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+    );
+    expect(policyToolPolicies).toHaveLength(1);
+    expect(policyToolPolicies[0].action).toBe("require_approval");
+
+    // an ordinary deprecated platform tool is NOT gated by default
+    expect(await approvalPoliciesForTool(TOOL_CREATE_AGENT_FULL_NAME)).toEqual(
+      [],
+    );
+  });
+
+  test("is idempotent — re-seeding does not duplicate the default policies", async () => {
+    await seedArchestraCatalogAndTools();
+    await seedArchestraCatalogAndTools();
+
+    expect(await approvalPoliciesForTool(TOOL_API_FULL_NAME)).toHaveLength(1);
+    expect(
+      await approvalPoliciesForTool(
+        TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+      ),
+    ).toHaveLength(1);
+  });
+});
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 

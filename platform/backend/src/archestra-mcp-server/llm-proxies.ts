@@ -15,11 +15,16 @@ import {
   CreateBaseToolArgsSchema,
   GetResourceToolArgsSchema,
   handleCreateResource,
-  handleEditResource,
   handleGetResource,
   LabelInputSchema,
 } from "./agent-resources";
-import { defineArchestraTool, defineArchestraTools } from "./helpers";
+import {
+  apiResult,
+  callArchestraApi,
+  catchError,
+  defineArchestraTool,
+  defineArchestraTools,
+} from "./helpers";
 
 const CreateLlmProxyToolArgsSchema = CreateBaseToolArgsSchema;
 
@@ -103,11 +108,18 @@ const registry = defineArchestraTools([
       "Edit an existing LLM proxy. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level.",
     schema: EditLlmProxyToolArgsSchema,
     async handler({ args, context }) {
-      return handleEditResource({
-        args,
-        context,
-        expectedType: "llm_proxy",
-      });
+      const { id, ...body } = args;
+      try {
+        const response = await callArchestraApi({
+          method: "PUT",
+          path: `/api/agents/${id}`,
+          body,
+          context,
+        });
+        return apiResult(response);
+      } catch (error) {
+        return catchError(error, "editing llm proxy");
+      }
     },
   }),
 ] as const);

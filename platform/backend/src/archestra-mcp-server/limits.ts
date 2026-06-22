@@ -17,6 +17,8 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
+  apiResult,
+  callArchestraApi,
   catchError,
   defineArchestraTool,
   defineArchestraTools,
@@ -116,46 +118,32 @@ const registry = defineArchestraTools([
     description:
       "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
     schema: CreateLimitToolArgsSchema,
-    outputSchema: z.object({
-      limit: LimitOutputItemSchema,
-    }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
-
       logger.info(
-        { agentId: contextAgent.id, createLimitArgs: args },
+        { agentId: context.agent.id, createLimitArgs: args },
         "create_limit tool called",
       );
 
       try {
-        const limit = await LimitModel.create({
-          entityType: args.entity_type,
-          entityId: args.entity_id,
-          limitType: args.limit_type,
-          limitValue: args.limit_value,
-          model:
-            args.model && Array.isArray(args.model) && args.model.length > 0
-              ? args.model
-              : null,
-          cleanupInterval: args.cleanup_interval,
-          mcpServerName: args.mcp_server_name,
-          toolName: args.tool_name,
+        const response = await callArchestraApi({
+          method: "POST",
+          path: "/api/limits",
+          body: {
+            entityType: args.entity_type,
+            entityId: args.entity_id,
+            limitType: args.limit_type,
+            limitValue: args.limit_value,
+            model:
+              args.model && Array.isArray(args.model) && args.model.length > 0
+                ? args.model
+                : null,
+            cleanupInterval: args.cleanup_interval,
+            mcpServerName: args.mcp_server_name,
+            toolName: args.tool_name,
+          },
+          context,
         });
-
-        return structuredSuccessResult(
-          { limit },
-          `Successfully created limit.\n\nLimit ID: ${
-            limit.id
-          }\nEntity Type: ${limit.entityType}\nEntity ID: ${
-            limit.entityId
-          }\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${
-            limit.cleanupInterval
-              ? `\nCleanup Interval: ${limit.cleanupInterval}`
-              : ""
-          }${limit.model ? `\nModel: ${limit.model}` : "\nModel: All models"}${
-            limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
-          }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
-        );
+        return apiResult(response);
       } catch (error) {
         return catchError(error, "creating limit");
       }
@@ -253,44 +241,32 @@ const registry = defineArchestraTools([
         ),
       })
       .strict(),
-    outputSchema: z.object({
-      limit: LimitOutputItemSchema,
-    }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
-
       logger.info(
-        { agentId: contextAgent.id, updateLimitArgs: args },
+        { agentId: context.agent.id, updateLimitArgs: args },
         "update_limit tool called",
       );
 
+      const updateData: Record<string, unknown> = {};
+      if (args.limit_value !== undefined) {
+        updateData.limitValue = args.limit_value;
+      }
+      if (args.cleanup_interval !== undefined) {
+        updateData.cleanupInterval = args.cleanup_interval;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return errorResult("No fields provided to update.");
+      }
+
       try {
-        const updateData: Record<string, unknown> = {};
-        if (args.limit_value !== undefined) {
-          updateData.limitValue = args.limit_value;
-        }
-        if (args.cleanup_interval !== undefined) {
-          updateData.cleanupInterval = args.cleanup_interval;
-        }
-
-        if (Object.keys(updateData).length === 0) {
-          return errorResult("No fields provided to update.");
-        }
-
-        const limit = await LimitModel.patch(args.id, updateData);
-
-        if (!limit) {
-          return errorResult(`Limit with ID ${args.id} not found.`);
-        }
-
-        return structuredSuccessResult(
-          { limit },
-          `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${
-            limit.cleanupInterval
-              ? `\nCleanup Interval: ${limit.cleanupInterval}`
-              : ""
-          }`,
-        );
+        const response = await callArchestraApi({
+          method: "PATCH",
+          path: `/api/limits/${args.id}`,
+          body: updateData,
+          context,
+        });
+        return apiResult(response);
       } catch (error) {
         return catchError(error, "updating limit");
       }
@@ -305,29 +281,19 @@ const registry = defineArchestraTools([
         id: UuidIdSchema.describe("The ID of the limit to delete."),
       })
       .strict(),
-    outputSchema: z.object({
-      success: z.literal(true),
-      id: z.string(),
-    }),
     async handler({ args, context }) {
-      const { agent: contextAgent } = context;
-
       logger.info(
-        { agentId: contextAgent.id, deleteLimitArgs: args },
+        { agentId: context.agent.id, deleteLimitArgs: args },
         "delete_limit tool called",
       );
 
       try {
-        const deleted = await LimitModel.delete(args.id);
-
-        if (!deleted) {
-          return errorResult(`Limit with ID ${args.id} not found.`);
-        }
-
-        return structuredSuccessResult(
-          { success: true, id: args.id },
-          `Successfully deleted limit with ID: ${args.id}`,
-        );
+        const response = await callArchestraApi({
+          method: "DELETE",
+          path: `/api/limits/${args.id}`,
+          context,
+        });
+        return apiResult(response);
       } catch (error) {
         return catchError(error, "deleting limit");
       }

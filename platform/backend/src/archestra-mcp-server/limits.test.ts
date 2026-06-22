@@ -3,11 +3,25 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { beforeEach, describe, expect, test } from "@/test";
+import { fastifyAuthPlugin, loopbackGateway } from "@/auth";
+import { LimitModel } from "@/models";
+import limitsRoutes from "@/routes/limits";
+import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { ARCHESTRA_API_DEPRECATION_NOTE } from "./helpers";
+
+function toolName(shortName: string): string {
+  return `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
+}
+
+function lastText(result: { content: unknown[] }): string {
+  return (result.content[result.content.length - 1] as any).text;
+}
 
 describe("limit tool execution", () => {
+  let app: FastifyInstanceWithZod;
   let testAgent: Agent;
   let mockContext: ArchestraContext & {
     virtualApiKeyId: string;
@@ -16,13 +30,13 @@ describe("limit tool execution", () => {
   beforeEach(
     async ({
       makeAgent,
-      makeUser,
+      makeAdmin,
       makeVirtualApiKey,
       makeOrganization,
       makeMember,
     }) => {
       const org = await makeOrganization();
-      const user = await makeUser();
+      const user = await makeAdmin();
       const virtualApiKey = await makeVirtualApiKey(org.id);
       await makeMember(user.id, org.id, { role: "admin" });
       testAgent = await makeAgent({
@@ -35,12 +49,25 @@ describe("limit tool execution", () => {
         organizationId: org.id,
         virtualApiKeyId: virtualApiKey.id,
       };
+
+      // The create/update/delete tools delegate through an in-process loopback
+      // REST call, so a real Fastify server with the auth middleware + limits
+      // routes must back the loopback gateway.
+      app = createFastifyInstance();
+      await app.register(fastifyAuthPlugin);
+      await app.register(limitsRoutes);
+      loopbackGateway.setServer(app);
+      await app.ready();
     },
   );
 
+  afterEach(async () => {
+    await app.close();
+  });
+
   test("create_limit returns error when required fields are missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {},
       mockContext,
     );
@@ -56,7 +83,7 @@ describe("limit tool execution", () => {
 
   test("create_limit succeeds with omitted model (all models)", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -66,15 +93,17 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain("Model: All models");
+    expect(result.structuredContent?.status).toBe(200);
+
+    const created = (result.structuredContent?.body as any).id as string;
+    const stored = await LimitModel.findById(created);
+    expect(stored?.model).toBeNull();
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit succeeds with null model (all models)", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -85,15 +114,14 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain("Model: All models");
+    expect(result.structuredContent?.status).toBe(200);
+    expect((result.structuredContent?.body as any).model).toBeNull();
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit succeeds with empty model array (all models)", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -104,15 +132,14 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain("Model: All models");
+    expect(result.structuredContent?.status).toBe(200);
+    expect((result.structuredContent?.body as any).model).toBeNull();
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit returns error when mcp_server_calls limit missing mcp_server_name", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -130,7 +157,7 @@ describe("limit tool execution", () => {
 
   test("create_limit returns error when tool_calls limit missing fields", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -148,18 +175,20 @@ describe("limit tool execution", () => {
 
   test("get_limits returns empty when no limits exist", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+      toolName("get_limits"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toEqual({ limits: [] });
     expect((result.content[0] as any).text).toContain("No limits found");
+    // get_limits is still a deprecated platform tool, so it carries the note.
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("update_limit returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      toolName("update_limit"),
       {},
       mockContext,
     );
@@ -172,7 +201,7 @@ describe("limit tool execution", () => {
 
   test("update_limit returns error when no fields provided", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      toolName("update_limit"),
       { id: "00000000-0000-4000-8000-000000000001" },
       mockContext,
     );
@@ -184,7 +213,7 @@ describe("limit tool execution", () => {
 
   test("delete_limit returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+      toolName("delete_limit"),
       {},
       mockContext,
     );
@@ -197,7 +226,7 @@ describe("limit tool execution", () => {
 
   test("get_agent_token_usage returns usage for current agent", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent_token_usage`,
+      toolName("get_agent_token_usage"),
       {},
       mockContext,
     );
@@ -210,12 +239,13 @@ describe("limit tool execution", () => {
     });
     expect((result.content[0] as any).text).toContain("Token usage for agent");
     expect((result.content[0] as any).text).toContain("Total Input Tokens");
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
-  test("full limit CRUD lifecycle", async () => {
-    // Create a token_cost limit
+  test("full limit CRUD lifecycle through the loopback API", async () => {
+    // Create a token_cost limit via the loopback POST /api/limits.
     const createResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -227,20 +257,29 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(createResult.isError).toBe(false);
-    const createText = (createResult.content[0] as any).text;
-    expect(createText).toContain("Successfully created limit");
-    expect(createText).toContain("Limit Type: token_cost");
-    expect(createText).toContain("Limit Value: 1000");
-    expect(createText).toContain("Cleanup Interval: 12h");
+    expect(createResult.structuredContent?.status).toBe(200);
+    expect(lastText(createResult)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
 
-    // Extract the limit ID
-    const idMatch = createText.match(/Limit ID: (.+)/);
-    expect(idMatch).toBeTruthy();
-    const limitId = idMatch?.[1].trim();
+    const createdBody = createResult.structuredContent?.body as any;
+    const limitId = createdBody.id as string;
+    expect(createdBody).toMatchObject({
+      limitType: "token_cost",
+      limitValue: 1000,
+      cleanupInterval: "12h",
+      model: ["gpt-4o"],
+    });
 
-    // Get limits and verify the created limit appears
+    // Verify the real effect: the limit exists in the database.
+    const afterCreate = await LimitModel.findById(limitId);
+    expect(afterCreate).toMatchObject({
+      limitType: "token_cost",
+      limitValue: 1000,
+      cleanupInterval: "12h",
+    });
+
+    // Get limits and verify the created limit appears (unchanged tool path).
     const getResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+      toolName("get_limits"),
       { entity_type: "agent", entity_id: testAgent.id },
       mockContext,
     );
@@ -250,37 +289,39 @@ describe("limit tool execution", () => {
     expect(getText).toContain(limitId);
     expect(getText).toContain("token_cost");
 
-    // Update the limit value
+    // Update the limit value via the loopback PATCH /api/limits/:id.
     const updateResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      toolName("update_limit"),
       { id: limitId, limit_value: 2000, cleanup_interval: "1w" },
       mockContext,
     );
     expect(updateResult.isError).toBe(false);
-    expect((updateResult.content[0] as any).text).toContain(
-      "Successfully updated limit",
-    );
-    expect((updateResult.content[0] as any).text).toContain(
-      "Cleanup Interval: 1w",
-    );
-    expect((updateResult.content[0] as any).text).toContain(
-      "Limit Value: 2000",
-    );
+    expect(updateResult.structuredContent?.status).toBe(200);
+    expect(updateResult.structuredContent?.body as any).toMatchObject({
+      limitValue: 2000,
+      cleanupInterval: "1w",
+    });
+    expect(lastText(updateResult)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
 
-    // Delete the limit
+    const afterUpdate = await LimitModel.findById(limitId);
+    expect(afterUpdate?.limitValue).toBe(2000);
+    expect(afterUpdate?.cleanupInterval).toBe("1w");
+
+    // Delete the limit via the loopback DELETE /api/limits/:id.
     const deleteResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+      toolName("delete_limit"),
       { id: limitId },
       mockContext,
     );
     expect(deleteResult.isError).toBe(false);
-    expect((deleteResult.content[0] as any).text).toContain(
-      "Successfully deleted limit",
-    );
+    expect(deleteResult.structuredContent?.status).toBe(200);
+    expect(lastText(deleteResult)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
 
-    // Verify the limit is gone
+    // Verify the real effect: the limit is gone.
+    expect(await LimitModel.findById(limitId)).toBeNull();
+
     const verifyResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+      toolName("get_limits"),
       { entity_type: "agent", entity_id: testAgent.id },
       mockContext,
     );
@@ -290,7 +331,7 @@ describe("limit tool execution", () => {
 
   test("create_limit succeeds for mcp_server_calls type", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -301,17 +342,16 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
+    expect(result.structuredContent?.status).toBe(200);
+    expect((result.structuredContent?.body as any).mcpServerName).toBe(
+      "test-server",
     );
-    expect((result.content[0] as any).text).toContain(
-      "MCP Server: test-server",
-    );
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit succeeds for tool_calls type", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "agent",
         entity_id: testAgent.id,
@@ -323,18 +363,17 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain(
-      "MCP Server: test-server",
-    );
-    expect((result.content[0] as any).text).toContain("Tool: test-tool");
+    expect(result.structuredContent?.status).toBe(200);
+    expect(result.structuredContent?.body as any).toMatchObject({
+      mcpServerName: "test-server",
+      toolName: "test-tool",
+    });
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit succeeds for user entity type", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "user",
         entity_id: mockContext.userId,
@@ -345,15 +384,14 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
-    );
-    expect((result.content[0] as any).text).toContain("Entity Type: user");
+    expect(result.structuredContent?.status).toBe(200);
+    expect((result.structuredContent?.body as any).entityType).toBe("user");
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("create_limit succeeds for virtual_key entity type", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      toolName("create_limit"),
       {
         entity_type: "virtual_key",
         entity_id: mockContext.virtualApiKeyId,
@@ -364,29 +402,32 @@ describe("limit tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "Successfully created limit",
+    expect(result.structuredContent?.status).toBe(200);
+    expect((result.structuredContent?.body as any).entityType).toBe(
+      "virtual_key",
     );
-    expect((result.content[0] as any).text).toContain(
-      "Entity Type: virtual_key",
-    );
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("update_limit returns error for nonexistent limit", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+      toolName("update_limit"),
       { id: crypto.randomUUID(), limit_value: 999 },
       mockContext,
     );
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.status).toBe(404);
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("delete_limit returns error for nonexistent limit", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+      toolName("delete_limit"),
       { id: crypto.randomUUID() },
       mockContext,
     );
     expect(result.isError).toBe(true);
+    expect(result.structuredContent?.status).toBe(404);
+    expect(lastText(result)).toBe(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 });

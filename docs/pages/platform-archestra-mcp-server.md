@@ -31,6 +31,7 @@ However, **RBAC (role-based access control) is still enforced**. Every tool is m
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `whoami` | Returns the name and ID of the current agent. | None (no additional RBAC permission required) |
+| `api` | Call the Archestra platform's own REST API — the same API the web UI uses. | None (no additional RBAC permission required) |
 
 #### whoami
 
@@ -44,6 +45,20 @@ This tool takes no arguments.
 |-------|------|----------|-------------|
 | `agentId` | `string` | Yes | The ID of the current agent. |
 | `agentName` | `string` | Yes | The display name of the current agent. |
+
+#### api
+
+Required RBAC permission: None (no additional RBAC permission required)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `method` | `"GET" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | Yes | HTTP method, e.g. GET to read or POST to create. |
+| `path` | `string` | Yes | API path starting with /api/, e.g. /api/agents or /api/agents/<id>. |
+| `query` | `object` | No | Optional query-string parameters. |
+| `body` | `any` | No | Optional JSON request body for write methods. |
+
 
 ### Agents
 
@@ -650,20 +665,6 @@ Required RBAC permission: `llmLimit:create`
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `limit` | `object` | Yes |  |
-| `limit.id` | `string` | Yes | The limit ID. |
-| `limit.entityType` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key" \| "environment"` | Yes | The limited entity type. |
-| `limit.entityId` | `string` | Yes | The limited entity ID. |
-| `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
-| `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | Yes | How often this limit resets. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
-| `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
-| `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
 #### get_limits
 
@@ -703,20 +704,6 @@ Required RBAC permission: `llmLimit:update`
 | `limit_value` | `number` | No | Optional new limit value. |
 | `cleanup_interval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | No | Optional new cleanup interval for this limit. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `limit` | `object` | Yes |  |
-| `limit.id` | `string` | Yes | The limit ID. |
-| `limit.entityType` | `"organization" \| "team" \| "agent" \| "user" \| "virtual_key" \| "environment"` | Yes | The limited entity type. |
-| `limit.entityId` | `string` | Yes | The limited entity ID. |
-| `limit.limitType` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The kind of limit. |
-| `limit.limitValue` | `number` | Yes | The configured limit value. |
-| `limit.cleanupInterval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | Yes | How often this limit resets. |
-| `limit.model` | `string[] \| null` | No | Models targeted by a token_cost limit. Null or empty array means all models. |
-| `limit.mcpServerName` | `string \| null` | No | MCP server name for MCP-specific limits, if any. |
-| `limit.toolName` | `string \| null` | No | Tool name for tool-specific limits, if any. |
 
 #### delete_limit
 
@@ -728,12 +715,6 @@ Required RBAC permission: `llmLimit:delete`
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the limit to delete. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
-| `id` | `string` | Yes |  |
 
 #### get_agent_token_usage
 
@@ -777,17 +758,39 @@ Required RBAC permission: `llmLimit:read`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels | `toolPolicy:read` |
-| `get_tool_invocation_policies` | Get all tool invocation policies | `toolPolicy:read` |
-| `create_tool_invocation_policy` | Create a new tool invocation policy | `toolPolicy:create` |
-| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID | `toolPolicy:read` |
-| `update_tool_invocation_policy` | Update a tool invocation policy | `toolPolicy:update` |
-| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID | `toolPolicy:delete` |
-| `get_trusted_data_policies` | Get all trusted data policies | `toolPolicy:read` |
-| `create_trusted_data_policy` | Create a new trusted data policy | `toolPolicy:create` |
-| `get_trusted_data_policy` | Get a specific trusted data policy by ID | `toolPolicy:read` |
-| `update_trusted_data_policy` | Update a trusted data policy | `toolPolicy:update` |
-| `delete_trusted_data_policy` | Delete a trusted data policy by ID | `toolPolicy:delete` |
+| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.j... | `toolPolicy:read` |
+| `get_tool_invocation_policies` | Get all tool invocation policies
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `create_tool_invocation_policy` | Create a new tool invocation policy
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
+| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `update_tool_invocation_policy` | Update a tool invocation policy
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
+| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
+| `get_trusted_data_policies` | Get all trusted data policies
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `create_trusted_data_policy` | Create a new trusted data policy
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
+| `get_trusted_data_policy` | Get a specific trusted data policy by ID
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `update_trusted_data_policy` | Update a trusted data policy
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
+| `delete_trusted_data_policy` | Delete a trusted data policy by ID
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
 
 #### get_autonomy_policy_operators
 
@@ -839,19 +842,6 @@ Required RBAC permission: `toolPolicy:create`
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The action to take when the policy matches. |
 | `reason` | `string` | No | Human-readable explanation for why this policy exists. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested tool invocation policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policy.reason` | `string \| null` | Yes | The policy reason, if any. |
 
 #### get_tool_invocation_policy
 
@@ -894,19 +884,6 @@ Required RBAC permission: `toolPolicy:update`
 | `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | No | Updated action to take when the policy matches. |
 | `reason` | `string \| null` | No | Updated human-readable explanation for why this policy exists. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested tool invocation policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policy.reason` | `string \| null` | Yes | The policy reason, if any. |
 
 #### delete_tool_invocation_policy
 
@@ -918,11 +895,6 @@ Required RBAC permission: `toolPolicy:delete`
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the tool invocation policy. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the delete succeeded. |
 
 #### get_trusted_data_policies
 
@@ -960,19 +932,6 @@ Required RBAC permission: `toolPolicy:create`
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The action to take when the policy matches. |
 | `description` | `string` | No | Human-readable explanation for why this policy exists. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested trusted data policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policy.description` | `string \| null` | Yes | The policy description, if any. |
 
 #### get_trusted_data_policy
 
@@ -1015,19 +974,6 @@ Required RBAC permission: `toolPolicy:update`
 | `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | No | Updated action to take when the policy matches. |
 | `description` | `string \| null` | No | Updated human-readable explanation for why this policy exists. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested trusted data policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policy.description` | `string \| null` | Yes | The policy description, if any. |
 
 #### delete_trusted_data_policy
 
@@ -1039,18 +985,17 @@ Required RBAC permission: `toolPolicy:delete`
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The ID of the trusted data policy. |
 
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the delete succeeded. |
 
 ### Tool Assignment
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling | `agent:update` |
-| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling | `mcpGateway:update` |
+| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes vi... | `agent:update` |
+| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling
+
+Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover rou... | `mcpGateway:update` |
 
 #### bulk_assign_tools_to_agents
 

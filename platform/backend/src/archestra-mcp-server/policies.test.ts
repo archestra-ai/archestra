@@ -3,11 +3,28 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { beforeEach, describe, expect, test } from "@/test";
+import { fastifyAuthPlugin, loopbackGateway } from "@/auth";
+import autonomyPolicyRoutes from "@/routes/autonomy-policies";
+import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { ARCHESTRA_API_DEPRECATION_NOTE } from "./helpers";
+
+const toolName = (shortName: string) =>
+  `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
+
+const lastText = (result: any) =>
+  (result.content[result.content.length - 1] as any).text;
+
+const firstText = (result: any) => (result.content[0] as any).text;
+
+// A syntactically valid v4 UUID that no policy/tool will ever own, so the
+// request clears input validation and reaches the REST route (which 404s).
+const ABSENT_UUID = "11111111-1111-4111-8111-111111111111";
 
 describe("policy tool execution", () => {
+  let app: FastifyInstanceWithZod;
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
@@ -21,11 +38,37 @@ describe("policy tool execution", () => {
       userId: user.id,
       organizationId: org.id,
     };
+
+    // The deprecated write tools delegate through an in-process loopback REST
+    // call, so a real Fastify server with the auth middleware + policy routes
+    // must be registered and wired to the loopback gateway.
+    app = createFastifyInstance();
+    await app.register(fastifyAuthPlugin);
+    await app.register(autonomyPolicyRoutes);
+    loopbackGateway.setServer(app);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("every tool result carries the deprecation note", async () => {
+    const result = await executeArchestraTool(
+      toolName("get_tool_invocation_policies"),
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
+    expect(lastText(result)).toContain(
+      "Deprecated: prefer the archestra__api tool",
+    );
   });
 
   test("get_autonomy_policy_operators returns operators", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_autonomy_policy_operators`,
+      toolName("get_autonomy_policy_operators"),
       {},
       mockContext,
     );
@@ -33,67 +76,71 @@ describe("policy tool execution", () => {
     expect(result.structuredContent).toEqual({
       operators: expect.any(Array),
     });
-    const parsed = JSON.parse((result.content[0] as any).text);
+    // First block is the tool payload, last block is the deprecation note.
+    const parsed = JSON.parse(firstText(result));
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed.length).toBeGreaterThan(0);
     expect(parsed[0]).toHaveProperty("value");
     expect(parsed[0]).toHaveProperty("label");
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("get_tool_invocation_policies returns empty when none exist", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policies`,
+      toolName("get_tool_invocation_policies"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(false);
-    const parsed = JSON.parse((result.content[0] as any).text);
+    const parsed = JSON.parse(firstText(result));
     expect(Array.isArray(parsed)).toBe(true);
   });
 
   test("get_tool_invocation_policy returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+      toolName("get_tool_invocation_policy"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
+    expect(firstText(result)).toContain(
       "Validation error in archestra__get_tool_invocation_policy",
     );
-    expect((result.content[0] as any).text).toContain("id:");
+    expect(firstText(result)).toContain("id:");
   });
 
   test("update_tool_invocation_policy returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+      toolName("update_tool_invocation_policy"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
+    expect(firstText(result)).toContain(
       "Validation error in archestra__update_tool_invocation_policy",
     );
-    expect((result.content[0] as any).text).toContain("id:");
+    expect(firstText(result)).toContain("id:");
   });
 
   test("delete_tool_invocation_policy returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+      toolName("delete_tool_invocation_policy"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
+    expect(firstText(result)).toContain(
       "Validation error in archestra__delete_tool_invocation_policy",
     );
-    expect((result.content[0] as any).text).toContain("id:");
+    expect(firstText(result)).toContain("id:");
   });
 
-  test("create and get tool invocation policy", async ({ makeTool }) => {
+  test("create_tool_invocation_policy round-trips through the REST API", async ({
+    makeTool,
+  }) => {
     const tool = await makeTool();
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+      toolName("create_tool_invocation_policy"),
       {
         toolId: tool.id,
         conditions: [],
@@ -103,15 +150,15 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    expect(result.structuredContent).toEqual({
-      policy: expect.objectContaining({ toolId: tool.id }),
-    });
-    const created = JSON.parse((result.content[0] as any).text);
-    expect(created).toHaveProperty("id");
+    expect((result.structuredContent as any).status).toBe(200);
+    const created = (result.structuredContent as any).body;
+    expect(created.toolId).toBe(tool.id);
+    expect(created.id).toBeDefined();
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
 
-    // Get the created policy
+    // Verify the real effect: the created policy is retrievable.
     const getResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+      toolName("get_tool_invocation_policy"),
       { id: created.id },
       mockContext,
     );
@@ -119,51 +166,71 @@ describe("policy tool execution", () => {
     expect(getResult.structuredContent).toEqual({
       policy: expect.objectContaining({ id: created.id }),
     });
-    const fetched = JSON.parse((getResult.content[0] as any).text);
+    const fetched = JSON.parse(firstText(getResult));
     expect(fetched.id).toBe(created.id);
+  });
+
+  test("create_tool_invocation_policy reports an API error for an unknown tool", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_tool_invocation_policy"),
+      {
+        toolId: ABSENT_UUID,
+        conditions: [],
+        action: "block_always",
+        reason: "no such tool",
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.structuredContent as any).status).toBeGreaterThanOrEqual(
+      400,
+    );
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("get_trusted_data_policies returns empty when none exist", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policies`,
+      toolName("get_trusted_data_policies"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(false);
-    const parsed = JSON.parse((result.content[0] as any).text);
+    const parsed = JSON.parse(firstText(result));
     expect(Array.isArray(parsed)).toBe(true);
   });
 
   test("get_trusted_data_policy returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+      toolName("get_trusted_data_policy"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
+    expect(firstText(result)).toContain(
       "Validation error in archestra__get_trusted_data_policy",
     );
-    expect((result.content[0] as any).text).toContain("id:");
+    expect(firstText(result)).toContain("id:");
   });
 
   test("delete_trusted_data_policy returns error when id is missing", async () => {
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+      toolName("delete_trusted_data_policy"),
       {},
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
+    expect(firstText(result)).toContain(
       "Validation error in archestra__delete_trusted_data_policy",
     );
-    expect((result.content[0] as any).text).toContain("id:");
+    expect(firstText(result)).toContain("id:");
   });
 
-  test("create and get trusted data policy", async ({ makeTool }) => {
+  test("create_trusted_data_policy round-trips through the REST API", async ({
+    makeTool,
+  }) => {
     const tool = await makeTool();
     const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+      toolName("create_trusted_data_policy"),
       {
         toolId: tool.id,
         conditions: [],
@@ -173,17 +240,20 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(false);
-    const created = JSON.parse((result.content[0] as any).text);
-    expect(created).toHaveProperty("id");
+    expect((result.structuredContent as any).status).toBe(200);
+    const created = (result.structuredContent as any).body;
+    expect(created.toolId).toBe(tool.id);
+    expect(created.id).toBeDefined();
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
 
-    // Get the created policy
+    // Verify the real effect: the created policy is retrievable.
     const getResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+      toolName("get_trusted_data_policy"),
       { id: created.id },
       mockContext,
     );
     expect(getResult.isError).toBe(false);
-    const fetched = JSON.parse((getResult.content[0] as any).text);
+    const fetched = JSON.parse(firstText(getResult));
     expect(fetched.id).toBe(created.id);
   });
 
@@ -192,7 +262,7 @@ describe("policy tool execution", () => {
 
     // Create
     const createResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_tool_invocation_policy`,
+      toolName("create_tool_invocation_policy"),
       {
         toolId: tool.id,
         conditions: [{ key: "url", operator: "contains", value: "internal" }],
@@ -202,13 +272,14 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(createResult.isError).toBe(false);
-    const created = JSON.parse((createResult.content[0] as any).text);
+    expect((createResult.structuredContent as any).status).toBe(200);
+    const created = (createResult.structuredContent as any).body;
     expect(created.id).toBeDefined();
     expect(created.action).toBe("block_always");
 
     // Update
     const updateResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_tool_invocation_policy`,
+      toolName("update_tool_invocation_policy"),
       {
         id: created.id,
         action: "block_when_context_is_untrusted",
@@ -217,37 +288,51 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(updateResult.isError).toBe(false);
-    const updated = JSON.parse((updateResult.content[0] as any).text);
+    expect((updateResult.structuredContent as any).status).toBe(200);
+    const updated = (updateResult.structuredContent as any).body;
     expect(updated.action).toBe("block_when_context_is_untrusted");
 
-    // Verify in list
+    // Verify in list (read tool, unchanged shape)
     const listResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policies`,
+      toolName("get_tool_invocation_policies"),
       {},
       mockContext,
     );
     expect(listResult.isError).toBe(false);
-    const list = JSON.parse((listResult.content[0] as any).text);
+    const list = JSON.parse(firstText(listResult));
     expect(list.some((p: any) => p.id === created.id)).toBe(true);
 
     // Delete
     const deleteResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_tool_invocation_policy`,
+      toolName("delete_tool_invocation_policy"),
       { id: created.id },
       mockContext,
     );
     expect(deleteResult.isError).toBe(false);
-    const deleteData = JSON.parse((deleteResult.content[0] as any).text);
-    expect(deleteData.success).toBe(true);
+    expect((deleteResult.structuredContent as any).status).toBe(200);
+    expect((deleteResult.structuredContent as any).body).toEqual({
+      success: true,
+    });
 
     // Verify deleted
     const getAfterDelete = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_tool_invocation_policy`,
+      toolName("get_tool_invocation_policy"),
       { id: created.id },
       mockContext,
     );
     expect(getAfterDelete.isError).toBe(true);
-    expect((getAfterDelete.content[0] as any).text).toContain("not found");
+    expect(firstText(getAfterDelete)).toContain("not found");
+  });
+
+  test("delete_tool_invocation_policy on an unknown id reports an API error", async () => {
+    const result = await executeArchestraTool(
+      toolName("delete_tool_invocation_policy"),
+      { id: ABSENT_UUID },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.structuredContent as any).status).toBe(404);
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 
   test("full trusted data policy CRUD lifecycle", async ({ makeTool }) => {
@@ -255,7 +340,7 @@ describe("policy tool execution", () => {
 
     // Create
     const createResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_trusted_data_policy`,
+      toolName("create_trusted_data_policy"),
       {
         toolId: tool.id,
         conditions: [{ key: "source", operator: "equal", value: "internal" }],
@@ -265,12 +350,13 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(createResult.isError).toBe(false);
-    const created = JSON.parse((createResult.content[0] as any).text);
+    expect((createResult.structuredContent as any).status).toBe(200);
+    const created = (createResult.structuredContent as any).body;
     expect(created.id).toBeDefined();
 
     // Update
     const updateResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_trusted_data_policy`,
+      toolName("update_trusted_data_policy"),
       {
         id: created.id,
         action: "mark_as_untrusted",
@@ -279,36 +365,50 @@ describe("policy tool execution", () => {
       mockContext,
     );
     expect(updateResult.isError).toBe(false);
-    const updated = JSON.parse((updateResult.content[0] as any).text);
+    expect((updateResult.structuredContent as any).status).toBe(200);
+    const updated = (updateResult.structuredContent as any).body;
     expect(updated.action).toBe("mark_as_untrusted");
 
-    // Verify in list
+    // Verify in list (read tool, unchanged shape)
     const listResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policies`,
+      toolName("get_trusted_data_policies"),
       {},
       mockContext,
     );
     expect(listResult.isError).toBe(false);
-    const list = JSON.parse((listResult.content[0] as any).text);
+    const list = JSON.parse(firstText(listResult));
     expect(list.some((p: any) => p.id === created.id)).toBe(true);
 
     // Delete
     const deleteResult = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_trusted_data_policy`,
+      toolName("delete_trusted_data_policy"),
       { id: created.id },
       mockContext,
     );
     expect(deleteResult.isError).toBe(false);
-    const deleteData = JSON.parse((deleteResult.content[0] as any).text);
-    expect(deleteData.success).toBe(true);
+    expect((deleteResult.structuredContent as any).status).toBe(200);
+    expect((deleteResult.structuredContent as any).body).toEqual({
+      success: true,
+    });
 
     // Verify deleted
     const getAfterDelete = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_trusted_data_policy`,
+      toolName("get_trusted_data_policy"),
       { id: created.id },
       mockContext,
     );
     expect(getAfterDelete.isError).toBe(true);
-    expect((getAfterDelete.content[0] as any).text).toContain("not found");
+    expect(firstText(getAfterDelete)).toContain("not found");
+  });
+
+  test("delete_trusted_data_policy on an unknown id reports an API error", async () => {
+    const result = await executeArchestraTool(
+      toolName("delete_trusted_data_policy"),
+      { id: ABSENT_UUID },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.structuredContent as any).status).toBe(404);
+    expect(lastText(result)).toContain(ARCHESTRA_API_DEPRECATION_NOTE);
   });
 });

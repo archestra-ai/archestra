@@ -418,9 +418,12 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "trusted data policy" matches only policy tools (trusted-data /
+    // "trusted data policy" matches the policy tools (trusted-data /
     // tool-invocation / autonomy), all of which require permissions this
-    // agent:read role lacks, so RBAC filters them all out before ranking.
+    // agent:read role lacks, so RBAC filters them out. The generic
+    // archestra__api tool also matches (its description lists "policies") and
+    // carries no gateway permission, so it is the one survivor — privileged
+    // operations through it are still RBAC-gated per route at call time.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
       { query: "trusted data policy", limit: 10 },
@@ -428,13 +431,13 @@ describe("search_tools", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(result.structuredContent).toEqual({
-      total: 0,
-      matchCount: 0,
-      truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: trusted, data, policy.",
-      tools: [],
-    });
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.total).toBe(1);
+    expect(structuredContent.matchCount).toBe(1);
+    expect(structuredContent.tools.map((t) => t.toolName)).toEqual([
+      "archestra__api",
+    ]);
   });
 
   test("on zero matches, hints the sandbox fallback when the sandbox is usable", async ({

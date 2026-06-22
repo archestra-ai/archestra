@@ -16,12 +16,17 @@ import {
   CreateBaseToolArgsSchema,
   GetResourceToolArgsSchema,
   handleCreateResource,
-  handleEditResource,
   handleGetResource,
   KnowledgeBaseIdsToolInputSchema,
   LabelInputSchema,
 } from "./agent-resources";
-import { defineArchestraTool, defineArchestraTools } from "./helpers";
+import {
+  apiResult,
+  callArchestraApi,
+  catchError,
+  defineArchestraTool,
+  defineArchestraTools,
+} from "./helpers";
 
 const CreateMcpGatewayToolArgsSchema = CreateBaseToolArgsSchema.extend({
   knowledgeBaseIds: KnowledgeBaseIdsToolInputSchema.optional(),
@@ -121,11 +126,18 @@ const registry = defineArchestraTools([
       "Edit an existing MCP gateway. All fields are optional except id. Only provided fields are updated, and the tool respects the calling user's access level, including knowledge source assignments.",
     schema: EditMcpGatewayToolArgsSchema,
     async handler({ args, context }) {
-      return handleEditResource({
-        args,
-        context,
-        expectedType: "mcp_gateway",
-      });
+      const { id, ...body } = args;
+      try {
+        const response = await callArchestraApi({
+          method: "PUT",
+          path: `/api/agents/${id}`,
+          body,
+          context,
+        });
+        return apiResult(response);
+      } catch (error) {
+        return catchError(error, "editing mcp gateway");
+      }
     },
   }),
 ] as const);

@@ -12,7 +12,7 @@ import {
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import { AgentToolModel, ConversationEnabledToolModel, ToolModel } from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   afterAll,
@@ -809,8 +809,10 @@ describe("run_tool", () => {
       vi.restoreAllMocks();
     });
 
-    // run_command is seeded into the (org-accessible) Archestra catalog but left
-    // unassigned, so every test below exercises the dynamic path.
+    // run_command is seeded into the (org-accessible) Archestra catalog. The
+    // create hook now auto-assigns the sandbox tools when the runtime flag is on,
+    // so we clear all assignments right after creation to keep run_command
+    // *unassigned* — every test below exercises the dynamic (unassigned) path.
     beforeEach(async ({ makeAgent }) => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       dynamicAgent = await makeAgent({
@@ -818,6 +820,7 @@ describe("run_tool", () => {
         organizationId: mockContext.organizationId,
         accessAllTools: true,
       });
+      await AgentToolModel.deleteAllForAgent(dynamicAgent.id);
       dynamicContext = {
         ...mockContext,
         agent: { id: dynamicAgent.id, name: dynamicAgent.name },

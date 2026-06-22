@@ -443,21 +443,41 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution sandbox tools. Gated by `sandbox:execute` and only seeded when
- * the sandbox feature is on; unlike other built-ins they participate in the
- * `search_tools`/`run_tool` dynamic tool access relaxation (see
- * `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them without
- * a manual assignment.
+ * Code-execution runtime tools. Gated by `sandbox:execute` and only seeded when
+ * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
+ * materialize a Dagger container, so they genuinely need the runtime, and they
+ * participate in the `search_tools`/`run_tool` dynamic tool access relaxation
+ * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
+ * without a manual assignment.
  */
-const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
+const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
+ * but they operate purely on persistent file storage and never touch the Dagger
+ * runtime — so their exposure and dynamic-access participation are driven by the
+ * Projects feature flag (`config.projects.enabled`), not the runtime flag (see
+ * `dynamic-tools.ts` and the backend `index.ts` registration gate).
+ */
+export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_SAVE_RESULT_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The full sandbox tool group (runtime + persistent-files). All share the
+ * `sandbox:execute` RBAC permission and require the runtime to execute.
+ */
+const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
+  ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
@@ -466,6 +486,15 @@ const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
 
 export function isSandboxArchestraToolShortName(shortName: string): boolean {
   return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isProjectsFileArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
 /**
@@ -485,11 +514,11 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
-  // delete_file is destructive and never intent-time-critical, so — like
-  // delete_app — it stays behind search_tools/run_tool rather than top-level.
-  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES.filter(
-    (name) => name !== TOOL_DELETE_FILE_SHORT_NAME,
-  ),
+  // The full sandbox + persistent-files surface stays top-level. delete_file is
+  // included too (unlike delete_app, which stays behind search/run): deleting a
+  // persistent file is part of the everyday file-management flow, not a rare
+  // destructive escape hatch.
+  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,

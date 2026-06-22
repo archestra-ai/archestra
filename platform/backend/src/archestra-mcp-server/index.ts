@@ -5,12 +5,8 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-  TOOL_DELETE_FILE_FULL_NAME,
-  TOOL_EDIT_FILE_FULL_NAME,
-  TOOL_READ_FILE_FULL_NAME,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SAVE_RESULT_FULL_NAME,
-  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -123,13 +119,11 @@ const appToolFullNames = new Set<string>([
 // search_files / read_file / save_result / edit_file / delete_file are the
 // persistent-files (Projects) surface of the sandbox tool group. Registered above
 // for unit tests, but hidden and non-dispatchable when the projects feature is dark.
-const projectGatedSandboxFullNames = new Set<string>([
-  TOOL_SEARCH_FILES_FULL_NAME,
-  TOOL_READ_FILE_FULL_NAME,
-  TOOL_SAVE_RESULT_FULL_NAME,
-  TOOL_EDIT_FILE_FULL_NAME,
-  TOOL_DELETE_FILE_FULL_NAME,
-]);
+// Derived from the shared subgroup so this gate and the always-exposed /
+// dynamic-access logic stay in lockstep.
+const projectGatedSandboxFullNames = new Set<string>(
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
+);
 
 export function getArchestraMcpTools() {
   const tools = [

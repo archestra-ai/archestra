@@ -387,6 +387,7 @@ function escapeTableCell(text: string): string {
   // otherwise split the Markdown table row) and escape cell delimiters.
   return text
     .replace(/\s*\n\s*/g, " ")
+    .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
     .trim();
 }

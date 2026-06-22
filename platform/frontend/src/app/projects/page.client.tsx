@@ -40,7 +40,7 @@ function ProjectsList() {
   if (!isApiKeyLoading && !hasAnyApiKey) {
     return (
       <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
-        <NoApiKeySetup />
+        <NoApiKeySetup description="Connect an LLM provider to start a project" />
       </PageLayout>
     );
   }

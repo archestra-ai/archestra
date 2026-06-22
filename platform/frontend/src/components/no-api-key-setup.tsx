@@ -17,10 +17,18 @@ const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
  * mutation invalidates the keys query, so the calling screen reactively shows
  * its real content once a key exists.
  *
+ * @param description subtitle under the heading; defaults to the chat copy so
+ * each surface can phrase the "why" for its own context.
  * @param onKeyAdded extra work after a key is created (e.g. the chat screen
  * resets its URL). Optional — most callers just rely on the query refetch.
  */
-export function NoApiKeySetup({ onKeyAdded }: { onKeyAdded?: () => void }) {
+export function NoApiKeySetup({
+  description = "Connect an LLM provider to start chatting",
+  onKeyAdded,
+}: {
+  description?: string;
+  onKeyAdded?: () => void;
+}) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
@@ -28,9 +36,7 @@ export function NoApiKeySetup({ onKeyAdded }: { onKeyAdded?: () => void }) {
       <div className="text-center space-y-4">
         <div className="space-y-2">
           <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect an LLM provider to start chatting
-          </p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <Button
           data-testid={E2eTestId.QuickstartAddApiKeyButton}

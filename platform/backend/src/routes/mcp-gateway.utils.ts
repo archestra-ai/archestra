@@ -415,10 +415,11 @@ export async function createAgentServer(
 
           // The gateway tools/call path is an autonomous channel with no human
           // approval grant, so enforce invocation policies fail-closed here. In
-          // practice this only gates archestra__api — every other built-in
-          // bypasses policies — but without it a profile-token client could issue
-          // platform writes with RBAC only, skipping both the block policies and
-          // the approval gate the chat path enforces.
+          // practice this gates only archestra__api and the governance-mutating
+          // platform tools — every other built-in bypasses policies — but without
+          // it a profile-token client could issue platform writes with RBAC only,
+          // skipping both the block policies and the approval gate the chat path
+          // enforces.
           const policyBlock = await blockIfPolicyDenies(
             name,
             agent.id,

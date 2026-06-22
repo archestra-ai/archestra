@@ -383,7 +383,12 @@ function truncateDescription(description: string): string {
 }
 
 function escapeTableCell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+  // Collapse newlines (a multi-paragraph or note-suffixed description would
+  // otherwise split the Markdown table row) and escape cell delimiters.
+  return text
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/\|/g, "\\|")
+    .trim();
 }
 
 export function formatToolPermission(

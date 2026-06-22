@@ -294,6 +294,36 @@ export async function callArchestraApi(params: {
   });
 }
 
+/**
+ * Preserve the per-type guard the dedicated edit tools had before they routed
+ * through the shared `PUT /api/agents/:id` route (which authorizes by the
+ * target's actual type but does not assert the caller used the matching tool).
+ * Returns an error result to short-circuit the wrapper, or null when the type
+ * matches. Surfaces the route's own 403/404 unchanged.
+ */
+export async function assertAgentType(params: {
+  id: string;
+  expected: "agent" | "llm_proxy" | "mcp_gateway";
+  label: string;
+  context: ArchestraContext;
+}): Promise<CallToolResult | null> {
+  const response = await callArchestraApi({
+    method: "GET",
+    path: `/api/agents/${params.id}`,
+    context: params.context,
+  });
+  if (response.status >= 400) {
+    return apiResult(response);
+  }
+  const agentType = (response.body as { agentType?: string } | null)?.agentType;
+  if (agentType !== params.expected) {
+    return errorResult(
+      `Agent ${params.id} is not a ${params.label}; this tool only edits ${params.label}s.`,
+    );
+  }
+  return null;
+}
+
 /** Build a tool result mirroring the {@link TOOL_API_FULL_NAME} output shape. */
 export function apiResult(response: {
   status: number;

@@ -225,6 +225,37 @@ describe("mcp gateway tool execution", () => {
       ARCHESTRA_API_DEPRECATION_NOTE,
     );
   });
+
+  test("edit_mcp_gateway refuses to edit a non-gateway agent", async ({
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const proxy = await makeAgent({
+      name: "A Proxy",
+      agentType: "llm_proxy",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_gateway`,
+      { id: proxy.id, name: "Should Not Apply" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not a mcp gateway");
+
+    const unchanged = await AgentModel.findById(
+      proxy.id,
+      mockContext.userId,
+      true,
+    );
+    expect(unchanged?.name).toBe("A Proxy");
+  });
 });
 
 function extractCreatedId(

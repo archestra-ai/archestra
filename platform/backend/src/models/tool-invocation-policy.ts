@@ -227,12 +227,13 @@ class ToolInvocationPolicyModel {
     context: PolicyEvaluationContext,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch),
-    // except for the policy-governed built-ins (archestra__api and the
-    // governance-mutating platform tools). Their seeded require_approval gate
-    // must stay effective regardless of the org-wide permissive setting;
-    // otherwise the default org (permissive) silently nullifies the approval
-    // policy these tools ship with.
+    // Permissive mode skips approval checks, except for the policy-governed
+    // built-ins (archestra__api and the governance-mutating platform tools):
+    // their seeded require_approval gate must stay effective regardless of the
+    // org-wide permissive setting, otherwise the default org (permissive)
+    // silently nullifies the approval policy these tools ship with.
+    // (evaluateBatch — the separate hard-block gate — never yields
+    // require_approval, so it needs no equivalent carve-out here.)
     if (
       globalToolPolicy === "permissive" &&
       !archestraMcpBranding.isPermissiveModeGated(toolName)

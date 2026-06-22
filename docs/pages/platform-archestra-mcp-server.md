@@ -758,39 +758,17 @@ Required RBAC permission: `llmLimit:read`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.j... | `toolPolicy:read` |
-| `get_tool_invocation_policies` | Get all tool invocation policies
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
-| `create_tool_invocation_policy` | Create a new tool invocation policy
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
-| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
-| `update_tool_invocation_policy` | Update a tool invocation policy
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
-| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
-| `get_trusted_data_policies` | Get all trusted data policies
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
-| `create_trusted_data_policy` | Create a new trusted data policy
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
-| `get_trusted_data_policy` | Get a specific trusted data policy by ID
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
-| `update_trusted_data_policy` | Update a trusted data policy
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
-| `delete_trusted_data_policy` | Delete a trusted data policy by ID
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
+| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.j... | `toolPolicy:read` |
+| `get_tool_invocation_policies` | Get all tool invocation policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `create_tool_invocation_policy` | Create a new tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
+| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `update_tool_invocation_policy` | Update a tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
+| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
+| `get_trusted_data_policies` | Get all trusted data policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `create_trusted_data_policy` | Create a new trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:create` |
+| `get_trusted_data_policy` | Get a specific trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:read` |
+| `update_trusted_data_policy` | Update a trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:update` |
+| `delete_trusted_data_policy` | Delete a trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json). | `toolPolicy:delete` |
 
 #### get_autonomy_policy_operators
 
@@ -990,12 +968,8 @@ Required RBAC permission: `toolPolicy:delete`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes vi... | `agent:update` |
-| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling
-
-Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover rou... | `mcpGateway:update` |
+| `bulk_assign_tools_to_agents` | Assign multiple tools to multiple agents in bulk with validation and error handling Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes vi... | `agent:update` |
+| `bulk_assign_tools_to_mcp_gateways` | Assign multiple tools to multiple MCP gateways in bulk with validation and error handling Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover rou... | `mcpGateway:update` |
 
 #### bulk_assign_tools_to_agents
 

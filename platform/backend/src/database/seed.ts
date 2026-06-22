@@ -398,18 +398,25 @@ async function seedArchestraApiDefaultPolicy(
 /**
  * Default tool-invocation policies for the deprecated governance-mutating
  * platform tools (autonomy / trusted-data policy writes): every call requires
- * human approval. Seeded once per tool, the first time its row is created (same
- * marker semantics as {@link seedArchestraApiDefaultPolicy}), so an admin's
- * later deletion or relaxation is never resurrected.
+ * human approval.
+ *
+ * Unlike {@link seedArchestraApiDefaultPolicy}, these tool rows already exist on
+ * any upgraded install (they predate this feature), so "the tool row is new" is
+ * NOT a usable once-marker. We instead key off the `archestra__api` tool being
+ * newly created — the one event that fires exactly once for every install when
+ * this feature ships — and only seed tools that have no policy yet, so an admin
+ * who already configured one is left untouched and deletions are not resurrected.
  */
 async function seedPolicyMutatingToolDefaultPolicies(
   newlyCreatedToolNames: string[],
 ): Promise<void> {
+  const apiToolName = archestraMcpBranding.getToolName(TOOL_API_SHORT_NAME);
+  if (!newlyCreatedToolNames.includes(apiToolName)) {
+    return;
+  }
+
   for (const shortName of POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES) {
     const toolName = archestraMcpBranding.getToolName(shortName);
-    if (!newlyCreatedToolNames.includes(toolName)) {
-      continue;
-    }
 
     const [tool] = await db
       .select({ id: schema.toolsTable.id })
@@ -421,6 +428,14 @@ async function seedPolicyMutatingToolDefaultPolicies(
         { toolName },
         "Policy-mutating tool row not found; skipping default policy seed",
       );
+      continue;
+    }
+
+    const existingPolicies = await db
+      .select({ id: schema.toolInvocationPoliciesTable.id })
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+    if (existingPolicies.length > 0) {
       continue;
     }
 

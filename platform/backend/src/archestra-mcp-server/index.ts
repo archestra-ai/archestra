@@ -286,13 +286,15 @@ export async function executeArchestraTool(
     };
   }
 
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
-  if ("error" in parsedArgs) {
-    return parsedArgs.error;
-  }
-
+  // Deprecated platform tools carry a "prefer archestra__api" note on every
+  // result — success, validation error, or handler error alike.
   const finalize = (result: CallToolResult): CallToolResult =>
     isDeprecatedPlatformTool(toolName) ? withDeprecationNote(result) : result;
+
+  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  if ("error" in parsedArgs) {
+    return finalize(parsedArgs.error);
+  }
 
   try {
     const result = await toolEntry.invoke({

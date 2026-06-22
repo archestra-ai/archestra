@@ -72,6 +72,28 @@ describe("seedArchestraCatalogAndTools default approval policies", () => {
       ),
     ).toHaveLength(1);
   });
+
+  test("gates governance tools on an upgrade — policy rows pre-exist, archestra__api is new", async () => {
+    // Seed once, then simulate a pre-feature install: drop every seeded policy
+    // and remove the archestra__api tool row, but keep the (pre-existing)
+    // governance tool rows. On re-seed, archestra__api is created fresh — the
+    // marker that this feature just shipped — so the governance tools get gated
+    // even though their own rows are not "newly created".
+    await seedArchestraCatalogAndTools();
+    await db.delete(schema.toolInvocationPoliciesTable);
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, TOOL_API_FULL_NAME));
+
+    await seedArchestraCatalogAndTools();
+
+    expect(await approvalPoliciesForTool(TOOL_API_FULL_NAME)).toHaveLength(1);
+    expect(
+      await approvalPoliciesForTool(
+        TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
+      ),
+    ).toHaveLength(1);
+  });
 });
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;

@@ -20,6 +20,7 @@ import {
 } from "./agent-resources";
 import {
   apiResult,
+  assertAgentType,
   callArchestraApi,
   catchError,
   defineArchestraTool,
@@ -110,6 +111,14 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const { id, ...body } = args;
       try {
+        const mismatch = await assertAgentType({
+          id,
+          expected: "llm_proxy",
+          label: "llm proxy",
+          context,
+        });
+        if (mismatch) return mismatch;
+
         const response = await callArchestraApi({
           method: "PUT",
           path: `/api/agents/${id}`,

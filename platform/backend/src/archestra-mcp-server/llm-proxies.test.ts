@@ -134,4 +134,36 @@ describe("llm proxy tool execution", () => {
       ARCHESTRA_API_DEPRECATION_NOTE,
     );
   });
+
+  test("edit_llm_proxy refuses to edit a non-proxy agent", async ({
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
+
+    const gateway = await makeAgent({
+      name: "A Gateway",
+      agentType: "mcp_gateway",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_llm_proxy`,
+      { id: gateway.id, name: "Should Not Apply" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not a llm proxy");
+
+    // the wrong-type edit was rejected before any write
+    const unchanged = await AgentModel.findById(
+      gateway.id,
+      mockContext.userId,
+      true,
+    );
+    expect(unchanged?.name).toBe("A Gateway");
+  });
 });

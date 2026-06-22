@@ -509,7 +509,10 @@ function checkThirdPartyToolArgs(params: {
     (key) =>
       `${JSON.stringify(key)}: ${placeholderForSchema(properties?.[key], 1)}`,
   );
-  const sentCall = JSON.stringify({ tool_name: toolName, tool_args: toolArgs });
+  const sentCall = safeJsonStringify({
+    tool_name: toolName,
+    tool_args: toolArgs,
+  });
   const messageLines = [
     `Invalid tool_args for "${toolName}": ${problems.join("; ")}.`,
     "Put each of the target tool's parameters inside tool_args.",
@@ -522,9 +525,29 @@ function checkThirdPartyToolArgs(params: {
     );
   }
   messageLines.push(
-    `The tool's full input schema is:\n${JSON.stringify(schema, null, 2)}`,
+    `The tool's full input schema is:\n${safeJsonStringify(schema, 2)}`,
   );
   return errorResult(messageLines.join("\n"));
+}
+
+/**
+ * JSON.stringify that never throws — the diagnostic path serializes
+ * model-supplied tool_args and a catalog schema, either of which could carry a
+ * BigInt or a circular reference. A failure must not turn a validation error
+ * into an exception, so fall back to an opaque marker.
+ */
+function safeJsonStringify(value: unknown, indent?: number): string {
+  try {
+    return (
+      JSON.stringify(
+        value,
+        (_key, v) => (typeof v === "bigint" ? v.toString() : v),
+        indent,
+      ) ?? "<unserializable>"
+    );
+  } catch {
+    return "<unserializable>";
+  }
 }
 
 /** How many levels of object/array nesting a skeleton unpacks before falling
@@ -535,15 +558,22 @@ const MAX_SKELETON_DEPTH = 8;
 
 /**
  * Illustrative placeholder for a value, derived from its declared JSON Schema.
- * Reads only literal `properties`/`required`/`items` (mirroring the shallow
- * validation) and recurses into object/array shapes up to MAX_SKELETON_DEPTH.
- * Falls back to an opaque type tag for free-form objects, `$ref`/`allOf`/`oneOf`/
- * `anyOf`, or past the depth cap — the full schema appended to the error carries
- * anything not expanded here.
+ * Prefers a concrete literal (`const`, first `enum` member); otherwise reads
+ * only literal `properties`/`required`/`items` (mirroring the shallow validation)
+ * and recurses into object/array shapes up to MAX_SKELETON_DEPTH. A `type` array
+ * (e.g. `["string","null"]`) resolves to its first non-null member. Falls back to
+ * an opaque type tag for free-form objects, `$ref`/`allOf`/`oneOf`/`anyOf`, or
+ * past the depth cap — the full schema appended to the error carries the rest.
  */
 function placeholderForSchema(schema: unknown, depth: number): string {
   if (!isRecord(schema)) {
     return "<value>";
+  }
+  if ("const" in schema) {
+    return safeJsonStringify(schema.const);
+  }
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    return safeJsonStringify(schema.enum[0]);
   }
   if (
     "$ref" in schema ||
@@ -553,7 +583,13 @@ function placeholderForSchema(schema: unknown, depth: number): string {
   ) {
     return "<value>";
   }
-  switch (schema.type) {
+  const types = Array.isArray(schema.type)
+    ? schema.type.filter((t): t is string => typeof t === "string")
+    : typeof schema.type === "string"
+      ? [schema.type]
+      : [];
+  const primaryType = types.find((t) => t !== "null") ?? types[0];
+  switch (primaryType) {
     case "string":
       return "<string>";
     case "number":
@@ -561,6 +597,8 @@ function placeholderForSchema(schema: unknown, depth: number): string {
       return "<number>";
     case "boolean":
       return "<boolean>";
+    case "null":
+      return "null";
     case "array": {
       if (depth < MAX_SKELETON_DEPTH && isRecord(schema.items)) {
         return `[${placeholderForSchema(schema.items, depth + 1)}]`;

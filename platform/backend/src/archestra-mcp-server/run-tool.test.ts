@@ -1518,6 +1518,47 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
+    test("unpacks an array of objects with an enum member into the skeleton (no dispatch)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "tickets__bulk_update",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  status: { type: "string", enum: ["open", "closed"] },
+                },
+                required: ["id", "status"],
+              },
+            },
+          },
+          required: ["items"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "tickets__bulk_update", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as any).text;
+      expect(text).toContain('"items": [{"id": <string>, "status": "open"}]');
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
     test("returns the full schema for an unknown key under additionalProperties:false (no dispatch)", async ({
       makeAgentTool,
       makeInternalMcpCatalog,
@@ -1546,9 +1587,13 @@ describe("run_tool", () => {
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        'unexpected parameter "bogus"',
+      const text = (result.content[0] as any).text;
+      expect(text).toContain('unexpected parameter "bogus"');
+      // echo + skeleton hold for the unknown-key path too, not just missing-key
+      expect(text).toContain(
+        'You sent: {"tool_name":"github__search_repositories","tool_args":{"query":"x","bogus":1}}',
       );
+      expect(text).toContain('"query": <string>');
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 

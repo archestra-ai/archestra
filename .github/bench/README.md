@@ -21,8 +21,9 @@ Files:
 gcloud storage buckets create gs://archestra-bench-history \
   --project friendly-path-465518-r6 --location us-central1 --uniform-bucket-level-access
 
-# Optional: expire raw run dirs after 180 days (TensorBoard event files under tb/ are tiny — keep them).
-printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":180,"matchesPrefix":["runs/"]}}]}' \
+# Expire raw run dirs after 30 days (they are disposable; TensorBoard event files under tb/ are tiny —
+# keep them).
+printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30,"matchesPrefix":["runs/"]}}]}' \
   > /tmp/lifecycle.json
 gcloud storage buckets update gs://archestra-bench-history --lifecycle-file=/tmp/lifecycle.json
 

@@ -3,6 +3,7 @@ import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
+  TOOL_API_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
@@ -1051,6 +1052,9 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
       [
+        // archestra__api stays top-level even in search_and_run_only mode, so the
+        // platform-management entrypoint is always discoverable when assigned.
+        TOOL_API_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
@@ -1123,6 +1127,7 @@ describe("MCP Gateway (stateless mode)", () => {
         .result.tools.map((tool: { name: string }) => tool.name);
       expect(toolNames.sort()).toEqual(
         [
+          TOOL_API_FULL_NAME,
           TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
           TOOL_EDIT_FILE_FULL_NAME,

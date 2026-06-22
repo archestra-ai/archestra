@@ -1540,7 +1540,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | `string` | Yes | Keywords describing the capability you need, e.g. 'send slack message' or 'search repositories'. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions, so pass several relevant words and include the server name (e.g. 'github') to narrow results. |
+| `query` | `string` | Yes | Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match. |
 | `limit` | `integer` | No | Maximum number of matching tools to return. |
 | `mode` | `"keyword" \| "regex"` | No | Search mode. 'keyword' (default) keyword-ranks the query across tool fields. 'regex' treats query as a case-insensitive regular expression matched against tool names, titles, and descriptions — use it when you know a naming pattern, e.g. '^github__' or 'search\|find'. |
 

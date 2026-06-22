@@ -2,7 +2,7 @@
 // wrappers (MCP gateway tools vs agent delegation tools), their approval and
 // hook pipelines, error handling, metric emission, and tool-cache gating.
 // Mocks sit only at process boundaries: the MCP SDK client (gateway transport),
-// mcpClient.executeToolCall (gateway network call), executeA2AMessage
+// mcpClient.executeToolCallForOwner (gateway network call), executeA2AMessage
 // (child-agent execution), hookDispatcherService.fire (hook scripts run in
 // Dagger sandbox containers), the browser-stream feature (browser pods), and
 // the external-IdP session token resolver (IdP network call).
@@ -20,6 +20,7 @@ import { resolveSessionExternalIdpToken } from "@/services/identity-providers/se
 import { beforeEach, describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
+import { MAX_IDENTICAL_TOOL_CALLS } from "./tool-call-repeat-tracker";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -36,7 +37,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 
 vi.mock("@/clients/mcp-client", () => ({
   default: {
-    executeToolCall: vi.fn(),
+    executeToolCallForOwner: vi.fn(),
   },
 }));
 
@@ -153,7 +154,7 @@ beforeEach(
       makeToolPolicy,
     };
     vi.restoreAllMocks();
-    vi.mocked(mcpClient.executeToolCall).mockReset();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
     mockExecuteA2AMessage.mockReset();
     vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   },
@@ -300,13 +301,15 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
         return { decision: "proceed", runs: [] };
       });
     const metricsSpy = vi.spyOn(metrics.mcp, "reportMcpToolCall");
-    vi.mocked(mcpClient.executeToolCall).mockImplementation(async () => {
-      callOrder.push("gateway");
-      return {
-        content: [{ type: "text", text: "external result" }],
-        isError: false,
-      } as never;
-    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      async () => {
+        callOrder.push("gateway");
+        return {
+          content: [{ type: "text", text: "external result" }],
+          isError: false,
+        } as never;
+      },
+    );
 
     const tools = await chatClient.getChatMcpTools(baseParams);
     const result = await tools.extsrv__fetch_data.execute?.(
@@ -348,7 +351,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       "Tool call blocked by a PreToolUse hook",
     );
     expect(toolResultContent(result)).toContain("policy says no");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     expect(fireSpy).toHaveBeenCalledTimes(1);
     expect(metricsSpy).toHaveBeenCalledTimes(1);
     expect(metricsSpy).toHaveBeenCalledWith(
@@ -367,7 +370,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
           ? { decision: "block", reason: "be careful", runs: [] }
           : { decision: "proceed", runs: [] },
     );
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValue({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
       content: [{ type: "text", text: "external result" }],
       isError: false,
     } as never);
@@ -467,10 +470,10 @@ describe("getChatMcpTools approval gating", () => {
         execOptions("call-5"),
       ),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
-  test("run_tool proposes a grant approval only for an accessible-but-unassigned target", async () => {
+  test("run_tool needsApproval reflects only invocation policy, never proposes a grant", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv({
       gatewayTools: [
         {
@@ -503,12 +506,16 @@ describe("getChatMcpTools approval gating", () => {
     const needsApproval = callableNeedsApproval(
       tools[getArchestraToolFullName("run_tool")],
     );
+    // Dynamic tool access replaced the grant-on-first-use flow: an
+    // accessible-but-unassigned target no longer triggers an approval
+    // proposal — needsApproval is driven solely by the invocation policy,
+    // which neither tool here requires.
     await expect(
       needsApproval(
         { tool_name: unassignedTool.name, tool_args: {} },
         execOptions(),
       ),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     await expect(
       needsApproval(
         { tool_name: assignedTool.name, tool_args: {} },
@@ -549,6 +556,157 @@ describe("getChatMcpTools approval gating", () => {
         execOptions(),
       ),
     ).resolves.toBe(false);
+  });
+});
+
+describe("getChatMcpTools repeated-call circuit breaker", () => {
+  test("nudges instead of executing once an identical call repeats past the threshold", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "external result" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      const result = await tools.extsrv__fetch_data.execute?.(
+        { query: "stuck" },
+        execOptions(`call-${i}`),
+      );
+      expect(toolResultContent(result)).toContain("external result");
+    }
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
+
+    const nudged = await tools.extsrv__fetch_data.execute?.(
+      { query: "stuck" },
+      execOptions("call-over"),
+    );
+    expect(toolResultContent(nudged)).toContain("identical arguments");
+    // The nudge reports the consecutive count.
+    expect(toolResultContent(nudged)).toContain(
+      String(MAX_IDENTICAL_TOOL_CALLS + 1),
+    );
+    // The over-threshold call is not forwarded to the gateway.
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
+  });
+
+  test("a different call resets the streak so a repeated call executes again", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__a"), externalTool("extsrv__b")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await tools.extsrv__a.execute?.({ query: "x" }, execOptions(`a-${i}`));
+    }
+    // A different tool resets the consecutive counter.
+    await tools.extsrv__b.execute?.({ query: "y" }, execOptions("b-1"));
+
+    const afterReset = await tools.extsrv__a.execute?.(
+      { query: "x" },
+      execOptions("a-after"),
+    );
+    expect(toolResultContent(afterReset)).toContain("ok");
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS + 2,
+    );
+  });
+
+  test("a cached tool set (no abortSignal) resets the tracker per run, so counts do not leak", async () => {
+    const { baseParams, gatewayClient } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+
+    // No abortSignal: this is the A2A/scheduled/email path that reuses the
+    // 30s tool cache. The second run on the same scope hits the cache (the
+    // gateway is listed once) but must still get a fresh tracker.
+    const runOne = await chatClient.getChatMcpTools(baseParams);
+    for (let i = 0; i <= MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await runOne.extsrv__fetch_data.execute?.(
+        { query: "stuck" },
+        execOptions(`one-${i}`),
+      );
+    }
+
+    vi.mocked(mcpClient.executeToolCallForOwner).mockClear();
+    const runTwo = await chatClient.getChatMcpTools(baseParams);
+    const fresh = await runTwo.extsrv__fetch_data.execute?.(
+      { query: "stuck" },
+      execOptions("two-0"),
+    );
+
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+    // A fresh run executes the same call rather than carrying over the nudge.
+    expect(toolResultContent(fresh)).toContain("ok");
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+  });
+
+  test("breaks repeated identical delegation calls without spawning more child agents", async () => {
+    const { agent, org, baseParams } = await setupChatToolEnv();
+    const { delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Loop Child",
+    });
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-1",
+      text: "child result",
+      finishReason: "stop",
+    });
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await tools[delegationTool.name].execute?.(
+        { message: "do it" },
+        execOptions(`d-${i}`),
+      );
+    }
+    const nudged = await tools[delegationTool.name].execute?.(
+      { message: "do it" },
+      execOptions("d-over"),
+    );
+
+    expect(toolResultContent(nudged)).toContain("identical arguments");
+    // The over-threshold call does not spawn another child-agent run.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
   });
 });
 

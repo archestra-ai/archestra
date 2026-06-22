@@ -151,6 +151,50 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(second.statusCode).toBe(410);
   });
 
+  test("windows platform yields an irm|iex command and a PowerShell script", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      platform: "windows",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("irm '");
+    expect(command).toContain("| iex");
+    expect(command).not.toContain("curl");
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    const script = response.body;
+    expect(script).toContain("$ErrorActionPreference = 'Stop'");
+    expect(script).not.toContain("set -euo pipefail");
+    expect(script).toContain("claude mcp add --transport http 'prod_gateway'");
+  });
+
+  test("default platform (omitted) renders bash", async ({ makeAgent }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const { rawToken, command } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+    expect(command).toContain("curl -fsSL");
+    const response = await fetchScript(rawToken);
+    expect(response.body).toContain("set -euo pipefail");
+  });
+
   test("provider-key (passthrough) script rewires the base URL without any virtual key", async ({
     makeAgent,
   }) => {
@@ -177,6 +221,56 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).not.toContain("Virtual API Keys page");
     expect(script).toContain("credentials keep working");
+  });
+
+  test("github-copilot passthrough script embeds the in-script GitHub device flow", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "copilot-cli",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "github-copilot",
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    expect(script).toContain(`/v1/github-copilot/${proxy.id}`);
+    // device-flow endpoints come from backend config
+    expect(script).toContain("/login/device/code");
+    expect(script).toContain("copilot_internal/v2/token");
+    // token obtained at runtime, not injected server-side
+    expect(script).toContain("ARCHESTRA_GHCP_TOKEN");
+    expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
+  });
+
+  test("github-copilot is rejected for clients that do not support it", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "github-copilot",
+      },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   test("410s without burning the token when re-validation fails, then succeeds after access is restored", async ({

@@ -30,6 +30,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",
+  // App
+  "app.created": "App created",
+  "app.updated": "App updated",
+  "app.deleted": "App deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -41,6 +45,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  // Default user limit
+  "defaultUserLimit.created": "Default user limit created",
+  "defaultUserLimit.updated": "Default user limit updated",
+  "defaultUserLimit.deleted": "Default user limit deleted",
   // Environment
   "environment.created": "Environment created",
   "environment.updated": "Environment updated",

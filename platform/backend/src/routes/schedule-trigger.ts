@@ -2,24 +2,26 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
-  DynamicInteraction,
   PaginationQuerySchema,
-  type PartialUIMessage,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
-  InteractionModel,
-  MessageModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
+import { projectService } from "@/services/project";
+import {
+  backfillRunConversationMessages,
+  createAndLinkRunConversation,
+} from "@/services/scheduled-run-conversation";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -33,11 +35,14 @@ import {
   SelectScheduleTriggerSchema,
   UuidIdSchema,
 } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 const ScheduleTriggerBodyFieldsSchema = z.object({
   name: z.string().min(1),
-  agentId: UuidIdSchema,
+  // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
+  // the handler falls back to the org's default agent.
+  agentId: UuidIdSchema.optional(),
+  // Required at the handler when the projects feature is on; ignored otherwise.
+  projectId: UuidIdSchema.optional(),
   enabled: z.boolean().optional().default(true),
   ...ScheduleTriggerConfigurationSchemaBase.shape,
 });
@@ -104,6 +109,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: z.string().optional(),
           actorUserIds: z.string().optional(),
           agentIds: z.string().optional(),
+          projectId: z.string().uuid().optional(),
           showAll: z
             .preprocess(
               (value) =>
@@ -128,6 +134,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name,
           actorUserIds: actorUserIdsParam,
           agentIds: agentIdsParam,
+          projectId,
           showAll,
         },
         user,
@@ -162,6 +169,19 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? agentIdsParam.split(",").filter(Boolean)
         : undefined;
 
+      // Project-scoped listing: project access is the authorization, so show
+      // every member's schedules for the project, not just the requester's.
+      if (projectId) {
+        await projectService.get({
+          id: projectId,
+          organizationId,
+          userId: user.id,
+        });
+        actorUserId = undefined;
+        actorUserIds = undefined;
+        excludeActorUserId = undefined;
+      }
+
       const [data, total] = await Promise.all([
         ScheduleTriggerModel.listByOrganization({
           organizationId,
@@ -173,6 +193,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           actorUserIds,
           excludeActorUserId,
           name,
+          projectId,
         }),
         ScheduleTriggerModel.countByOrganization({
           organizationId,
@@ -182,6 +203,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           actorUserIds,
           excludeActorUserId,
           name,
+          projectId,
         }),
       ]);
 
@@ -209,26 +231,66 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      const agent = await AgentModel.findById(
-        body.agentId,
-        user.id,
-        isAgentAdmin,
-      );
-      if (!agent) {
-        throw new ApiError(403, "You do not have access to the selected agent");
+      // A caller who can pick an agent (`agent:read`) passes one and we verify
+      // access; a caller who can't (e.g. a basic-user role) omits it and we fall
+      // back to the org's default agent.
+      let agentId: string;
+      if (body.agentId) {
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(
+            403,
+            "You do not have access to the selected agent",
+          );
+        }
+        if (
+          agent.organizationId !== organizationId ||
+          agent.agentType !== "agent"
+        ) {
+          throw new ApiError(
+            400,
+            "Scheduled triggers require an internal agent",
+          );
+        }
+        agentId = agent.id;
+      } else {
+        const defaultAgent = await AgentModel.findDefaultByType({
+          organizationId,
+          agentType: "agent",
+        });
+        if (!defaultAgent) {
+          throw new ApiError(
+            400,
+            "No default agent is configured for scheduled tasks",
+          );
+        }
+        agentId = defaultAgent.id;
       }
 
-      if (
-        agent.organizationId !== organizationId ||
-        agent.agentType !== "agent"
-      ) {
-        throw new ApiError(400, "Scheduled triggers require an internal agent");
+      // With the projects feature on, schedules belong to a project; verify the
+      // caller can access it. With the feature off, scheduling stays unscoped.
+      let projectId: string | null = null;
+      if (config.projects.enabled) {
+        if (!body.projectId) {
+          throw new ApiError(400, "A project is required for scheduled tasks");
+        }
+        await projectService.get({
+          id: body.projectId,
+          organizationId,
+          userId: user.id,
+        });
+        projectId = body.projectId;
       }
 
       const trigger = await ScheduleTriggerModel.create({
         organizationId,
         name: body.name,
-        agentId: body.agentId,
+        agentId,
+        projectId,
         messageTemplate: body.messageTemplate,
         cronExpression: body.cronExpression,
         timezone: body.timezone,
@@ -287,32 +349,40 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      const agentId = body.agentId ?? existing.agentId;
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-      if (!agent) {
-        throw new ApiError(403, "You do not have access to the selected agent");
-      }
+      // Only validate the agent when the caller is actually changing it. A
+      // caller without `agent:read` editing other fields omits agentId and must
+      // not be access-checked against the trigger's existing (default) agent.
+      if (body.agentId !== undefined && body.agentId !== existing.agentId) {
+        const agent = await AgentModel.findById(
+          body.agentId,
+          user.id,
+          isAgentAdmin,
+        );
+        if (!agent) {
+          throw new ApiError(
+            403,
+            "You do not have access to the selected agent",
+          );
+        }
+        if (
+          agent.organizationId !== organizationId ||
+          agent.agentType !== "agent"
+        ) {
+          throw new ApiError(
+            400,
+            "Scheduled triggers require an internal agent",
+          );
+        }
 
-      if (
-        agent.organizationId !== organizationId ||
-        agent.agentType !== "agent"
-      ) {
-        throw new ApiError(400, "Scheduled triggers require an internal agent");
-      }
-
-      const isChangingAgent =
-        body.agentId !== undefined && body.agentId !== existing.agentId;
-      if (isChangingAgent) {
         const actorIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
           userId: existing.actorUserId,
           organizationId,
         });
         const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess(
           existing.actorUserId,
-          agentId,
+          body.agentId,
           actorIsAgentAdmin,
         );
-
         if (!actorHasAgentAccess) {
           throw new ApiError(
             400,
@@ -335,6 +405,22 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           firstIssue?.message ?? "Invalid schedule trigger configuration",
         );
+      }
+
+      // Guard project re-scoping the same way create does: only with the
+      // feature on and only to a project the caller can access.
+      if (body.projectId !== undefined) {
+        if (!config.projects.enabled) {
+          throw new ApiError(
+            400,
+            "Projects are not enabled on this deployment",
+          );
+        }
+        await projectService.get({
+          id: body.projectId,
+          organizationId,
+          userId: user.id,
+        });
       }
 
       const updated = await ScheduleTriggerModel.update(id, body);
@@ -660,92 +746,57 @@ async function ensureRunConversation(params: {
     throw new ApiError(400, "The trigger for this run no longer exists");
   }
 
-  const agentId = trigger.agentId;
-  const agent = await AgentModel.findById(agentId);
-  if (!agent || agent.organizationId !== organizationId) {
-    throw new ApiError(
-      400,
-      "The agent used for this run no longer exists or is unavailable",
-    );
-  }
-
-  const llmSelection = await resolveConversationLlmSelectionForAgent({
-    agent: {
-      llmApiKeyId: agent.llmApiKeyId ?? null,
-      modelId: agent.modelId ?? null,
-    },
-    organizationId,
-    userId,
-  });
-
-  if (run.chatConversationId) {
-    const existing = await ConversationModel.findByIdInOrganization({
-      id: run.chatConversationId,
-      organizationId,
-    });
-    if (existing) {
-      // Sync run artifact into conversation if missing
-      if (run.artifact && !existing.artifact) {
-        const updated = await ConversationModel.update(
-          existing.id,
-          existing.userId,
-          organizationId,
-          { artifact: run.artifact },
-        );
-        if (updated) {
-          return updated;
-        }
-      }
-      return existing;
+  // A project-scoped run's conversation was created up front by the handler;
+  // otherwise create it now, owned by the requester so follow-up chat uses
+  // their own model/API key access.
+  let conversation = run.chatConversationId
+    ? await ConversationModel.findByIdInOrganization({
+        id: run.chatConversationId,
+        organizationId,
+      })
+    : null;
+  if (!conversation) {
+    try {
+      conversation = await createAndLinkRunConversation({
+        run,
+        trigger,
+        ownerUserId: userId,
+        organizationId,
+      });
+    } catch {
+      throw new ApiError(
+        400,
+        "The agent used for this run no longer exists or is unavailable",
+      );
     }
   }
 
-  const interactionResult = await InteractionModel.findAllPaginated(
-    { limit: 50, offset: 0 },
-    { sortBy: "createdAt", sortDirection: "desc" },
-    userId,
-    true,
-    {
-      profileId: agentId,
-      sessionId: `scheduled-${run.id}`,
-    },
-  );
-  const uiMessages = buildMessagesFromInteractions(
-    interactionResult.data,
-    trigger.messageTemplate,
-  );
-  const conversationTitle = buildRunConversationSeedTitle(
-    trigger.messageTemplate,
-  );
+  // Sync the run artifact into the conversation if missing.
+  if (run.artifact && !conversation.artifact) {
+    const updated = await ConversationModel.update(
+      conversation.id,
+      conversation.userId,
+      organizationId,
+      { artifact: run.artifact },
+    );
+    if (updated) {
+      conversation = updated;
+    }
+  }
 
-  // Backfilled run conversations are owned by the requester so follow-up chat
-  // uses their own model/API key access, while existing run conversations keep
-  // their original owner.
-  const conversation = await ConversationModel.create({
-    userId,
-    organizationId,
-    agentId,
-    title: conversationTitle,
-    modelId: llmSelection.modelId,
-    chatApiKeyId: llmSelection.chatApiKeyId,
-    artifact: run.artifact ?? undefined,
+  // Reconstruct the chat from the run's interactions (the up-front path links
+  // the conversation before any interactions exist, so this is where messages
+  // are populated for project runs too).
+  await backfillRunConversationMessages({
+    conversation,
+    trigger,
+    run,
+    ownerUserId: conversation.userId,
   });
-
-  const createdAt = Date.now();
-  await MessageModel.bulkCreate(
-    uiMessages.map((message, index) => ({
-      conversationId: conversation.id,
-      role: message.role,
-      content: message,
-      createdAt: new Date(createdAt + index),
-    })),
-  );
-
-  await ScheduleTriggerRunModel.setChatConversationId(run.id, conversation.id);
 
   const refreshedConversation = await ConversationModel.findById({
     id: conversation.id,
-    userId,
+    userId: conversation.userId,
     organizationId,
   });
   if (!refreshedConversation) {
@@ -753,65 +804,4 @@ async function ensureRunConversation(params: {
   }
 
   return refreshedConversation;
-}
-
-function buildMessagesFromInteractions(
-  interactions: Array<{
-    type: string;
-    request: unknown;
-    response: unknown;
-    model?: string | null;
-    dualLlmAnalyses?: unknown;
-  }>,
-  messageTemplate: string,
-): PartialUIMessage[] {
-  // Interactions are fetched desc — the first one is the most recent (last in
-  // the agentic loop). Its request contains the full conversation history and
-  // its response contains the final LLM reply. Using only the last interaction
-  // avoids duplicate messages that would result from earlier interactions
-  // replaying the same conversation prefix.
-  const lastInteraction = interactions[0];
-  const messages: PartialUIMessage[] = [];
-
-  if (lastInteraction) {
-    try {
-      const di = new DynamicInteraction(lastInteraction as never);
-      messages.push(...di.mapToUiMessages());
-    } catch {
-      // Skip if interaction can't be parsed
-    }
-  }
-
-  if (messages.length > 0) {
-    return messages;
-  }
-
-  // Fallback: simple prompt + placeholder
-  return [
-    {
-      role: "user",
-      parts: [{ type: "text", text: messageTemplate }],
-    },
-    {
-      role: "assistant",
-      parts: [
-        {
-          type: "text",
-          text: "No output was captured for this scheduled run.",
-        },
-      ],
-    },
-  ];
-}
-
-function buildRunConversationSeedTitle(prompt: string): string {
-  const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
-
-  if (!normalizedPrompt) {
-    return "Scheduled run";
-  }
-
-  return normalizedPrompt.length > 72
-    ? `${normalizedPrompt.slice(0, 69).trimEnd()}...`
-    : normalizedPrompt;
 }

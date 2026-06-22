@@ -4,6 +4,10 @@ import {
   IDENTITY_PROVIDER_ID,
   LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
   LLM_PROXY_OAUTH_SCOPE,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
+  MCP_OAUTH_CLIENT_ID_PREFIX,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_GRANT_TYPE,
   RouteId,
 } from "@archestra/shared";
@@ -18,13 +22,21 @@ import {
   AccountModel,
   AgentModel,
   LlmOauthClientModel,
+  McpOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  OAuthRefreshTokenModel,
   OrganizationModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import {
+  appConnectorAudienceRef,
+  isAppConnectorAudienceRef,
+  isConnectorTargetedResource,
+  resolveAppConnectorResource,
+} from "@/services/apps/app-connector-resource";
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
@@ -243,7 +255,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "[auth:oauth2/authorize] Authorization request received",
       );
 
-      if (clientId && isCimdClientId(clientId)) {
+      if (
+        clientId &&
+        isCimdClientId(clientId) &&
+        config.auth.dynamicClientRegistrationEnabled
+      ) {
         try {
           await ensureCimdClientRegistered(clientId);
         } catch (error) {
@@ -371,7 +387,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // CIMD: auto-register client if client_id is a URL
       const clientId = body?.client_id as string | undefined;
-      if (clientId && isCimdClientId(clientId)) {
+      if (
+        clientId &&
+        isCimdClientId(clientId) &&
+        config.auth.dynamicClientRegistrationEnabled
+      ) {
         try {
           await ensureCimdClientRegistered(clientId);
         } catch (error) {
@@ -409,7 +429,15 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationHeader: request.headers.authorization,
             body,
           });
-        const result = await issueLlmOauthClientAccessToken({
+        // Route to the right issuer by clientId prefix. MCP gateway clients and
+        // LLM proxy clients are both stored in the oauth_client table but issue
+        // tokens scoped to different resources.
+        const issueAccessToken = authenticatedClientId?.startsWith(
+          MCP_OAUTH_CLIENT_ID_PREFIX,
+        )
+          ? issueMcpOauthClientAccessToken
+          : issueLlmOauthClientAccessToken;
+        const result = await issueAccessToken({
           clientId: authenticatedClientId,
           clientSecret,
           scope: body.scope as string | undefined,
@@ -481,6 +509,25 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "[auth:oauth2/token] Token request failed",
         );
+      }
+
+      // Bind a shareable-App connector token to its canonical resource URI
+      // (RFC 8707) so it is accepted only at its own connector. Fail closed if
+      // an app-connector resource was requested but the binding can't be written
+      // — better to error than hand back a token that silently 401s.
+      if (response.ok) {
+        const connectorBinding = await bindAppConnectorTokenAudience({
+          resource,
+          responseBody,
+          grantType: body?.grant_type,
+          tokenEndpointOrigin,
+        });
+        if (connectorBinding.status === "error") {
+          return reply.status(400).send({
+            error: "invalid_target",
+            error_description: connectorBinding.message,
+          });
+        }
       }
 
       reply.status(response.status);
@@ -590,6 +637,20 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const body = request.body;
+
+      // When DCR is disabled, only pre-registered OAuth clients may run OAuth
+      // flows. Reject self-registration with the RFC 7591 error shape.
+      if (!config.auth.dynamicClientRegistrationEnabled) {
+        logger.warn(
+          { clientName: body.client_name },
+          "[auth:oauth2/register] Dynamic client registration is disabled",
+        );
+        return reply.status(403).send({
+          error: "access_denied",
+          error_description:
+            "Dynamic client registration is disabled on this instance",
+        });
+      }
 
       logger.info(
         {
@@ -929,6 +990,75 @@ async function issueLlmOauthClientAccessToken(params: {
   };
 }
 
+async function issueMcpOauthClientAccessToken(params: {
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  scope: string | undefined;
+}): Promise<{
+  ok: boolean;
+  statusCode: number;
+  body: Record<string, unknown>;
+}> {
+  if (!params.clientId || !params.clientSecret) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
+    MCP_GATEWAY_OAUTH_SCOPE,
+  ];
+  if (!requestedScopes.some((scope) => scope === MCP_GATEWAY_OAUTH_SCOPE)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      body: {
+        error: "invalid_scope",
+        error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
+      },
+    };
+  }
+
+  const oauthClient = await McpOauthClientModel.findClientForCredentials({
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+  });
+  if (!oauthClient) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: { error: "invalid_client" },
+    };
+  }
+
+  // Same storage invariant as the LLM issuer: a high-entropy token returned
+  // once to the caller, persisted only as a lookup hash, with a finite
+  // client-credentials lifetime. Keep this in sync with
+  // issueLlmOauthClientAccessToken if either is refactored.
+  const accessToken = `mcp_at_${randomBytes(32).toString("base64url")}`;
+  const expiresIn = MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
+  await OAuthAccessTokenModel.createClientCredentialsToken({
+    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
+    clientId: oauthClient.clientId,
+    expiresAt: new Date(Date.now() + expiresIn * 1000),
+    scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+    referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
+  });
+
+  return {
+    ok: true,
+    statusCode: 200,
+    body: {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      scope: MCP_GATEWAY_OAUTH_SCOPE,
+    },
+  };
+}
+
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {
   const normalizedHeaderName = headerName.toLowerCase();
   return (
@@ -1117,4 +1247,140 @@ function getProfileIdFromReferenceId(
 
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
   return OAuthAccessTokenModel.hashTokenForLookup(oauthAccessToken);
+}
+
+/**
+ * Bind a freshly minted access token to a shareable-App connector resource
+ * (RFC 8707), so the connector accepts it only at its own canonical URI. The
+ * `resource` parameter is stripped before better-auth (which rejects a dynamic
+ * audience), so the binding is stamped here, after mint. On an authorization_code
+ * grant the audience is the consented `resource`; on a refresh_token grant it is
+ * the audience carried on the refresh token from the original grant — a refresh
+ * cannot re-target a different connector. Returns `error` when an app-connector
+ * resource was requested but the token could not be bound to it, so the caller
+ * fails the request rather than return a token that silently 401s.
+ *
+ * @public — exercised by auth.test.ts
+ */
+export async function bindAppConnectorTokenAudience(params: {
+  resource: unknown;
+  responseBody: string | null;
+  grantType: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<{ status: "ok" | "skip" } | { status: "error"; message: string }> {
+  if (!params.responseBody) {
+    return { status: "skip" };
+  }
+  const tokenBody = parseOAuthTokenResponseBody(params.responseBody);
+  const accessToken =
+    typeof tokenBody?.access_token === "string" ? tokenBody.access_token : null;
+  if (!accessToken) {
+    return { status: "skip" };
+  }
+
+  const allowedOrigins = new Set([
+    new URL(buildOAuthIssuer()).origin,
+    params.tokenEndpointOrigin,
+  ]);
+  const requestedCanonical = resolveAppConnectorResource(
+    params.resource,
+    allowedOrigins,
+  );
+  const requestedRef = requestedCanonical
+    ? appConnectorAudienceRef(requestedCanonical)
+    : null;
+
+  // A `resource` that targets a connector path but did not resolve to a trusted
+  // canonical URI (an untrusted origin like https://evil.example.com/api/mcp/app/<id>,
+  // or a malformed/sub-path connector URL) must fail closed with RFC 8707
+  // invalid_target. Falling through to "skip" would mint an unbound `mcp` token,
+  // which still authenticates the MCP gateway via the user-access path. Absent or
+  // non-connector resources are unaffected (they bind elsewhere or not at all).
+  if (!requestedRef && isConnectorTargetedResource(params.resource)) {
+    return {
+      status: "error",
+      message:
+        "The requested resource is not a valid connector on this server.",
+    };
+  }
+
+  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
+
+  if (params.grantType === "refresh_token") {
+    // better-auth carries the original grant's audience onto the refreshed
+    // token, so a refresh cannot acquire a connector the original grant did not
+    // authorize. Honor that inherited binding and reject an attempt to
+    // re-target a different connector (RFC 8707 invalid_target).
+    const refreshed = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    let inheritedRef = isAppConnectorAudienceRef(refreshed?.referenceId)
+      ? (refreshed?.referenceId ?? null)
+      : null;
+    if (!inheritedRef && refreshed?.refreshId) {
+      const refresh = await OAuthRefreshTokenModel.getById(refreshed.refreshId);
+      inheritedRef = isAppConnectorAudienceRef(refresh?.referenceId)
+        ? (refresh?.referenceId ?? null)
+        : null;
+    }
+    if (requestedRef && requestedRef !== inheritedRef) {
+      return {
+        status: "error",
+        message: "The refresh token is not bound to the requested resource.",
+      };
+    }
+    if (!inheritedRef) {
+      return { status: "skip" };
+    }
+    // Stamp the access token only if better-auth did not already inherit it.
+    if (refreshed?.referenceId !== inheritedRef) {
+      await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+        tokenHash,
+        referenceId: inheritedRef,
+      });
+    }
+    return { status: "ok" };
+  }
+
+  // Initial (authorization_code) grant: stamp the consented connector audience.
+  if (!requestedRef) {
+    return { status: "skip" };
+  }
+  const bound =
+    await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+      tokenHash,
+      referenceId: requestedRef,
+    });
+  if (!bound) {
+    // A prior stamp of the same audience is success (idempotent); any other
+    // unbindable state fails closed.
+    const existing = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    if (existing?.referenceId === requestedRef) {
+      return { status: "ok" };
+    }
+    logger.error(
+      { requestedRef },
+      "[auth:oauth2/token] could not bind app connector token to its resource",
+    );
+    return {
+      status: "error",
+      message: "Unable to bind the access token to the requested resource.",
+    };
+  }
+  // Carry the binding onto the refresh token so better-auth inherits it on later
+  // refreshes. Best-effort: if it can't be written, a future refresh that omits
+  // `resource` yields an unbound token the connector rejects (fail-closed).
+  if (bound.refreshId) {
+    const carried = await OAuthRefreshTokenModel.bindReferenceIdByIdWhenUnbound(
+      {
+        id: bound.refreshId,
+        referenceId: requestedRef,
+      },
+    );
+    if (!carried) {
+      logger.warn(
+        { refreshId: bound.refreshId, requestedRef },
+        "[auth:oauth2/token] could not carry the connector audience onto the refresh token",
+      );
+    }
+  }
+  return { status: "ok" };
 }

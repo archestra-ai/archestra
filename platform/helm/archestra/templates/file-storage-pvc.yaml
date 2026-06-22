@@ -1,0 +1,18 @@
+{{- if and (eq .Values.archestra.fileStorage.provider "filesystem") (not .Values.archestra.fileStorage.filesystem.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "archestra-platform.fileStorageClaimName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.archestra.fileStorage.filesystem.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.archestra.fileStorage.filesystem.size | quote }}
+  {{- with .Values.archestra.fileStorage.filesystem.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

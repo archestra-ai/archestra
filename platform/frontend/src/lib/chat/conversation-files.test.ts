@@ -20,6 +20,16 @@ const apiFiles = {
       createdAt: "2026-06-08T00:00:00.000Z",
     },
   ],
+  referenced: [
+    {
+      id: "x1",
+      name: "q2.csv",
+      mimeType: "text/csv",
+      contentUrl: "/api/skill-sandbox/artifacts/x1",
+      createdAt: "2026-06-08T00:00:00.000Z",
+    },
+  ],
+  projectName: null,
 };
 
 describe("assembleFileSections", () => {
@@ -61,11 +71,39 @@ describe("assembleFileSections", () => {
   });
 
   it("handles a null files payload (artifact only)", () => {
-    const { generated, attachments } = assembleFileSections({
+    const { generated, attachments, referenced } = assembleFileSections({
       files: null,
       artifact: "# hello",
     });
     expect(generated.map((f) => f.id)).toEqual(["artifact"]);
     expect(attachments).toEqual([]);
+    expect(referenced).toEqual([]);
+  });
+
+  it("maps referenced files to the my-file source with the byte URL", () => {
+    const { referenced } = assembleFileSections({
+      files: apiFiles,
+      artifact: null,
+    });
+    expect(referenced).toEqual([
+      {
+        id: "x1",
+        name: "q2.csv",
+        mimeType: "text/csv",
+        contentUrl: "/api/skill-sandbox/artifacts/x1",
+        source: "my-file",
+      },
+    ]);
+  });
+
+  it("titles the referenced section by scope: project vs personal", () => {
+    const personal = assembleFileSections({ files: apiFiles, artifact: null });
+    expect(personal.referencedTitle).toBe("Referenced files");
+
+    const project = assembleFileSections({
+      files: { ...apiFiles, projectName: "hello" },
+      artifact: null,
+    });
+    expect(project.referencedTitle).toBe("Project files");
   });
 });

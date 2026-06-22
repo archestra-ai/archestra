@@ -1,12 +1,32 @@
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
+import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import {
   ApiError,
   type CreateEnvironment,
   type Environment,
   type EnvironmentList,
+  type InternalMcpCatalogServerType,
   type UpdateEnvironment,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
+import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "./remote-server-network-policy";
+
+/**
+ * Provision (or update) the environment's per-env Dagger engine + egress
+ * NetworkPolicy in the background. Fire-and-forget: a k8s hiccup must not fail
+ * environment CRUD, and the manager no-ops when code-runtime/k8s is off.
+ */
+function reconcileEnvironmentEngine(environment: Environment): void {
+  void daggerEnvironmentRuntimeManager
+    .reconcileEnvironment(environment)
+    .catch((err) =>
+      logger.error(
+        { err, environmentId: environment.id },
+        "[DaggerEnvRuntime] background reconcile failed",
+      ),
+    );
+}
 
 // === Public API ===
 
@@ -29,7 +49,7 @@ export async function createEnvironment(params: {
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
   }
-  return EnvironmentModel.create({
+  const created = await EnvironmentModel.create({
     organizationId,
     name: data.name,
     description: data.description ?? null,
@@ -38,6 +58,8 @@ export async function createEnvironment(params: {
     restricted: data.restricted,
     validationRegex: data.validationRegex ?? null,
   });
+  reconcileEnvironmentEngine(created);
+  return created;
 }
 
 export async function updateEnvironment(params: {
@@ -66,6 +88,7 @@ export async function updateEnvironment(params: {
   if (!updated) {
     throw new ApiError(404, "Environment not found");
   }
+  reconcileEnvironmentEngine(updated);
   return updated;
 }
 
@@ -136,6 +159,32 @@ export async function assertValuesMatchEnvironmentRegex(params: {
     }
   } catch (e) {
     throw new ApiError(400, (e as Error).message);
+  }
+}
+
+/**
+ * Enforce that a remote MCP server's URL is reachable under its governing
+ * environment's network egress policy. No-op for self-hosted servers (their
+ * egress is enforced by the real k8s NetworkPolicy on the pod) and for
+ * unrestricted / built-in policies. Throws `ApiError(400)` when the policy
+ * would block the backend's outbound connection to the server URL.
+ *
+ * This is the create/edit-time guard, for early feedback in the form. The
+ * runtime connection guard in the MCP client enforces the same policy on actual
+ * calls, so a grandfathered server is still blocked at call time.
+ */
+export async function assertRemoteServerUrlAllowedByNetworkPolicy(params: {
+  serverType: InternalMcpCatalogServerType;
+  serverUrl: string | null | undefined;
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<void> {
+  const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy(params);
+  if (!verdict.allowed) {
+    // internal_code lets the frontend attach this to the Server URL field
+    // inline instead of a generic toast. Keep in sync with the frontend
+    // constant of the same value.
+    throw new ApiError(400, verdict.message, "remote_server_url_not_allowed");
   }
 }
 

@@ -1,0 +1,19 @@
+artifact_key = "artifact"
+
+[[stages]]
+text = """Can you estimate π with a Monte-Carlo method -- sample random points in the unit square, count how many fall inside the quarter circle, and use that ratio? I'd like an animated GIF that visualizes the sampling -- 60 frames, one per sampling step, 400 by 400 pixels, with points accumulating and the running π estimate shown. Install whatever packages you need. Save the GIF and tell me where it is."""
+
+[[stages]]
+text = """Now invert the colors of every frame of that GIF, put the inverted GIF into a single .zip archive, and export it with the download_file tool so I can retrieve it. Then call submit_result with the exported zip's filename, e.g. result = {"artifact": "pi.zip"}."""
+
+[result_schema]
+type = "object"
+required = ["artifact"]
+additionalProperties = false
+
+  [result_schema.properties.artifact]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = ["pillow==11.3.0"]

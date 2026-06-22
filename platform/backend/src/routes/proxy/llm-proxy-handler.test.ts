@@ -103,6 +103,7 @@ import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import anthropicProxyRoutes from "./routes/anthropic";
 import azureProxyRoutes from "./routes/azure";
 import geminiProxyRoutes from "./routes/gemini";
+import githubCopilotProxyRoutes from "./routes/github-copilot";
 import openAiProxyRoutes from "./routes/openai";
 
 describe("LLM Proxy Handler Prometheus Metrics", () => {
@@ -1207,5 +1208,102 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       "sk-resolved-real",
       expect.any(Object),
     );
+  });
+});
+
+describe("LLM Proxy Handler — per-user provider connect required", () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) => {
+      if (error instanceof ApiError) {
+        return reply
+          .status(error.statusCode)
+          .send({ error: { message: error.message, type: error.type } });
+      }
+      return reply.status(500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type: "api_internal_server_error",
+        },
+      });
+    });
+
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
+    );
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+    mockGetGlobalToolPolicy.mockResolvedValue("permissive");
+
+    await app.register(githubCopilotProxyRoutes);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("returns an actionable provider_auth_required 401 when the acting user's Copilot credential is missing", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({
+      name: "Copilot Proxy Agent",
+      organizationId: org.id,
+    });
+
+    // Personal Copilot key whose secret is gone (revoked / orphaned): the
+    // virtual key authenticates but resolves no usable upstream token.
+    const copilotKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Copilot (orphaned secret)",
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+      teamId: null,
+    });
+
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "my-copilot-vk",
+      scope: "personal",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/github-copilot/${agent.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${virtualKey}`,
+      },
+      payload: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(401);
+    const body = response.json();
+    expect(body.error.type).toBe("api_authentication_error");
+    expect(body.error.internal_code).toBe("provider_auth_required");
+    expect(body.error.message).toContain("GitHub Copilot");
+    expect(body.error.message).toContain("/settings");
   });
 });

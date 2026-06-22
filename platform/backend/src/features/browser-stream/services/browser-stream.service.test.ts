@@ -5,7 +5,7 @@ import { browserStateManager } from "./browser-stream.state-manager";
 
 /**
  * Helper to mock the private executeTool method on BrowserStreamService.
- * Since executeTool now calls mcpClient.executeToolCall directly (bypassing
+ * Since executeTool now calls mcpClient.executeToolCallForOwner directly (bypassing
  * the MCP Gateway), tests need to mock it at the service level.
  */
 function mockExecuteTool(

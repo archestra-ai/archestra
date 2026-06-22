@@ -5,9 +5,9 @@
  */
 export function normalizeByteaField<
   Key extends string,
-  Row extends Record<Key, Buffer>,
+  Row extends Record<Key, Buffer | null>,
 >(row: Row, key: Key): Row {
-  if (Buffer.isBuffer(row[key])) return row;
+  if (row[key] == null || Buffer.isBuffer(row[key])) return row;
   // the runtime value is a Uint8Array here, which the static type can't see
   return { ...row, [key]: Buffer.from(row[key] as unknown as Uint8Array) };
 }

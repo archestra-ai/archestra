@@ -380,16 +380,13 @@ export const UpdateAppearanceSettingsSchema = z.object({
 export const UpdateSecuritySettingsSchema = z.object({
   globalToolPolicy: GlobalToolPolicySchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
 });
 
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
-  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
-  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
-  defaultUserLimitCleanupInterval:
-    LimitCleanupIntervalSchema.nullable().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  agentRequiresPerUserConnect,
   CHAT_STORAGE_KEYS,
   deriveModelSource,
   getSavedAgent,
@@ -181,6 +182,66 @@ describe("resolveAutoSelectedModel", () => {
         isLoading: false,
       }),
     ).toBe("uuid-a");
+  });
+});
+
+describe("agentRequiresPerUserConnect", () => {
+  const perUserAgent = {
+    modelId: "uuid-copilot",
+    llmProviderRequiresPerUserCredential: true,
+  };
+
+  test("true when the per-user agent model is selected but unavailable", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: false,
+      }),
+    ).toBe(true);
+  });
+
+  test("false when the viewer can use the model (connected)", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the selection is not the agent's pinned model (user override)", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-other",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false for a non-per-user provider agent", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: "uuid-anthropic",
+          llmProviderRequiresPerUserCredential: false,
+        },
+        selectedModelId: "uuid-anthropic",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when no agent is selected", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: undefined,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
   });
 });
 

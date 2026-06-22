@@ -397,15 +397,12 @@ class StatisticsModel {
     const teamMemberCounts = await db
       .select({
         teamId: schema.teamsTable.id,
-        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.membersTable.userId}) AS INTEGER)`,
+        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.teamMembersTable.userId}) AS INTEGER)`,
       })
       .from(schema.teamsTable)
       .leftJoin(
-        schema.membersTable,
-        eq(
-          schema.teamsTable.organizationId,
-          schema.membersTable.organizationId,
-        ),
+        schema.teamMembersTable,
+        eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
       )
       .groupBy(schema.teamsTable.id);
 

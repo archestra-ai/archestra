@@ -3,18 +3,25 @@
 //! chain. all `dagger_sdk` usage is contained in this module.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
+use dagger_sdk::core::DAGGER_ENGINE_VERSION;
+use dagger_sdk::core::cli_session::DaggerSessionProc;
+use dagger_sdk::core::connect_params::ConnectParams;
+use dagger_sdk::core::downloader::Downloader;
 use dagger_sdk::core::gql_client::GraphQlExtension;
-use dagger_sdk::core::graphql_client::GraphQLError;
-use dagger_sdk::errors::DaggerError;
+use dagger_sdk::core::graphql_client::{DefaultGraphQLClient, GraphQLError};
+use dagger_sdk::errors::{ConnectError, DaggerError};
 use dagger_sdk::{
-    Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, ReturnType,
-    connect_opts,
+    Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, Query,
+    ReturnType,
 };
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 use tokio::sync::{OnceCell, mpsc, oneshot};
 use tracing::Span;
 
@@ -29,7 +36,7 @@ use crate::validation::{
 };
 use crate::{
     ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
-    SandboxError, SnapshotFile,
+    RuntimeTarget, SandboxError, SnapshotFile,
 };
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
@@ -47,6 +54,8 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     "build-essential",
     "nodejs",
     "npm",
+    "unzip",
+    "zip",
 ];
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every
@@ -57,6 +66,17 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 /// split the two interpreters.
 const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
+/// provenance marker written by `sandbox_base/Dockerfile`; prebuilt mode verifies
+/// it so a mis-set `ARCHESTRA_DAGGER_RUNTIME_IMAGE` fails fast here instead of
+/// downstream.
+const SANDBOX_BASE_MARKER: &str = "/etc/archestra-sandbox-base";
+
+/// Dagger CLI env vars on the connect path, named to avoid typos in this
+/// tenant-isolation-sensitive routing. `DAGGER_RUNNER_HOST_ENV` is set on the
+/// spawned `dagger session` child only (never the parent) to pin a
+/// per-environment engine; `DAGGER_CLI_BIN_ENV` overrides the CLI binary path.
+const DAGGER_RUNNER_HOST_ENV: &str = "_EXPERIMENTAL_DAGGER_RUNNER_HOST";
+const DAGGER_CLI_BIN_ENV: &str = "_EXPERIMENTAL_DAGGER_CLI_BIN";
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
 /// the dagger SDK message emitted when the engine accepted `/query` but timed
@@ -245,22 +265,191 @@ impl SandboxBackend for DaggerBackend {
     }
 }
 
+/// The Dagger runner host for a runtime target: `Default` -> `None` (use the
+/// process-default engine), an environment -> its engine's `kube-pod://` address.
+/// `environment_id` / `namespace` were validated (UUID / RFC1123 label) at the
+/// NAPI boundary, so the formatted address needs no escaping. The pod name and
+/// container MUST match the engine StatefulSet the TS dagger-environment-runtime
+/// manager creates (`daggerEngineDeploymentName` + the `dagger-engine` container).
+fn runtime_target_host(target: &RuntimeTarget) -> Option<String> {
+    match target {
+        RuntimeTarget::Default => None,
+        RuntimeTarget::Environment {
+            environment_id,
+            namespace,
+        } => Some(format!(
+            "kube-pod://dagger-engine-{environment_id}-0?namespace={namespace}&container=dagger-engine"
+        )),
+    }
+}
+
+/// The `dagger session` CLI arguments, pinned to the protocol dagger-sdk 0.21
+/// speaks. Kept pure so a test asserts the exact vector — an SDK bump that
+/// changed it would then fail loudly rather than silently break the handshake.
+fn session_args(workdir: &Path) -> Vec<String> {
+    vec![
+        "session".to_string(),
+        "--workdir".to_string(),
+        workdir.to_string_lossy().into_owned(),
+        "--label".to_string(),
+        "dagger.io/sdk.name:rust".to_string(),
+        "--label".to_string(),
+        format!("dagger.io/sdk.version:{DAGGER_ENGINE_VERSION}"),
+    ]
+}
+
+/// Build the `dagger session` child command. The per-environment runner host is
+/// set on **this child only** (never the parent process env); `None` leaves it
+/// unset so the child inherits the parent's default engine.
+fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) -> Command {
+    let mut cmd = Command::new(cli);
+    cmd.args(session_args(workdir))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        // Reap the child if the connect future is dropped — the readiness-timeout
+        // path aborts `connect_task` before `proc.shutdown()` can run, so without
+        // this a hung `dagger session` would outlive its connect attempt.
+        .kill_on_drop(true);
+    if let Some(host) = runner_host {
+        cmd.env(DAGGER_RUNNER_HOST_ENV, host);
+    }
+    cmd
+}
+
+/// Spawn the `dagger session` CLI child and read its `ConnectParams` handshake —
+/// a faithful reimplementation of dagger-sdk's private `CliSession::get_conn`,
+/// pinned to `=0.21.5`. The ordering is load-bearing: take stdout/stderr off the
+/// child, build the session handle (which owns the shutdown broadcast — there is
+/// no `Drop`), then drain both pipes in background tasks until teardown, parsing
+/// the first JSON line as `ConnectParams`.
+async fn spawn_and_read_connect_params(
+    mut cmd: Command,
+) -> eyre::Result<(ConnectParams, DaggerSessionProc)> {
+    let mut child = cmd.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| eyre::eyre!("could not acquire stdout from the dagger session"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| eyre::eyre!("could not acquire stderr from the dagger session"))?;
+    let session: DaggerSessionProc = child.into();
+
+    let (sender, receiver) = oneshot::channel::<ConnectParams>();
+    let mut sender = Some(sender);
+    let mut stdout_shutdown = session.subscribe_shutdown();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stdout).lines();
+        loop {
+            tokio::select! {
+                line = lines.next_line() => match line {
+                    Ok(Some(line)) => match serde_json::from_str::<ConnectParams>(&line) {
+                        // first parseable line wins; the sender is consumed so we
+                        // keep draining stdout but never send twice.
+                        Ok(conn) => if let Some(tx) = sender.take() {
+                            let _ = tx.send(conn);
+                        },
+                        Err(_) => tracing::debug!(line, "dagger session stdout"),
+                    },
+                    Ok(None) | Err(_) => break,
+                },
+                _ = stdout_shutdown.recv() => break,
+            }
+        }
+    });
+
+    let mut stderr_shutdown = session.subscribe_shutdown();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        loop {
+            tokio::select! {
+                line = lines.next_line() => match line {
+                    Ok(Some(line)) => tracing::debug!(line, "dagger session stderr"),
+                    Ok(None) | Err(_) => break,
+                },
+                _ = stderr_shutdown.recv() => break,
+            }
+        }
+    });
+
+    let conn = receiver
+        .await
+        .map_err(|_| eyre::eyre!("the dagger session exited before reporting connect params"))?;
+    Ok((conn, session))
+}
+
+/// Connect to a Dagger engine and drive `f` for the connection's lifetime,
+/// setting the runner host on the spawned CLI **child** only — never the parent
+/// process env. `runner_host = None` lets the child inherit the parent's default
+/// host. This owns the thin glue `dagger_sdk::connect_opts` would run (pinned to
+/// `=0.21.5`), so a per-environment host is bound to one child at spawn instead
+/// of mutated into process-global, non-synchronized state.
+async fn connect_target<F, Fut>(
+    cfg: Config,
+    runner_host: Option<&str>,
+    f: F,
+) -> std::result::Result<(), ConnectError>
+where
+    F: FnOnce(DaggerConn) -> Fut,
+    Fut: std::future::Future<Output = eyre::Result<()>>,
+{
+    let cli = match env::var(DAGGER_CLI_BIN_ENV) {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => Downloader::new(DAGGER_ENGINE_VERSION.into())
+            .get_cli()
+            .await
+            .map_err(|e| ConnectError::FailedToConnect(e.into()))?,
+    };
+    let workdir =
+        std::fs::canonicalize("/").map_err(|e| ConnectError::FailedToConnect(e.into()))?;
+
+    let cmd = build_session_command(&cli, &workdir, runner_host);
+
+    let (conn, proc) = spawn_and_read_connect_params(cmd)
+        .await
+        .map_err(ConnectError::FailedToConnect)?;
+    let proc = Arc::new(proc);
+
+    let client = Query {
+        proc: Some(proc.clone()),
+        selection: Default::default(),
+        graphql_client: Arc::new(DefaultGraphQLClient::new(&conn, &cfg)),
+    };
+
+    let outcome = f(client).await;
+    // `DaggerSessionProc` has no `Drop`, so shut down explicitly on success and
+    // error to release the engine session and reader tasks. The readiness-timeout
+    // abort path never reaches this line; `kill_on_drop(true)` on the child reaps
+    // it there instead.
+    let _ = proc.shutdown().await;
+    outcome.map_err(ConnectError::DaggerContext)
+}
+
 /// connect to the Dagger engine and drive the generic actor loop for the
 /// connection's lifetime. this is the one place the Dagger backend is selected.
-pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
-    tracing::info!("spawning dagger session");
+///
+/// `target` selects the engine: `Default` uses the process-default runner host,
+/// an environment its own `kube-pod://…` (resolved here so that address never
+/// crosses the generic API). The host is set on the spawned CLI child only, so
+/// distinct environments connect concurrently with no process-global env mutation.
+pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
+    tracing::info!(target = ?target, "spawning dagger session");
     let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
 
-    tokio::spawn(async move {
+    let runner_host = runtime_target_host(&target);
+
+    let connect_task = tokio::spawn(async move {
         let cfg = Config::builder()
             .workdir_path(PathBuf::from("/"))
             .load_workspace_modules(false)
             .build();
         let mut ready_tx = Some(ready_tx);
         let mut fail_tx = Some(fail_tx);
-        let result = connect_opts(cfg, move |client| async move {
+        let result = connect_target(cfg, runner_host.as_deref(), move |client| async move {
             if let Some(tx) = ready_tx.take() {
                 let _ = tx.send(());
             }
@@ -284,7 +473,7 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
         }
     });
 
-    tokio::select! {
+    let outcome = tokio::select! {
         ready = ready_rx => match ready {
             Ok(()) => {
                 tracing::info!("dagger session ready");
@@ -306,7 +495,13 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
             message: format!("the Dagger session did not become ready within {}s", SESSION_READY_TIMEOUT.as_secs()),
             fault: EngineFault::Unreachable,
         }),
+    };
+    // On timeout or failure, abort the connect task so a stuck or half-open
+    // session can't linger; on success it is the session actor loop and stays.
+    if outcome.is_err() {
+        connect_task.abort();
     }
+    outcome
 }
 
 /// warm-base user-setup command: scaffold the uv project, create the venv at
@@ -319,29 +514,71 @@ fn warm_base_user_setup(py_requirements: &str) -> String {
     )
 }
 
+/// The root-level setup exec, run before `with_user` drops to the sandbox user.
+/// A pre-baked image only verifies its provenance marker (no network); a plain
+/// base runs the apt toolbelt + sandbox dirs + pip shim.
+fn warm_base_root_setup(prebuilt: bool) -> String {
+    match prebuilt {
+        // Skipping the apt/uv setup is only safe if the image really is the baked
+        // base. Verify its provenance marker so a mis-set runtime image fails here
+        // with a clear message rather than producing a container that breaks
+        // downstream — and with no network fallback under restricted egress.
+        true => format!(
+            "test -f {SANDBOX_BASE_MARKER} || (echo 'error: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true but {SANDBOX_BASE_MARKER} is absent; the runtime image is not the baked sandbox base' >&2; exit 1)"
+        ),
+        // apt packages + sandbox dirs + ownership + pip shim. the shim redirects
+        // any `pip` invocation to uv so the model is never tempted to install into
+        // ~/.local (which the venv python won't see). `uv pip` is unaffected
+        // because it's a subcommand of `uv`, not a separate binary.
+        false => {
+            let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
+            format!(
+                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
+            )
+        }
+    }
+}
+
+/// The user-level setup exec, run after `with_user`. A pre-baked image already
+/// has the uv project + venv, so there is nothing to do; a plain base scaffolds
+/// the project and seeds the default packages.
+fn warm_base_user_setup_exec(prebuilt: bool) -> Option<String> {
+    match prebuilt {
+        true => None,
+        false => Some(warm_base_user_setup(&DEFAULT_PYTHON_REQUIREMENTS.join(" "))),
+    }
+}
+
+/// The base is treated as pre-baked only on an exact `"true"`; anything else
+/// (unset, empty, `"1"`, `"True"`) falls back to building from a stock image,
+/// because skipping the toolchain build on a non-baked image yields a broken
+/// container with no network fallback under restricted egress.
+fn base_prebuilt_from_env(value: Option<String>) -> bool {
+    value.as_deref() == Some("true")
+}
+
 #[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
         .unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string());
+    // When the base image is pre-baked (the `sandbox-base` image already contains
+    // the apt toolbelt + uv project + venv), skip the apt/uv build execs — those
+    // are the steps that hit ghcr.io/debian/pypi at runtime and get starved by a
+    // restrictive egress policy. Only the supervisor + env/user are layered on
+    // (no network), so a cold restricted engine works without warming first.
+    let prebuilt = base_prebuilt_from_env(env::var("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT").ok());
     tracing::Span::current().record("image", image.as_str());
-    tracing::info!(%image, "building warm base image");
-    let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
-    let py_requirements = DEFAULT_PYTHON_REQUIREMENTS.join(" ");
+    tracing::info!(%image, prebuilt, "building warm base image");
 
-    // root setup: apt packages + sandbox dirs + ownership + pip shim. the shim
-    // redirects any `pip` invocation to uv so the model is never tempted to
-    // install into ~/.local (which the venv python won't see). `uv pip` is
-    // unaffected because it's a subcommand of `uv`, not a separate binary.
-    let root_setup = format!(
-        "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
-    );
-    // user setup: scaffold the uv project, create the venv, seed default
-    // packages with `uv add` (same path the model uses), owned by sandbox user.
-    let user_setup = warm_base_user_setup(&py_requirements);
-    client
+    let mut container = client
         .container()
         .from(&image)
-        .with_exec(vec!["sh".to_string(), "-c".to_string(), root_setup])
+        // exactly one root-level exec: provenance check (prebuilt) or apt/uv setup.
+        .with_exec(vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            warm_base_root_setup(prebuilt),
+        ])
         // written as root (0755) so every materialised container inherits a
         // world-readable, executable supervisor without a per-call layer.
         .with_new_file_opts(
@@ -357,8 +594,14 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .with_env_variable("HOME", SKILL_SANDBOX_HOME)
         .with_env_variable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)
         .with_env_variable("VIRTUAL_ENV", DEFAULT_VENV_DIR)
-        .with_env_variable("PATH", format!("{DEFAULT_VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
-        .with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup])
+        .with_env_variable("PATH", format!("{DEFAULT_VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"));
+
+    // user setup runs as the sandbox user; a prebuilt base already has the venv.
+    if let Some(user_setup) = warm_base_user_setup_exec(prebuilt) {
+        container = container.with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup]);
+    }
+
+    container
         .sync()
         .await
         .map_err(engine)
@@ -709,8 +952,184 @@ fn parse_sdk_exit_code(message: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
     use dagger_sdk::core::gql_client::GraphQLErrorMessage;
+
+    #[test]
+    fn dagger_session_args_match_the_pinned_protocol() {
+        assert_eq!(
+            session_args(Path::new("/")),
+            vec![
+                "session".to_string(),
+                "--workdir".to_string(),
+                "/".to_string(),
+                "--label".to_string(),
+                "dagger.io/sdk.name:rust".to_string(),
+                "--label".to_string(),
+                "dagger.io/sdk.version:0.21.5".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn connect_params_parse_from_a_session_stdout_line() {
+        let conn: ConnectParams =
+            serde_json::from_str(r#"{"port":12345,"session_token":"tok"}"#).unwrap();
+        assert_eq!(conn.port, 12345);
+        assert_eq!(conn.session_token, "tok");
+    }
+
+    #[test]
+    fn session_command_pins_runner_host_on_the_child_only_for_environments() {
+        let cli = Path::new("/usr/local/bin/dagger");
+        let host = "kube-pod://dagger-engine-env-a-0?namespace=ns&container=dagger-engine";
+
+        // an environment target pins the runner host on the child command, never
+        // the parent process env — the tenant-isolation boundary this fix exists for.
+        let env_cmd = build_session_command(cli, Path::new("/"), Some(host));
+        let runner_override = env_cmd
+            .as_std()
+            .get_envs()
+            .find(|(key, _)| *key == OsStr::new(DAGGER_RUNNER_HOST_ENV));
+        assert_eq!(
+            runner_override,
+            Some((OsStr::new(DAGGER_RUNNER_HOST_ENV), Some(OsStr::new(host))))
+        );
+
+        // the default target sets no override, so the child inherits the parent's
+        // default engine rather than a host a sibling environment pinned.
+        let default_cmd = build_session_command(cli, Path::new("/"), None);
+        assert!(
+            default_cmd
+                .as_std()
+                .get_envs()
+                .all(|(key, _)| key != OsStr::new(DAGGER_RUNNER_HOST_ENV))
+        );
+    }
+
+    /// Write a throwaway executable shell script that stands in for the
+    /// `dagger session` CLI; it ignores the appended `session_args`. Linux-only,
+    /// matching the sandbox runtime's target.
+    #[cfg(target_os = "linux")]
+    fn write_fake_session(body: &str) -> PathBuf {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "dagger-fake-session-{}-{unique}.sh",
+            std::process::id(),
+        ));
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(body.as_bytes()).unwrap();
+        file.set_permissions(std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        path
+    }
+
+    /// True when `pid` is gone from the proc table or is a reaped/zombie corpse.
+    #[cfg(target_os = "linux")]
+    fn process_finished(pid: u32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return true; // proc entry gone → reaped
+        };
+        // `stat` is "pid (comm) state ..."; comm can contain spaces and parens,
+        // so the state char is the first token after the final ')'.
+        match stat.rsplit_once(')') {
+            Some((_, rest)) => matches!(rest.trim_start().chars().next(), Some('Z' | 'X') | None),
+            None => true,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn spawn_and_read_connect_params_returns_the_parsed_handshake() {
+        // a fake session that prints the handshake line then stays alive, so the
+        // child is still running when the params are read.
+        let script = write_fake_session(
+            "#!/bin/sh\necho '{\"port\":12345,\"session_token\":\"tok\"}'\nsleep 30\n",
+        );
+        let cmd = build_session_command(&script, Path::new("/"), None);
+
+        let (conn, proc) = spawn_and_read_connect_params(cmd).await.unwrap();
+        assert_eq!(conn.port, 12345);
+        assert_eq!(conn.session_token, "tok");
+
+        let _ = proc.shutdown().await;
+        std::fs::remove_file(&script).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn spawn_and_read_connect_params_errors_when_child_exits_without_params() {
+        // a fake session that exits before emitting any ConnectParams; the oneshot
+        // sender drops, so the receiver resolves to the "exited" error.
+        let script = write_fake_session("#!/bin/sh\nexit 0\n");
+        let cmd = build_session_command(&script, Path::new("/"), None);
+
+        // `DaggerSessionProc` isn't `Debug`, so match instead of `unwrap_err`.
+        let Err(err) = spawn_and_read_connect_params(cmd).await else {
+            panic!("expected an error when the child exits without reporting params");
+        };
+        assert!(
+            err.to_string()
+                .contains("exited before reporting connect params"),
+            "unexpected error: {err}"
+        );
+        std::fs::remove_file(&script).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn build_session_command_reaps_the_child_on_drop() {
+        // dropping the spawned child must SIGKILL it (kill_on_drop), so an aborted
+        // connect attempt can't leak a long-running `dagger session`.
+        let script = write_fake_session("#!/bin/sh\nsleep 120\n");
+        let mut cmd = build_session_command(&script, Path::new("/"), None);
+
+        let child = cmd.spawn().unwrap();
+        let pid = child.id().expect("a spawned child has a pid");
+        assert!(
+            !process_finished(pid),
+            "child should be running after spawn"
+        );
+
+        drop(child);
+
+        // kill_on_drop sends SIGKILL on drop; poll until the kernel reaps it.
+        let mut reaped = false;
+        for _ in 0..100 {
+            if process_finished(pid) {
+                reaped = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            reaped,
+            "child {pid} outlived its dropped handle (kill_on_drop missing?)"
+        );
+        std::fs::remove_file(&script).ok();
+    }
+
+    #[test]
+    fn runtime_target_host_builds_a_kube_pod_address_for_an_environment() {
+        assert_eq!(runtime_target_host(&RuntimeTarget::Default), None);
+        assert_eq!(
+            runtime_target_host(&RuntimeTarget::Environment {
+                environment_id: "abcdef00-1111-2222-3333-444455556666".to_string(),
+                namespace: "ns-production".to_string(),
+            }),
+            Some(
+                "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=ns-production&container=dagger-engine"
+                    .to_string()
+            )
+        );
+    }
 
     /// a GraphQL domain error carrying `message` and an optional typed extension.
     fn domain_error(message: &str, extension: Option<GraphQlExtension>) -> DaggerError {
@@ -802,6 +1221,67 @@ mod tests {
         // deps seeded via the same `uv add` path the model uses.
         assert!(cmd.contains("uv add numpy pandas"));
         assert!(!cmd.contains("uv pip install"));
+    }
+
+    #[test]
+    fn warm_base_root_setup_prebuilt_verifies_marker_only() {
+        let cmd = warm_base_root_setup(true);
+        // prebuilt only checks the provenance marker and fails loudly if absent.
+        assert!(cmd.contains(&format!("test -f {SANDBOX_BASE_MARKER}")));
+        assert!(cmd.contains("ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true"));
+        assert!(cmd.contains("exit 1"));
+        // no network/apt steps — those are what a restricted egress starves.
+        assert!(!cmd.contains("apt-get"));
+        assert!(!cmd.contains("mkdir"));
+    }
+
+    #[test]
+    fn warm_base_root_setup_plain_installs_apt_toolbelt() {
+        let cmd = warm_base_root_setup(false);
+        assert!(cmd.contains("apt-get update"));
+        assert!(cmd.contains("apt-get install -y --no-install-recommends"));
+        // every default apt package is present.
+        for pkg in DEFAULT_APT_PACKAGES {
+            assert!(cmd.contains(pkg), "missing apt package: {pkg}");
+        }
+        assert!(cmd.contains(&format!(
+            "mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
+        )));
+        assert!(cmd.contains(PIP_SHIM_SETUP));
+        // a plain base never checks the baked-image marker.
+        assert!(!cmd.contains(SANDBOX_BASE_MARKER));
+    }
+
+    #[test]
+    fn warm_base_user_setup_exec_is_skipped_when_prebuilt() {
+        // a baked base already has the uv project + venv, so no user-level exec.
+        assert!(warm_base_user_setup_exec(true).is_none());
+    }
+
+    #[test]
+    fn warm_base_user_setup_exec_scaffolds_when_plain() {
+        let cmd = warm_base_user_setup_exec(false).expect("plain base needs user setup");
+        assert!(cmd.contains("uv venv --python python3 /home/sandbox/.venv"));
+        // default python deps are seeded via the same `uv add` path the model uses.
+        for req in DEFAULT_PYTHON_REQUIREMENTS {
+            assert!(cmd.contains(req), "missing python requirement: {req}");
+        }
+    }
+
+    #[test]
+    fn base_prebuilt_from_env_is_true_only_for_exact_true() {
+        assert!(base_prebuilt_from_env(Some("true".to_string())));
+        // anything but an exact "true" must not skip the toolchain build.
+        assert!(!base_prebuilt_from_env(Some("True".to_string())));
+        assert!(!base_prebuilt_from_env(Some("TRUE".to_string())));
+        assert!(!base_prebuilt_from_env(Some("1".to_string())));
+        assert!(!base_prebuilt_from_env(Some("true ".to_string())));
+        assert!(!base_prebuilt_from_env(Some(String::new())));
+    }
+
+    #[test]
+    fn base_prebuilt_from_env_defaults_to_false_when_unset() {
+        assert!(!base_prebuilt_from_env(None));
     }
 
     #[test]

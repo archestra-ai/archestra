@@ -96,6 +96,17 @@ export const handlers: HttpHandler[] = [
     defaultAssignedCatalogCount: 0,
   }),
   ...getJson("/api/teams", teamsSeed),
+  ...getJson("/api/members", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 50,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),

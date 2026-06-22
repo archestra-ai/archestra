@@ -294,6 +294,27 @@ export default function ModelsPage() {
         },
       },
       {
+        id: "pricingCache",
+        size: 132,
+        header: "$/M Cache R/W",
+        cell: ({ row }) => {
+          const { pricePerMillionCacheRead, pricePerMillionCacheWrite } =
+            row.original;
+          if (hasUnknownCapabilities(row.original)) return null;
+          if (
+            pricePerMillionCacheRead === null ||
+            pricePerMillionCacheWrite === null
+          ) {
+            return <span className="text-sm text-muted-foreground">-</span>;
+          }
+          return (
+            <span className="text-sm font-mono">
+              ${pricePerMillionCacheRead} / ${pricePerMillionCacheWrite}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "contextLength",
         size: 100,
         header: "Context",
@@ -523,6 +544,8 @@ type EditModelEmbeddingDimensionsValue =
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
+  customPricePerMillionCacheRead: string;
+  customPricePerMillionCacheWrite: string;
   ignored: boolean;
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
@@ -544,6 +567,17 @@ function EditModelDialog({
   const updateModel = useUpdateModel();
   const providerConfig = PROVIDER_CONFIG[model.provider];
   const fallbackPricing = getFallbackPricing(model);
+  // The model's provider supports prompt caching when the backend resolved a
+  // cache price for it (synced, custom, or multiplier-derived).
+  const supportsCachePricing = model.cachePriceSource !== null;
+  const nonNegativePriceRule = {
+    validate: (v: string) => {
+      if (!v) return true;
+      const n = parseFloat(v);
+      if (Number.isNaN(n) || n < 0) return "Must be a non-negative number";
+      return true;
+    },
+  };
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
@@ -558,6 +592,9 @@ function EditModelDialog({
   const handleSubmit = async (values: EditModelFormValues) => {
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
+    const cacheReadPrice = values.customPricePerMillionCacheRead.trim() || null;
+    const cacheWritePrice =
+      values.customPricePerMillionCacheWrite.trim() || null;
     const embeddingDimensions = getEmbeddingDimensionsValue(
       values.embeddingDimensions,
     );
@@ -566,6 +603,8 @@ function EditModelDialog({
       id: model.id,
       customPricePerMillionInput: inputPrice,
       customPricePerMillionOutput: outputPrice,
+      customPricePerMillionCacheRead: cacheReadPrice,
+      customPricePerMillionCacheWrite: cacheWritePrice,
       ignored: values.ignored,
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
@@ -579,6 +618,8 @@ function EditModelDialog({
   const handleResetPricing = () => {
     form.setValue("customPricePerMillionInput", "");
     form.setValue("customPricePerMillionOutput", "");
+    form.setValue("customPricePerMillionCacheRead", "");
+    form.setValue("customPricePerMillionCacheWrite", "");
   };
 
   return (
@@ -652,15 +693,7 @@ function EditModelDialog({
               <FormField
                 control={form.control}
                 name="customPricePerMillionInput"
-                rules={{
-                  validate: (v) => {
-                    if (!v) return true;
-                    const n = parseFloat(v);
-                    if (Number.isNaN(n) || n < 0)
-                      return "Must be a non-negative number";
-                    return true;
-                  },
-                }}
+                rules={nonNegativePriceRule}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Input</FormLabel>
@@ -674,15 +707,7 @@ function EditModelDialog({
               <FormField
                 control={form.control}
                 name="customPricePerMillionOutput"
-                rules={{
-                  validate: (v) => {
-                    if (!v) return true;
-                    const n = parseFloat(v);
-                    if (Number.isNaN(n) || n < 0)
-                      return "Must be a non-negative number";
-                    return true;
-                  },
-                }}
+                rules={nonNegativePriceRule}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Output</FormLabel>
@@ -694,6 +719,61 @@ function EditModelDialog({
                 )}
               />
             </div>
+            {model.priceSource === "default" && (
+              <p className="text-xs text-muted-foreground">
+                Input/output prices are estimated — set a custom price for
+                accurate cost tracking.
+              </p>
+            )}
+            {supportsCachePricing && (
+              <div className="space-y-2 pt-1">
+                <span className="text-sm font-medium">
+                  Cache Pricing ($/M tokens)
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="customPricePerMillionCacheRead"
+                    rules={nonNegativePriceRule}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Cache read</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={fallbackPricing.cacheRead}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="customPricePerMillionCacheWrite"
+                    rules={nonNegativePriceRule}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Cache write</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={fallbackPricing.cacheWrite}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {model.cachePriceSource === "derived_multiplier" && (
+                  <p className="text-xs text-muted-foreground">
+                    Cache prices are estimated from the input price. Set a
+                    custom cache price to override.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -1001,34 +1081,34 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
   );
 }
 
+/**
+ * Placeholder prices shown in the custom-price inputs: the backend's resolved
+ * effective price (synced or estimated) for input/output, and the resolved
+ * cache prices (null when the model's provider has no cache pricing). The
+ * effective price equals the custom override when one is set, but in that case
+ * the input is non-empty so the placeholder is not shown.
+ */
 function getFallbackPricing(model: ModelWithApiKeys): {
   input: string;
   output: string;
+  cacheRead: string;
+  cacheWrite: string;
 } {
-  // Tier 2: models.dev synced price (per-token → per-million)
-  if (
-    model.promptPricePerToken != null &&
-    model.completionPricePerToken != null
-  ) {
-    return {
-      input: (parseFloat(model.promptPricePerToken) * 1_000_000).toFixed(2),
-      output: (parseFloat(model.completionPricePerToken) * 1_000_000).toFixed(
-        2,
-      ),
-    };
-  }
-  // Tier 3: default fallback
-  const isCheaper = ["-haiku", "-nano", "-mini"].some((p) =>
-    model.modelId.toLowerCase().includes(p),
-  );
-  const price = isCheaper ? "30.00" : "50.00";
-  return { input: price, output: price };
+  return {
+    input: model.pricePerMillionInput ?? "",
+    output: model.pricePerMillionOutput ?? "",
+    cacheRead: model.pricePerMillionCacheRead ?? "",
+    cacheWrite: model.pricePerMillionCacheWrite ?? "",
+  };
 }
 
 function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
   return {
     customPricePerMillionInput: model.customPricePerMillionInput ?? "",
     customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
+    customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
+    customPricePerMillionCacheWrite:
+      model.customPricePerMillionCacheWrite ?? "",
     ignored: model.ignored,
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)

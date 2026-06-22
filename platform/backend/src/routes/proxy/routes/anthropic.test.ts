@@ -21,11 +21,209 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
+
+vi.mock("@/logging", () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    trace: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+function findAnthropicRequestLog(message: string) {
+  return vi
+    .mocked(logger.info)
+    .mock.calls.find((call) => call[1] === message)?.[0] as
+    | {
+        headers?: Record<string, unknown>;
+      }
+    | undefined;
+}
+
+describe("Anthropic request logging", () => {
+  beforeEach(() => {
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient() as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("summarizes default-agent headers without logging secret values", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    try {
+      await app.register(anthropicProxyRoutes);
+      vi.mocked(logger.info).mockClear();
+
+      await app.inject({
+        method: "POST",
+        url: "/v1/anthropic/v1/messages",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer leaked-authorization-token",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "leaked-x-api-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+
+      const requestLog = findAnthropicRequestLog(
+        "[UnifiedProxy] Handling Anthropic request (default agent)",
+      );
+
+      expect(requestLog).toBeDefined();
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-authorization-token",
+      );
+      expect(JSON.stringify(requestLog)).not.toContain("leaked-x-api-key");
+      expect(requestLog?.headers).toEqual(
+        expect.objectContaining({
+          contentType: "application/json",
+          anthropicVersion: "2023-06-01",
+          hasAuthorization: true,
+          hasXApiKey: true,
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("summarizes agent headers without logging secret values", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    try {
+      await app.register(anthropicProxyRoutes);
+      vi.mocked(logger.info).mockClear();
+
+      const agent = await makeAgent({ name: "Request Logging Agent" });
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer leaked-agent-authorization-token",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "leaked-agent-x-api-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+
+      const requestLog = findAnthropicRequestLog(
+        "[UnifiedProxy] Handling Anthropic request (with agent)",
+      );
+
+      expect(requestLog).toBeDefined();
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-agent-authorization-token",
+      );
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-agent-x-api-key",
+      );
+      expect(requestLog?.headers).toEqual(
+        expect.objectContaining({
+          contentType: "application/json",
+          anthropicVersion: "2023-06-01",
+          hasAuthorization: true,
+          hasXApiKey: true,
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Anthropic anthropic-beta forwarding", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Drive a real /messages request and return the headers the handler actually
+  // hands the upstream client (the strip/forward decision's observable effect).
+  async function forwardedHeaders(agentId: string, model: string) {
+    let captured: Record<string, string> | undefined;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(((
+      _apiKey: string | undefined,
+      options: unknown,
+    ) => {
+      captured = (options as { defaultHeaders?: Record<string, string> })
+        ?.defaultHeaders;
+      return createAnthropicTestClient() as never;
+    }) as never);
+
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    try {
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agentId}/v1/messages`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "pdfs-2024-09-25",
+          "x-api-key": "test-anthropic-key",
+          // Loopback-only override that marks the upstream as a custom base URL.
+          "x-archestra-provider-base-url": "http://localhost:9/v1",
+        },
+        payload: {
+          model,
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+    } finally {
+      await app.close();
+    }
+    return captured;
+  }
+
+  test("strips anthropic-beta for a non-Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Strip Agent" });
+    const headers = await forwardedHeaders(agent.id, "kimi-k2");
+    expect(headers?.["anthropic-beta"]).toBeUndefined();
+  });
+
+  test("forwards anthropic-beta for a Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Forward Agent" });
+    const headers = await forwardedHeaders(agent.id, "claude-opus-4-20250514");
+    expect(headers?.["anthropic-beta"]).toBe("pdfs-2024-09-25");
+  });
+});
 
 describe("Anthropic cost tracking", () => {
   beforeEach(() => {

@@ -1,5 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
@@ -48,7 +49,12 @@ vi.mock("@/lib/config/config.query", () => ({
 
 // ── Import component under test after mocks ───────────────────────────────────
 
+import {
+  clearAllAppDiagnostics,
+  reportAppDiagnostic,
+} from "@/lib/chat/app-diagnostics-store";
 import { McpAppSection } from "./mcp-app-container";
+import { PinnedCanvasProvider, usePinnedCanvas } from "./pinned-canvas-context";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -265,6 +271,297 @@ describe("McpAppContainer (via McpAppSection)", () => {
     expect(
       screen.queryByRole("button", { name: /exit fullscreen/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppContainer inline height (via McpAppSection)", () => {
+  const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  // Matches the mocked getMcpSandboxBaseUrl baseUrl origin.
+  const SANDBOX_ORIGIN = "http://127.0.0.1:9000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Drives the canvas into the sidebar portal so renderInSidebar becomes true.
+  function SidebarDriver({ target }: { target: HTMLElement }) {
+    const { setPortalTarget, select } = usePinnedCanvas();
+    useEffect(() => {
+      setPortalTarget(target);
+      select("tc1");
+    }, [setPortalTarget, select, target]);
+    return null;
+  }
+
+  // Capture the live bridge and drive the sandbox-proxy handshake so the
+  // runtime binds `onsizechange` (it is gated on sandbox-ready). The iframe
+  // proxy is a true process boundary, so faking its ready message is legitimate.
+  async function renderReadyApp(
+    viewportHeight: number,
+    { sidebar = false }: { sidebar?: boolean } = {},
+  ) {
+    Object.defineProperty(window, "innerHeight", {
+      value: viewportHeight,
+      configurable: true,
+    });
+
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null;
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+
+    await act(async () => {
+      render(
+        sidebar ? (
+          <PinnedCanvasProvider
+            conversationId="conv-1"
+            canvases={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+          >
+            <SidebarDriver target={document.body} />
+            <McpAppSection
+              {...defaultProps}
+              toolCallId="tc1"
+              preloadedResource={preloadedResource}
+            />
+          </PinnedCanvasProvider>
+        ) : (
+          <McpAppSection
+            {...defaultProps}
+            preloadedResource={preloadedResource}
+          />
+        ),
+      );
+    });
+
+    const iframe = document.querySelector("iframe");
+    if (!iframe) throw new Error("iframe did not mount");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: iframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { method: SANDBOX_PROXY_READY },
+        }),
+      );
+    });
+
+    const bridge = bridgeInstances[bridgeInstances.length - 1];
+    if (typeof bridge?.onsizechange !== "function") {
+      throw new Error("onsizechange was not bound after sandbox-ready");
+    }
+    return bridge;
+  }
+
+  function inlineMaxHeightPx(): number {
+    const el = Array.from(document.querySelectorAll<HTMLElement>("*")).find(
+      (e) => e.style.maxHeight !== "",
+    );
+    if (!el) throw new Error("no element carries a max-height style");
+    return Number.parseFloat(el.style.maxHeight);
+  }
+
+  // biome-ignore lint/suspicious/noExplicitAny: reading mock call args
+  function lastGuestContainerDimensions(bridge: any): unknown {
+    const calls = bridge.setHostContext.mock.calls;
+    return calls[calls.length - 1]?.[0]?.containerDimensions;
+  }
+
+  it("caps the inline card at a viewport fraction, well above the legacy 500px", async () => {
+    const bridge = await renderReadyApp(2000);
+
+    await act(async () => {
+      bridge.onsizechange({ height: 700 });
+    });
+
+    expect(inlineMaxHeightPx()).toBe(700);
+    expect(inlineMaxHeightPx()).not.toBe(500);
+  });
+
+  it("clamps a report taller than the ceiling to the ceiling", async () => {
+    const bridge = await renderReadyApp(2000);
+
+    await act(async () => {
+      bridge.onsizechange({ height: 100_000 });
+    });
+
+    // ceiling = round(2000 * 0.6) = 1200
+    expect(inlineMaxHeightPx()).toBe(1200);
+  });
+
+  it("hints the viewport ceiling to the guest, not the legacy 500px", async () => {
+    const bridge = await renderReadyApp(2000);
+    // ceiling = round(2000 * 0.6) = 1200
+    expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
+  });
+
+  it("hints no cap to the guest when the canvas fills the sidebar", async () => {
+    const bridge = await renderReadyApp(2000, { sidebar: true });
+    expect(lastGuestContainerDimensions(bridge)).toEqual({});
+  });
+});
+
+describe("McpAppSection sidebar pinning", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAllAppDiagnostics();
+  });
+
+  // Opens the sidebar canvas host (portalTarget) without selecting any canvas,
+  // so an owned-app section renders its "Show in sidebar" placeholder.
+  function SidebarHost({ target }: { target: HTMLElement }) {
+    const { setPortalTarget } = usePinnedCanvas();
+    useEffect(() => {
+      setPortalTarget(target);
+    }, [setPortalTarget, target]);
+    return null;
+  }
+
+  it("pins an owned-app render into the sidebar canvas host", async () => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+
+    await act(async () => {
+      render(
+        <PinnedCanvasProvider
+          conversationId="conv-1"
+          canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+        >
+          <SidebarHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </PinnedCanvasProvider>,
+      );
+    });
+
+    // Opening the canvas host auto-selects the sole canvas, portaling the live
+    // owned-app iframe into the sidebar target (not left inline).
+    expect(target.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+
+    target.remove();
+  });
+
+  it("keeps the diagnostics badge out of the stretched canvas wrapper when pinned", async () => {
+    // The error badge must not share the fill-container wrapper with the iframe:
+    // that wrapper applies `[&>div]:!h-full`, so a badge inside it gets stretched
+    // to full height and shoves the iframe below the sidebar fold (blank render).
+    reportAppDiagnostic(APP_ID, 1, {
+      type: "csp-violation",
+      message: "script-src blocked eval",
+    });
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+
+    await act(async () => {
+      render(
+        <PinnedCanvasProvider
+          conversationId="conv-1"
+          canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+        >
+          <SidebarHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </PinnedCanvasProvider>,
+      );
+    });
+
+    const iframe = target.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
+    const badge = within(target).getByText(/runtime error/i);
+
+    // The nearest overflow-hidden wrapper of the iframe is the fill-container
+    // clip box that stretches its `> div` children; the badge must sit OUTSIDE
+    // it, or it gets sized to full height and pushes the iframe off-screen.
+    let clipWrapper: HTMLElement | null = iframe?.parentElement ?? null;
+    while (
+      clipWrapper &&
+      clipWrapper !== target &&
+      !clipWrapper.className.includes("overflow-hidden")
+    ) {
+      clipWrapper = clipWrapper.parentElement;
+    }
+    expect(clipWrapper).not.toBeNull();
+    expect(clipWrapper?.contains(badge)).toBe(false);
+
+    target.remove();
+  });
+
+  it("offers a Show in sidebar control for a second, unselected canvas", async () => {
+    const user = userEvent.setup();
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+
+    await act(async () => {
+      render(
+        <PinnedCanvasProvider
+          conversationId="conv-1"
+          canvases={[
+            { toolCallId: "tc1", label: "First App", createdAt: 0 },
+            { toolCallId: "tc2", label: "Second App", createdAt: 1 },
+          ]}
+        >
+          <SidebarHost target={target} />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            toolCallId="tc2"
+            preloadedResource={preloadedResource}
+          />
+        </PinnedCanvasProvider>,
+      );
+    });
+
+    // tc1 auto-selected, so tc2 shows the placeholder control; clicking it
+    // selects tc2 and portals its canvas into the sidebar target.
+    const pinButton = screen.getByRole("button", { name: /show in sidebar/i });
+    expect(target.querySelector("iframe")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(pinButton);
+    });
+
+    expect(target.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+
+    target.remove();
   });
 });
 

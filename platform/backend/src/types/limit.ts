@@ -16,6 +16,7 @@ export const LimitEntityTypeSchema = z.enum([
   "agent",
   "user",
   "virtual_key",
+  "environment",
 ]);
 export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 

@@ -8,12 +8,15 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  AppToolModel,
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -22,6 +25,7 @@ import {
 import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
+import { agentOwner, appOwner } from "@/types";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
@@ -175,13 +179,13 @@ describe("McpClient", () => {
       isError: false,
     });
 
-    await mcpClient.executeToolCall(
+    await mcpClient.executeToolCallForOwner(
       {
         id: "call_invalidate_connection",
         name: "github-mcp-server__list_repos",
         arguments: {},
       },
-      agentId,
+      agentOwner(agentId),
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
@@ -193,13 +197,13 @@ describe("McpClient", () => {
 
     mockConnect.mockClear();
 
-    await mcpClient.executeToolCall(
+    await mcpClient.executeToolCallForOwner(
       {
         id: "call_invalidate_connection_after",
         name: "github-mcp-server__list_repos",
         arguments: {},
       },
-      agentId,
+      agentOwner(agentId),
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
@@ -269,7 +273,100 @@ describe("McpClient", () => {
     expect(mockListResources).toHaveBeenCalledTimes(1);
   });
 
-  describe("executeToolCall", () => {
+  describe("executeToolCallForOwner (app owner)", () => {
+    test("executes an app-assigned tool and persists an app-owned audit row", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__app_list",
+        description: "List",
+        parameters: {},
+        catalogId,
+      });
+      await AppToolModel.create(app.id, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_app_1", name: tool.name, arguments: {} },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(false);
+
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.appId, app.id));
+      expect(row?.ownerType).toBe("app");
+      expect(row?.appId).toBe(app.id);
+      expect(row?.agentId).toBeNull();
+    });
+
+    test("resolves an app tool called by its unprefixed suffix", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__refresh_stats",
+        description: "Refresh",
+        parameters: {},
+        catalogId,
+      });
+      await AppToolModel.create(app.id, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      // Third-party hosts call oncalltool with the raw (unprefixed) tool name.
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_app_suffix", name: "refresh_stats", arguments: {} },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(false);
+    });
+
+    test("fails closed for a tool the app was never assigned", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const result = await mcpClient.executeToolCallForOwner(
+        {
+          id: "call_app_unknown",
+          name: "github-mcp-server__nope",
+          arguments: {},
+        },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(true);
+      expect(
+        (result._meta as { archestraError?: { code?: string } } | undefined)
+          ?.archestraError?.code,
+      ).toBe("unknown_tool");
+
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.appId, app.id));
+      expect(row?.ownerType).toBe("app");
+      expect(row?.agentId).toBeNull();
+    });
+  });
+
+  describe("executeToolCallForOwner", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {
         id: "call_123",
@@ -277,7 +374,10 @@ describe("McpClient", () => {
         arguments: { param: "value" },
       };
 
-      const result = await mcpClient.executeToolCall(toolCall, agentId);
+      const result = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(result).toMatchObject({
         id: "call_123",
         isError: true,
@@ -308,13 +408,13 @@ describe("McpClient", () => {
         content: [{ type: "text", text: "ok" }],
       });
 
-      const result = await mcpClient.executeToolCall(
+      const result = await mcpClient.executeToolCallForOwner(
         {
           id: "call_extensions",
           name: tool.name,
           arguments: {},
         },
-        agentId,
+        agentOwner(agentId),
       );
 
       expect(result.isError).toBe(false);
@@ -360,13 +460,13 @@ describe("McpClient", () => {
         content: [{ type: "text", text: "ok" }],
       });
 
-      const result = await mcpClient.executeToolCall(
+      const result = await mcpClient.executeToolCallForOwner(
         {
           id: "call_elicitation",
           name: tool.name,
           arguments: {},
         },
-        agentId,
+        agentOwner(agentId),
         undefined,
         {
           elicitationHandler: async () => ({
@@ -432,13 +532,13 @@ describe("McpClient", () => {
         // Spy on secretManager to count calls
         const getSecretSpy = vi.spyOn(secretManager(), "getSecret");
 
-        const resultA = await mcpClient.executeToolCall(
+        const resultA = await mcpClient.executeToolCallForOwner(
           { id: "call_a", name: "github-mcp-server__tool_a", arguments: {} },
-          agentId,
+          agentOwner(agentId),
         );
-        const resultB = await mcpClient.executeToolCall(
+        const resultB = await mcpClient.executeToolCallForOwner(
           { id: "call_b", name: "github-mcp-server__tool_b", arguments: {} },
-          agentId,
+          agentOwner(agentId),
         );
 
         expect(resultA.isError).toBe(false);
@@ -475,7 +575,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+        const firstResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(firstResult.isError).toBe(false);
         expect(getSecretSpy).toHaveBeenCalledTimes(1);
 
@@ -487,11 +590,294 @@ describe("McpClient", () => {
           secretId: rotatedSecret.id,
         });
 
-        const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+        const secondResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(secondResult.isError).toBe(false);
         expect(getSecretSpy).toHaveBeenCalledTimes(2);
 
         getSecretSpy.mockRestore();
+      });
+
+      test("resolves and executes a tool without the heavy server-detail lookup", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__lightweight_resolution",
+          description: "Lightweight resolution tool",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        // findById() performs a 4-table join plus a per-server mcp_server_user
+        // lookup; the tool-execution hot path must not pay that cost since it
+        // only needs base columns (name/secretId). Resolving with the heavier
+        // query is what produced the N+1 under repeated tool calls.
+        const findByIdSpy = vi.spyOn(McpServerModel, "findById");
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_lightweight", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(findByIdSpy).not.toHaveBeenCalled();
+
+        findByIdSpy.mockRestore();
+      });
+    });
+
+    // The catalog item defines how agents connect when credentials resolve at
+    // call time: NULL = the caller's own connection, falling back to a team or
+    // org connection it can access; a pinned mcp_servers.id = a service account
+    // every call uses regardless of the caller.
+    describe("agent connections (catalog dynamic-connection policy)", () => {
+      async function makeDynamicCatalogTool() {
+        const catalogItem = await InternalMcpCatalogModel.create({
+          name: `connected-server-${randomUUID().slice(0, 8)}`,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Connection-policy tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+        return { catalogItem, tool };
+      }
+
+      function userToken(userId: string, organizationId: string) {
+        return {
+          tokenId: "tok-user",
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId,
+          organizationId,
+        };
+      }
+
+      test("resolve at call time falls back to a team connection the user can access", async ({
+        makeMember,
+        makeOrganization,
+        makeTeam,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, user.id);
+        const { TeamModel } = await import("@/models");
+        await TeamModel.addMember(team.id, user.id, "member");
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        // The user has not connected their own account, but a connection for a
+        // team they belong to exists — resolution falls back to it.
+        await McpServerModel.create({
+          name: `${catalogItem.name}-team`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          teamId: team.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via team connection" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("resolve at call time uses the caller's own connection", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via own connection" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("a pinned service-account connection is used for any caller", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const serviceAccount = await McpServerModel.create({
+          name: `${catalogItem.name}-org`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          scope: "org",
+        });
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: serviceAccount.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via service account" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("a revoked pinned connection degrades to resolve at call time", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        // Pin points at a connection that no longer exists; the caller's own
+        // connection takes over.
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: randomUUID(),
+        });
+        await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via own connection" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
+        makeAgent,
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        // Agent in "All tools" mode (access_all_tools = true).
+        const allAgent = await makeAgent({
+          name: "All Tools Agent",
+          organizationId: org.id,
+          scope: "org",
+          accessAllTools: true,
+        });
+
+        const catalogItem = await InternalMcpCatalogModel.create({
+          name: `connected-server-${randomUUID().slice(0, 8)}`,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Connection-policy tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        const orgServer = await McpServerModel.create({
+          name: `${catalogItem.name}-org`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          scope: "org",
+        });
+        const pinnedAwayServer = await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        // Catalog pins the service account to the org connection...
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: orgServer.id,
+        });
+        // ...but a leftover static assignment pins the tool elsewhere.
+        await AgentToolModel.create(allAgent.id, tool.id, {
+          mcpServerId: pinnedAwayServer.id,
+          credentialResolutionMode: "static",
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via org service account" }],
+          isError: false,
+        });
+        // The resolved target server is the one whose secrets get loaded, so
+        // observe resolution through the lightweight server lookup the secrets
+        // path performs for the chosen target.
+        const findByIdsBasicSpy = vi.spyOn(McpServerModel, "findByIdsBasic");
+
+        const result = await mcpClient.executeToolCallForOwner(
+          { id: "call_all_mode", name: tool.name, arguments: {} },
+          agentOwner(allAgent.id),
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        // Resolved via the catalog's org pin, not the static assignment's server.
+        expect(findByIdsBasicSpy).toHaveBeenCalledWith([orgServer.id]);
+        expect(findByIdsBasicSpy).not.toHaveBeenCalledWith([
+          pinnedAwayServer.id,
+        ]);
       });
     });
 
@@ -524,13 +910,19 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+        const firstResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(firstResult.isError).toBe(false);
         expect(mockConnect).toHaveBeenCalledTimes(1);
 
         await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 1);
 
-        const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+        const secondResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(secondResult.isError).toBe(false);
 
         expect(mockConnect).toHaveBeenCalledTimes(2);
@@ -566,7 +958,10 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
 
@@ -576,7 +971,10 @@ describe("McpClient", () => {
       );
       await McpServerModel.update(mcpServerId, { secretId: rotatedSecret.id });
 
-      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockClose).toHaveBeenCalledTimes(1);
       expect(mockConnect).toHaveBeenCalledTimes(2);
@@ -608,7 +1006,10 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
 
@@ -616,7 +1017,10 @@ describe("McpClient", () => {
         oauthRefreshError: "refresh_failed",
       });
 
-      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockClose).toHaveBeenCalledTimes(0);
       expect(mockConnect).toHaveBeenCalledTimes(1);
@@ -648,14 +1052,20 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
 
       mockPing.mockClear();
 
-      const secondResult = await mcpClient.executeToolCall(toolCall, agentId);
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
@@ -717,7 +1127,10 @@ describe("McpClient", () => {
             arguments: {},
           };
 
-          const result = await mcpClient.executeToolCall(toolCall, agentId);
+          const result = await mcpClient.executeToolCallForOwner(
+            toolCall,
+            agentOwner(agentId),
+          );
 
           expect(runWithLimitSpy).toHaveBeenCalled();
           expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(4);
@@ -810,7 +1223,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify HTTP transport was detected
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -855,7 +1271,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify error result
 
@@ -922,7 +1341,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -993,7 +1415,10 @@ describe("McpClient", () => {
             arguments: {},
           };
 
-          const result = await mcpClient.executeToolCall(toolCall, agentId);
+          const result = await mcpClient.executeToolCallForOwner(
+            toolCall,
+            agentOwner(agentId),
+          );
 
           expect(runWithLimitSpy).toHaveBeenCalled();
           expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(1);
@@ -1037,7 +1462,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify the tool was called with just the tool name (stripped using catalogName)
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1089,7 +1517,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify stripping worked using mcpServerName fallback
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1131,7 +1562,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify the tool name was not mangled since no prefix matched
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1155,7 +1589,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result).toMatchObject({
           id: "call_error_content",
@@ -1203,12 +1640,16 @@ describe("McpClient", () => {
           arguments: { query: "test" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         // Should return an error with the install URL
         expect(result).toMatchObject({
@@ -1283,11 +1724,15 @@ describe("McpClient", () => {
           arguments: { key: "PROJ-1" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({
           isError: true,
@@ -1357,11 +1802,15 @@ describe("McpClient", () => {
         };
 
         // Call with teamMember's team token - serverOwner is NOT in this team
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token-no-cred",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token-no-cred",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -1431,12 +1880,16 @@ describe("McpClient", () => {
           arguments: { title: "Test issue" },
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "invoker-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: invokingUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "invoker-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: invokingUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -1457,7 +1910,7 @@ describe("McpClient", () => {
         });
       });
 
-      test("resolves org-scoped server for user when no personal or team server exists", async ({
+      test("resolves the pinned org service account when the user has no connection", async ({
         makeUser,
         makeOrganization,
         makeMember,
@@ -1478,13 +1931,18 @@ describe("McpClient", () => {
           "linear-org-secret",
         );
 
-        await McpServerModel.create({
+        const orgServer = await McpServerModel.create({
           name: "linear-org",
           catalogId: dynCatalog.id,
           secretId: orgSecret.id,
           serverType: "remote",
           ownerId: admin.id,
           scope: "org",
+        });
+        // The org install only serves other callers when pinned as the
+        // catalog's service-account connection.
+        await InternalMcpCatalogModel.update(dynCatalog.id, {
+          dynamicConnectionMcpServerId: orgServer.id,
         });
 
         const tool = await ToolModel.createToolIfNotExists({
@@ -1506,13 +1964,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_org_scope",
             name: "linear-org__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "user-token",
             teamId: null,
@@ -1599,13 +2057,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_priority",
             name: "linear-priority__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "user-token",
             teamId: null,
@@ -1698,13 +2156,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_enterprise_external_jwt",
             name: "enterprise external jwt demo__debug-auth-token",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "external-token",
             teamId: null,
@@ -1837,13 +2295,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_linked_secondary_idp",
             name: "entra protected api__query_codebase",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
             teamId: null,
@@ -1948,13 +2406,13 @@ describe("McpClient", () => {
           credentialResolutionMode: "enterprise_managed",
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_missing_downstream_idp",
             name: "entra protected api__query_codebase",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: `external_idp:${oktaIdentityProvider.id}:okta-sub`,
             teamId: null,
@@ -2067,13 +2525,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_enterprise_managed",
             name: "github-mcp-server__managed_tool",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "session-token",
             teamId: null,
@@ -2182,13 +2640,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_stale_static",
             name: "github-mcp-server__stale_static_tool",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "session-token",
             teamId: null,
@@ -2295,13 +2753,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const firstResult = await mcpClient.executeToolCall(
+        const firstResult = await mcpClient.executeToolCallForOwner(
           {
             id: "call_enterprise_managed_cache_1",
             name: "github-mcp-server__managed_cache_tool",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "session-token",
             teamId: null,
@@ -2310,13 +2768,13 @@ describe("McpClient", () => {
           },
           { conversationId: "enterprise-managed-cache-conv" },
         );
-        const secondResult = await mcpClient.executeToolCall(
+        const secondResult = await mcpClient.executeToolCallForOwner(
           {
             id: "call_enterprise_managed_cache_2",
             name: "github-mcp-server__managed_cache_tool",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "session-token",
             teamId: null,
@@ -2386,13 +2844,13 @@ describe("McpClient", () => {
           credentialResolutionMode: "enterprise_managed",
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_missing_enterprise_assertion",
             name: "keycloak protected demo__whoami",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "session-token",
             teamId: null,
@@ -2502,13 +2960,13 @@ describe("McpClient", () => {
             isError: false,
           });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_tool_error_refresh",
             name: "jira-oauth-server__get_issue",
             arguments: { issue_key: "CTAZ-1015" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "test-token",
             teamId: null,
@@ -2590,13 +3048,13 @@ describe("McpClient", () => {
           isError: true,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_tool_error_access_denied",
             name: "jira-oauth-access-denied-server__get_issue",
             arguments: { issue_key: "CTAZ-1015" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "test-token",
             teamId: null,
@@ -2682,13 +3140,13 @@ describe("McpClient", () => {
           isError: true,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_tool_error_bearer_guidance",
             name: "jira-oauth-bearer-guidance-server__get_issue",
             arguments: { issue_key: "CTAZ-1015" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "test-token",
             teamId: null,
@@ -2778,13 +3236,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_proactive_refresh",
             name: "jira-proactive-server__get_issue",
             arguments: { issue_key: "CTAZ-1015" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "test-token",
             teamId: null,
@@ -2865,13 +3323,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_proactive_refresh_fallback",
             name: "jira-proactive-fallback-server__get_issue",
             arguments: { issue_key: "CTAZ-1015" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "test-token",
             teamId: null,
@@ -2948,13 +3406,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_oauth_concurrent_seed",
             name: "jira-concurrent-server__get_issue",
             arguments: { issue_key: "CTAZ-1014" },
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "seed-token",
             teamId: null,
@@ -3003,15 +3461,15 @@ describe("McpClient", () => {
         };
 
         const results = await Promise.all([
-          mcpClient.executeToolCall(toolCall, agentId, {
+          mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
             tokenId: "test-token-1",
             teamId: null,
             isOrganizationToken: false,
             userId: testUser.id,
           }),
-          mcpClient.executeToolCall(
+          mcpClient.executeToolCallForOwner(
             { ...toolCall, id: "call_oauth_concurrent_refresh_2" },
-            agentId,
+            agentOwner(agentId),
             {
               tokenId: "test-token-2",
               teamId: null,
@@ -3019,9 +3477,9 @@ describe("McpClient", () => {
               userId: testUser.id,
             },
           ),
-          mcpClient.executeToolCall(
+          mcpClient.executeToolCallForOwner(
             { ...toolCall, id: "call_oauth_concurrent_refresh_3" },
-            agentId,
+            agentOwner(agentId),
             {
               tokenId: "test-token-3",
               teamId: null,
@@ -3104,12 +3562,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3194,12 +3656,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3260,12 +3726,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         // Non-OAuth servers with existing credentials should get expired-auth message
@@ -3334,12 +3804,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3414,11 +3888,15 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId, {
-          tokenId: "team-token",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3513,13 +3991,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_stored_endpoint",
             name: "stale-session-server__stored_endpoint",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           undefined,
           { conversationId: "conv-1" },
         );
@@ -3572,7 +4050,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should succeed after retry
         expect(result).toMatchObject({
@@ -3627,7 +4108,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should return error (no infinite retry loop)
         expect(result).toMatchObject({
@@ -3688,7 +4172,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should succeed after retry
         expect(result).toMatchObject({
@@ -3738,7 +4225,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId);
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Verify callTool was called with the original camelCase name
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -3775,7 +4262,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId);
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         expect(mockCallTool).toHaveBeenCalledWith({
           name: "GetRepository",
@@ -3809,7 +4296,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId);
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to the lowercased stripped name
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -3846,7 +4333,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId);
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         // Falls back to stripped name since no match found
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -3883,7 +4370,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId);
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
 
         expect(mockCallTool).toHaveBeenCalledWith({
           name: "search_issues",
@@ -3918,7 +4405,7 @@ describe("McpClient", () => {
         };
 
         // Call with JWKS tokenAuth — the gateway has both the JWT and upstream credentials
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "ext-token",
           teamId: null,
           isOrganizationToken: false,
@@ -3978,7 +4465,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "ext-token",
           teamId: null,
           isOrganizationToken: false,
@@ -4043,7 +4530,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "ext-token",
           teamId: null,
           isOrganizationToken: false,
@@ -4111,13 +4598,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_custom_header_auth",
             name: "custom-header-server__list_items",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
         );
 
         const { StreamableHTTPClientTransport } = await import(
@@ -4177,13 +4664,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_lowercase_authorization",
             name: "lowercase-authorization-server__list_items",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
         );
 
         const { StreamableHTTPClientTransport } = await import(
@@ -4245,13 +4732,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_legacy_bearer_auth",
             name: "legacy-bearer-server__list_items",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
         );
 
         const { StreamableHTTPClientTransport } = await import(
@@ -4320,13 +4807,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_multi_header_auth",
             name: "multi-header-server__get_info",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
         );
 
         const { StreamableHTTPClientTransport } = await import(
@@ -4364,7 +4851,7 @@ describe("McpClient", () => {
         };
 
         // Call with standard (non-JWKS) tokenAuth — isExternalIdp is false
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "user-token",
           teamId: null,
           isOrganizationToken: false,
@@ -4441,7 +4928,7 @@ describe("McpClient", () => {
         };
 
         // Call with JWKS tokenAuth, userId matching the server owner
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "ext-dynamic-token",
           teamId: null,
           isOrganizationToken: false,
@@ -4522,7 +5009,7 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        await mcpClient.executeToolCall(toolCall, agentId, {
+        await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
           tokenId: "ext-local-token",
           teamId: null,
           isOrganizationToken: false,
@@ -4572,7 +5059,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         // The tool name should be rewritten to the full prefixed name
@@ -4587,7 +5077,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(true);
         expect(result.error).toContain("No tool named");
@@ -4612,13 +5105,13 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "ok" }],
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_passthrough_1",
             name: "github-mcp-server__passthrough_test",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "tok-1",
             teamId: null,
@@ -4659,13 +5152,13 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "ok" }],
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_passthrough_2",
             name: "github-mcp-server__passthrough_no_override",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "tok-1",
             teamId: null,
@@ -5079,13 +5572,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_1",
             name: "shared-client-credentials-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5218,13 +5711,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_cache_1",
             name: "shared-client-credentials-cache-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5232,13 +5725,13 @@ describe("McpClient", () => {
             userId: user.id,
           },
         );
-        await mcpClient.executeToolCall(
+        await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_cache_2",
             name: "shared-client-credentials-cache-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5343,13 +5836,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_no_audience_1",
             name: "shared-client-credentials-no-audience-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5482,13 +5975,13 @@ describe("McpClient", () => {
             isError: false,
           });
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_retry_1",
             name: "shared-client-credentials-retry-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5603,13 +6096,13 @@ describe("McpClient", () => {
           }),
         );
 
-        const result = await mcpClient.executeToolCall(
+        const result = await mcpClient.executeToolCallForOwner(
           {
             id: "call_client_credentials_error_1",
             name: "shared-client-credentials-error-server__list_projects",
             arguments: {},
           },
-          agentId,
+          agentOwner(agentId),
           {
             tokenId: "token-1",
             teamId: null,
@@ -5653,7 +6146,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         expect(result._meta).toEqual(toolMeta);
@@ -5684,7 +6180,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         expect(result.structuredContent).toEqual(structured);
@@ -5708,3 +6207,102 @@ function base64UrlEncode(value: unknown): string {
 function futureExpSeconds(secondsFromNow: number = 3600): number {
   return Math.floor(Date.now() / 1000) + secondsFromNow;
 }
+
+describe("connectAndGetTools network egress enforcement", () => {
+  test("blocks a remote server whose host is forbidden by its environment policy", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "locked",
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["allowed.example.com"],
+        allowedCidrs: [],
+      },
+    });
+    // Seeded directly via the model (grandfathered): a remote server pointing at
+    // a host the policy forbids, as if the env policy was tightened after it was
+    // created. The create/edit-time check never re-ran for it.
+    const catalogItem = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: env.id,
+      serverType: "remote",
+      serverUrl: "https://blocked.example.com/mcp",
+    });
+
+    mockConnect.mockClear();
+
+    await expect(
+      mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId: randomUUID(),
+        secrets: {},
+      }),
+    ).rejects.toThrow(/not permitted by the "locked" environment/);
+
+    // The guard fails the call before any connection is attempted.
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  test("blocks a tool call (the chat/gateway path) on a forbidden remote host", async ({
+    makeOrganization,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    // Chat-UI tool calls run through the MCP Gateway, which executes via
+    // executeToolCallForOwner — the same getTransport chokepoint as inspection.
+    // This proves that path is guarded too (chat-mcp-client needs no change).
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "locked",
+      networkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["allowed.example.com"],
+        allowedCidrs: [],
+      },
+    });
+    const catalogItem = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: env.id,
+      serverType: "remote",
+      serverUrl: "https://blocked.example.com/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      catalogId: catalogItem.id,
+      scope: "org",
+    });
+    // The agent must share the catalog's environment, otherwise environment
+    // isolation blocks the call before the network-policy guard under test.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      environmentId: env.id,
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "blocked-remote__do_thing",
+      description: "do thing",
+      parameters: {},
+      catalogId: catalogItem.id,
+    });
+    await AgentToolModel.create(agent.id, tool.id, {
+      mcpServerId: mcpServer.id,
+    });
+
+    mockConnect.mockClear();
+
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "call_blocked", name: tool.name, arguments: {} },
+      agentOwner(agent.id),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.error).toContain('not permitted by the "locked" environment');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+});

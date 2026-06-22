@@ -7,6 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+import projectsTable from "./project";
 import usersTable from "./user";
 
 const scheduleTriggersTable = pgTable(
@@ -18,6 +19,14 @@ const scheduleTriggersTable = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
+    /**
+     * Owning project (projects feature). Required at the API layer when the
+     * projects flag is on; null for legacy/flag-off triggers. SET NULL on
+     * project delete so the trigger survives as an unscoped one.
+     */
+    projectId: uuid("project_id").references(() => projectsTable.id, {
+      onDelete: "set null",
+    }),
     messageTemplate: text("message_template").notNull(),
     cronExpression: text("cron_expression").notNull(),
     timezone: text("timezone").notNull(),
@@ -35,6 +44,7 @@ const scheduleTriggersTable = pgTable(
   },
   (table) => [
     index("schedule_triggers_agent_id_idx").on(table.agentId),
+    index("schedule_triggers_project_id_idx").on(table.projectId),
     index("schedule_triggers_actor_user_id_idx").on(table.actorUserId),
     index("schedule_triggers_enabled_last_executed_at_idx").on(
       table.enabled,

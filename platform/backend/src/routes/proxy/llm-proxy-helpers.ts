@@ -44,6 +44,22 @@ export function toSpanUserInfo(
 }
 
 /**
+ * Whether to forward the inbound `anthropic-beta` header to the upstream.
+ *
+ * The Anthropic SDK auto-adds beta flags (e.g. `pdfs-2024-09-25`) that are
+ * proprietary to genuine Anthropic. An Anthropic-compatible endpoint (a custom
+ * base URL serving a non-Claude model) rejects them with a turn-0 400. Forward
+ * for real Anthropic (no base-URL override) and for Claude proxied behind a
+ * custom URL (model name still reads `claude`); strip otherwise.
+ */
+export function shouldForwardAnthropicBeta(
+  model: string,
+  baseUrlOverridden: boolean,
+): boolean {
+  return !baseUrlOverridden || /claude/i.test(model);
+}
+
+/**
  * Normalize tool calls from either streaming or non-streaming responses
  * into the shape expected by `evaluatePolicies`.
  *
@@ -82,6 +98,7 @@ export async function calculateInteractionCosts(params: {
   actualCost: number | undefined;
   cacheCost: number | undefined;
   cacheSavings: number | undefined;
+  cacheReadSavings: number | undefined;
 }> {
   const cacheTokens = {
     readTokens: params.usage.cacheReadTokens ?? 0,
@@ -114,6 +131,7 @@ export async function calculateInteractionCosts(params: {
     actualCost,
     cacheCost: cacheBreakdown?.cacheCost,
     cacheSavings: cacheBreakdown?.cacheSavings,
+    cacheReadSavings: cacheBreakdown?.cacheReadSavings,
   };
 }
 
@@ -178,6 +196,7 @@ export function buildInteractionRecord(params: {
     outputTokens: params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
+    cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
     baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
     cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,

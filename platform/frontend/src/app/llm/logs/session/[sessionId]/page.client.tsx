@@ -90,6 +90,12 @@ export default function SessionDetailPage({
   const totalOutputTokens =
     sessionData?.totalOutputTokens ??
     interactions.reduce((sum, i) => sum + (i.outputTokens ?? 0), 0);
+  const totalCacheReadTokens =
+    sessionData?.totalCacheReadTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheReadTokens ?? 0), 0);
+  const totalCacheWriteTokens =
+    sessionData?.totalCacheWriteTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheWriteTokens ?? 0), 0);
   const models = sessionData?.models ?? [
     ...new Set(interactions.map((i) => i.model).filter(Boolean)),
   ];
@@ -211,6 +217,12 @@ export default function SessionDetailPage({
             {totalInputTokens.toLocaleString()} in /{" "}
             {totalOutputTokens.toLocaleString()} out
           </div>
+          {(totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) && (
+            <div className="font-mono text-xs text-muted-foreground">
+              {totalCacheReadTokens.toLocaleString()} cache read /{" "}
+              {totalCacheWriteTokens.toLocaleString()} cache write
+            </div>
+          )}
         </MetadataItem>
         <MetadataItem label="Total Cost">
           <div className="font-mono">

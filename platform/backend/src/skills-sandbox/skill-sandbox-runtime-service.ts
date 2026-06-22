@@ -3,6 +3,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   ConversationAttachmentModel,
+  FileNameExistsError,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -18,6 +19,8 @@ import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-read
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
+import { readRowBytes, storageFilename } from "./file-storage";
+import { fileStore } from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -92,7 +95,7 @@ class SkillSandboxRuntimeService {
 
   async runCommand(params: RunCommandParams): Promise<CommandResult> {
     this.ensureEnabled();
-    validateCommand(params.command);
+    validateCommand(params.command, params.cwd ?? null);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
@@ -112,6 +115,7 @@ class SkillSandboxRuntimeService {
           cwd,
           timeoutSeconds,
           replayEntries,
+          environment: params.environment,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
@@ -161,22 +165,37 @@ class SkillSandboxRuntimeService {
           timeoutSeconds,
         });
       } catch (dbError) {
+        // never surface the raw driver error: it embeds the full INSERT SQL and
+        // every parameter (command text + stdout) and is unparseable to the
+        // model. Keep the detail in the log; hand the agent an actionable line.
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist command result",
+        );
         throw new SkillSandboxError(
-          `failed to persist command result: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The command ran but its output could not be saved due to an internal storage error. Try running it again; redirect large or binary output to a file and fetch it with download_file.",
         );
       }
+
+      // appendCommand strips NUL bytes that Postgres `text` columns reject, so
+      // binary piped to stdout no longer crashes the insert. Return the
+      // persisted values (what was actually stored) and flag when stripping
+      // changed the output, so the model can be told its text is incomplete.
+      const binaryStripped =
+        row.stdout !== executed.stdout || row.stderr !== executed.stderr;
 
       return {
         commandId: row.id,
         sandboxId: params.sandboxId,
         command: params.command,
         cwd: params.cwd ?? null,
-        stdout: executed.stdout,
-        stderr: executed.stderr,
+        stdout: row.stdout,
+        stderr: row.stderr,
         exitCode: executed.exitCode,
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,
         truncated: executed.truncated,
+        binaryStripped,
         stagingNotices,
       };
     });
@@ -203,6 +222,7 @@ class SkillSandboxRuntimeService {
           replayEntries,
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
+          environment: params.environment,
           // must match runCommand's limit: the command supervisor takes
           // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
           // here invalidates Dagger's per-replay layer cache.
@@ -220,26 +240,37 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof SkillSandboxFileModel.createArtifact>>;
+      let row: Awaited<ReturnType<typeof fileStore.put>>;
       try {
-        row = await SkillSandboxFileModel.createArtifact({
+        row = await fileStore.put({
+          organizationId: sandbox.organizationId,
+          userId: sandbox.userId,
+          projectId: params.projectId ?? null,
+          conversationId: sandbox.conversationId,
           sandboxId: params.sandboxId,
-          path: resolvedPath,
+          filename: storageFilename({ originalName: null, path: resolvedPath }),
           mimeType,
-          originalName: null,
           sizeBytes: data.byteLength,
           data,
         });
       } catch (dbError) {
+        // A name collision is a real, actionable conflict — surface it typed so
+        // the caller renders a non-retryable "already exists" message instead of
+        // masking it as a generic, retryable storage error.
+        if (dbError instanceof FileNameExistsError) throw dbError;
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist artifact",
+        );
         throw new SkillSandboxError(
-          `failed to persist artifact: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The file could not be saved due to an internal storage error. Try the operation again.",
         );
       }
 
       return {
         artifactId: row.id,
         sandboxId: params.sandboxId,
-        path: row.path,
+        path: resolvedPath,
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
         stagingNotices,
@@ -287,16 +318,22 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxReplayEventModel.appendUpload({
           sandboxId: params.sandboxId,
+          userId: sandbox.userId,
           path: resolvedPath,
           mimeType,
           originalName: params.originalName ?? null,
           sizeBytes: params.data.byteLength,
           data: params.data,
           sourceAttachmentId: params.dedupeId ?? null,
+          origin: params.origin ?? null,
         });
       } catch (dbError) {
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to persist upload",
+        );
         throw new SkillSandboxError(
-          `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The uploaded file could not be saved due to an internal storage error. Try the upload again.",
         );
       }
       // null means the ON CONFLICT index fired and the insert was a no-op.
@@ -380,8 +417,12 @@ class SkillSandboxRuntimeService {
           installCommands,
         });
       } catch (dbError) {
+        logger.error(
+          { err: dbError, sandboxId: params.sandboxId },
+          "[SkillSandbox] failed to mount skill",
+        );
         throw new SkillSandboxError(
-          `failed to mount skill: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          "The skill could not be mounted due to an internal storage error. Try loading the skill again.",
         );
       }
       // already mounted: ON CONFLICT made the insert a no-op.
@@ -521,13 +562,16 @@ class SkillSandboxRuntimeService {
     replayEntries: ReplayEntry[];
   }> {
     const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
-    return {
-      // uniform, ordered replay: every command (including per-skill
-      // requirements-install steps), every uploaded file, and every skill mount
-      // lives in one sequenced log. interleaving is preserved so each step
-      // materializes at exactly its sequence point. an empty log is valid — a
-      // freshly-created default sandbox is just a plain shell.
-      replayEntries: log.map((entry): ReplayEntry => {
+    // uniform, ordered replay: every command (including per-skill
+    // requirements-install steps), every uploaded file, and every skill mount
+    // lives in one sequenced log. interleaving is preserved so each step
+    // materializes at exactly its sequence point. an empty log is valid — a
+    // freshly-created default sandbox is just a plain shell.
+    // allSettled, not all: a storage read failure (e.g. an upload file removed
+    // from the storage folder) must fail the run — but with every unreadable
+    // file reported at once and no abandoned sibling reads.
+    const settled = await Promise.allSettled(
+      log.map(async (entry): Promise<ReplayEntry> => {
         switch (entry.kind) {
           case "command":
             return {
@@ -548,7 +592,7 @@ class SkillSandboxRuntimeService {
               file: {
                 path: entry.upload.path,
                 encoding: "base64",
-                content: entry.upload.data.toString("base64"),
+                content: (await readRowBytes(entry.upload)).toString("base64"),
               },
             };
           case "skill_mount":
@@ -582,6 +626,28 @@ class SkillSandboxRuntimeService {
             );
         }
       }),
+    );
+    const failures = settled.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      const reasons = failures.map((failure) =>
+        failure.reason instanceof Error
+          ? failure.reason.message
+          : String(failure.reason),
+      );
+      logger.warn(
+        { sandboxId: sandbox.id, reasons },
+        "[SkillSandbox] replay inputs could not be read",
+      );
+      throw new SkillSandboxError(
+        `cannot replay sandbox: ${failures.length} replay input(s) unreadable: ${reasons.join("; ")}`,
+      );
+    }
+    return {
+      replayEntries: settled.map(
+        (result) => (result as PromiseFulfilledResult<ReplayEntry>).value,
+      ),
     };
   }
 
@@ -689,9 +755,16 @@ function shouldRecordOnFailure(error: unknown): boolean {
   return error.code === "ARCHESTRA_INTERNAL";
 }
 
-function validateCommand(command: string): void {
+function validateCommand(command: string, cwd: string | null): void {
   if (!command.trim()) {
     throw new SkillSandboxError("command must be a non-empty string");
+  }
+  // Reject NUL in the inputs up front: a `text` column can't store it, and
+  // silently stripping it would replay a different command than ran. stdout/
+  // stderr are stripped instead (they legitimately carry binary) — see
+  // SkillSandboxReplayEventModel.appendCommand.
+  if (command.includes("\0") || cwd?.includes("\0")) {
+    throw new SkillSandboxError("command and cwd must not contain NUL bytes");
   }
   if (
     Buffer.byteLength(command, "utf8") > SKILL_SANDBOX_LIMITS.maxCommandBytes
@@ -908,6 +981,7 @@ async function stageConversationAttachments(
     validateUploadPath(path);
     await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: sandbox.userId,
       path,
       mimeType: full.mimeType,
       originalName: full.originalName,

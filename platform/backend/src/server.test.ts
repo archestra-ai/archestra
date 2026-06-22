@@ -26,13 +26,8 @@ vi.mock("@sentry/node", async (importOriginal) => {
 
 import config from "@/config";
 // Import after mock setup
-import { isDatabaseHealthy } from "@/database";
 import healthRoutes from "@/routes/health";
-import {
-  buildCspHeader,
-  createFastifyInstance,
-  sanitizeCspDomains,
-} from "./server";
+import { createFastifyInstance } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -42,150 +37,29 @@ const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
 
 describe("createFastifyInstance", () => {
   describe("error handling", () => {
-    test("handles ApiError with 400 status code", async () => {
+    test.each([
+      [400, "Validation failed", "api_validation_error"],
+      [401, "Unauthenticated", "api_authentication_error"],
+      [403, "Forbidden", "api_authorization_error"],
+      [404, "Not found", "api_not_found_error"],
+      [500, "Internal server error", "api_internal_server_error"],
+      [409, "Resource conflict", "api_conflict_error"],
+      [418, "I'm a teapot", "unknown_api_error"],
+    ])("maps ApiError %i to its error type", async (statusCode, message, type) => {
       const app = createFastifyInstance();
 
-      app.get("/test-400", async () => {
-        throw new ApiError(400, "Validation failed");
+      app.get(`/test-${statusCode}`, async () => {
+        throw new ApiError(statusCode, message);
       });
 
       const response = await app.inject({
         method: "GET",
-        url: "/test-400",
+        url: `/test-${statusCode}`,
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(statusCode);
       expect(response.json()).toEqual({
-        error: {
-          message: "Validation failed",
-          type: "api_validation_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 401 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-401", async () => {
-        throw new ApiError(401, "Unauthenticated");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-401",
-      });
-
-      expect(response.statusCode).toBe(401);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Unauthenticated",
-          type: "api_authentication_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 403 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-403", async () => {
-        throw new ApiError(403, "Forbidden");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-403",
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Forbidden",
-          type: "api_authorization_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 404 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-404", async () => {
-        throw new ApiError(404, "Not found");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-404",
-      });
-
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Not found",
-          type: "api_not_found_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 500 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-500", async () => {
-        throw new ApiError(500, "Internal server error");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-500",
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Internal server error",
-          type: "api_internal_server_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 409 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-409", async () => {
-        throw new ApiError(409, "Resource conflict");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-409",
-      });
-
-      expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Resource conflict",
-          type: "api_conflict_error",
-        },
-      });
-    });
-
-    test("handles ApiError with unknown status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-unknown", async () => {
-        throw new ApiError(418, "I'm a teapot");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-unknown",
-      });
-
-      expect(response.statusCode).toBe(418);
-      expect(response.json()).toEqual({
-        error: {
-          message: "I'm a teapot",
-          type: "unknown_api_error",
-        },
+        error: { message, type },
       });
     });
 
@@ -734,14 +608,6 @@ describe("createFastifyInstance", () => {
   });
 });
 
-describe("isDatabaseHealthy", () => {
-  test("returns true when database is reachable", async () => {
-    // Using PGlite in tests, the database should be healthy
-    const result = await isDatabaseHealthy();
-    expect(result).toBe(true);
-  });
-});
-
 describe("health endpoints", () => {
   describe("/health endpoint", () => {
     test("returns 200 with application info", async () => {
@@ -824,129 +690,5 @@ describe("health endpoints", () => {
         config.maintenanceMode = originalMaintenanceMode;
       }
     });
-  });
-});
-
-describe("sanitizeCspDomains", () => {
-  test("returns empty array for undefined input", () => {
-    expect(sanitizeCspDomains(undefined)).toEqual([]);
-  });
-
-  test("returns empty array for empty input", () => {
-    expect(sanitizeCspDomains([])).toEqual([]);
-  });
-
-  test("passes through valid domain names", () => {
-    expect(
-      sanitizeCspDomains([
-        "example.com",
-        "*.cdn.net",
-        "https://api.example.com",
-      ]),
-    ).toEqual(["example.com", "*.cdn.net", "https://api.example.com"]);
-  });
-
-  test("rejects domains containing semicolons", () => {
-    expect(sanitizeCspDomains(["good.com", "bad.com;evil.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing newlines", () => {
-    expect(sanitizeCspDomains(["good.com", "bad\n.com", "bad\r.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing single quotes", () => {
-    expect(sanitizeCspDomains(["good.com", "'unsafe-eval'"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing double quotes", () => {
-    expect(sanitizeCspDomains(["good.com", '"injected"'])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing spaces", () => {
-    expect(sanitizeCspDomains(["good.com", "bad domain.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-});
-
-describe("buildCspHeader", () => {
-  test("returns default CSP when no config is provided", () => {
-    const header = buildCspHeader(undefined);
-    expect(header).toContain("default-src 'none'");
-    expect(header).toContain("frame-src 'none'");
-    expect(header).toContain("object-src 'none'");
-    expect(header).toContain("base-uri 'none'");
-  });
-
-  test("includes resourceDomains in script-src, style-src, img-src, font-src, worker-src", () => {
-    const header = buildCspHeader({ resourceDomains: ["cdn.example.com"] });
-    expect(header).toContain(
-      "script-src 'self' 'unsafe-inline' blob: data: cdn.example.com",
-    );
-    expect(header).toContain(
-      "style-src 'self' 'unsafe-inline' blob: data: cdn.example.com",
-    );
-    expect(header).toContain("img-src 'self' data: blob: cdn.example.com");
-    expect(header).toContain("font-src 'self' data: blob: cdn.example.com");
-    expect(header).toContain("worker-src 'self' blob: cdn.example.com");
-  });
-
-  test("includes connectDomains in connect-src", () => {
-    const header = buildCspHeader({
-      connectDomains: ["api.example.com", "ws.example.com"],
-    });
-    expect(header).toContain(
-      "connect-src 'self' api.example.com ws.example.com",
-    );
-  });
-
-  test("uses frame-src with specified frameDomains", () => {
-    const header = buildCspHeader({ frameDomains: ["iframe.example.com"] });
-    expect(header).toContain("frame-src iframe.example.com");
-    expect(header).not.toContain("frame-src 'none'");
-  });
-
-  test("uses base-uri with specified baseUriDomains", () => {
-    const header = buildCspHeader({ baseUriDomains: ["base.example.com"] });
-    expect(header).toContain("base-uri base.example.com");
-    expect(header).not.toContain("base-uri 'none'");
-  });
-
-  test("strips injected characters from domains before including in header", () => {
-    const header = buildCspHeader({
-      resourceDomains: ["good.com", "bad.com;evil"],
-      connectDomains: ["api.com", "'unsafe-eval'"],
-    });
-    expect(header).toContain("good.com");
-    expect(header).not.toContain("bad.com;evil");
-    expect(header).toContain("api.com");
-    // connect-src should NOT include the injected 'unsafe-eval' domain
-    const connectSrc = header
-      .split("; ")
-      .find((d) => d.startsWith("connect-src"));
-    expect(connectSrc).not.toContain("'unsafe-eval'");
-  });
-
-  test("returns all required CSP directives", () => {
-    const header = buildCspHeader({});
-    const directives = header.split("; ").map((d) => d.split(" ")[0]);
-    expect(directives).toContain("default-src");
-    expect(directives).toContain("script-src");
-    expect(directives).toContain("style-src");
-    expect(directives).toContain("img-src");
-    expect(directives).toContain("font-src");
-    expect(directives).toContain("connect-src");
-    expect(directives).toContain("worker-src");
-    expect(directives).toContain("frame-src");
-    expect(directives).toContain("object-src");
-    expect(directives).toContain("base-uri");
   });
 });

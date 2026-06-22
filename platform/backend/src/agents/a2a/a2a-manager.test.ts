@@ -199,6 +199,13 @@ describe("A2AManager.sendMessage", () => {
     }
     expect(dbMessage.contextId).toBe(response.message.contextId);
     expect(dbMessage.parts).toEqual(response.message.parts);
+    expect(dbMessage.role).toBe(A2AProtocolRole.Agent);
+    expect(dbMessage.taskId).toBeNull();
+    expect(dbMessage.content).toEqual({
+      id: response.message.messageId,
+      role: "assistant",
+      parts: [{ type: "text", text: "response" }],
+    });
 
     expect(await A2AContextModel.getTotalCount()).toBe(prevContextCount + 1);
     expect(await A2ATaskModel.getTotalCount()).toBe(prevTaskCount);
@@ -409,6 +416,13 @@ describe("A2AManager.sendMessage", () => {
         throw new Error("Message should be stored in the database");
       }
       expect(dbMessage.parts).toEqual(response2.message.parts);
+      expect(dbMessage.role).toBe(A2AProtocolRole.Agent);
+      expect(dbMessage.taskId).toBe(response.task.id);
+      expect(dbMessage.content).toEqual({
+        id: response2.message.messageId,
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      });
     });
 
     test("Multi request in single turn", async ({ makeAgent }) => {

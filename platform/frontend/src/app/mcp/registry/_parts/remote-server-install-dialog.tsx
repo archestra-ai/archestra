@@ -397,6 +397,7 @@ export function RemoteServerInstallDialog({
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
+        isReauth={isReauth}
         existingScope={existingScope}
         existingTeamId={existingTeamId}
         preselectedTeamId={preselectedTeamId}

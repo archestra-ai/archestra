@@ -5,6 +5,7 @@ import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import EnvironmentModel from "./environment";
 import InteractionModel from "./interaction";
 import LimitModel from "./limit";
 import TeamModel from "./team";
@@ -52,6 +53,69 @@ describe("InteractionModel", () => {
       expect(interaction.profileId).toBe(profileId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
+    });
+
+    test("snapshots the agent's environment and keeps it stable across reassignment", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const envA = await EnvironmentModel.create({
+        organizationId: org.id,
+        name: "production",
+      });
+      const envB = await EnvironmentModel.create({
+        organizationId: org.id,
+        name: "staging",
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        environmentId: envA.id,
+      });
+
+      const baseInteraction = {
+        request: {
+          model: "gpt-4o",
+          messages: [{ role: "user" as const, content: "Hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 1,
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant" as const,
+                content: "Hi",
+                refusal: null,
+              },
+              finish_reason: "stop" as const,
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+
+      const first = await InteractionModel.create({
+        profileId: agent.id,
+        ...baseInteraction,
+      });
+      expect(first.environmentId).toBe(envA.id);
+
+      // Reassigning the agent must not retroactively change the snapshot.
+      await AgentModel.update(agent.id, { environmentId: envB.id });
+
+      const second = await InteractionModel.create({
+        profileId: agent.id,
+        ...baseInteraction,
+      });
+      expect(second.environmentId).toBe(envB.id);
+
+      const refetchedFirst = await InteractionModel.findById(first.id);
+      expect(refetchedFirst?.environmentId).toBe(envA.id);
     });
 
     test("returns chat errors for chat conversation sessions", async ({

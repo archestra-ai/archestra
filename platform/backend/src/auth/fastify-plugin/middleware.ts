@@ -7,6 +7,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ServiceAccountModel, UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
+import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
   CONNECTION_SETUP_SCRIPT_PREFIX,
@@ -20,10 +21,14 @@ import {
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
+import {
+  appIdFromConnectorPath,
+  connectorWwwAuthenticate,
+} from "@/services/apps/app-connector-resource";
 import { ApiError } from "@/types";
 
 export class Authnz {
-  public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
+  public handle = async (request: FastifyRequest, reply: FastifyReply) => {
     const requestId = request.id;
 
     // custom logic to skip auth check
@@ -37,6 +42,10 @@ export class Authnz {
         { requestId, url: request.url },
         "[Authnz] Authentication failed",
       );
+      // A credential-less request to an MCP App connector gets the RFC 9728
+      // challenge here (it has no Bearer header, so it was not skipped above and
+      // never reaches the route); an invalid Bearer token is challenged in-route.
+      this.maybeSetConnectorChallenge(request, reply);
       throw new ApiError(401, "Unauthenticated");
     }
 
@@ -93,6 +102,7 @@ export class Authnz {
   private shouldSkipAuthCheck = async ({
     url,
     method,
+    headers,
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
@@ -128,6 +138,14 @@ export class Authnz {
       url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // MCP App connector: a Bearer request (a personal token or the native
+      // OAuth flow's audience-bound token) is validated in-route, so it stands
+      // down here. A session request carries no Bearer and falls through to the
+      // normal session auth below (unchanged); a credential-less request also
+      // falls through and is answered with the RFC 9728 challenge in handle().
+      (appIdFromConnectorPath(url) !== null &&
+        typeof headers.authorization === "string" &&
+        /^Bearer\s+/i.test(headers.authorization)) ||
       // Public skill marketplace git endpoint: token in URL, no session
       url === config.skillMarketplace.endpoint ||
       url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
@@ -165,6 +183,25 @@ export class Authnz {
       return true;
     }
     return false;
+  };
+
+  private maybeSetConnectorChallenge = (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): void => {
+    // Dark when the feature is off: no OAuth challenge that would advertise the
+    // connector mechanism exists.
+    if (!config.apps.enabled) {
+      return;
+    }
+    const appId = appIdFromConnectorPath(request.url);
+    if (!appId) {
+      return;
+    }
+    reply.header(
+      "WWW-Authenticate",
+      connectorWwwAuthenticate(getPublicRequestOrigin(request), appId),
+    );
   };
 
   private isAuthenticated = async (request: FastifyRequest) => {

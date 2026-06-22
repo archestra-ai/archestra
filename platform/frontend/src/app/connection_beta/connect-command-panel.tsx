@@ -2,12 +2,19 @@
 
 import {
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Check, CircleDashed, Copy, Loader2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  AgentSelector,
+  type AgentSelectorAgent,
+} from "@/components/agent-selector";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,11 +32,21 @@ import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
-import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  useAvailableLlmProviderApiKeys,
+  useCreateLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
-import { SearchableSelect } from "./searchable-select";
+import { OsLogos } from "./os-logos";
+import {
+  CONNECT_PLATFORM_OPTIONS,
+  type ConnectPlatformOption,
+  detectPlatform,
+  platformLabels,
+  toPlatformOption,
+} from "./platform.utils";
 import {
   fetchAllSkillIds,
   useTotalSkillCount,
@@ -38,7 +55,7 @@ import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
-type EditableRow = "endpoint" | "gateway" | "proxy" | "skills";
+type EditableRow = "endpoint" | "gateway" | "proxy" | "skills" | "platform";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
@@ -69,19 +86,14 @@ function useConnectSkills(): { eligible: boolean; totalSkills: number } {
   };
 }
 
-interface AgentOption {
-  id: string;
-  name: string;
-}
-
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentOption[] | null;
+  mcpGateways: AgentSelectorAgent[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** null when the user can't read LLM proxies. */
-  llmProxies: AgentOption[] | null;
+  llmProxies: AgentSelectorAgent[] | null;
   llmProxyId: string | null;
   onLlmProxySelect: (id: string) => void;
   /** When null/undefined: all providers allowed. Otherwise: only these. */
@@ -123,6 +135,13 @@ export function ConnectCommandPanel({
   const includeSkills = skillsEligible && !skillsOptOut;
 
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
+  // Target OS for the generated command. Auto-detected from the browser after
+  // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
+  // user can override it in the review step.
+  const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
+  useEffect(() => {
+    setPlatform(toPlatformOption(detectPlatform()));
+  }, []);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -151,12 +170,32 @@ export function ConnectCommandPanel({
   // needs no key (the user brings their own at runtime).
   const providers = useMemo(() => {
     if (proxyAuth !== "virtual-key") return supportedProviders;
-    return supportedProviders.filter((p) => configuredProviders.has(p));
+    // Per-user providers (GitHub Copilot) stay selectable even without a key:
+    // the user connects their own account inline, after which a personal
+    // virtual key is minted. Other providers need a pre-existing key.
+    return supportedProviders.filter(
+      (p) => configuredProviders.has(p) || providerRequiresPerUserCredential(p),
+    );
   }, [supportedProviders, proxyAuth, configuredProviders]);
   const provider =
     urlProvider && providers.includes(urlProvider)
       ? urlProvider
       : (providers[0] ?? null);
+
+  // GitHub Copilot is per-user: it can only run through a personal virtual key,
+  // never the passthrough device flow, and the user must connect their own
+  // account before a command can be generated.
+  const providerIsPerUser =
+    !!provider && providerRequiresPerUserCredential(provider);
+  const needsPerUserConnect =
+    providerIsPerUser && !configuredProviders.has(provider);
+
+  // Force virtual-key auth for per-user providers (no passthrough tab).
+  useEffect(() => {
+    if (providerIsPerUser && proxyAuth !== "virtual-key") {
+      setProxyAuth("virtual-key");
+    }
+  }, [providerIsPerUser, proxyAuth]);
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The selected proxy may exist without a usable provider (e.g. virtual-key
@@ -167,6 +206,17 @@ export function ConnectCommandPanel({
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
+  // Creating the personal key invalidates the available-keys query, so once the
+  // user connects, `configuredProviders` updates and the command auto-generates.
+  const createPerUserKey = useCreateLlmProviderApiKey();
+  // Virtual keys are minted from a provider key. When none of the client's
+  // providers has one, offer to add it inline (gated on the create permission);
+  // the create mutation invalidates the available-keys query, so this section
+  // re-resolves the moment the key lands.
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
     null,
   );
@@ -177,6 +227,7 @@ export function ConnectCommandPanel({
   // newer one.
   const inputsKey = JSON.stringify({
     clientId: client.id,
+    platform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? proxy.id : null,
@@ -191,6 +242,7 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const inputs = JSON.parse(key) as {
         clientId: ScriptClientId;
+        platform: ConnectPlatformOption;
         baseUrl: string;
         gatewayId: string | null;
         proxyId: string | null;
@@ -211,6 +263,7 @@ export function ConnectCommandPanel({
 
       const created = await createSetup({
         clientId: inputs.clientId,
+        platform: inputs.platform,
         baseUrl: inputs.baseUrl,
         mcpGatewayId: inputs.gatewayId ?? undefined,
         llmProxyId: inputs.proxyId ?? undefined,
@@ -228,12 +281,14 @@ export function ConnectCommandPanel({
   useEffect(() => {
     setResult(null);
     setFailed(false);
-    if (!hasAnything) return;
+    // Don't try to generate a command until the user has connected their
+    // per-user account — the backend would reject it (no key to mint from).
+    if (!hasAnything || needsPerUserConnect) return;
     const timer = setTimeout(() => {
       void runGeneration(inputsKey);
     }, 350);
     return () => clearTimeout(timer);
-  }, [inputsKey, hasAnything, runGeneration]);
+  }, [inputsKey, hasAnything, needsPerUserConnect, runGeneration]);
 
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
@@ -243,11 +298,15 @@ export function ConnectCommandPanel({
     <div className="grid gap-3">
       {mcpGateways && mcpGateways.length > 1 && gateway && (
         <EditorField label="Gateway">
-          <SearchableSelect
-            options={mcpGateways.map((g) => ({ value: g.id, label: g.name }))}
+          <AgentSelector
+            mode="single"
+            flat
+            className="w-full"
+            agents={mcpGateways}
             value={gateway.id}
             onValueChange={onMcpGatewaySelect}
             placeholder="Select gateway"
+            searchPlaceholder="Search gateways…"
           />
         </EditorField>
       )}
@@ -268,36 +327,109 @@ export function ConnectCommandPanel({
     </EditorField>
   );
 
+  const platformEditor = (
+    <EditorField label="Platform">
+      <Select
+        value={platform}
+        onValueChange={(v) => setPlatform(v as ConnectPlatformOption)}
+      >
+        <SelectTrigger className="w-full" data-testid="connect-platform-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {CONNECT_PLATFORM_OPTIONS.map((p) => (
+            <SelectItem key={p} value={p}>
+              <span className="flex items-center gap-2">
+                <OsLogos platform={p} />
+                {platformLabels[p]}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </EditorField>
+  );
+
+  // A virtual key is minted from a key for one of the providers THIS client
+  // routes through the proxy (e.g. Claude Code → Anthropic/Bedrock), not from
+  // any provider key you happen to have. Naming them keeps "no key" from
+  // reading as "you have no keys at all".
+  const supportedNames = supportedProviders.map((p) => providerDisplayNames[p]);
+  const noVirtualKeyReason =
+    supportedNames.length === 0
+      ? "None of this client's providers has a key to mint a virtual key from."
+      : supportedNames.length === 1
+        ? `${client.label} routes ${supportedNames[0]}, which has no key to mint a virtual key from.`
+        : `${client.label} routes ${formatList(supportedNames)}, none of which has a key to mint a virtual key from.`;
+  const providerKeyDialogDescription =
+    supportedNames.length === 0
+      ? "Add a provider API key so a virtual key can be minted from it."
+      : `Add a provider API key so a virtual key can be minted from it. ${client.label} routes ${formatList(supportedNames)}, so a key for one of those unlocks the virtual-key option for this client.`;
+
   const proxyEditor = proxy ? (
     <div className="grid gap-3">
       {llmProxies && llmProxies.length > 1 && (
         <EditorField label="Proxy">
-          <SearchableSelect
-            options={llmProxies.map((p) => ({ value: p.id, label: p.name }))}
+          <AgentSelector
+            mode="single"
+            flat
+            className="w-full"
+            agents={llmProxies}
             value={proxy.id}
             onValueChange={onLlmProxySelect}
             placeholder="Select proxy"
+            searchPlaceholder="Search proxies…"
           />
         </EditorField>
       )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
-          <Tabs
-            value={proxyAuth}
-            onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
-          >
-            <TabsList>
-              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
-              <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <p className="text-xs text-muted-foreground">
-            {proxyAuth === "provider-key"
-              ? "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
-              : providers.length === 0
-                ? "No provider has a key to mint a virtual key from. Add a provider key, or use your provider key."
-                : "A virtual key is created for you and wired into the command."}
-          </p>
+          {/* Per-user providers (GitHub Copilot) can't use passthrough — their
+              raw token must never be embedded in a shared command — so only the
+              virtual-key path is offered. */}
+          {providerIsPerUser ? (
+            <p className="text-xs text-muted-foreground">
+              {providerDisplayNames[provider]} runs through a personal virtual
+              key — connect your own account below.
+            </p>
+          ) : (
+            <>
+              <Tabs
+                value={proxyAuth}
+                onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
+              >
+                <TabsList>
+                  <TabsTrigger value="provider-key">
+                    Your provider key
+                  </TabsTrigger>
+                  <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="text-xs text-muted-foreground">
+                {proxyAuth === "provider-key" ? (
+                  "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                ) : providers.length === 0 ? (
+                  canCreateProviderKey ? (
+                    <>
+                      {noVirtualKeyReason}{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                        onClick={() => setShowAddProviderKey(true)}
+                      >
+                        Add a provider key
+                      </button>{" "}
+                      or switch to your provider key.
+                    </>
+                  ) : (
+                    `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add a provider key.`
+                  )
+                ) : (
+                  "A virtual key is created for you and wired into the command."
+                )}
+              </p>
+            </>
+          )}
         </div>
       </EditorField>
     </div>
@@ -317,9 +449,6 @@ export function ConnectCommandPanel({
     </label>
   );
 
-  // Why no provider can be offered for a virtual key: name the providers the
-  // client actually supports so the user knows what would need a key.
-  const supportedNames = supportedProviders.map((p) => providerDisplayNames[p]);
   const noVirtualKeyMessage =
     supportedNames.length === 1
       ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
@@ -426,6 +555,19 @@ export function ConnectCommandPanel({
               <span className="font-medium text-foreground">{baseUrl}</span>
             </SummaryRow>
           )}
+          <SummaryRow
+            editable
+            isEditing={editing === "platform"}
+            onToggle={() => toggleEdit("platform")}
+            editor={platformEditor}
+            changeTestId="connect-change-platform"
+          >
+            Run on{" "}
+            <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
+              <OsLogos platform={platform} />
+              {platformLabels[platform]}
+            </span>
+          </SummaryRow>
         </ul>
       </WizardStep>
 
@@ -451,19 +593,43 @@ export function ConnectCommandPanel({
                 ))}
               </div>
             )}
-            <CommandLine
-              command={result?.command ?? null}
-              pending={isPending || (!result && !failed)}
-              failed={failed}
-              onRetry={() => runGeneration(inputsKey)}
-            />
+            {needsPerUserConnect && provider ? (
+              <PerUserConnectGate
+                providerLabel={providerDisplayNames[provider]}
+                pending={createPerUserKey.isPending}
+                onToken={async (token) => {
+                  try {
+                    await createPerUserKey.mutateAsync({
+                      name: providerDisplayNames[provider],
+                      provider,
+                      apiKey: token,
+                      scope: "personal",
+                    });
+                    // availableKeys invalidates → the command auto-generates.
+                  } catch {
+                    // handleApiError already surfaced the failure (e.g. no seat)
+                  }
+                }}
+              />
+            ) : (
+              <CommandLine
+                command={result?.command ?? null}
+                pending={isPending || (!result && !failed)}
+                failed={failed}
+                onRetry={() => runGeneration(inputsKey)}
+              />
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <span className="max-w-2xl">
-              One-time command, expires in 15 minutes · macOS &amp; Linux only
-              (not Windows) · it edits your client config in place and
-              isn&apos;t undone automatically — revert manually if you need to.
+              One-time command, expires in 15 minutes · for{" "}
+              {platformLabels[platform]} ·{" "}
+              {platform === "windows"
+                ? "runs in PowerShell"
+                : "runs in a shell"}{" "}
+              and edits your client config in place — it isn&apos;t undone
+              automatically, so revert manually if you need to.
             </span>
             <button
               type="button"
@@ -478,6 +644,20 @@ export function ConnectCommandPanel({
           </div>
         </div>
       </WizardStep>
+
+      <CreateLlmProviderApiKeyDialog
+        open={showAddProviderKey}
+        onOpenChange={setShowAddProviderKey}
+        title="Add a provider key"
+        description={providerKeyDialogDescription}
+        defaultValues={
+          supportedProviders[0]
+            ? { provider: supportedProviders[0] }
+            : undefined
+        }
+        allowedProviders={supportedProviders}
+        onSuccess={() => setShowAddProviderKey(false)}
+      />
     </>
   );
 }
@@ -549,6 +729,34 @@ function CommandLine({
       <pre className="m-0 overflow-x-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
         {command}
       </pre>
+    </div>
+  );
+}
+
+/**
+ * Shown in place of the command when a per-user provider (GitHub Copilot) is
+ * selected but the user hasn't connected their own account yet. Connecting
+ * creates their personal key; the command then auto-generates.
+ */
+function PerUserConnectGate({
+  providerLabel,
+  pending,
+  onToken,
+}: {
+  providerLabel: string;
+  pending: boolean;
+  onToken: (token: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-3 px-5 py-4">
+      <p className="text-[13px] text-[#e5e7eb]">
+        Connect your {providerLabel} account to generate the command — it runs
+        through your own personal virtual key, so your token never leaves the
+        server.
+      </p>
+      <div>
+        <GithubCopilotSignIn disabled={pending} onToken={onToken} />
+      </div>
     </div>
   );
 }
@@ -634,6 +842,13 @@ function RecommendationChip({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
+}
+
+/** Join names as a readable list: "A", "A and B", "A, B, and C". */
+function formatList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 /** label + control row inside an inline editor. */

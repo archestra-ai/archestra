@@ -11,6 +11,7 @@ export const BUILT_IN_AGENT_NAMES = {
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
+  APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -20,6 +21,7 @@ export const BUILT_IN_AGENT_IDS = {
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
   CONTEXT_COMPACTION: "context-compaction-subagent",
   CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
+  APP_RUNTIME: "app-runtime-llm-agent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -184,6 +186,12 @@ export const CHAT_TITLE_GENERATION_SYSTEM_PROMPT = `You generate short chat titl
 
 Return only a concise 3-6 word title. Do not wrap the title in quotes. Do not include explanations, markdown, or punctuation unless it is part of the topic.`;
 
+// Identity for the LLM completions an MCP App requests through
+// `archestra.llm.complete()`. Each call supplies its own instruction (the SDK's
+// `system` option), so this prompt is only the fallback when the app provides
+// none; it is intentionally minimal.
+export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestra MCP App. Follow the app's instructions for the request and reply with only the requested content.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
@@ -192,4 +200,5 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION]: CONTEXT_COMPACTION_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION]:
     CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.APP_RUNTIME]: APP_RUNTIME_SYSTEM_PROMPT,
 };

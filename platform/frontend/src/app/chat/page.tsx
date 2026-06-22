@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
+import type { ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -56,12 +56,11 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
+import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,6 +98,10 @@ import {
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
 import {
+  clearAllAppDiagnostics,
+  drainAppDiagnostics,
+} from "@/lib/chat/app-diagnostics-store";
+import {
   fetchConversationEnabledTools,
   useCompactConversation,
   useConversation,
@@ -131,10 +134,10 @@ import {
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
+  agentRequiresPerUserConnect,
   deriveModelSource,
-  getSavedAgent,
-  saveAgent,
 } from "@/lib/chat/use-chat-preferences";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -143,16 +146,15 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
+import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
   resolveChatModelState,
-  resolveInitialAgentSelection,
-  resolveInitialAgentState,
   resolvePreferredModelForProvider,
-  shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
@@ -303,145 +305,35 @@ export function ChatPageContent({
   // for a new chat ("member" level).
   const { data: memberDefault } = useMemberDefaultModel();
 
-  // State for initial chat (when no conversation exists yet)
-  const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
-  const [initialModel, setInitialModel] = useState<string>("");
-  const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  const previousRouteConversationIdRef = useRef<string | undefined>(
-    routeConversationId,
-  );
-  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
-  // but do apply a new one when navigating from a different agent page)
-  const urlParamsConsumedRef = useRef<string | null>(null);
-
-  // Resolve which agent to use on page load (URL param > localStorage > first available).
-  // Stores the resolved agent in a ref so the model init effect can read it synchronously.
-  const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
-
-  const applyInitialAgentSelection = useCallback(
-    (agent: (typeof internalAgents)[number]) => {
-      setInitialAgentId(agent.id);
-      resolvedAgentRef.current = agent;
-
-      const resolved = resolveInitialAgentState({
-        agent,
-        modelsByProvider,
-        chatApiKeys,
-        organization: organization
-          ? {
-              defaultModelId: organization.defaultModelId,
-              defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-            }
-          : null,
-        memberDefault: memberDefault ?? null,
-      });
-
-      if (resolved) {
-        setInitialModel(resolved.modelId);
-        setInitialApiKeyId(resolved.apiKeyId);
-      } else {
-        setInitialModel("");
-        setInitialApiKeyId(null);
-      }
-    },
-    [modelsByProvider, chatApiKeys, organization, memberDefault],
-  );
-
-  useEffect(() => {
-    if (internalAgents.length === 0) return;
-    // Wait for organization data to avoid race condition where agents load
-    // before org, causing the org default to be skipped
-    if (isOrgLoading) return;
-
-    // Process URL agentId param, but only if it's a new value (not one we already consumed).
-    // This allows navigating from different agent pages while preventing re-application
-    // after the user manually changes the agent.
-    const urlAgentId = searchParams.get("agentId");
-    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
-      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-      if (matchingAgent) {
-        applyInitialAgentSelection(matchingAgent);
-        urlParamsConsumedRef.current = urlAgentId;
-        return;
-      }
-    }
-
-    // Priority: org default > localStorage > member default > first available.
-    // Org default always wins when set (admin-configured for the whole org).
-    // localStorage only overrides when no org default is configured and the
-    // user can change agents; otherwise a stale hidden picker value can trap
-    // restricted users on a previously swapped agent.
-    // Also skip if a URL param was consumed but state hasn't flushed yet.
-    if (!initialAgentId && !urlParamsConsumedRef.current) {
-      if (isAgentPickerPermissionLoading) return;
-
-      const selectedAgent = resolveInitialAgentSelection({
-        agents: internalAgents,
-        organizationDefaultAgentId: organization?.defaultAgentId,
-        savedAgentId: getSavedAgent(),
-        memberDefaultAgentId: defaultAgentId,
-        canUseSavedAgent: canSeeAgentPicker === true,
-      });
-      if (!selectedAgent) return;
-
-      applyInitialAgentSelection(selectedAgent);
-      saveAgent(selectedAgent.id);
-    }
-  }, [
-    applyInitialAgentSelection,
-    initialAgentId,
-    searchParams,
-    internalAgents,
+  // Shared new-chat initialization (agent/model/key resolution + persistence).
+  const {
+    agentId: initialAgentId,
+    modelId: initialModel,
+    apiKeyId: initialApiKeyId,
+    provider: initialProvider,
+    modelSource: initialModelSource,
+    setApiKeyId: setInitialApiKeyId,
+    onAgentChange: handleInitialAgentChange,
+    onModelChange: handleInitialModelChange,
+    onProviderChange: handleInitialProviderChange,
+    onResetModelOverride: handleResetModelOverride,
+  } = useInitialChatModelState({
+    agents: internalAgents,
+    organization: organization ?? null,
     defaultAgentId,
-    organization?.defaultAgentId,
-    isOrgLoading,
-    canSeeAgentPicker,
-    isAgentPickerPermissionLoading,
-  ]);
-
-  // Initialize model and API key once agent is resolved.
-  // Priority: agent config > org default > first available.
-  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
-  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
-  // cause an early return and skip the proper priority chain (org default, etc.).
-  const modelInitializedRef = useRef(false);
-  useEffect(() => {
-    if (!initialAgentId) return;
-    if (modelInitializedRef.current) return;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: memberDefault ?? null,
-    });
-
-    if (!resolved) return; // No models available yet
-
-    setInitialModel(resolved.modelId);
-    if (resolved.apiKeyId) {
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-  }, [
-    initialAgentId,
     modelsByProvider,
     chatApiKeys,
-    organization?.defaultModelId,
-    organization?.defaultLlmApiKeyId,
-    organization,
-    memberDefault,
-  ]);
+    memberDefault: memberDefault ?? null,
+    urlAgentId: searchParams.get("agentId"),
+    canUseSavedAgent: canSeeAgentPicker === true,
+    isPermissionResolving: isAgentPickerPermissionLoading,
+    isOrgLoading,
+    routeConversationId,
+  });
 
-  // Persist the user's (model, key) pick as their member default so the next
-  // new chat reuses it — the "member" level of the resolution chain. No-ops on
-  // an incomplete pair.
+  // Persist the user's (model, key) pick as their member default for the
+  // existing-conversation handlers below (the initial handlers persist via the
+  // hook). No-ops on an incomplete pair.
   const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
   const updateMemberDefaultModelMutateRef = useRef(
     updateMemberDefaultModelMutation.mutate,
@@ -459,76 +351,6 @@ export function ChatPageContent({
     [],
   );
 
-  // Model change for the initial (no conversation) state. The picked model is
-  // scoped to the selected key, so the pair is persisted as the member default.
-  const initialApiKeyIdRef = useRef(initialApiKeyId);
-  initialApiKeyIdRef.current = initialApiKeyId;
-  const handleInitialModelChange = useCallback(
-    (modelId: string) => {
-      setInitialModel(modelId);
-      persistMemberDefaultModel(modelId, initialApiKeyIdRef.current);
-    },
-    [persistMemberDefaultModel],
-  );
-
-  // Handle API key change - preselect best model for the new key's provider
-  const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, apiKeyId: string) => {
-      const preferredModel = resolvePreferredModelForProvider({
-        provider: newProvider,
-        modelsByProvider,
-      });
-      if (preferredModel) {
-        setInitialModel(preferredModel.modelId);
-        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
-      }
-    },
-    [modelsByProvider, persistMemberDefaultModel],
-  );
-
-  // Reset to the agent/org default model (shown when on a custom model).
-  // Resolves without the member default — reset deliberately drops the user's
-  // personal override to fall back to the agent/org default.
-  const handleResetModelOverride = useCallback(() => {
-    modelInitializedRef.current = false;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: null,
-    });
-
-    if (resolved) {
-      setInitialModel(resolved.modelId);
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-
-    // Clear the saved member default so the reset sticks for future new chats.
-    updateMemberDefaultModelMutateRef.current({
-      modelId: null,
-      chatApiKeyId: null,
-    });
-  }, [modelsByProvider, chatApiKeys, organization]);
-
-  // Derive provider from initial model for API key filtering
-  const initialProvider = useMemo((): SupportedProvider | undefined => {
-    if (!initialModel) return undefined;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === initialModel)) {
-        return provider as SupportedProvider;
-      }
-    }
-    return undefined;
-  }, [initialModel, modelsByProvider]);
-
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
@@ -538,21 +360,6 @@ export function ChatPageContent({
 
   useEffect(() => {
     setConversationId(routeConversationId);
-
-    const previousRouteConversationId = previousRouteConversationIdRef.current;
-    previousRouteConversationIdRef.current = routeConversationId;
-
-    if (
-      shouldResetInitialChatState({
-        previousRouteConversationId,
-        routeConversationId,
-      })
-    ) {
-      setInitialAgentId(null);
-      setInitialModel("");
-      setInitialApiKeyId(null);
-      modelInitializedRef.current = false;
-    }
 
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
@@ -576,6 +383,13 @@ export function ChatPageContent({
     },
     [router],
   );
+
+  // App render diagnostics are conversation-scoped: drop any leftovers when
+  // switching conversations so they never attach to an unrelated send.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberately re-runs on conversation switch
+  useEffect(() => {
+    clearAllAppDiagnostics();
+  }, [conversationId]);
 
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
@@ -686,21 +500,42 @@ export function ChatPageContent({
     organization?.defaultModelId,
   ]);
 
-  // Same derivation for the initial (no conversation) chat.
-  const initialModelSource = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === initialAgentId) as
-      | (Record<string, unknown> & { modelId?: string | null })
-      | undefined;
-    return deriveModelSource({
-      selectedModelId: initialModel,
-      agentModelId: agent?.modelId,
-      orgModelId: organization?.defaultModelId,
-    });
+  // A shared agent can pin a per-user-credential model (e.g. GitHub Copilot).
+  // When the viewer hasn't connected their own account that model is not in
+  // their available list; keep it selected (no silent swap) so sending it
+  // surfaces an inline connect prompt instead of substituting another provider.
+  // Returns whether the per-user connect prompt applies and, if so, the agent's
+  // resolved model name — so the read-only chip can show "gpt-4" instead of the
+  // model's UUID (which the viewer can't resolve without access to the key).
+  const initialPerUserConnect = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === initialAgentId);
+    return {
+      needsConnect: agentRequiresPerUserConnect({
+        agent,
+        selectedModelId: initialModel,
+        isModelAvailable: chatModels.some((m) => m.dbId === initialModel),
+      }),
+      modelName: agent?.resolvedLlmModelName ?? undefined,
+    };
+  }, [internalAgents, initialAgentId, initialModel, chatModels]);
+
+  const conversationPerUserConnect = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === conversation?.agentId);
+    return {
+      needsConnect: agentRequiresPerUserConnect({
+        agent,
+        selectedModelId: conversation?.modelId,
+        isModelAvailable: chatModels.some(
+          (m) => m.dbId === conversation?.modelId,
+        ),
+      }),
+      modelName: agent?.resolvedLlmModelName ?? undefined,
+    };
   }, [
-    initialModel,
-    initialAgentId,
     internalAgents,
-    organization?.defaultModelId,
+    conversation?.agentId,
+    conversation?.modelId,
+    chatModels,
   ]);
 
   // Get selected model's context length for the context indicator
@@ -829,7 +664,6 @@ export function ChatPageContent({
         : null,
       // Reset deliberately drops the user's personal override.
       memberDefault: null,
-      chatModels,
     });
 
     if (resolved) {
@@ -852,7 +686,6 @@ export function ChatPageContent({
     modelsByProvider,
     chatApiKeys,
     organization,
-    chatModels,
   ]);
 
   // Create conversation mutation (requires agentId)
@@ -934,19 +767,42 @@ export function ChatPageContent({
   // selector is deterministic and survives transient section unmounts (the
   // previous mount-effect registry could empty when a single canvas's section
   // briefly unmounted).
+  const { getToolShortName: getArchestraToolShortName } =
+    useArchestraMcpIdentity();
   const mcpCanvases = useMemo(
     () =>
       deriveCanvasesFromMessages(
         messages,
         chatSession?.earlyToolUiStarts ?? {},
+        getArchestraToolShortName,
       ),
-    [messages, chatSession?.earlyToolUiStarts],
+    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
   );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+
+  // After the user connects a per-user provider (e.g. GitHub Copilot) via the
+  // inline auth card, re-run their original prompt automatically. The connect
+  // mutation already invalidated the model/key caches; find the last user
+  // message and regenerate its turn. A no-op while a turn is in flight so a
+  // connect can't double-send.
+  const handleProviderConnected = useCallback(() => {
+    if (status === "submitted" || status === "streaming") return;
+    if (!regenerateUserMessage) return;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role !== "user") continue;
+      const partIndex = message.parts.findIndex((part) => part.type === "text");
+      if (partIndex < 0) return;
+      const part = message.parts[partIndex];
+      const text = "text" in part ? part.text : "";
+      void regenerateUserMessage({ messageId: message.id, partIndex, text });
+      return;
+    }
+  }, [messages, regenerateUserMessage, status]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as
@@ -974,6 +830,7 @@ export function ChatPageContent({
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
+  const contextWindow = chatSession?.contextWindow ?? null;
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
 
@@ -1108,6 +965,7 @@ export function ChatPageContent({
             compactionId: result.compaction.id,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            trigger: "manual",
           });
         }
 
@@ -1120,6 +978,7 @@ export function ChatPageContent({
             compactionId: result.compaction.id,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            trigger: "manual",
           });
         }
 
@@ -1275,12 +1134,16 @@ export function ChatPageContent({
       });
     }
 
+    const initialAppDiagnostics = drainAppDiagnostics();
     sendMessage({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToSend ? { skill: skillToSend } : {}),
+        ...(initialAppDiagnostics.length > 0
+          ? { appDiagnostics: initialAppDiagnostics }
+          : {}),
       },
     });
   }, [
@@ -1430,12 +1293,16 @@ export function ChatPageContent({
       }
     }
 
+    // Attach-once: captured app render diagnostics ride this message's
+    // metadata and the store is drained — a regenerate never re-attaches.
+    const appDiagnostics = drainAppDiagnostics();
     sendMessage?.({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(options?.skill ? { skill: options.skill } : {}),
+        ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
   };
@@ -1597,6 +1464,7 @@ export function ChatPageContent({
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
         title,
+        projectId: searchParams.get("project"),
       });
       if (!input) {
         return false;
@@ -1611,7 +1479,13 @@ export function ChatPageContent({
       });
       return true;
     },
-    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      createConversationMutation,
+      searchParams,
+    ],
   );
 
   const handleCreateConversationWithUrl = useCallback(
@@ -1678,21 +1552,6 @@ export function ChatPageContent({
     conversation?.title,
     conversation?.agent?.name,
   ]);
-
-  // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback(
-    (agentId: string) => {
-      setInitialAgentId(agentId);
-      saveAgent(agentId);
-
-      // Resolve model/key for the new agent using the same priority chain
-      const selectedAgent = internalAgents.find((a) => a.id === agentId);
-      if (selectedAgent) {
-        applyInitialAgentSelection(selectedAgent);
-      }
-    },
-    [applyInitialAgentSelection, internalAgents],
-  );
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
@@ -1785,6 +1644,21 @@ export function ChatPageContent({
       [submitInitialMessage],
     );
 
+  // A chat started from a project page keeps the Files panel open when the
+  // project already has results — continuity with the project page, which
+  // shows the same folder on its right side. Tracked through a ref (the files
+  // query races conversation creation) and persisted per conversation, since
+  // creation navigates to /chat/<id>, which remounts this component.
+  const { data: startedFromProjectFiles } = useProjectFiles(
+    searchParams.get("project") ?? undefined,
+  );
+  const projectHasFilesRef = useRef(false);
+  useEffect(() => {
+    if ((startedFromProjectFiles?.length ?? 0) > 0) {
+      projectHasFilesRef.current = true;
+    }
+  }, [startedFromProjectFiles]);
+
   // Auto-send message from URL when conditions are met (deep link support)
   useEffect(() => {
     // Skip if already triggered or no user_prompt in URL
@@ -1810,6 +1684,14 @@ export function ChatPageContent({
     pendingPromptRef.current = initialUserPrompt;
 
     createInitialConversation((newConversation) => {
+      // the init effect on the /chat/<id> mount reads this preference and
+      // opens the Files panel (the default tab) for the fresh project chat.
+      if (projectHasFilesRef.current) {
+        localStorage.setItem(
+          conversationStorageKeys(newConversation.id).artifactOpen,
+          "true",
+        );
+      }
       selectConversation(newConversation.id);
     });
   }, [
@@ -1917,7 +1799,9 @@ export function ChatPageContent({
 
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    return <NoApiKeySetup />;
+    // Reset to a clean /chat URL after a key is added so no stale conversation
+    // param lingers; the keys query refetch then reveals the composer.
+    return <NoApiKeySetup onKeyAdded={() => router.push("/chat")} />;
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
@@ -2006,31 +1890,36 @@ export function ChatPageContent({
                 {/* Left side - conversation title */}
                 {conversationId && conversation && (
                   <div className="flex items-center flex-shrink min-w-0">
-                    <TruncatedTooltip
-                      content={getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )}
-                    >
+                    {/* Skip TruncatedTooltip while the title animates: its
+                        resize measurement re-renders on every TypingText tick,
+                        which loops past React's nested-update cap. */}
+                    {headerAnimatingTitles.has(conversation.id) ? (
                       <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                        {headerAnimatingTitles.has(conversation.id) ? (
-                          <TypingText
-                            text={getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )}
-                            typingSpeed={35}
-                            showCursor
-                            cursorClassName="bg-muted-foreground"
-                          />
-                        ) : (
-                          getConversationDisplayTitle(
+                        <TypingText
+                          text={getConversationDisplayTitle(
                             conversation.title,
                             conversation.messages,
-                          )
-                        )}
+                          )}
+                          typingSpeed={35}
+                          showCursor
+                          cursorClassName="bg-muted-foreground"
+                        />
                       </h1>
-                    </TruncatedTooltip>
+                    ) : (
+                      <TruncatedTooltip
+                        content={getConversationDisplayTitle(
+                          conversation.title,
+                          conversation.messages,
+                        )}
+                      >
+                        <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                          {getConversationDisplayTitle(
+                            conversation.title,
+                            conversation.messages,
+                          )}
+                        </h1>
+                      </TruncatedTooltip>
+                    )}
                   </div>
                 )}
                 {/* Right side - desktop: panel toggle */}
@@ -2201,6 +2090,7 @@ export function ChatPageContent({
                       chatErrors={conversation?.chatErrors ?? []}
                       compactions={conversation?.compactions ?? []}
                       onRegenerateUserMessage={regenerateUserMessage}
+                      onProviderConnected={handleProviderConnected}
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse
@@ -2302,6 +2192,8 @@ export function ChatPageContent({
                           tokensUsed={tokensUsed}
                           cachedTokens={tokenUsage?.cacheReadTokens}
                           maxContextLength={selectedModelContextLength}
+                          contextWindow={contextWindow}
+                          lastCompaction={contextCompaction?.lastCompaction}
                           inputModalities={selectedModelInputModalities}
                           agentLlmApiKeyId={
                             conversation?.agent?.llmApiKeyId ?? null
@@ -2316,6 +2208,14 @@ export function ChatPageContent({
                           modelSource={conversationModelSource}
                           onResetModelOverride={
                             handleConversationResetModelOverride
+                          }
+                          agentRequiresPerUserConnect={
+                            conversationPerUserConnect.needsConnect
+                          }
+                          agentModelDisplayName={
+                            conversationPerUserConnect.needsConnect
+                              ? conversationPerUserConnect.modelName
+                              : undefined
                           }
                         />
                         <div className="text-center">
@@ -2429,6 +2329,14 @@ export function ChatPageContent({
                         onAgentChange={handleInitialAgentChange}
                         modelSource={initialModelSource}
                         onResetModelOverride={handleResetModelOverride}
+                        agentRequiresPerUserConnect={
+                          initialPerUserConnect.needsConnect
+                        }
+                        agentModelDisplayName={
+                          initialPerUserConnect.needsConnect
+                            ? initialPerUserConnect.modelName
+                            : undefined
+                        }
                       />
                     </div>
                   </div>
@@ -2597,49 +2505,4 @@ type ChatMessagePart =
 // so the message is well-formed and the backend can inject the skill
 function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
   return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
-}
-
-// =========================================================================
-// No API Key Setup — shown when user has no API keys configured
-// =========================================================================
-
-const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
-  isPrimary: true,
-};
-
-function NoApiKeySetup() {
-  const router = useRouter();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  return (
-    <div className="flex h-full w-full items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect an LLM provider to start chatting
-          </p>
-        </div>
-        <Button
-          data-testid={E2eTestId.QuickstartAddApiKeyButton}
-          onClick={() => setIsDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add API Key
-        </Button>
-      </div>
-      <CreateLlmProviderApiKeyDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        title="Add API Key"
-        description="Add an LLM provider API key to start chatting"
-        defaultValues={DEFAULT_FORM_VALUES}
-        showConsoleLink
-        onSuccess={() => {
-          // Navigate to clean /chat URL so there's no stale conversation param
-          router.push("/chat");
-        }}
-      />
-    </div>
-  );
 }

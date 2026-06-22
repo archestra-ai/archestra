@@ -105,7 +105,7 @@ const DEBUG_TAB_MAP: Record<string, McpLogsTab> = {
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
   configuration: "Configuration",
-  connections: "Credentials",
+  connections: "Connections",
   "debug-logs": "Logs",
   "debug-inspector": "Inspector",
   "debug-shell": "Shell",
@@ -158,7 +158,7 @@ export function McpServerSettingsDialog({
   if (showConnections) {
     navItems.push({
       id: "connections",
-      label: "Credentials",
+      label: "Connections",
       badge: connectionCount,
     });
   }

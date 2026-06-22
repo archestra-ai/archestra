@@ -16,6 +16,7 @@ import {
   Cohere,
   DeepSeek,
   Gemini,
+  GithubCopilot,
   Groq,
   Minimax,
   Mistral,
@@ -67,6 +68,7 @@ export const InteractionRequestSchema = z.union([
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
+  GithubCopilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
@@ -90,6 +92,7 @@ export const InteractionResponseSchema = z.union([
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
+  GithubCopilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
@@ -280,6 +283,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest:
       DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
     response: DeepSeek.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["github-copilot:chatCompletions"]),
+    request: GithubCopilot.API.ChatCompletionRequestSchema,
+    processedRequest:
+      GithubCopilot.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: GithubCopilot.API.ChatCompletionResponseSchema,
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

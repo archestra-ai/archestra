@@ -823,7 +823,19 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`** - Shows the per-environment sandbox binding selector on the agent form, letting an agent's code sandbox run on a deployment environment's dedicated Dagger engine under that environment's egress policy. When off, the selector is hidden. Requires the code runtime and Kubernetes.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
   - Default: `false`
   - Values: `true`, `false`
 
@@ -878,6 +890,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
+- **`ARCHESTRA_AUTH_DCR_ENABLED`** - Controls OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+  - Default: `true`
+  - Set to `false` to allow only pre-registered OAuth clients to run OAuth flows. Runtime self-registration (`POST /api/auth/oauth2/register`) returns `403`, CIMD auto-registration is skipped, and the well-known metadata stops advertising the registration endpoint
+  - Pair with manually registered [MCP OAuth clients](/docs/mcp-authentication) (both `client_credentials` and `authorization_code`) when you want to restrict gateway access to a known set of applications
 
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
   - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
@@ -974,6 +991,21 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_GITHUB_COPILOT_BASE_URL`** - Override the GitHub Copilot API base URL.
+  - Default: `https://api.githubcopilot.com`
+  - For GitHub Enterprise, use `https://copilot-api.<ghe-domain>`
+
+- **`ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL`** - Endpoint that exchanges a user's GitHub OAuth token for a short-lived Copilot API bearer.
+  - Default: `https://api.github.com/copilot_internal/v2/token`
+  - Copilot has no static API keys: provider keys store the user's long-lived GitHub OAuth token, and the proxy performs this exchange (with caching) on every request
+
+- **`ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL`** - GitHub host serving the OAuth device-flow endpoints (`/login/device/code`, `/login/oauth/access_token`) used by the "Sign in with GitHub" flow and the connection-page setup script.
+  - Default: `https://github.com`
+
+- **`ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`** - GitHub App client id used for the Copilot device flow.
+  - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
+  - Override this if your organization registers its own GitHub App with Copilot API access
+
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
   - Foundry v1 format: `https://<resource-name>.services.ai.azure.com/openai/v1`
@@ -1001,6 +1033,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `2592000` (30 days)
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
+
+- **`ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS`** - Headers/body timeout (milliseconds) for LLM-call fetches, applied as a custom undici dispatcher on both the chat→proxy and proxy→upstream hops.
+  - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
+  - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
+  - Keep it finite so genuinely-dead upstreams still surface as errors
 
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`
@@ -1044,9 +1081,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
@@ -1321,40 +1359,6 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
-
-#### Knowledge Files External Blob Storage
-
-Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER`** - File byte storage provider.
-  - Default: `db`
-  - Values: `db`, `s3`
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET`** - S3 bucket for uploaded file bytes.
-  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION`** - AWS region for the S3 bucket.
-  - Required when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER=s3`
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX`** - Optional object key prefix.
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT`** - Optional S3-compatible endpoint.
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE`** - Use path-style URLs for S3-compatible storage.
-  - Default: `false`
-  - Set to `true` when required by your S3-compatible provider.
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD`** - S3 authentication method.
-  - Default: `irsa`
-  - Values: `irsa`, `static`
-  - `irsa`: use the AWS default credential chain, including IAM Roles for Service Accounts on EKS.
-  - `static`: use `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID` and `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`.
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID`** - Static S3 access key ID.
-  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
-
-- **`ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY`** - Static S3 secret access key.
-  - Used only when `ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD=static`
 
 ### Audit Log Configuration
 

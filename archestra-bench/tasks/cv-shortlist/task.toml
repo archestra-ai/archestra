@@ -1,0 +1,98 @@
+[[stages]]
+text = """Hey, so we're finally filling that backend engineer spot on the payments team (just the one opening). I've attached all the CVs that came in - think it's about 15, mix of PDFs and Word docs. Each one's got an ID on it somewhere like CAND-01.
+
+Can you go through them and tell me the top 3 you'd actually bring in for an interview? Pick whoever looks strongest for the kind of stuff our team does.
+
+When you've figured it out send it back with submit_result: just the three candidate IDs under top_candidates."""
+
+  [[stages.files]]
+  src = "cand-01-priya-nair.pdf"
+  dest = "/home/sandbox/attachments/cand-01-priya-nair.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-02-marcus-hale.pdf"
+  dest = "/home/sandbox/attachments/cand-02-marcus-hale.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-03-lena-fischer.docx"
+  dest = "/home/sandbox/attachments/cand-03-lena-fischer.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-04-daniel-osei.docx"
+  dest = "/home/sandbox/attachments/cand-04-daniel-osei.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-05-sofia-marin.pdf"
+  dest = "/home/sandbox/attachments/cand-05-sofia-marin.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-06-victor-crane.pdf"
+  dest = "/home/sandbox/attachments/cand-06-victor-crane.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-07-aisha-rahman.docx"
+  dest = "/home/sandbox/attachments/cand-07-aisha-rahman.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-08-tom-becker.pdf"
+  dest = "/home/sandbox/attachments/cand-08-tom-becker.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-09-hiroshi-tan.docx"
+  dest = "/home/sandbox/attachments/cand-09-hiroshi-tan.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-10-gregory-voss.docx"
+  dest = "/home/sandbox/attachments/cand-10-gregory-voss.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-11-elena-popova.pdf"
+  dest = "/home/sandbox/attachments/cand-11-elena-popova.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-12-samuel-reed.pdf"
+  dest = "/home/sandbox/attachments/cand-12-samuel-reed.pdf"
+  mime_type = "application/pdf"
+
+  [[stages.files]]
+  src = "cand-13-nadia-haddad.docx"
+  dest = "/home/sandbox/attachments/cand-13-nadia-haddad.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-14-bruno-alves.docx"
+  dest = "/home/sandbox/attachments/cand-14-bruno-alves.docx"
+  mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  [[stages.files]]
+  src = "cand-15-chloe-dubois.pdf"
+  dest = "/home/sandbox/attachments/cand-15-chloe-dubois.pdf"
+  mime_type = "application/pdf"
+
+[result_schema]
+type = "object"
+required = ["top_candidates"]
+additionalProperties = false
+
+  [result_schema.properties.top_candidates]
+  type = "array"
+  minItems = 3
+  maxItems = 3
+  uniqueItems = true
+
+    [result_schema.properties.top_candidates.items]
+    type = "string"
+
+[verifier]
+deps = []

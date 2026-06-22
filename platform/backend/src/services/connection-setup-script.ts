@@ -1,8 +1,10 @@
 import { DEFAULT_APP_NAME, type SupportedProvider } from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
+  ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
+import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 
 /**
  * Pure renderers for the /connection one-command setup scripts. Everything in
@@ -44,6 +46,21 @@ export interface SetupScriptProxySection {
   virtualKey: string | null;
   /** Display name of the virtual key, for revocation guidance. */
   virtualKeyName: string | null;
+  /**
+   * GitHub OAuth endpoints for the in-script device flow. Required when
+   * provider is "github-copilot" in passthrough mode: Copilot has no static
+   * API keys, so the script obtains the user's GitHub OAuth token locally
+   * (reusing the Copilot CLI's stored token when one works, otherwise running
+   * the device flow) and the token never leaves the machine.
+   */
+  githubCopilot?: {
+    /** Exchange endpoint used to verify a token has an active Copilot seat. */
+    tokenExchangeUrl: string;
+    /** Host serving /login/device/code and /login/oauth/access_token. */
+    deviceAuthBaseUrl: string;
+    /** GitHub App client id for the device flow. */
+    clientId: string;
+  } | null;
 }
 
 export interface SetupScriptSkillsSection {
@@ -53,6 +70,8 @@ export interface SetupScriptSkillsSection {
 
 export interface SetupScriptContext {
   clientId: ConnectionSetupClientId;
+  /** Target OS: "macos"/"linux" render bash, "windows" renders PowerShell. */
+  platform: ConnectionSetupPlatform;
   /** White-label product name for user-facing messaging. */
   appName: string;
   mcp: SetupScriptMcpSection | null;
@@ -60,13 +79,22 @@ export interface SetupScriptContext {
   skills: SetupScriptSkillsSection | null;
 }
 
-/** The one-liner shown in the UI. `origin` is the API origin (no /v1). */
+/**
+ * The one-liner shown in the UI. `origin` is the API origin (no /v1). Windows
+ * gets a PowerShell `irm | iex` invocation; macOS/Linux get `curl | bash`.
+ */
 export function buildSetupCommand(params: {
   origin: string;
   rawToken: string;
+  platform: ConnectionSetupPlatform;
 }): string {
+  const url = `${params.origin}/api/connection-setups/script/${params.rawToken}`;
+  if (params.platform === "windows") {
+    // single quotes: nothing in the URL may expand in PowerShell.
+    return `irm ${psq(url)} | iex`;
+  }
   // single quotes: nothing in the URL may expand in the user's shell.
-  return `curl -fsSL ${sh(`${params.origin}/api/connection-setups/script/${params.rawToken}`)} | bash`;
+  return `curl -fsSL ${sh(url)} | bash`;
 }
 
 /** Strips the /v1 suffix the connection base URLs carry. */
@@ -75,13 +103,19 @@ export function proxyBaseUrlToOrigin(baseUrl: string): string {
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
-  // appName is white-label, admin-controlled text that lands in bash comments
-  // and unquoted echo strings. Collapse control characters (newlines, NUL, …)
-  // to spaces so it can never break out of a comment line and execute.
+  // appName is white-label, admin-controlled text that lands in script comments
+  // and bare echo strings. Collapse control characters (newlines, NUL, …) to
+  // spaces so it can never break out of a comment line and execute.
   const ctx: SetupScriptContext = {
     ...rawCtx,
     appName: sanitizeAppName(rawCtx.appName),
   };
+
+  // Windows targets a separate PowerShell renderer; macOS/Linux share bash.
+  if (ctx.platform === "windows") {
+    return renderWindowsSetupScript(ctx);
+  }
+
   const sections: string[] = [header(ctx)];
 
   switch (ctx.clientId) {
@@ -125,11 +159,34 @@ function sh(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/** Single-quote a value for PowerShell; safe for arbitrary content. */
+function psq(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 /** Collapse control characters so appName is safe in comments and bare echoes. */
 function sanitizeAppName(appName: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
   return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || "Archestra";
 }
+
+/**
+ * Color setup + logging helpers shared by every script. Colors are emitted
+ * only when stdout is a TTY and NO_COLOR is unset, so piping the output to a
+ * file or a non-interactive shell keeps it clean ANSI-free text. `say` marks
+ * section headers, `ok` a success, `warn`/`err` advisory and failure lines
+ * (err goes to stderr so `curl -f | bash` surfaces it).
+ */
+const SCRIPT_HELPERS = `if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
+  ARCH_C_RESET=$'\\033[0m'; ARCH_C_HEAD=$'\\033[1;36m'; ARCH_C_OK=$'\\033[1;32m'
+  ARCH_C_WARN=$'\\033[1;33m'; ARCH_C_ERR=$'\\033[1;31m'
+else
+  ARCH_C_RESET=''; ARCH_C_HEAD=''; ARCH_C_OK=''; ARCH_C_WARN=''; ARCH_C_ERR=''
+fi
+say()  { printf '\\n%s==> %s%s\\n' "$ARCH_C_HEAD" "$1" "$ARCH_C_RESET"; }
+ok()   { printf '%s==>%s %s\\n' "$ARCH_C_OK" "$ARCH_C_RESET" "$1"; }
+warn() { printf '%swarning:%s %s\\n' "$ARCH_C_WARN" "$ARCH_C_RESET" "$1"; }
+err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }`;
 
 function header(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -137,7 +194,7 @@ function header(ctx: SetupScriptContext): string {
   const requireBinary = binary
     ? `
 if ! command -v ${binary} >/dev/null 2>&1; then
-  echo "error: the '${binary}' CLI was not found on PATH. Install ${label} first, then re-run this command." >&2
+  err "the '${binary}' CLI was not found on PATH. Install ${label} first, then re-run this command."
   exit 1
 fi`
     : "";
@@ -148,9 +205,10 @@ fi`
 # credentials — do not share or commit it.
 set -euo pipefail
 
+${SCRIPT_HELPERS}
+
 ${banner(ctx)}
 
-say() { printf '\\n==> %s\\n' "$1"; }
 say ${sh(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
 }
 
@@ -174,15 +232,20 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
+  // A monospace rendition of the Archestra mark: a white tilted rounded bar
+  // and dot on the terminal's dark field, echoing the real logo-icon.svg.
+  // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
   const logo =
     ctx.appName === DEFAULT_APP_NAME
-      ? `   .----------------.
-   |       __       |
-   |      / /       |
-   |     / /        |     ${ctx.appName}
-   |    / /  __     |     Secure access to your AI tools
-   |   /_/  |__|    |
-   '----------------'`
+      ? `   ╭──────────────────╮
+   │                  │
+   │        ▟██▙      │
+   │        ████      │     ${ctx.appName}
+   │       ████       │     Secure access to your AI tools
+   │       ████ ▟▙    │
+   │      ▜██▛  ▜▛    │
+   │                  │
+   ╰──────────────────╯`
       : `   ${ctx.appName}
    Secure access to your AI tools`;
 
@@ -203,7 +266,7 @@ ARCHESTRA_BANNER`;
 }
 
 function footer(ctx: SetupScriptContext): string {
-  const lines = [`say "Done."`];
+  const lines = [`ok "Done."`];
 
   const nextSteps = nextStepsFor(ctx);
   if (nextSteps.length > 0) {
@@ -332,7 +395,9 @@ function mergeJsonFileSnippet(params: {
 
   return `if command -v python3 >/dev/null 2>&1; then
   mkdir -p "$(dirname ${sh(params.file)})"
-  if [ -f ${sh(params.file)} ]; then
+  # Back up once: a re-run must not overwrite the pristine pre-Archestra copy
+  # with our already-modified file. The merge below is itself idempotent.
+  if [ -f ${sh(params.file)} ] && [ ! -f ${sh(`${params.file}.archestra-backup`)} ]; then
     cp ${sh(params.file)} ${sh(`${params.file}.archestra-backup`)}
   fi
 ${indent(envAssignments, "  ")}
@@ -340,7 +405,7 @@ ${indent(envAssignments, "  ")}
 ${params.python}
 ARCHESTRA_PY
 else
-  echo ${sh(params.fallbackMessage)}
+  warn ${sh(params.fallbackMessage)}
   cat <<'ARCHESTRA_MANUAL'
 ${params.fallbackSnippet}
 ARCHESTRA_MANUAL
@@ -378,7 +443,7 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
+  warn "Marketplace may already be registered — run /plugin inside Claude Code to inspect."
 fi`);
   }
 
@@ -487,8 +552,9 @@ requires_openai_auth = true
 mkdir -p "$HOME/.codex"
 CONFIG="$HOME/.codex/config.toml"
 if [ -f "$CONFIG" ]; then
-  cp "$CONFIG" "$CONFIG.archestra-backup"
-  # drop any previous archestra-managed block for this provider
+  # Back up once so re-runs preserve the pristine pre-Archestra config.
+  [ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"
+  # drop any previous archestra-managed block for this provider (idempotent)
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
@@ -513,7 +579,7 @@ echo "Codex keeps using your own OpenAI API key login."`
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run /plugins inside Codex to inspect."
+  warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
 fi`);
   }
 
@@ -535,8 +601,11 @@ copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
 
   if (ctx.proxy) {
-    // A piped script cannot export into the caller's shell; print the lines.
-    sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
+    if (ctx.proxy.provider === "github-copilot" && !ctx.proxy.virtualKey) {
+      sections.push(copilotGithubLinkSection(ctx.proxy));
+    } else {
+      // A piped script cannot export into the caller's shell; print the lines.
+      sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
 Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:
@@ -549,16 +618,167 @@ Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the 
   }
   export COPILOT_MODEL="<model-name>"
 ARCHESTRA_COPILOT`);
+    }
   }
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
 if ! copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  echo "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
+  warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }
 
   return sections;
+}
+
+/**
+ * GitHub Copilot in passthrough mode: there is no static API key — the proxy
+ * expects the user's long-lived GitHub OAuth token as the bearer. The script
+ * obtains one locally and prints it in the export lines, so the token never
+ * leaves the machine:
+ *  1. reuse a token the Copilot CLI / VS Code already stored in
+ *     ~/.config/github-copilot/{apps,hosts}.json — but only if Copilot's token
+ *     exchange accepts it (valid + active Copilot seat);
+ *  2. otherwise run the GitHub device flow (RFC 8628): show a code, poll
+ *     until the user authorizes in the browser, honoring interval/slow_down
+ *     with a hard deadline from expires_in.
+ * The token is never passed as argv to external commands (curl reads it via
+ * stdin config / request bodies via stdin).
+ */
+function copilotGithubLinkSection(proxy: SetupScriptProxySection): string {
+  const gh = proxy.githubCopilot;
+  if (!gh) {
+    throw new Error(
+      "github-copilot passthrough proxy section requires githubCopilot device-flow configuration",
+    );
+  }
+
+  const deviceCodeUrl = `${gh.deviceAuthBaseUrl.replace(/\/+$/, "")}/login/device/code`;
+  const accessTokenUrl = `${gh.deviceAuthBaseUrl.replace(/\/+$/, "")}/login/oauth/access_token`;
+  const deviceRequestBody = JSON.stringify({
+    client_id: gh.clientId,
+    scope: "read:user",
+  });
+
+  return `say 'Linking your GitHub Copilot subscription'
+ARCHESTRA_GHCP_TOKEN=""
+
+# Probe the Copilot token exchange: succeeds only for a valid GitHub token on
+# an account with an active Copilot seat. Token goes via stdin, never argv.
+ghcp_validate() {
+  [ -n "$1" ] || return 1
+  printf 'header = "authorization: token %s"\\n' "$1" | curl -fsS -o /dev/null \\
+    --connect-timeout 10 --max-time 30 -K - \\
+    -H 'accept: application/json' \\
+    -H 'editor-version: vscode/1.99.0' \\
+    -H 'copilot-integration-id: vscode-chat' \\
+    ${sh(gh.tokenExchangeUrl)} 2>/dev/null
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+  cat <<'ARCHESTRA_GHCP_MANUAL'
+python3 not found — skipping the automatic GitHub sign-in.
+Sign in manually instead: run the Copilot CLI once and complete its login,
+then use the "oauth_token" value from ~/.config/github-copilot/apps.json
+as COPILOT_PROVIDER_API_KEY below.
+ARCHESTRA_GHCP_MANUAL
+else
+  # 1. Reuse a GitHub token already stored by the Copilot CLI / VS Code.
+  ghcp_candidates="$(python3 - "$HOME/.config/github-copilot/apps.json" "$HOME/.config/github-copilot/hosts.json" <<'ARCHESTRA_GHCP_PY'
+import json, sys
+seen = []
+for path in sys.argv[1:]:
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        continue
+    if not isinstance(data, dict):
+        continue
+    for value in data.values():
+        if isinstance(value, dict):
+            token = value.get("oauth_token")
+            if isinstance(token, str) and token and token not in seen:
+                seen.append(token)
+print("\\n".join(seen))
+ARCHESTRA_GHCP_PY
+)" || ghcp_candidates=""
+  for ghcp_candidate in $ghcp_candidates; do
+    if ghcp_validate "$ghcp_candidate"; then
+      ARCHESTRA_GHCP_TOKEN="$ghcp_candidate"
+      echo "Re-using the GitHub token stored by the Copilot CLI on this machine."
+      break
+    fi
+  done
+
+  # 2. No usable stored token: run the GitHub device flow.
+  if [ -z "$ARCHESTRA_GHCP_TOKEN" ]; then
+    ghcp_device="$(printf '%s' ${sh(deviceRequestBody)} | curl -fsS --connect-timeout 10 --max-time 30 \\
+      -X POST -H 'accept: application/json' -H 'content-type: application/json' \\
+      --data @- ${sh(deviceCodeUrl)})" || {
+      err "could not reach GitHub to start the device flow."
+      exit 1
+    }
+    ghcp_field() { printf '%s' "$ghcp_device" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$1',''))"; }
+    ghcp_device_code="$(ghcp_field device_code)"
+    ghcp_user_code="$(ghcp_field user_code)"
+    ghcp_verification_uri="$(ghcp_field verification_uri)"
+    ghcp_interval="$(ghcp_field interval)"
+    ghcp_expires_in="$(ghcp_field expires_in)"
+    [ -n "$ghcp_interval" ] || ghcp_interval=5
+    [ -n "$ghcp_expires_in" ] || ghcp_expires_in=900
+    if [ -z "$ghcp_device_code" ]; then
+      err "GitHub did not return a device code."
+      exit 1
+    fi
+    ghcp_deadline=$(( $(date +%s) + ghcp_expires_in ))
+    echo
+    printf '  Open:        %s\\n' "$ghcp_verification_uri"
+    printf '  Enter code:  %s\\n' "$ghcp_user_code"
+    echo
+    echo 'Waiting for you to authorize in the browser...'
+    while [ -z "$ARCHESTRA_GHCP_TOKEN" ]; do
+      if [ "$(date +%s)" -ge "$ghcp_deadline" ]; then
+        err "timed out waiting for GitHub authorization — re-run this command to try again."
+        exit 1
+      fi
+      sleep "$ghcp_interval"
+      ghcp_poll="$(printf '{"client_id":"%s","device_code":"%s","grant_type":"urn:ietf:params:oauth:grant-type:device_code"}' ${sh(gh.clientId)} "$ghcp_device_code" | \\
+        curl -sS --connect-timeout 10 --max-time 30 \\
+          -X POST -H 'accept: application/json' -H 'content-type: application/json' \\
+          --data @- ${sh(accessTokenUrl)})" || continue
+      ghcp_token="$(printf '%s' "$ghcp_poll" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token","") or "")' 2>/dev/null)" || ghcp_token=""
+      if [ -n "$ghcp_token" ]; then
+        ARCHESTRA_GHCP_TOKEN="$ghcp_token"
+        break
+      fi
+      ghcp_error="$(printf '%s' "$ghcp_poll" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("error",""))' 2>/dev/null)" || ghcp_error=""
+      case "$ghcp_error" in
+        # keep polling on pending and on transient/parse hiccups
+        authorization_pending|"") ;;
+        slow_down) ghcp_interval=$((ghcp_interval + 5)) ;;
+        *) err "GitHub sign-in failed: $ghcp_error"; exit 1 ;;
+      esac
+    done
+    ok "GitHub account linked."
+    if ! ghcp_validate "$ARCHESTRA_GHCP_TOKEN"; then
+      err "this GitHub account does not appear to have an active Copilot subscription."
+      exit 1
+    fi
+  fi
+fi
+
+say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
+echo
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:'
+printf '  export COPILOT_PROVIDER_TYPE="openai"\\n'
+printf '  export COPILOT_PROVIDER_BASE_URL="%s"\\n' ${sh(proxy.url)}
+if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
+  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
+else
+  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' '<your-github-oauth-token>'
+fi
+printf '  export COPILOT_MODEL="<model-name>"\\n'`;
 }
 
 // ===================================================================

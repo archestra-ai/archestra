@@ -16,6 +16,7 @@ import {
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
+import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -23,7 +24,6 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
-import { getUnassignedDiscoverableTools } from "./tool-auto-assign";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -53,41 +53,37 @@ const SearchToolsArgsSchema = z
   })
   .strict();
 
-const NestedParameterSchema = z.object({
-  name: z.string().describe("Nested property name."),
-  type: z.string().nullable().describe("JSON Schema type, if available."),
-  required: z.boolean().describe("Whether the nested property is required."),
-});
+// Internal intermediate only — the model sees the flat `params` string built from
+// these, never the structured form, so a plain recursive type is enough (no Zod,
+// no place in SearchToolsOutputSchema). `properties` carries one further nested
+// level; recursion depth is bounded by MAX_NESTED_DEPTH in summarizeNestedProperties.
+type NestedParameterSummary = {
+  name: string;
+  type: string | null;
+  required: boolean;
+  properties: NestedParameterSummary[] | null;
+};
 
-const InputParameterSchema = z.object({
-  name: z.string().describe("Top-level input parameter name."),
-  required: z.boolean().describe("Whether the parameter is required."),
-  type: z
-    .string()
-    .nullable()
-    .describe("JSON Schema type (e.g. 'string', 'number', 'object')."),
-  enum: z
-    .array(z.unknown())
-    .nullable()
-    .describe("Allowed values when the parameter is constrained by an enum."),
-  description: z
-    .string()
-    .nullable()
-    .describe("Parameter description, if available."),
-  properties: z
-    .array(NestedParameterSchema)
-    .nullable()
-    .describe(
-      "One-level summary of nested properties for object (or array-of-object) parameters.",
-    ),
-});
-
-type InputParameterSummary = z.infer<typeof InputParameterSchema>;
-type NestedParameterSummary = z.infer<typeof NestedParameterSchema>;
+type InputParameterSummary = {
+  name: string;
+  required: boolean;
+  type: string | null;
+  enum: unknown[] | null;
+  description: string | null;
+  properties: NestedParameterSummary[] | null;
+  // True when the compact summary elides object content — a freeform/extensible
+  // object, or nesting deeper than the levels shown. Rendered as a trailing '…'.
+  hasHiddenDetail: boolean;
+};
 
 // cap on enum values rendered inline in a parameter signature; the full list
 // stays recoverable via run_tool validation feedback.
 const PARAM_ENUM_VALUE_CAP = 20;
+
+// how many nested levels below a top-level param the compact summary expands:
+// the param's children (level 1) and their children (level 2). Object content
+// past this is collapsed behind the hidden-detail marker.
+const MAX_NESTED_DEPTH = 2;
 
 const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
@@ -106,7 +102,9 @@ const SearchToolsOutputSchema = z.object({
   hint: z
     .string()
     .nullable()
-    .describe("Actionable guidance when results were truncated or empty."),
+    .describe(
+      "Actionable guidance when results were truncated, empty, or when some query terms matched no tool text.",
+    ),
   tools: z.array(
     z.object({
       toolName: z
@@ -128,11 +126,16 @@ const SearchToolsOutputSchema = z.object({
       params: z
         .string()
         .describe(
-          "Compact one-line input signature. Parameters are joined by '; ', each rendered as " +
-            "`name<!|?>:<type>` where `!` marks required and `?` optional. Object parameters are " +
-            "expanded one level as `{child<!|?>:type, …}`, enums as `enum(<json-values>)`, and a " +
-            "trailing ` — description` is added when available. Empty string when the tool takes " +
-            `no input. Pass matching values inside tool_args when calling ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+          "Compact one-line input signature — a summary, not the full schema. Parameters are " +
+            "joined by '; ', each rendered as `name<!|?>:<type>` where `!` marks required and `?` " +
+            "optional. Object parameters are expanded up to two levels as " +
+            "`{child<!|?>:type{grandchild<!|?>:type}, …}`, enums as " +
+            "`enum(<json-values>)`, and a trailing ` — description` is added when available. A " +
+            "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
+            "more deeply nested) — consult the task instructions or the full schema for its shape. " +
+            "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
+            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error describes ` +
+            "the expected input (for third-party tools, the full input schema).",
         ),
     }),
   ),
@@ -178,6 +181,7 @@ const registry = defineArchestraTools([
       });
 
       let matches: SearchCandidate[];
+      let unmatchedTerms: string[] = [];
       if (args.mode === "regex") {
         const result = rankCandidatesByRegex(searchableTools, args.query);
         if (!result.ok) {
@@ -185,9 +189,11 @@ const registry = defineArchestraTools([
         }
         matches = result.matches;
       } else {
-        matches = rankCandidatesByKeyword(
+        const preparedQuery = prepareSearchQuery(args.query);
+        matches = rankCandidatesByKeyword(searchableTools, preparedQuery);
+        unmatchedTerms = findUnmatchedQueryTerms(
           searchableTools,
-          prepareSearchQuery(args.query),
+          preparedQuery,
         );
       }
 
@@ -199,6 +205,7 @@ const registry = defineArchestraTools([
         truncated,
         limit: args.limit,
         searchableTools,
+        unmatchedTerms,
       });
 
       const structured = {
@@ -239,6 +246,7 @@ export const __test = {
   prepareSearchQuery,
   rankCandidatesByKeyword,
   rankCandidatesByRegex,
+  findUnmatchedQueryTerms,
   summarizeInputParameters,
   formatParamsSignature,
   makeRankingCandidate(input: {
@@ -276,13 +284,15 @@ async function getSearchableTools(params: {
   const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
-  // Widened search space: skills reference tools nobody assigned to the agent,
-  // so discovery also spans third-party tools from every catalog the user can
-  // access, plus the sandbox built-ins when the feature is on. Running such a
-  // tool is not silent — run_tool proposes granting it to the agent (or steers
-  // the user to an admin), which keeps these results actionable.
+  // Dynamic tool access: when the agent's "access all tools" setting is on,
+  // discovery also spans third-party tools from every catalog the user can
+  // access, the sandbox built-ins when the feature is on, and
+  // query_knowledge_sources when the user can access a knowledge connector.
+  // run_tool executes such a tool directly without assigning it; the MCP
+  // server's connection policy decides which credential the call uses.
   const discoverableTools = await getUnassignedDiscoverableTools({
     assignedToolNames: assignedNames,
+    agentId,
     userId,
     organizationId,
   });
@@ -313,8 +323,8 @@ async function getSearchableTools(params: {
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
-  // same row the grant flow resolves, so the description shown by search
-  // matches the row a later run_tool grant assigns.
+  // same row resolveDynamicTool picks, so the description shown by search
+  // matches the row a later run_tool call executes.
   for (const tool of filteredTools) {
     if (candidates.has(tool.name)) {
       continue;
@@ -448,24 +458,35 @@ function buildSearchText(params: {
 function summarizeInputParameters(
   schema: Record<string, unknown>,
 ): InputParameterSummary[] {
-  const properties = asRecord(schema.properties);
-  const required = new Set(asStringArray(schema.required));
+  return mapObjectProperties(schema, (paramSchema, name, required) => ({
+    name,
+    required,
+    type: extractSchemaType(paramSchema),
+    enum: Array.isArray(paramSchema.enum) ? paramSchema.enum : null,
+    description:
+      typeof paramSchema.description === "string"
+        ? paramSchema.description
+        : null,
+    properties: summarizeNestedProperties(paramSchema, MAX_NESTED_DEPTH),
+    hasHiddenDetail: objectHasHiddenDetail(paramSchema),
+  }));
+}
 
+// Shared property walk: read an object schema's `properties`/`required`, build a
+// summary per entry, and order required-first then alphabetically. The build
+// callback yields the shape; the {name, required} bound lets the sort stay here.
+function mapObjectProperties<T extends { name: string; required: boolean }>(
+  objectSchema: Record<string, unknown>,
+  build: (
+    childSchema: Record<string, unknown>,
+    name: string,
+    required: boolean,
+  ) => T,
+): T[] {
+  const properties = asRecord(objectSchema.properties);
+  const required = new Set(asStringArray(objectSchema.required));
   return Object.entries(properties)
-    .map(([name, value]) => {
-      const paramSchema = asRecord(value);
-      return {
-        name,
-        required: required.has(name),
-        type: extractSchemaType(paramSchema),
-        enum: Array.isArray(paramSchema.enum) ? paramSchema.enum : null,
-        description:
-          typeof paramSchema.description === "string"
-            ? paramSchema.description
-            : null,
-        properties: summarizeNestedProperties(paramSchema),
-      };
-    })
+    .map(([name, value]) => build(asRecord(value), name, required.has(name)))
     .sort(
       (left, right) =>
         Number(right.required) - Number(left.required) ||
@@ -491,34 +512,25 @@ function extractSchemaType(
   return null;
 }
 
-// One-level nested summary for object (or array-of-object) parameters, so the
-// model can call run_tool without guessing the nested shape. Intentionally does
-// not recurse further — deeper structure is left to the actual call's
-// validation feedback to keep results bounded.
+// Nested summary for object (or array-of-object) parameters, so the model can
+// call run_tool without guessing the nested shape. Recurses up to `depth` levels
+// (MAX_NESTED_DEPTH from the top-level param); each object child carries its own
+// next level. Structure past the budget is left to the actual call's validation
+// feedback and flagged by objectHasHiddenDetail.
 function summarizeNestedProperties(
   paramSchema: Record<string, unknown>,
-): InputParameterSummary["properties"] {
+  depth: number,
+): NestedParameterSummary[] | null {
   const objectSchema = nestedObjectSchema(paramSchema);
-  if (!objectSchema) {
+  if (!objectSchema || depth <= 0) {
     return null;
   }
-  const properties = asRecord(objectSchema.properties);
-  const required = new Set(asStringArray(objectSchema.required));
-
-  return Object.entries(properties)
-    .map(([name, value]) => {
-      const nestedSchema = asRecord(value);
-      return {
-        name,
-        type: extractSchemaType(nestedSchema),
-        required: required.has(name),
-      };
-    })
-    .sort(
-      (left, right) =>
-        Number(right.required) - Number(left.required) ||
-        left.name.localeCompare(right.name),
-    );
+  return mapObjectProperties(objectSchema, (childSchema, name, required) => ({
+    name,
+    type: extractSchemaType(childSchema),
+    required,
+    properties: summarizeNestedProperties(childSchema, depth - 1),
+  }));
 }
 
 function nestedObjectSchema(
@@ -532,6 +544,75 @@ function nestedObjectSchema(
     return items;
   }
   return null;
+}
+
+// The object schema a parameter ultimately describes: the schema itself when it
+// is object-shaped, or its array `items` when those are. Unlike nestedObjectSchema
+// this recognizes object-typed schemas with no listed properties (opaque /
+// freeform), so an array of freeform objects is not mistaken for a leaf.
+function resolveObjectSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (isObjectSchema(schema)) {
+    return schema;
+  }
+  const items = asRecord(schema.items);
+  return isObjectSchema(items) ? items : null;
+}
+
+function isObjectSchema(schema: Record<string, unknown>): boolean {
+  return (
+    (extractSchemaType(schema)?.includes("object") ?? false) ||
+    Object.keys(asRecord(schema.properties)).length > 0
+  );
+}
+
+// Does the compact one-line rendering hide object content the model would need?
+// Mirrors summarizeNestedProperties' MAX_NESTED_DEPTH budget so the marker fires
+// exactly when content falls past the levels actually shown.
+function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
+  return schemaHidesDetailBelow(paramSchema, MAX_NESTED_DEPTH);
+}
+
+// `remainingDepth` is how many more nested levels the compact summary still
+// renders below this schema. Detail is hidden when an object's content can't be
+// shown within that budget: a freeform/extensible object (additionalProperties)
+// or an opaque object with no listed properties at any shown level, or an object
+// child whose own object content falls past the budget. Resolves through array
+// items so an array of objects is judged by its element shape. Scalars and
+// objects fully shown within budget return false. Conservative: an object that
+// merely omits `additionalProperties` is not flagged, to avoid marking every
+// object. Always called with remainingDepth >= 1 (the <= 1 branch never recurses
+// further), so an object's own properties are never themselves unshown here.
+function schemaHidesDetailBelow(
+  schema: Record<string, unknown>,
+  remainingDepth: number,
+): boolean {
+  const objectSchema = resolveObjectSchema(schema);
+  if (!objectSchema) {
+    return false;
+  }
+  const additionalProperties = objectSchema.additionalProperties;
+  if (
+    additionalProperties === true ||
+    (additionalProperties != null && typeof additionalProperties === "object")
+  ) {
+    return true;
+  }
+  const properties = asRecord(objectSchema.properties);
+  if (Object.keys(properties).length === 0) {
+    return true;
+  }
+  // Last shown level: this object's children render, but their children do not,
+  // so any object child means unshown content.
+  if (remainingDepth <= 1) {
+    return Object.values(properties).some(
+      (value) => resolveObjectSchema(asRecord(value)) != null,
+    );
+  }
+  return Object.values(properties).some((value) =>
+    schemaHidesDetailBelow(asRecord(value), remainingDepth - 1),
+  );
 }
 
 type PreparedSearchQuery = {
@@ -581,9 +662,9 @@ function formatParamSignature(param: InputParameterSummary): string {
   return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
 }
 
-// Additive: a parameter can carry a scalar type, a one-level object shape, and an
-// enum constraint at once, so each present part is appended rather than replacing
-// the others (e.g. `sort?:string enum("asc"|"desc")`).
+// Additive: a parameter can carry a scalar type, a nested object shape (up to
+// MAX_NESTED_DEPTH levels), and an enum constraint at once, so each present part
+// is appended rather than replacing the others (e.g. `sort?:string enum("asc"|"desc")`).
 function formatParamType(param: InputParameterSummary): string {
   let type = param.type ?? "";
   if (param.properties && param.properties.length > 0) {
@@ -593,18 +674,26 @@ function formatParamType(param: InputParameterSummary): string {
     const enumClause = formatEnumValues(param.enum);
     type = type ? `${type} ${enumClause}` : enumClause;
   }
+  // mark objects whose content the compact summary could not fully show, so the
+  // model knows to consult the full schema (returned on an invalid run_tool call).
+  if (param.hasHiddenDetail) {
+    type += "…";
+  }
   return type;
 }
 
 function formatNestedProperties(properties: NestedParameterSummary[]): string {
-  const inner = properties
-    .map((property) => {
-      const requiredMark = property.required ? "!" : "?";
-      const typeSuffix = property.type ? `:${property.type}` : "";
-      return `${property.name}${requiredMark}${typeSuffix}`;
-    })
-    .join(", ");
-  return `{${inner}}`;
+  return `{${properties.map(formatNestedProperty).join(", ")}}`;
+}
+
+function formatNestedProperty(property: NestedParameterSummary): string {
+  const requiredMark = property.required ? "!" : "?";
+  let type = property.type ?? "";
+  if (property.properties && property.properties.length > 0) {
+    type += formatNestedProperties(property.properties);
+  }
+  const typeSuffix = type ? `:${type}` : "";
+  return `${property.name}${requiredMark}${typeSuffix}`;
 }
 
 // enum values are arbitrary JSON (number/boolean/null/object, or strings that may
@@ -679,24 +768,74 @@ function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
 }
 
 // Actionable next-step guidance (Anthropic recovery-error practice). Null when
-// results are complete and non-empty.
+// results are complete, non-empty, and every query term hit some tool text.
+// Clauses compose: a vocabulary-mismatch note can ride alongside the empty- or
+// truncated-result note so the model learns both what happened and which terms
+// to drop or replace.
 function buildSearchHint(params: {
   matchCount: number;
   truncated: boolean;
   limit: number;
   searchableTools: SearchCandidate[];
+  unmatchedTerms: string[];
 }): string | null {
-  const { limit, matchCount, searchableTools, truncated } = params;
+  const { limit, matchCount, searchableTools, truncated, unmatchedTerms } =
+    params;
+  const parts: string[] = [];
+
   if (matchCount === 0) {
     const servers = availableServerNames(searchableTools);
     const serverHint =
       servers.length > 0 ? ` Available servers: ${servers.join(", ")}.` : "";
-    return `No tools matched. Try broader or different keywords, or switch mode.${serverHint}`;
+    parts.push(
+      `No tools matched. Try broader or different keywords, or switch mode.${serverHint}`,
+    );
+  } else if (truncated) {
+    parts.push(
+      `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`,
+    );
   }
-  if (truncated) {
-    return `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`;
+
+  if (unmatchedTerms.length > 0) {
+    parts.push(
+      `No tool text matches these query terms: ${unmatchedTerms.join(", ")}.`,
+    );
   }
-  return null;
+
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+// Query terms the ranker cannot match against any tool. The ranker has exactly
+// two match surfaces: BM25 over indexed tokens across every field, and the
+// whole-query substring boost over name/title. So a term is unmatched only when
+// it is neither an indexed token (any field) nor a substring of any name/title.
+// Both checks are necessary: the token set alone would falsely report "repo"
+// (which matches github__search_repositories via the name substring boost), and
+// the name/title substring check alone would miss a description-only term.
+// One-sided by design — never names a term that contributed to a result; it may
+// stay silent on a term that only appears inside a name/title as a substring.
+function findUnmatchedQueryTerms(
+  candidates: SearchCandidate[],
+  query: PreparedSearchQuery,
+): string[] {
+  if (query.tokens.length === 0) {
+    return [];
+  }
+  const corpusTokens = new Set<string>();
+  let nameTitleText = "";
+  for (const candidate of candidates) {
+    const { name, title, description, argNames, argDescriptions } =
+      candidate.searchText;
+    for (const token of tokenize(
+      `${name} ${title} ${description} ${argNames} ${argDescriptions}`,
+    )) {
+      corpusTokens.add(token);
+    }
+    nameTitleText += ` ${name} ${title}`;
+  }
+  return query.tokens.filter(
+    (token) => !corpusTokens.has(token) && !nameTitleText.includes(token),
+  );
 }
 
 const MAX_HINT_SERVERS = 10;
@@ -953,11 +1092,11 @@ function visitSchema(
 }
 
 // search_tools only runs in search_and_run_only mode, where the meta tools and
-// the always-exposed runtime tools (skills + sandbox) are already top-level —
-// returning them as results would be redundant noise. But "always-exposed" only
+// the always-exposed runtime tools (skills + sandbox + apps) are already
+// top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
 // via sandbox:execute is NOT top-level, so surface it here so the model can
-// discover it and propose granting it. Meta tools are never useful as results.
+// discover and run it. Meta tools are never useful as results.
 function isExcludedFromSearchResults(
   toolName: string,
   assignedNames: Set<string>,

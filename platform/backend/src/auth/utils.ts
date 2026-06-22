@@ -90,6 +90,24 @@ export const userHasPermission = async (
   return permissions[resource]?.includes(action) ?? false;
 };
 
+/**
+ * Authorize a known user/organization against a set of required permissions.
+ * Used by the loopback auth path, where identity is already resolved (no
+ * session/token headers to re-verify), unlike {@link hasPermission}.
+ */
+export const userContextHasPermissions = async (params: {
+  userId: string;
+  organizationId: string;
+  permissions: Permissions;
+}): Promise<{ success: boolean; error: Error | null }> => {
+  const userPermissions = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const allowed = hasRequiredPermissions(userPermissions, params.permissions);
+  return { success: allowed, error: allowed ? null : new Error("Forbidden") };
+};
+
 export const getPermissionsForUserContext = async (params: {
   userId: string;
   organizationId: string;

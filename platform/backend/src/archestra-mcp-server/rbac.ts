@@ -21,6 +21,9 @@ export const TOOL_PERMISSIONS: Record<
   // Identity — available to all
   whoami: null,
 
+  // API — dispatches to REST routes; per-route RBAC is enforced by the loopback
+  api: null,
+
   // Agents
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },

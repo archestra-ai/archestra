@@ -17,6 +17,7 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
   SupportedProviders,
+  TOOL_API_SHORT_NAME,
   testMcpServerCommand,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -38,6 +39,7 @@ import {
   SkillModel,
   TeamModel,
   TeamTokenModel,
+  ToolInvocationPolicyModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -337,14 +339,58 @@ export async function syncBuiltInSkillsForOrganization(
  * Seeds Archestra MCP catalog and tools.
  * ToolModel.seedArchestraTools upserts the catalog and built-in tools idempotently.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
+ *
+ * @public — also imported directly by seed tests, not only reached via
+ * {@link seedRequiredStartingData}.
  */
-async function seedArchestraCatalogAndTools(): Promise<void> {
+export async function seedArchestraCatalogAndTools(): Promise<void> {
   const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
+  await seedArchestraApiDefaultPolicy(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
+}
+
+/**
+ * Default tool-invocation policy for `archestra__api`: writes (any non-GET
+ * method) require human approval. Seeded once, the first time the api tool row
+ * itself is created — the persistent tool row is the one-time marker. On later
+ * restarts the tool already exists, so a policy an admin intentionally deleted
+ * is never resurrected (and admin relaxations are likewise preserved).
+ */
+async function seedArchestraApiDefaultPolicy(
+  newlyCreatedToolNames: string[],
+): Promise<void> {
+  // Resolve the same (possibly white-labeled) name seedArchestraTools wrote, so
+  // a branded deployment still finds its tool row instead of the default name.
+  const apiToolName = archestraMcpBranding.getToolName(TOOL_API_SHORT_NAME);
+
+  if (!newlyCreatedToolNames.includes(apiToolName)) {
+    return;
+  }
+
+  const [apiTool] = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.name, apiToolName));
+
+  if (!apiTool) {
+    logger.warn(
+      { apiToolName },
+      "Archestra API tool row not found; skipping default policy seed",
+    );
+    return;
+  }
+
+  await ToolInvocationPolicyModel.create({
+    toolId: apiTool.id,
+    conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+    action: "require_approval",
+    reason: "Archestra API writes require human approval by default.",
+  });
+  logger.info("Seeded default archestra__api tool-invocation policy");
 }
 
 /**

@@ -11,8 +11,8 @@ export function getArchestraMcpCatalogMetadata(): Pick<
   return {
     name: archestraMcpBranding.catalogName,
     description: isWhiteLabeled
-      ? "Built-in tools for creating and managing agents, tools, MCP servers, policies, limits, and other platform resources."
-      : "Built-in Archestra tools for creating and managing agents, tools, MCP servers, policies, limits, and other platform resources.",
+      ? "Built-in tools, including the api tool for managing agents, MCP servers, policies, limits, and other platform resources via the platform's REST API."
+      : "Built-in Archestra tools, including the archestra__api tool for managing agents, MCP servers, policies, limits, and other platform resources via the platform's REST API.",
     docsUrl: isWhiteLabeled
       ? null
       : getDocsUrl(DocsPage.PlatformArchestraMcpServer),

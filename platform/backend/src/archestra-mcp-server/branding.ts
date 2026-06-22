@@ -8,6 +8,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  TOOL_API_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
 import type { Organization } from "@/types";
@@ -78,6 +79,25 @@ class ArchestraMcpBranding {
 
   isToolName(toolName: string): boolean {
     return this.getToolShortName(toolName) !== null;
+  }
+
+  /**
+   * Whether a tool bypasses tool-invocation and trusted-data policies. All
+   * built-in archestra tools are trusted and bypass — except `archestra__api`,
+   * which dispatches to arbitrary REST routes and is therefore policy-governed.
+   */
+  bypassesToolPolicies(toolName: string): boolean {
+    const shortName = this.getToolShortName(toolName);
+    return shortName !== null && shortName !== TOOL_API_SHORT_NAME;
+  }
+
+  /**
+   * Whether a tool is the generic `archestra__api` REST dispatch tool — the one
+   * built-in that is always policy-governed and must stay gated even when the
+   * org runs in permissive mode.
+   */
+  isApiTool(toolName: string): boolean {
+    return this.getToolShortName(toolName) === TOOL_API_SHORT_NAME;
   }
 
   private state: ArchestraBrandingState = {

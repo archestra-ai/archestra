@@ -12,6 +12,8 @@ import {
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
+  TOOL_API_SHORT_NAME,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -20,6 +22,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  type CallToolResult,
   ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
@@ -29,6 +32,7 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -54,13 +58,17 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  OrganizationModel,
   TeamModel,
   TeamTokenModel,
+  ToolInvocationPolicyModel,
   ToolModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+
 import { findAgentAccessContextById } from "@/models/agent-access-context";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -73,15 +81,18 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
+
 import {
   type AgentAccessContext,
   type AgentType,
   agentOwner,
   type CommonToolCall,
+  type GlobalToolPolicy,
   type SelectTeamToken,
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -401,6 +412,22 @@ export async function createAgentServer(
               ? "Agent delegation tool call received"
               : "Archestra MCP tool call received",
           );
+
+          // The gateway tools/call path is an autonomous channel with no human
+          // approval grant, so enforce invocation policies fail-closed here. In
+          // practice this only gates archestra__api — every other built-in
+          // bypasses policies — but without it a profile-token client could issue
+          // platform writes with RBAC only, skipping both the block policies and
+          // the approval gate the chat path enforces.
+          const policyBlock = await blockIfPolicyDenies(
+            name,
+            agent.id,
+            args,
+            tokenAuth,
+          );
+          if (policyBlock) {
+            return policyBlock;
+          }
 
           // Handle Archestra and agent delegation tools directly
           const response = await startActiveMcpSpan({
@@ -1613,6 +1640,14 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
+    // archestra__api (when assigned) stays directly exposed at top level in both
+    // modes, so the platform-management entrypoint is always discoverable rather
+    // than hidden behind search_tools. It is never a candidate here unless
+    // assigned (it is not in the always-exposed set), so unassigned agents never
+    // see it.
+    if (isArchestraApiTool(tool.name)) {
+      return true;
+    }
     // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
     // but the meta tools themselves and the always-exposed skill path must stay
     // top-level. `full` mode hides only the meta tools.
@@ -1752,7 +1787,75 @@ function isArchestraMetaTool(toolName: string) {
   );
 }
 
+function isArchestraApiTool(toolName: string) {
+  return (
+    archestraMcpBranding.getToolShortName(toolName) === TOOL_API_SHORT_NAME
+  );
+}
+
 function isAlwaysExposedTool(toolName: string) {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
+}
+
+// Fail-closed policy gate for the gateway tools/call path. Returns an error
+// result when an invocation policy denies the call, or null to let execution
+// proceed. Two disjoint checks: evaluateBatch enforces hard blocks
+// (block_always), and checkApprovalRequired enforces require_approval — which
+// this autonomous channel can never grant. A direct gateway call carries no
+// untrusted conversational data, so it is evaluated as a trusted context: that
+// keeps block_always and require_approval enforced while leaving unpoliced
+// reads and block_when_context_is_untrusted policies unaffected.
+async function blockIfPolicyDenies(
+  toolName: string,
+  agentId: string,
+  args: Record<string, unknown> | undefined,
+  tokenAuth: TokenAuthContext | null | undefined,
+): Promise<CallToolResult | null> {
+  const organizationId = tokenAuth?.organizationId;
+  if (!organizationId) {
+    return null;
+  }
+
+  const organization = await OrganizationModel.getById(organizationId);
+  const globalToolPolicy: GlobalToolPolicy =
+    organization?.globalToolPolicy ?? "permissive";
+
+  const context: PolicyEvaluationContext = {
+    teamIds: tokenAuth?.teamId ? [tokenAuth.teamId] : [],
+  };
+  const toolInput = isRecord(args) ? args : {};
+
+  const evaluation = await ToolInvocationPolicyModel.evaluateBatch(
+    agentId,
+    [{ toolCallName: toolName, toolInput }],
+    context,
+    true,
+    globalToolPolicy,
+  );
+  if (!evaluation.isAllowed) {
+    return policyDeniedResult(evaluation.reason);
+  }
+
+  const approvalRequired =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      toolName,
+      toolInput,
+      context,
+      globalToolPolicy,
+    );
+  if (approvalRequired) {
+    return policyDeniedResult(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
+  }
+
+  return null;
+}
+
+function policyDeniedResult(text: string): CallToolResult {
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: true,
+  };
 }

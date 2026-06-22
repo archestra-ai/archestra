@@ -227,13 +227,21 @@ class ToolInvocationPolicyModel {
     context: PolicyEvaluationContext,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
-    if (globalToolPolicy === "permissive") {
+    // Permissive mode: skip all approval checks (consistent with evaluateBatch),
+    // except for archestra__api. It is a broad REST write primitive whose seeded
+    // require_approval gate must stay effective regardless of the org-wide
+    // permissive setting; otherwise the default org (permissive) silently
+    // nullifies the approval policy this tool ships with.
+    if (
+      globalToolPolicy === "permissive" &&
+      !archestraMcpBranding.isApiTool(toolName)
+    ) {
       return false;
     }
 
-    // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (archestraMcpBranding.isToolName(toolName)) {
+    // Policy-bypassing Archestra tools are always allowed (consistent with
+    // evaluateBatch). archestra__api is policy-governed and is not bypassed.
+    if (archestraMcpBranding.bypassesToolPolicies(toolName)) {
       return false;
     }
 
@@ -272,9 +280,8 @@ class ToolInvocationPolicyModel {
     const specificPolicies = policies.filter((p) => p.conditions.length > 0);
     const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
 
-    // Check specific policies first
-    for (const policy of specificPolicies) {
-      const conditionsMatch = policy.conditions.every((condition) => {
+    const matches = (policy: (typeof policies)[number]): boolean =>
+      policy.conditions.every((condition) => {
         const { key, value, operator } = condition;
         if (key.startsWith("context.")) {
           return ToolInvocationPolicyModel.evaluateContextCondition(
@@ -292,22 +299,30 @@ class ToolInvocationPolicyModel {
         );
       });
 
-      if (conditionsMatch && policy.action === "require_approval") {
-        logger.info(
-          { toolName },
-          "checkApprovalRequired: specific policy requires approval",
-        );
-        return true;
-      }
+    // Among specific policies, a non-approval (allow/block) match takes
+    // precedence over a require_approval match, so an explicit relaxation
+    // deterministically suppresses a broad require_approval default. Evaluating
+    // the relaxations first makes that precedence independent of row order.
+    const matchesNonApproval = specificPolicies
+      .filter((p) => p.action !== "require_approval")
+      .some(matches);
+    if (matchesNonApproval) {
+      logger.debug(
+        { toolName },
+        "checkApprovalRequired: specific policy matched, no approval needed",
+      );
+      return false;
+    }
 
-      // If a specific policy matched but is not require_approval, it takes precedence
-      if (conditionsMatch) {
-        logger.debug(
-          { toolName, action: policy.action },
-          "checkApprovalRequired: specific policy matched, no approval needed",
-        );
-        return false;
-      }
+    const matchesApproval = specificPolicies
+      .filter((p) => p.action === "require_approval")
+      .some(matches);
+    if (matchesApproval) {
+      logger.info(
+        { toolName },
+        "checkApprovalRequired: specific policy requires approval",
+      );
+      return true;
     }
 
     // Fall back to default policy
@@ -427,10 +442,11 @@ class ToolInvocationPolicyModel {
       return { isAllowed: true, reason: "" };
     }
 
-    // Filter out Archestra tools and agent delegation tools (always allowed)
+    // Filter out policy-bypassing Archestra tools and agent delegation tools
+    // (always allowed). archestra__api is policy-governed and stays in.
     const externalToolCalls = toolCalls.filter(
       (tc) =>
-        !archestraMcpBranding.isToolName(tc.toolCallName) &&
+        !archestraMcpBranding.bypassesToolPolicies(tc.toolCallName) &&
         !isAgentTool(tc.toolCallName),
     );
 

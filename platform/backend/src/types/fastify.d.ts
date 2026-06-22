@@ -9,7 +9,9 @@ declare module "fastify" {
     user: User;
     organizationId: string;
     /** Auth method used for this request; set by Authnz.populateUserInfo. */
-    authMethod?: "session" | "api_key" | "service_account";
+    authMethod?: "session" | "api_key" | "service_account" | "loopback";
+    /** User id behind an in-process loopback request; set for authMethod "loopback". */
+    loopbackUserId?: string;
     serviceAccount?: SelectServiceAccount;
     serviceAccountAuthResult?: {
       serviceAccount: SelectServiceAccount;

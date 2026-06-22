@@ -61,6 +61,7 @@ const groupOrder: Record<ToolGroup, number> = {
  */
 const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   whoami: ToolGroup.Identity,
+  api: ToolGroup.Identity,
 
   create_agent: ToolGroup.Agents,
   get_agent: ToolGroup.Agents,

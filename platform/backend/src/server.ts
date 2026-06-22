@@ -50,7 +50,7 @@ import {
   renewEmailSubscriptionIfNeeded,
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { fastifyAuthPlugin } from "@/auth";
+import { fastifyAuthPlugin, loopbackGateway } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
@@ -1148,6 +1148,10 @@ const startWebServer = async () => {
 
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
+
+    // Expose the fully-configured instance for in-process loopback requests
+    // (the archestra__api tool dispatches to these same routes).
+    loopbackGateway.setServer(fastify);
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);

@@ -104,9 +104,15 @@ function resolveCacheDirection(params: {
 }
 
 /**
- * Collapse the read/write cache-price sources into one label for display.
- * Signals estimation (`derived_multiplier`) if either direction is derived;
- * otherwise prefers `custom`, then `models_dev`.
+ * Collapse the read/write cache-price sources into one label for display,
+ * favouring the most authoritative direction: custom → models.dev → derived.
+ *
+ * It reads `derived_multiplier` (the "estimated" signal) only when BOTH
+ * directions are derived. This matters because providers that don't charge for
+ * cache writes (OpenAI/Gemini/DeepSeek) always derive a structurally-zero write;
+ * that known-zero must not make a model with a real synced cache-read price
+ * appear estimated. (Synced-read + non-zero-derived-write does not occur in
+ * practice — the providers with a non-zero write surcharge publish both prices.)
  */
 function combineCacheSource(
   readSource: PriceSource | null,
@@ -115,9 +121,9 @@ function combineCacheSource(
   const sources = [readSource, writeSource].filter(
     (s): s is PriceSource => s != null,
   );
-  if (sources.includes("derived_multiplier")) return "derived_multiplier";
   if (sources.includes("custom")) return "custom";
-  return "models_dev";
+  if (sources.includes("models_dev")) return "models_dev";
+  return "derived_multiplier";
 }
 
 /**

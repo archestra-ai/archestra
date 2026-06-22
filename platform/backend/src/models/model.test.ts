@@ -1079,8 +1079,9 @@ describe("ModelModel", () => {
       expect(pricing.pricePerMillionCacheRead).toBe("1.25");
       // OpenAI does not charge for cache writes → multiplier write 0.
       expect(pricing.pricePerMillionCacheWrite).toBe("0");
-      // Mixed sources collapse to the estimated label since write is derived.
-      expect(pricing.cacheSource).toBe("derived_multiplier");
+      // The real synced read wins the label; the known-zero derived write must
+      // not flag the model as estimated.
+      expect(pricing.cacheSource).toBe("models_dev");
     });
 
     test("preserves sub-cent cache-read precision (no 2-decimal rounding)", async () => {

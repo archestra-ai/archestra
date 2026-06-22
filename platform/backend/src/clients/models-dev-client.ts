@@ -46,6 +46,17 @@ const RETRY_CONFIG = {
 
 /**
  * Cost information for a model (prices per million tokens in USD)
+ *
+ * Only input/output + cache_read/cache_write are persisted and used in cost
+ * calculation. Intentionally NOT persisted:
+ * - `reasoning`: reasoning/thinking tokens are a subset of output tokens and are
+ *   billed at the output rate (reasoning === output for current models), so a
+ *   separate reasoning price would double-count what output pricing already covers.
+ * - `input_audio` / `output_audio`: genuinely distinct rates, but nothing
+ *   captures audio token counts yet (no adapter usage parsing, interaction
+ *   columns, or o11y attributes), so persisting them would be dead data. Persist
+ *   these as step 0 of an end-to-end audio cost-tracking feature, not on their own.
+ *
  * @public — exported for testability
  */
 export type ModelsDevCost = {

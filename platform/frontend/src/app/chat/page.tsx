@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
+import type { ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -56,12 +56,11 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
+import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -1800,7 +1799,9 @@ export function ChatPageContent({
 
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    return <NoApiKeySetup />;
+    // Reset to a clean /chat URL after a key is added so no stale conversation
+    // param lingers; the keys query refetch then reveals the composer.
+    return <NoApiKeySetup onKeyAdded={() => router.push("/chat")} />;
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
@@ -2504,49 +2505,4 @@ type ChatMessagePart =
 // so the message is well-formed and the backend can inject the skill
 function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
   return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
-}
-
-// =========================================================================
-// No API Key Setup — shown when user has no API keys configured
-// =========================================================================
-
-const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
-  isPrimary: true,
-};
-
-function NoApiKeySetup() {
-  const router = useRouter();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  return (
-    <div className="flex h-full w-full items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect an LLM provider to start chatting
-          </p>
-        </div>
-        <Button
-          data-testid={E2eTestId.QuickstartAddApiKeyButton}
-          onClick={() => setIsDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add API Key
-        </Button>
-      </div>
-      <CreateLlmProviderApiKeyDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        title="Add API Key"
-        description="Add an LLM provider API key to start chatting"
-        defaultValues={DEFAULT_FORM_VALUES}
-        showConsoleLink
-        onSuccess={() => {
-          // Navigate to clean /chat URL so there's no stale conversation param
-          router.push("/chat");
-        }}
-      />
-    </div>
-  );
 }

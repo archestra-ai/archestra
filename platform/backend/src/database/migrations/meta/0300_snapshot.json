@@ -1,5 +1,5 @@
 {
-  "id": "6b96d8bb-af7d-46d9-aadc-3b36375e48dc",
+  "id": "e478a798-f9b3-40cd-b979-5da56496c6d9",
   "prevId": "77f027f7-5621-446a-8999-852daad57d4e",
   "version": "7",
   "dialect": "postgresql",
@@ -4983,6 +4983,138 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.environment_default_user_limits": {
+      "name": "environment_default_user_limits",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "limit_value": {
+          "name": "limit_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cleanup_interval": {
+          "name": "cleanup_interval",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'calendar_month'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "environment_default_user_limits_org_global_unique": {
+          "name": "environment_default_user_limits_org_global_unique",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"environment_default_user_limits\".\"environment_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "environment_default_user_limits_org_idx": {
+          "name": "environment_default_user_limits_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "environment_default_user_limits_organization_id_organization_id_fk": {
+          "name": "environment_default_user_limits_organization_id_organization_id_fk",
+          "tableFrom": "environment_default_user_limits",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "environment_default_user_limits_environment_id_environments_id_fk": {
+          "name": "environment_default_user_limits_environment_id_environments_id_fk",
+          "tableFrom": "environment_default_user_limits",
+          "tableTo": "environments",
+          "columnsFrom": [
+            "environment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "environment_default_user_limits_environment_unique": {
+          "name": "environment_default_user_limits_environment_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "environment_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.environments": {
       "name": "environments",
       "schema": "",
@@ -5827,6 +5959,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "session_id": {
           "name": "session_id",
           "type": "varchar",
@@ -6058,6 +6196,21 @@
           "method": "btree",
           "with": {}
         },
+        "interactions_environment_id_idx": {
+          "name": "interactions_environment_id_idx",
+          "columns": [
+            {
+              "expression": "environment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "interactions_session_id_idx": {
           "name": "interactions_session_id_idx",
           "columns": [
@@ -6164,6 +6317,19 @@
           "tableTo": "virtual_api_keys",
           "columnsFrom": [
             "virtual_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "interactions_environment_id_environments_id_fk": {
+          "name": "interactions_environment_id_environments_id_fk",
+          "tableFrom": "interactions",
+          "tableTo": "environments",
+          "columnsFrom": [
+            "environment_id"
           ],
           "columnsTo": [
             "id"
@@ -7181,6 +7347,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "schedule": {
           "name": "schedule",
           "type": "text",
@@ -7249,6 +7421,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "knowledge_base_connectors_environment_id_idx": {
+          "name": "knowledge_base_connectors_environment_id_idx",
+          "columns": [
+            {
+              "expression": "environment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -7258,6 +7445,19 @@
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "knowledge_base_connectors_environment_id_environments_id_fk": {
+          "name": "knowledge_base_connectors_environment_id_environments_id_fk",
+          "tableFrom": "knowledge_base_connectors",
+          "tableTo": "environments",
+          "columnsFrom": [
+            "environment_id"
           ],
           "columnsTo": [
             "id"
@@ -9220,18 +9420,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cache_read_price_per_token": {
-          "name": "cache_read_price_per_token",
-          "type": "numeric(20, 12)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cache_write_price_per_token": {
-          "name": "cache_write_price_per_token",
-          "type": "numeric(20, 12)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "custom_price_per_million_input": {
           "name": "custom_price_per_million_input",
           "type": "numeric(10, 2)",
@@ -9240,18 +9428,6 @@
         },
         "custom_price_per_million_output": {
           "name": "custom_price_per_million_output",
-          "type": "numeric(10, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_price_per_million_cache_read": {
-          "name": "custom_price_per_million_cache_read",
-          "type": "numeric(10, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_price_per_million_cache_write": {
-          "name": "custom_price_per_million_cache_write",
           "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false

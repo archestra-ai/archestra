@@ -8,6 +8,7 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ type ConnectorItem = Pick<
   | "config"
   | "schedule"
   | "enabled"
+  | "environmentId"
 >;
 
 type EditConnectorFormValues = {
@@ -63,6 +65,7 @@ type EditConnectorFormValues = {
   email: string;
   apiToken: string;
   schedule: string;
+  environmentId: string | null;
 };
 
 export function EditConnectorDialog({
@@ -87,6 +90,7 @@ export function EditConnectorDialog({
       email: "",
       apiToken: "",
       schedule: connector.schedule,
+      environmentId: connector.environmentId ?? null,
     },
   });
 
@@ -102,6 +106,7 @@ export function EditConnectorDialog({
         email: "",
         apiToken: "",
         schedule: connector.schedule,
+        environmentId: connector.environmentId ?? null,
       });
     }
   }, [open, connector, form]);
@@ -144,6 +149,7 @@ export function EditConnectorDialog({
         config: transformConfigArrayFields(
           values.config,
         ) as archestraApiTypes.CreateConnectorData["body"]["config"],
+        environmentId: values.environmentId,
         schedule: values.schedule,
         ...(hasCredentials && {
           credentials: {
@@ -264,6 +270,18 @@ export function EditConnectorDialog({
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="environmentId"
+            render={({ field }) => (
+              <EnvironmentSelector
+                value={field.value ?? null}
+                onChange={field.onChange}
+                helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+              />
+            )}
+          />
+
           <KnowledgeSourceVisibilitySelector
             visibility={visibility}
             onVisibilityChange={setVisibility}
@@ -271,6 +289,8 @@ export function EditConnectorDialog({
             onTeamIdsChange={setTeamIds}
             showTeamRequired
           />
+
+          <div className="border-t" />
 
           {urlConfig && (
             <FormField

@@ -267,9 +267,19 @@ class InteractionModel {
   }
 
   static async create(data: InsertInteraction) {
+    // Snapshot the environment from the agent at creation time (single funnel
+    // for all interaction writes) so per-environment cost-limit usage stays
+    // stable under later agent reassignment. The agent is authoritative: when a
+    // profile is present its current environment wins over any caller-supplied
+    // value. Only profile-less system interactions may set it explicitly.
+    const environmentId = data.profileId
+      ? await AgentModel.findEnvironmentId(data.profileId)
+      : (data.environmentId ?? null);
+
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
       ...data,
+      environmentId,
       request: stripNullBytes(data.request),
       response: stripNullBytes(data.response),
     };
@@ -797,6 +807,20 @@ class InteractionModel {
           LimitModel.updateTokenLimitUsage(
             "virtual_key",
             interaction.virtualKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
+      // Update environment-level token cost limits using the environment
+      // snapshotted on the interaction at creation time.
+      if (interaction.environmentId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "environment",
+            interaction.environmentId,
             model,
             inputTokens,
             outputTokens,

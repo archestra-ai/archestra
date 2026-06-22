@@ -17,6 +17,7 @@ import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AgentModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -322,6 +323,9 @@ const registry = defineArchestraTools([
       const toolsResolution = await resolveToolsParam({
         organizationId: context.organizationId,
         tools: args.tools,
+        environmentId: await AgentModel.findEnvironmentId(
+          context.agentId ?? context.agent.id,
+        ),
       });
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
@@ -1410,6 +1414,7 @@ type ResolvedTools = Array<{ id: string; name: string }>;
 async function resolveToolsParam(params: {
   organizationId: string;
   tools: string[] | undefined;
+  environmentId: string | null;
 }): Promise<
   { ok: true; tools: ResolvedTools | undefined } | { ok: false; error: string }
 > {
@@ -1417,6 +1422,7 @@ async function resolveToolsParam(params: {
   const resolution = await resolveAppToolsByName({
     organizationId: params.organizationId,
     toolNames: params.tools,
+    environmentId: params.environmentId,
   });
   if ("error" in resolution) {
     return { ok: false, error: resolution.error.message };

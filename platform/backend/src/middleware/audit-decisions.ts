@@ -6,6 +6,7 @@ import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
@@ -86,6 +87,10 @@ export const AUDIT_DECISIONS = {
     model: ChatOpsChannelBindingModel,
   },
   environmentsTable: { audited: true, model: EnvironmentModel },
+  environmentDefaultUserLimitsTable: {
+    audited: true,
+    model: EnvironmentDefaultUserLimitModel,
+  },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },

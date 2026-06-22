@@ -1,6 +1,6 @@
 import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
-import { ToolModel } from "@/models";
+import { AgentModel, ToolModel } from "@/models";
 
 interface AppCapabilityTool {
   /** Full MCP tool name as used by archestra.tools.call(...). */
@@ -78,6 +78,7 @@ export async function buildAppCapabilityContext(params: {
   const assignableRows = await ToolModel.findAppAssignableToolsByNames(
     organizationId,
     [...permittedNames].filter((name) => descriptionByName.has(name)),
+    await AgentModel.findEnvironmentId(agentId),
   );
 
   // A name backed by more than one assignable row is ambiguous and cannot be

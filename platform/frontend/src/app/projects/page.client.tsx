@@ -98,10 +98,6 @@ function ProjectsList() {
                   {project.description}
                 </p>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                {project.conversationCount}{" "}
-                {project.conversationCount === 1 ? "chat" : "chats"}
-              </p>
             </Link>
           ))}
         </div>

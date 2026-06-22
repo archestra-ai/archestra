@@ -118,7 +118,7 @@ test("conversationFilesService.list drops attachments from a different org", asy
   expect(result.attachments).toEqual([]);
 });
 
-test("personal chat: referenced is the touched files (deduped vs generated), owner-only", async ({
+test("personal chat: referenced excludes other-conversation files and dedupes the chat's own outputs", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -150,42 +150,35 @@ test("personal chat: referenced is the touched files (deduped vs generated), own
     data: Buffer.from("a"),
   });
 
-  // a personal PFS file produced in some OTHER conversation, pulled into this
-  // chat (recorded as a read touch)
+  // a personal file produced in some OTHER conversation, with a (stale) read
+  // touch recorded against THIS chat. No-project files are conversation-scoped,
+  // so it must NOT surface in this chat's referenced section.
+  const otherConv = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: org.id,
+  });
   const otherSandbox = await SkillSandboxModel.create({
     organizationId: org.id,
     userId: user.id,
-    conversationId: null,
+    conversationId: otherConv.id,
     defaultCwd: "/home/sandbox",
   });
-  const touched = await fileStore.put({
+  const elsewhere = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
-    conversationId: null,
+    conversationId: otherConv.id,
     sandboxId: otherSandbox.id,
     filename: "elsewhere.txt",
     mimeType: "text/plain",
     sizeBytes: 1,
     data: Buffer.from("b"),
   });
-  // another personal file the agent never touched in this chat
-  await fileStore.put({
-    organizationId: org.id,
-    userId: user.id,
-    projectId: null,
-    conversationId: null,
-    sandboxId: otherSandbox.id,
-    filename: "untouched.txt",
-    mimeType: "text/plain",
-    sizeBytes: 1,
-    data: Buffer.from("c"),
-  });
 
   await ConversationFileTouchModel.recordTouch({
     organizationId: org.id,
     conversationId: conv.id,
-    fileId: touched.id,
+    fileId: elsewhere.id,
     touchKind: "read",
   });
   // touching this chat's own output must not duplicate it into `referenced`
@@ -203,25 +196,9 @@ test("personal chat: referenced is the touched files (deduped vs generated), own
     requestingUserId: user.id,
   });
   expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-  expect(result.referenced).toEqual([
-    {
-      id: touched.id,
-      name: "elsewhere.txt",
-      mimeType: "text/plain",
-      contentUrl: `/api/skill-sandbox/artifacts/${touched.id}`,
-      createdAt: touched.createdAt.toISOString(),
-    },
-  ]);
-
-  // a non-owner reading the shared chat must not see the owner's personal files
-  const viewer = await makeUser({ email: "files-viewer@test.com" });
-  const viewerResult = await conversationFilesService.list({
-    conversationId: conv.id,
-    organizationId: org.id,
-    conversationOwnerUserId: user.id,
-    requestingUserId: viewer.id,
-  });
-  expect(viewerResult.referenced).toEqual([]);
+  // the other-conversation file is excluded; the own output is deduped vs
+  // generated — so a no-project chat's referenced section is empty.
+  expect(result.referenced).toEqual([]);
 });
 
 test("project chat: referenced is the touched project files, for any reader", async ({

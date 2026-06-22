@@ -17,8 +17,11 @@ import {
   storageFilename,
 } from "./file-storage";
 
-function userScope(label: string): OwnerScope {
-  return { kind: "user", userId: "u1", label };
+function userScope(
+  label: string,
+  conversationId: string | null = null,
+): OwnerScope {
+  return { kind: "user", userId: "u1", label, conversationId };
 }
 
 describe("readRowBytes / getObjectStore (inline db provider)", () => {
@@ -82,6 +85,52 @@ describe("FilesystemObjectStore", () => {
     expect(await fs.readdir(path.join(root, "user@example.com"))).toEqual([
       "report.pdf",
     ]);
+  });
+
+  test("nests a user's conversation files under <email>/<conversationId>/<name>", async () => {
+    const { key } = await store.write({
+      scope: userScope("user@example.com", "conv-123"),
+      name: "report.pdf",
+      data: Buffer.from("pdf-bytes"),
+    });
+    expect(key).toBe("user@example.com/conv-123/report.pdf");
+    expect((await store.read(key)).toString()).toBe("pdf-bytes");
+    expect(
+      await fs.readdir(path.join(root, "user@example.com", "conv-123")),
+    ).toEqual(["report.pdf"]);
+  });
+
+  test("two conversations may hold a same-named file at distinct keys", async () => {
+    const { key: k1 } = await store.write({
+      scope: userScope("u@x.com", "c1"),
+      name: "same.txt",
+      data: Buffer.from("one"),
+    });
+    const { key: k2 } = await store.write({
+      scope: userScope("u@x.com", "c2"),
+      name: "same.txt",
+      data: Buffer.from("two"),
+    });
+    expect(k1).toBe("u@x.com/c1/same.txt");
+    expect(k2).toBe("u@x.com/c2/same.txt");
+    expect((await store.read(k1)).toString()).toBe("one");
+    expect((await store.read(k2)).toString()).toBe("two");
+  });
+
+  test("enumerate is scoped to the conversation folder", async () => {
+    await store.write({
+      scope: userScope("u@x.com", "c1"),
+      name: "a.txt",
+      data: Buffer.from("a"),
+    });
+    await store.write({
+      scope: userScope("u@x.com", "c2"),
+      name: "b.txt",
+      data: Buffer.from("b"),
+    });
+    const c1 = await store.enumerate(userScope("u@x.com", "c1"));
+    expect(c1.map((o) => o.name)).toEqual(["a.txt"]);
+    expect(c1[0].key).toBe("u@x.com/c1/a.txt");
   });
 
   test("write refuses to overwrite an existing object (exclusive)", async () => {

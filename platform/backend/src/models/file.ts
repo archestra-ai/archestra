@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   PersistedFile,
@@ -125,24 +125,6 @@ class FileModel {
     return row ? normalizeByteaField(row, "data") : null;
   }
 
-  /** The user's own files (newest first), metadata only: project files excluded. */
-  static async listForUser(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
-      .select(artifactColumns)
-      .from(schema.filesTable)
-      .where(
-        and(
-          eq(schema.filesTable.organizationId, params.organizationId),
-          eq(schema.filesTable.userId, params.userId),
-          isNull(schema.filesTable.projectId),
-        ),
-      )
-      .orderBy(desc(schema.filesTable.createdAt));
-  }
-
   /** Files belonging to one project (newest first), any author; org-scoped. */
   static async listByProject(params: {
     organizationId: string;
@@ -160,19 +142,26 @@ class FileModel {
       .orderBy(desc(schema.filesTable.createdAt));
   }
 
-  /** Files belonging to any of the given projects (newest first); org-scoped. */
-  static async listByProjects(params: {
+  /**
+   * The user's no-project files in one conversation (newest first), metadata
+   * only. This is the personal "My Files" scope after no-project files became
+   * conversation-scoped: a chat sees only its own files, never another
+   * conversation's. Project files are excluded (they use {@link listByProject}).
+   */
+  static async listNoProjectByConversation(params: {
     organizationId: string;
-    projectIds: string[];
+    userId: string;
+    conversationId: string;
   }): Promise<SandboxArtifactRow[]> {
-    if (params.projectIds.length === 0) return [];
     return db
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
-          inArray(schema.filesTable.projectId, params.projectIds),
+          eq(schema.filesTable.conversationId, params.conversationId),
+          eq(schema.filesTable.userId, params.userId),
+          isNull(schema.filesTable.projectId),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));

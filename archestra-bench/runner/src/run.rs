@@ -1268,12 +1268,23 @@ async fn capture_effective_prompts(
     turn_count: usize,
     artifacts: &RunArtifacts,
 ) {
+    // Every emitted event carries `conversation_id` so a multi-conversation rollout's captured prompts
+    // can be attributed to the conversation they came from.
+    let emit_error = async |message: &str| {
+        artifacts
+            .append(
+                "effective_prompt_error",
+                serde_json::json!({"conversation_id": conversation_id, "error": message}),
+            )
+            .await;
+    };
+
     let interactions = match client.fetch_session_interactions(conversation_id).await {
         Ok(rows) => rows,
         Err(e) => {
             let msg = format!("failed to fetch interactions: {e}");
             warn!("{msg}");
-            artifacts.append_error("effective_prompt_error", &msg).await;
+            emit_error(&msg).await;
             return;
         }
     };
@@ -1281,27 +1292,31 @@ async fn capture_effective_prompts(
     if turn_count > 0 && interactions.is_empty() {
         let msg = "no interactions found despite the conversation taking turns".to_string();
         warn!("{msg}");
-        artifacts.append_error("effective_prompt_error", &msg).await;
+        emit_error(&msg).await;
         return;
     }
 
     let outcome = extract_effective_prompts(&interactions);
     for prompt in &outcome.prompts {
         match serde_json::to_value(prompt) {
-            Ok(value) => artifacts.append("effective_prompt", value).await,
+            Ok(mut value) => {
+                if let serde_json::Value::Object(map) = &mut value {
+                    map.insert(
+                        "conversation_id".to_string(),
+                        serde_json::Value::String(conversation_id.to_string()),
+                    );
+                }
+                artifacts.append("effective_prompt", value).await
+            }
             Err(e) => {
                 warn!("failed to serialize effective prompt: {e}");
-                artifacts
-                    .append_error("effective_prompt_error", &e.to_string())
-                    .await;
+                emit_error(&e.to_string()).await;
             }
         }
     }
     for error in &outcome.errors {
         warn!("effective-prompt anomaly: {error}");
-        artifacts
-            .append_error("effective_prompt_error", error)
-            .await;
+        emit_error(error).await;
     }
 }
 

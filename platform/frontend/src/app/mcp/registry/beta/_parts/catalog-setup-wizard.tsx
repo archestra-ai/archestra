@@ -89,16 +89,16 @@ import {
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import { cn } from "@/lib/utils";
-import { InstallationProgress } from "./installation-progress";
+import { InstallationProgress } from "../../_parts/installation-progress";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
-} from "./local-server-install-dialog";
-import type { CatalogItem } from "./mcp-server-card";
+} from "../../_parts/local-server-install-dialog";
 import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
-} from "./remote-server-install-dialog";
+} from "../../_parts/remote-server-install-dialog";
+import type { CatalogItem } from "./mcp-server-card";
 
 export type SetupStepId = "configuration" | "test" | "tools";
 
@@ -367,7 +367,9 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
               Retry
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link href={`/mcp/registry/${item.id}?tab=logs`}>View logs</Link>
+              <Link href={`/mcp/registry/beta/${item.id}?tab=logs`}>
+                View logs
+              </Link>
             </Button>
           </div>
         </div>

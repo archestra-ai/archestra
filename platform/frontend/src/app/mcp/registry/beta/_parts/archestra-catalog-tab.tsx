@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
@@ -27,12 +28,11 @@ import {
   useMcpServerCategories,
 } from "@/lib/mcp/external-mcp-catalog.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import type { SelectedCategory } from "./CatalogFilters";
-import { DetailsDialog } from "./details-dialog";
-import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
-import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
-import { RequestInstallationDialog } from "./request-installation-dialog";
-import { TransportBadges } from "./transport-badges";
+import type { SelectedCategory } from "../../_parts/CatalogFilters";
+import type { McpCatalogFormValues } from "../../_parts/mcp-catalog-form.types";
+import { transformExternalCatalogToFormValues } from "../../_parts/mcp-catalog-form.utils";
+import { RequestInstallationDialog } from "../../_parts/request-installation-dialog";
+import { TransportBadges } from "../../_parts/transport-badges";
 
 type ServerType = "all" | "remote" | "local";
 
@@ -44,8 +44,6 @@ export function ArchestraCatalogTab({
   onSelectServer: (formValues: McpCatalogFormValues) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [readmeServer, setReadmeServer] =
-    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
@@ -229,7 +227,6 @@ export function ArchestraCatalogTab({
                     server={server}
                     onSelectServer={handleSelectServer}
                     onRequestInstallation={handleRequestInstallation}
-                    onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
                     userAllowedToCreateCatalogItem={
                       userAllowedToCreateCatalogItem
@@ -262,11 +259,6 @@ export function ArchestraCatalogTab({
         </>
       )}
 
-      <DetailsDialog
-        server={readmeServer}
-        onClose={() => setReadmeServer(null)}
-      />
-
       <RequestInstallationDialog
         server={requestServer}
         onClose={() => setRequestServer(null)}
@@ -280,7 +272,6 @@ function ServerCard({
   server,
   onSelectServer,
   onRequestInstallation,
-  onOpenReadme,
   isInCatalog,
   userAllowedToCreateCatalogItem,
 }: {
@@ -289,9 +280,6 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   onRequestInstallation: (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-  ) => void;
-  onOpenReadme: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
@@ -348,14 +336,14 @@ function ServerCard({
 
         <div className="flex flex-col gap-2 mt-auto pt-3 justify-end">
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenReadme(server)}
-              className="flex-1"
-            >
-              <Info className="h-4 w-4 mr-1" />
-              Details
+            <Button variant="outline" size="sm" asChild className="flex-1">
+              <Link
+                href={`/mcp/registry/beta/catalog/${encodeURIComponent(server.name)}`}
+                target="_blank"
+              >
+                <Info className="h-4 w-4 mr-1" />
+                Details
+              </Link>
             </Button>
             {server.github_info?.url && (
               <Button variant="outline" size="sm" asChild className="flex-1">

@@ -38,7 +38,7 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
         className="-ml-2 text-muted-foreground"
         asChild
       >
-        <Link href={`/mcp/registry/${id}`}>
+        <Link href={`/mcp/registry/beta/${id}`}>
           <ArrowLeft className="h-4 w-4" />
           Back to server
         </Link>
@@ -179,7 +179,9 @@ function SetupWizard({ item }: { item: CatalogItem }) {
               </Button>
             )
           ) : (
-            <Button onClick={() => router.push(`/mcp/registry/${item.id}`)}>
+            <Button
+              onClick={() => router.push(`/mcp/registry/beta/${item.id}`)}
+            >
               Finish
             </Button>
           )}

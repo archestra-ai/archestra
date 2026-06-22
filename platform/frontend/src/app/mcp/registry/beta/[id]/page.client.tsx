@@ -66,19 +66,19 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
-import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
-import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
-import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
+import { useCanModifyCatalogItem } from "../../_parts/catalog-edit-access";
+import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
+import { DeleteCatalogDialog } from "../../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
   getDeploymentLabel,
-} from "../_parts/deployment-status";
+} from "../../_parts/deployment-status";
+import { McpLogsContent, type McpLogsTab } from "../../_parts/mcp-logs-dialog";
+import { TransportBadges } from "../../_parts/transport-badges";
+import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
-import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
-import { TransportBadges } from "../_parts/transport-badges";
-import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
@@ -125,7 +125,7 @@ export function McpCatalogItemPage({ id }: { id: string }) {
         className="-ml-2 text-muted-foreground"
         asChild
       >
-        <Link href="/mcp/registry">
+        <Link href="/mcp/registry/beta">
           <ArrowLeft className="h-4 w-4" />
           MCP Registry
         </Link>
@@ -364,7 +364,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           )}
           {canModify && (
             <Button asChild>
-              <Link href={`/mcp/registry/${item.id}/edit`}>
+              <Link href={`/mcp/registry/beta/${item.id}/edit`}>
                 <Pencil className="h-4 w-4" />
                 Edit
               </Link>
@@ -399,7 +399,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                   <DropdownMenuItem
                     onClick={() =>
                       router.push(
-                        `/mcp/registry/new?${MCP_CATALOG_CLONE_QUERY_PARAM}=${item.id}`,
+                        `/mcp/registry/beta/new?${MCP_CATALOG_CLONE_QUERY_PARAM}=${item.id}`,
                       )
                     }
                   >
@@ -520,7 +520,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
             )}
 
             <Link
-              href={`/mcp/registry/${item.id}/edit?step=tools`}
+              href={`/mcp/registry/beta/${item.id}/edit?step=tools`}
               className="group"
             >
               <StatCard
@@ -643,7 +643,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       <DeleteCatalogDialog
         item={deleteRequested ? item : null}
         onClose={() => setDeleteRequested(false)}
-        onDeleted={() => router.push("/mcp/registry")}
+        onDeleted={() => router.push("/mcp/registry/beta")}
       />
     </div>
   );

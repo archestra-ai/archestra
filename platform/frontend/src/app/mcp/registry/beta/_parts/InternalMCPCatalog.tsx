@@ -4,6 +4,8 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPlaywrightCatalogItem,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM,
+  MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@archestra/shared";
@@ -52,7 +54,6 @@ import {
   setPendingEnterpriseManagedInstall,
   useEnterpriseManagedInstallConnectUrl,
 } from "@/lib/mcp/enterprise-managed-install-auth";
-import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
 import {
   useInternalMcpCatalog,
   useMcpCatalogLabelKeys,
@@ -69,33 +70,27 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
-import { CreateCatalogDialog } from "./create-catalog-dialog";
-import { CustomServerRequestDialog } from "./custom-server-request-dialog";
-import { DeleteCatalogDialog } from "./delete-catalog-dialog";
-import { DetailsDialog } from "./details-dialog";
-import { EditCatalogDialog } from "./edit-catalog-dialog";
+import { CustomServerRequestDialog } from "../../_parts/custom-server-request-dialog";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
-} from "./local-server-install-dialog";
+} from "../../_parts/local-server-install-dialog";
+import {
+  NoAuthInstallDialog,
+  type NoAuthInstallResult,
+} from "../../_parts/no-auth-install-dialog";
+import { ReinstallConfirmationDialog } from "../../_parts/reinstall-confirmation-dialog";
+import {
+  RemoteServerInstallDialog,
+  type RemoteServerInstallResult,
+} from "../../_parts/remote-server-install-dialog";
+import type { McpServerInstallScope } from "../../_parts/select-mcp-server-credential-type-and-teams";
 import { ManageUsersDialog } from "./manage-users-dialog";
-import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
-import { buildCloneFormValues } from "./mcp-catalog-form.utils";
 import {
   type CatalogItem,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
-import {
-  NoAuthInstallDialog,
-  type NoAuthInstallResult,
-} from "./no-auth-install-dialog";
-import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
-import {
-  RemoteServerInstallDialog,
-  type RemoteServerInstallResult,
-} from "./remote-server-install-dialog";
-import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 
 export function InternalMCPCatalog({
   initialData,
@@ -142,10 +137,7 @@ export function InternalMCPCatalog({
   const currentUserId = session?.user?.id;
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    | "create"
     | "custom-request"
-    | "edit"
-    | "delete"
     | "remote-install"
     | "local-install"
     | "oauth"
@@ -154,12 +146,6 @@ export function InternalMCPCatalog({
     | "manage"
   >();
 
-  const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
-  const [cloneValues, setCloneValues] = useState<McpCatalogFormValues | null>(
-    null,
-  );
-  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
-  const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
 
   // Deep-link manage connections dialog state
@@ -214,10 +200,6 @@ export function InternalMCPCatalog({
   >(undefined);
   // Track server ID for re-authentication (preserves tool assignments)
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
-  const [detailsServerName, setDetailsServerName] = useState<string | null>(
-    null,
-  );
-  const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
   const { data: _userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
@@ -234,7 +216,7 @@ export function InternalMCPCatalog({
     ): Promise<boolean> => {
       const connectUrl = await getEnterpriseManagedInstallConnectUrl({
         catalogItem,
-        redirectTo: "/mcp/registry",
+        redirectTo: "/mcp/registry/beta",
       });
       if (!connectUrl) {
         return true;
@@ -345,13 +327,6 @@ export function InternalMCPCatalog({
     }
   }, [installedServers]);
 
-  // Listen for create event from layout header button
-  useEffect(() => {
-    const handler = () => openDialog("create");
-    window.addEventListener("mcp-registry:create", handler);
-    return () => window.removeEventListener("mcp-registry:create", handler);
-  }, [openDialog]);
-
   // Clear OAuth installation completion state
   useEffect(() => {
     const oauthCatalogId = getOAuthInstallationCompleteCatalogId();
@@ -360,7 +335,10 @@ export function InternalMCPCatalog({
     }
   }, []);
 
-  // Deep-link: auto-open install dialog when ?install={catalogId} is present
+  // Deep-link: auto-open install dialog when ?install={catalogId} is present.
+  // Optional &scope=personal|team|org (and &team={teamId} for team scope)
+  // pre-target the connection — used by the item detail page's add-connection
+  // actions.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams/catalogItems changes, other deps are stable callbacks
   useEffect(() => {
     const installCatalogId = searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
@@ -371,13 +349,31 @@ export function InternalMCPCatalog({
     );
     if (!catalogItem) return;
 
-    // Clear the install param from URL to prevent re-triggering on refresh
+    const scopeParam = searchParams.get(MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM);
+    const teamParam = searchParams.get(MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM);
+
+    // Clear the install params from URL to prevent re-triggering on refresh
     const params = new URLSearchParams(searchParams.toString());
     params.delete(MCP_CATALOG_INSTALL_QUERY_PARAM);
+    params.delete(MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM);
+    params.delete(MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM);
     const newUrl = params.toString()
       ? `${pathname}?${params.toString()}`
       : pathname;
     router.replace(newUrl, { scroll: false });
+
+    if (scopeParam === "personal") {
+      handleAddPersonalConnection(catalogItem);
+      return;
+    }
+    if (scopeParam === "team" && teamParam) {
+      handleAddSharedConnection(catalogItem, teamParam);
+      return;
+    }
+    if (scopeParam === "org") {
+      handleAddOrgConnection(catalogItem);
+      return;
+    }
 
     // Trigger the appropriate install dialog
     if (catalogItem.serverType === "local") {
@@ -1295,40 +1291,12 @@ export function InternalMCPCatalog({
     }
   };
 
-  const handleClone = (item: CatalogItem) => {
-    setCloneValues(buildCloneFormValues(item));
-    setCloneSourceId(item.id);
-    openDialog("create");
-  };
-
   const handleCancelInstallation = (serverId: string) => {
     // Remove server from installing set to stop polling
     setInstallingServerIds((prev) => {
       const newSet = new Set(prev);
       newSet.delete(serverId);
       return newSet;
-    });
-  };
-
-  const handleRestartPodsStarted = (serverIds: string[]) => {
-    if (serverIds.length === 0) return;
-    setRestartingServerIds((prev) => {
-      const next = new Set(prev);
-      for (const serverId of serverIds) {
-        next.add(serverId);
-      }
-      return next;
-    });
-  };
-
-  const handleRestartPodsFailed = (serverIds: string[]) => {
-    if (serverIds.length === 0) return;
-    setRestartingServerIds((prev) => {
-      const next = new Set(prev);
-      for (const serverId of serverIds) {
-        next.delete(serverId);
-      }
-      return next;
     });
   };
 
@@ -1519,22 +1487,7 @@ export function InternalMCPCatalog({
                     onReinstall={(flagged, options) =>
                       handleReinstall(item, flagged, options)
                     }
-                    onEdit={() => setEditingItem(item)}
-                    onDetails={() => {
-                      setDetailsServerName(item.name);
-                    }}
-                    onDelete={() => setDeletingItem(item)}
-                    onClone={() => handleClone(item)}
-                    onRestartPodsStarted={handleRestartPodsStarted}
-                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
-                    onAddPersonalConnection={() =>
-                      handleAddPersonalConnection(item)
-                    }
-                    onAddSharedConnection={(teamId) =>
-                      handleAddSharedConnection(item, teamId)
-                    }
-                    onAddOrgConnection={() => handleAddOrgConnection(item)}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                   />
                 );
@@ -1582,22 +1535,7 @@ export function InternalMCPCatalog({
                     onReinstall={(flagged, options) =>
                       handleReinstall(item, flagged, options)
                     }
-                    onEdit={() => setEditingItem(item)}
-                    onDetails={() => {
-                      setDetailsServerName(item.name);
-                    }}
-                    onDelete={() => setDeletingItem(item)}
-                    onClone={() => handleClone(item)}
-                    onRestartPodsStarted={handleRestartPodsStarted}
-                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
-                    onAddPersonalConnection={() =>
-                      handleAddPersonalConnection(item)
-                    }
-                    onAddSharedConnection={(teamId) =>
-                      handleAddSharedConnection(item, teamId)
-                    }
-                    onAddOrgConnection={() => handleAddOrgConnection(item)}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
                   />
                 );
@@ -1630,77 +1568,9 @@ export function InternalMCPCatalog({
         )}
       </div>
 
-      <CreateCatalogDialog
-        isOpen={isDialogOpened("create")}
-        cloneValues={cloneValues ?? undefined}
-        clonedFrom={cloneSourceId ?? undefined}
-        onClose={() => {
-          setCloneValues(null);
-          setCloneSourceId(null);
-          closeDialog("create");
-        }}
-        onSuccess={(createdItem) => {
-          // Auto-open the appropriate install dialog based on server type
-          if (createdItem.serverType === "local") {
-            handleInstallLocalServer(createdItem);
-          } else if (createdItem.serverType === "remote") {
-            handleInstallRemoteServer(createdItem, false);
-          }
-          // For builtin servers, no connect dialog is needed
-        }}
-      />
-
       <CustomServerRequestDialog
         isOpen={isDialogOpened("custom-request")}
         onClose={() => closeDialog("custom-request")}
-      />
-
-      <EditCatalogDialog
-        item={editingItem}
-        onClose={() => {
-          const item = editingItem;
-
-          if (item) {
-            setEditingItem(null);
-            const serverInfo = getInstalledServerInfo(item);
-            // Only auto-trigger reinstall if not already in error state
-            // (user should click "Reinstall Required" button to retry after error)
-            const isInErrorState =
-              serverInfo.installedServer?.localInstallationStatus === "error";
-            if (
-              serverInfo.installedServer?.reinstallRequired &&
-              !isInErrorState
-            ) {
-              // If the same edit also set catalogReinstallRequired (multi-tenant
-              // local catalog whose execution config changed), chain the catalog
-              // reinstall after the per-install one — otherwise the admin would
-              // see the catalog Reinstall button reappear and have to click it
-              // separately.
-              const alsoReinstallCatalog =
-                item.multitenant === true &&
-                item.catalogReinstallRequired === true;
-              handleReinstall(
-                item,
-                undefined,
-                alsoReinstallCatalog
-                  ? { alsoReinstallCatalog: true }
-                  : undefined,
-              );
-            }
-          }
-        }}
-      />
-
-      <DetailsDialog
-        onClose={() => {
-          setDetailsServerName(null);
-        }}
-        server={detailsServerData || null}
-      />
-
-      <DeleteCatalogDialog
-        item={deletingItem}
-        onClose={() => setDeletingItem(null)}
       />
 
       <RemoteServerInstallDialog

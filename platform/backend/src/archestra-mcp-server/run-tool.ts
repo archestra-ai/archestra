@@ -505,11 +505,50 @@ function checkThirdPartyToolArgs(params: {
     return null;
   }
 
-  return errorResult(
-    `Invalid tool_args for "${toolName}": ${problems.join("; ")}. ` +
-      "Put each of the target tool's parameters inside tool_args. " +
-      `The tool's full input schema is:\n${JSON.stringify(schema, null, 2)}`,
+  const skeletonEntries = required.map(
+    (key) =>
+      `${JSON.stringify(key)}: ${placeholderForRequiredKey(properties?.[key])}`,
   );
+  const sentCall = JSON.stringify({ tool_name: toolName, tool_args: toolArgs });
+  const messageLines = [
+    `Invalid tool_args for "${toolName}": ${problems.join("; ")}.`,
+    "Put each of the target tool's parameters inside tool_args.",
+    `You sent: ${sentCall}`,
+  ];
+  if (skeletonEntries.length > 0) {
+    messageLines.push(
+      `Send instead: {"tool_name": ${JSON.stringify(toolName)}, "tool_args": {${skeletonEntries.join(", ")}}} ` +
+        "(replace each <…> with a real value).",
+    );
+  }
+  messageLines.push(
+    `The tool's full input schema is:\n${JSON.stringify(schema, null, 2)}`,
+  );
+  return errorResult(messageLines.join("\n"));
+}
+
+/**
+ * Illustrative placeholder for a required key, from its declared top-level JSON
+ * Schema type. Shallow by design (mirrors the validation above); the full schema
+ * appended to the error carries any nested shape.
+ */
+function placeholderForRequiredKey(prop: unknown): string {
+  const type = isRecord(prop) ? prop.type : undefined;
+  switch (type) {
+    case "string":
+      return "<string>";
+    case "number":
+    case "integer":
+      return "<number>";
+    case "boolean":
+      return "<boolean>";
+    case "array":
+      return "<array>";
+    case "object":
+      return "<object>";
+    default:
+      return "<value>";
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

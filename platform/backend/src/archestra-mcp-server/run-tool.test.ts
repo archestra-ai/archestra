@@ -1467,6 +1467,11 @@ describe("run_tool", () => {
         'Invalid tool_args for "final_answer__submit_result"',
       );
       expect(text).toContain('missing required parameter "result"');
+      // the empty call is echoed back and a filled skeleton shows the fix
+      expect(text).toContain(
+        'You sent: {"tool_name":"final_answer__submit_result","tool_args":{}}',
+      );
+      expect(text).toContain('"result": <object>');
       // the full schema is echoed for self-correction
       expect(text).toContain('"required"');
       expect(text).toContain('"additionalProperties"');

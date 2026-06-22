@@ -507,7 +507,7 @@ function checkThirdPartyToolArgs(params: {
 
   const skeletonEntries = required.map(
     (key) =>
-      `${JSON.stringify(key)}: ${placeholderForRequiredKey(properties?.[key])}`,
+      `${JSON.stringify(key)}: ${placeholderForSchema(properties?.[key], 1)}`,
   );
   const sentCall = JSON.stringify({ tool_name: toolName, tool_args: toolArgs });
   const messageLines = [
@@ -527,14 +527,33 @@ function checkThirdPartyToolArgs(params: {
   return errorResult(messageLines.join("\n"));
 }
 
+/** How many levels of object/array nesting a skeleton unpacks before falling
+ * back to an opaque tag. Generous: this runs only on an already-failed call, so
+ * a fuller skeleton beats a terser one — the cap is just a guard against a
+ * pathologically deep schema (`$ref` cycles already bail above). */
+const MAX_SKELETON_DEPTH = 8;
+
 /**
- * Illustrative placeholder for a required key, from its declared top-level JSON
- * Schema type. Shallow by design (mirrors the validation above); the full schema
- * appended to the error carries any nested shape.
+ * Illustrative placeholder for a value, derived from its declared JSON Schema.
+ * Reads only literal `properties`/`required`/`items` (mirroring the shallow
+ * validation) and recurses into object/array shapes up to MAX_SKELETON_DEPTH.
+ * Falls back to an opaque type tag for free-form objects, `$ref`/`allOf`/`oneOf`/
+ * `anyOf`, or past the depth cap — the full schema appended to the error carries
+ * anything not expanded here.
  */
-function placeholderForRequiredKey(prop: unknown): string {
-  const type = isRecord(prop) ? prop.type : undefined;
-  switch (type) {
+function placeholderForSchema(schema: unknown, depth: number): string {
+  if (!isRecord(schema)) {
+    return "<value>";
+  }
+  if (
+    "$ref" in schema ||
+    "allOf" in schema ||
+    "oneOf" in schema ||
+    "anyOf" in schema
+  ) {
+    return "<value>";
+  }
+  switch (schema.type) {
     case "string":
       return "<string>";
     case "number":
@@ -542,10 +561,28 @@ function placeholderForRequiredKey(prop: unknown): string {
       return "<number>";
     case "boolean":
       return "<boolean>";
-    case "array":
+    case "array": {
+      if (depth < MAX_SKELETON_DEPTH && isRecord(schema.items)) {
+        return `[${placeholderForSchema(schema.items, depth + 1)}]`;
+      }
       return "<array>";
-    case "object":
+    }
+    case "object": {
+      const properties = isRecord(schema.properties) ? schema.properties : null;
+      const required = Array.isArray(schema.required)
+        ? schema.required.filter(
+            (key): key is string => typeof key === "string",
+          )
+        : [];
+      if (depth < MAX_SKELETON_DEPTH && properties && required.length > 0) {
+        const entries = required.map(
+          (key) =>
+            `${JSON.stringify(key)}: ${placeholderForSchema(properties[key], depth + 1)}`,
+        );
+        return `{${entries.join(", ")}}`;
+      }
       return "<object>";
+    }
     default:
       return "<value>";
   }

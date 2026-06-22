@@ -1478,6 +1478,46 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
+    test("unpacks a declared nested object shape into the skeleton (no dispatch)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "search__query",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "object",
+              properties: {
+                field: { type: "string" },
+                limit: { type: "number" },
+              },
+              required: ["field", "limit"],
+            },
+          },
+          required: ["filter"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search__query", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as any).text;
+      expect(text).toContain(
+        '"filter": {"field": <string>, "limit": <number>}',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
     test("returns the full schema for an unknown key under additionalProperties:false (no dispatch)", async ({
       makeAgentTool,
       makeInternalMcpCatalog,

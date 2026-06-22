@@ -71,6 +71,12 @@ struct CommonBenchArgs {
     lanes_file: Option<PathBuf>,
     #[arg(short = 'j', long, help = "Maximum parallel rollouts")]
     max_workers: Option<usize>,
+    #[arg(
+        long,
+        env = "ARCHESTRA_BENCH_PLATFORM_DIR",
+        help = "Platform directory (the prod image lays the app out at /app); default: <repo>/platform"
+    )]
+    platform_dir: Option<PathBuf>,
 }
 
 /// Flags shared by `analyze` and `full` — which lanes drive the analysis. Flattened into both.
@@ -297,6 +303,7 @@ async fn guarded_run(
             run_dir,
             common.max_workers,
             update_mcp_lock,
+            common.platform_dir.as_deref(),
         ) => Some(result),
     };
     if result.is_none() {

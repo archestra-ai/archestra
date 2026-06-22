@@ -1,0 +1,11 @@
+{
+  "env_id": "basic",
+  "task_id": "beta",
+  "lane": "glm",
+  "provider": "anthropic",
+  "model": "glm-5.2",
+  "outcome": "failed",
+  "turn_count": 3,
+  "tool_call_count": 2,
+  "total_tokens": null
+}

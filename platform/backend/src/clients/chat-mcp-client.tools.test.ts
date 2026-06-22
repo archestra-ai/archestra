@@ -592,6 +592,10 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
       execOptions("call-over"),
     );
     expect(toolResultContent(nudged)).toContain("identical arguments");
+    // The nudge reports the consecutive count.
+    expect(toolResultContent(nudged)).toContain(
+      String(MAX_IDENTICAL_TOOL_CALLS + 1),
+    );
     // The over-threshold call is not forwarded to the gateway.
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
       MAX_IDENTICAL_TOOL_CALLS,
@@ -630,8 +634,8 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     );
   });
 
-  test("the tracker does not leak across separate getChatMcpTools runs", async () => {
-    const { baseParams } = await setupChatToolEnv({
+  test("a cached tool set (no abortSignal) resets the tracker per run, so counts do not leak", async () => {
+    const { baseParams, gatewayClient } = await setupChatToolEnv({
       gatewayTools: [externalTool("extsrv__fetch_data")],
     });
 
@@ -644,13 +648,10 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
       isError: false,
     } as never);
 
-    // Both runs pass an abortSignal (as every executing path does), so each
-    // bypasses the tool cache and gets its own tracker.
-    const abortSignal = new AbortController().signal;
-    const runOne = await chatClient.getChatMcpTools({
-      ...baseParams,
-      abortSignal,
-    });
+    // No abortSignal: this is the A2A/scheduled/email path that reuses the
+    // 30s tool cache. The second run on the same scope hits the cache (the
+    // gateway is listed once) but must still get a fresh tracker.
+    const runOne = await chatClient.getChatMcpTools(baseParams);
     for (let i = 0; i <= MAX_IDENTICAL_TOOL_CALLS; i++) {
       await runOne.extsrv__fetch_data.execute?.(
         { query: "stuck" },
@@ -659,17 +660,53 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     }
 
     vi.mocked(mcpClient.executeToolCallForOwner).mockClear();
-    const runTwo = await chatClient.getChatMcpTools({
-      ...baseParams,
-      abortSignal,
-    });
+    const runTwo = await chatClient.getChatMcpTools(baseParams);
     const fresh = await runTwo.extsrv__fetch_data.execute?.(
       { query: "stuck" },
       execOptions("two-0"),
     );
+
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
     // A fresh run executes the same call rather than carrying over the nudge.
     expect(toolResultContent(fresh)).toContain("ok");
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+  });
+
+  test("breaks repeated identical delegation calls without spawning more child agents", async () => {
+    const { agent, org, baseParams } = await setupChatToolEnv();
+    const { delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Loop Child",
+    });
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-1",
+      text: "child result",
+      finishReason: "stop",
+    });
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+
+    for (let i = 0; i < MAX_IDENTICAL_TOOL_CALLS; i++) {
+      await tools[delegationTool.name].execute?.(
+        { message: "do it" },
+        execOptions(`d-${i}`),
+      );
+    }
+    const nudged = await tools[delegationTool.name].execute?.(
+      { message: "do it" },
+      execOptions("d-over"),
+    );
+
+    expect(toolResultContent(nudged)).toContain("identical arguments");
+    // The over-threshold call does not spawn another child-agent run.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(
+      MAX_IDENTICAL_TOOL_CALLS,
+    );
   });
 });
 

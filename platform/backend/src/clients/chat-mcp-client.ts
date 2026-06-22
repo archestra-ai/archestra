@@ -109,7 +109,17 @@ const MAX_TOOL_CACHE_SIZE = 1000;
  * This degrades performance (repeated tool fetches from MCP Gateway) but
  * does not affect correctness - tools will still work, just slower.
  */
-const toolCache = new LRUCacheManager<Record<string, Tool>>({
+/**
+ * A cached tool set plus the `ChatToolContext` its wrappers close over. The
+ * context is retained so the per-run `repeatTracker` can be reset on each cache
+ * hit (the cache is keyed per agent/user/scope and outlives a single run).
+ */
+interface CachedToolSet {
+  tools: Record<string, Tool>;
+  context: ChatToolContext;
+}
+
+const toolCache = new LRUCacheManager<CachedToolSet>({
   maxSize: MAX_TOOL_CACHE_SIZE,
   defaultTtl: TOOL_CACHE_TTL_MS,
 });
@@ -724,18 +734,23 @@ export async function getChatMcpTools({
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
-  const cachedTools = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
-  if (cachedTools) {
+  const cached = shouldUseToolCache ? toolCache.get(toolCacheKey) : null;
+  if (cached) {
+    // Reset the per-run repeat tracker: this entry is keyed per agent/user/scope
+    // and lives for the cache TTL, so without this a later run on the same scope
+    // would inherit the previous run's repeat counts. getChatMcpTools is called
+    // once per run, and every wrapper reads the tracker through this context.
+    cached.context.repeatTracker = new ToolCallRepeatTracker();
     logger.info(
       {
         agentId,
         userId,
-        toolCount: Object.keys(cachedTools).length,
+        toolCount: Object.keys(cached.tools).length,
       },
       "Returning cached MCP tools for chat",
     );
     // Apply filtering if enabledToolIds provided and non-empty
-    return await filterToolsByEnabledIds(cachedTools, enabledToolIds);
+    return await filterToolsByEnabledIds(cached.tools, enabledToolIds);
   }
 
   // Log cache miss - in multi-pod deployments without sticky sessions,
@@ -845,10 +860,8 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       teams,
       userTeams,
-      // Built fresh per run on this cache-miss path. The tool cache (above) only
-      // serves the non-executing `GET .../tools` listing endpoint — every path
-      // that executes tools passes an abortSignal, which bypasses the cache — so
-      // the tracker never spans two runs.
+      // One tracker per run. On a cache hit the cached context's tracker is
+      // reset (see above) so repeat counts never carry across runs.
       repeatTracker: new ToolCallRepeatTracker(),
     };
     const aiTools: Record<string, Tool> = {};
@@ -910,7 +923,7 @@ export async function getChatMcpTools({
 
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     if (shouldUseToolCache) {
-      toolCache.set(toolCacheKey, aiTools);
+      toolCache.set(toolCacheKey, { tools: aiTools, context: toolContext });
     }
 
     // Apply filtering if enabledToolIds provided and non-empty

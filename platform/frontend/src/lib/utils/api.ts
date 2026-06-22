@@ -52,6 +52,24 @@ export function getApiErrorMessage(error: unknown): string {
 }
 
 /**
+ * The machine-readable `type` of an API error (e.g. `"api_not_found_error"`),
+ * if present. Lets a caller branch on the kind of failure — e.g. treat a
+ * not-found as an expected empty state instead of toasting it as an error.
+ */
+export function getApiErrorType(error: unknown): string | undefined {
+  const unwrapped = unwrapApiError(error);
+  if (
+    typeof unwrapped === "object" &&
+    unwrapped !== null &&
+    "type" in unwrapped &&
+    typeof (unwrapped as { type?: unknown }).type === "string"
+  ) {
+    return (unwrapped as { type: string }).type;
+  }
+  return undefined;
+}
+
+/**
  * Convert an API SDK error object into a proper Error instance.
  * Use this instead of `throw error` to avoid Sentry's
  * "Object captured as exception with keys: error" warning.

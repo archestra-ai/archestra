@@ -280,33 +280,48 @@ export async function calculateCacheCost(
     // Provider has no cache pricing model; don't fabricate cost/savings.
     return undefined;
   }
-  // One direction may be unpriced (e.g. providers that don't charge for cache
-  // writes); treat a missing price as zero rather than discarding the whole
-  // breakdown.
+  // Each direction is costed only when its price is known. A direction with a
+  // known zero price (e.g. providers that don't charge for cache writes) still
+  // contributes; a genuinely unpriced (null) direction is skipped so we neither
+  // claim its cost nor fabricate savings for it.
   const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
-  const cacheReadPrice = parsePriceOrZero(pricing.pricePerMillionCacheRead);
-  const cacheWrite5mPrice = parsePriceOrZero(pricing.pricePerMillionCacheWrite);
-  const cacheWrite1hPrice = cacheWrite5mPrice * cacheWrite1hFactor(provider);
+  const cacheReadPrice =
+    pricing.pricePerMillionCacheRead != null
+      ? Number.parseFloat(pricing.pricePerMillionCacheRead)
+      : null;
+  const cacheWrite5mPrice =
+    pricing.pricePerMillionCacheWrite != null
+      ? Number.parseFloat(pricing.pricePerMillionCacheWrite)
+      : null;
 
   // Split writes by TTL: 1h is billed at a higher surcharge than the 5m default.
   const write1h = Math.min(Math.max(write1hTokens, 0), writeTokens);
   const write5m = writeTokens - write1h;
 
-  // What each token class would have cost at the full input price (the baseline
-  // caching is measured against), and what it actually costs cached.
-  const readFull = (readTokens / 1_000_000) * priceIn;
-  const write5mFull = (write5m / 1_000_000) * priceIn;
-  const write1hFull = (write1h / 1_000_000) * priceIn;
+  let cacheCost = 0;
+  let cacheReadSavings = 0;
+  let writeSurcharge = 0;
 
-  const cacheCost =
-    (readTokens / 1_000_000) * cacheReadPrice +
-    (write5m / 1_000_000) * cacheWrite5mPrice +
-    (write1h / 1_000_000) * cacheWrite1hPrice;
-  const cacheReadSavings = readFull - (readTokens / 1_000_000) * cacheReadPrice;
-  const cacheSavings =
-    cacheReadSavings -
-    ((write5m / 1_000_000) * cacheWrite5mPrice - write5mFull) -
-    ((write1h / 1_000_000) * cacheWrite1hPrice - write1hFull);
+  if (cacheReadPrice != null) {
+    const readActual = (readTokens / 1_000_000) * cacheReadPrice;
+    cacheCost += readActual;
+    // Read saves the difference vs. paying the full input price (always >= 0).
+    cacheReadSavings = (readTokens / 1_000_000) * priceIn - readActual;
+  }
+
+  if (cacheWrite5mPrice != null) {
+    const cacheWrite1hPrice = cacheWrite5mPrice * cacheWrite1hFactor(provider);
+    const write5mActual = (write5m / 1_000_000) * cacheWrite5mPrice;
+    const write1hActual = (write1h / 1_000_000) * cacheWrite1hPrice;
+    cacheCost += write5mActual + write1hActual;
+    // Cache writes cost extra vs. the input price; this surcharge eats savings.
+    writeSurcharge =
+      write5mActual -
+      (write5m / 1_000_000) * priceIn +
+      (write1hActual - (write1h / 1_000_000) * priceIn);
+  }
+
+  const cacheSavings = cacheReadSavings - writeSurcharge;
 
   return { cacheCost, cacheSavings, cacheReadSavings };
 }

@@ -297,6 +297,34 @@ describe("calculateCacheCost", () => {
     expect(result?.cacheCost).toBeCloseTo(0.014);
     expect(result?.cacheSavings).toBeCloseTo(0.016);
   });
+
+  test("skips an unpriced cache direction instead of fabricating savings", async () => {
+    // A provider with no cache multiplier and only a synced cache-read price:
+    // the write direction is genuinely unpriced and must be skipped, not zeroed.
+    await ModelModel.create({
+      externalId: "cohere/cache-read-only",
+      provider: "cohere",
+      modelId: "cache-read-only",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.00001", // $10/M input
+      completionPricePerToken: "0.00003",
+      cacheReadPricePerToken: "0.000001", // $1/M read, no write synced
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000/1M*$1 = 0.002 cost; read saved 2000/1M*($10-$1) = 0.018.
+    // 1000 write tokens are unpriced → contribute no cost and no savings.
+    const result = await calculateCacheCost(
+      "cache-read-only",
+      "cohere",
+      2000,
+      1000,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.002);
+    expect(result?.cacheSavings).toBeCloseTo(0.018);
+    expect(result?.cacheReadSavings).toBeCloseTo(0.018);
+  });
 });
 
 describe("estimateToolTokens", () => {

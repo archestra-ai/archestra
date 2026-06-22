@@ -137,7 +137,9 @@ export class Authnz {
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
       isModelRouterRoute ||
+      // Bare spec or the ?compact=1 discovery variant (url carries the query).
       url === "/openapi.json" ||
+      url.startsWith("/openapi.json?") ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
       url === METRICS_PATH ||

@@ -40,7 +40,12 @@ export function projectCompactOpenApi(
       if (!HTTP_METHODS.has(method) || !isJsonObject(operation)) continue;
       compactItem[method] = pickFields(operation, KEPT_OPERATION_FIELDS);
     }
-    if (Object.keys(compactItem).length > 0) paths[path] = compactItem;
+    if (Object.keys(compactItem).length === 0) continue;
+    // Path-level parameters are shared by every method on the path (a valid
+    // OpenAPI construct) — keep them so the request shape stays complete.
+    if (Array.isArray(item.parameters))
+      compactItem.parameters = item.parameters;
+    paths[path] = compactItem;
   }
 
   const schemas = selectReferencedSchemas(paths, doc.components?.schemas ?? {});

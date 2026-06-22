@@ -1142,13 +1142,12 @@ const startWebServer = async () => {
     // and the Platform Operations skill use this for cheap route discovery.
     fastify.get("/openapi.json", async (request) => {
       const enriched = enrichOpenApiWithRbac(fastify.swagger());
-      const { compact, path } = request.query as {
-        compact?: string;
-        path?: string;
-      };
-      return compact === undefined
-        ? enriched
-        : projectCompactOpenApi(enriched, { pathPrefix: path });
+      const query = request.query as Record<string, unknown>;
+      // Repeated params arrive as arrays; only honor single string values.
+      if (typeof query.compact !== "string") return enriched;
+      const pathPrefix =
+        typeof query.path === "string" ? query.path : undefined;
+      return projectCompactOpenApi(enriched, { pathPrefix });
     });
 
     if (enableE2eTestEndpoints) {

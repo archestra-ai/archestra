@@ -93,6 +93,8 @@ describe("Authnz", () => {
         "/api/auth/session",
         ...llmProxyPaths,
         "/openapi.json",
+        "/openapi.json?compact=1",
+        "/openapi.json?compact=1&path=/api/agents",
         "/health",
         "/ready",
         "/metrics",

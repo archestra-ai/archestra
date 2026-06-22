@@ -13,10 +13,8 @@ import { BUILT_IN_SKILLS } from "./built-in-skills";
 const here = dirname(fileURLToPath(import.meta.url));
 const openApiPath = resolve(here, "../../../../docs/openapi.json");
 const openApiDoc = JSON.parse(readFileSync(openApiPath, "utf8")) as OpenApiDoc;
-const apiGroups = new Set(
-  Object.keys(openApiDoc.paths ?? {})
-    .filter((p) => p.startsWith("/api/"))
-    .map((p) => `/api/${p.split("/")[2]}`),
+const realApiPaths = Object.keys(openApiDoc.paths ?? {}).filter((p) =>
+  p.startsWith("/api/"),
 );
 
 const skill = BUILT_IN_SKILLS.find(
@@ -32,15 +30,28 @@ describe("Archestra Platform Operations skill", () => {
     expect(skill).toBeDefined();
   });
 
-  test("every /api route group it names actually exists (drift guard)", () => {
+  test("every /api path it names is a real route (drift guard)", () => {
+    // Concrete routes (deeper than /api/<group>, e.g.
+    // /api/autonomy-policies/tool-invocation) must match a real route exactly —
+    // that is what catches "named a real group but the wrong sub-route". Group
+    // roots are orientation, so a prefix match is enough for them. The regex
+    // stops at `:`, so `:param` paths collapse to their group root.
+    const realPaths = new Set(realApiPaths);
+    const collectionRoots = new Set(
+      realApiPaths.map((p) => p.replace(/\/\{[^}]+\}$/, "")),
+    );
+    const depth = (p: string) => p.split("/").filter(Boolean).length;
     const mentioned = new Set(
-      [...skillText.matchAll(/\/api\/[a-z0-9_-]+/gi)].map(
-        (m) => `/api/${m[0].split("/")[2]}`,
+      [...skillText.matchAll(/\/api\/[a-z0-9_/-]+/gi)].map((m) =>
+        m[0].replace(/\/$/, ""),
       ),
     );
-    // /openapi.json is the discovery route, not an /api group.
-    const missing = [...mentioned].filter((g) => !apiGroups.has(g));
-    expect(missing).toEqual([]);
+    const unmatched = [...mentioned].filter((tok) =>
+      depth(tok) <= 2
+        ? !realApiPaths.some((rp) => rp === tok || rp.startsWith(`${tok}/`))
+        : !(realPaths.has(tok) || collectionRoots.has(tok)),
+    );
+    expect(unmatched).toEqual([]);
   });
 
   test("teaches discovery via the compact archestra__api path", () => {

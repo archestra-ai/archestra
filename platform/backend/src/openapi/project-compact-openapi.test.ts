@@ -131,4 +131,30 @@ describe("projectCompactOpenApi", () => {
     });
     expect(compact.components).toBeUndefined();
   });
+
+  test("keeps path-level parameters shared across methods", () => {
+    const doc: OpenApiDoc = {
+      paths: {
+        "/api/things/{id}": {
+          parameters: [{ name: "id", in: "path", required: true }],
+          get: { operationId: "GetThing", responses: {} },
+        },
+      },
+    };
+    const item = projectCompactOpenApi(doc).paths?.[
+      "/api/things/{id}"
+    ] as Record<string, any>;
+    expect(item.parameters).toEqual([
+      { name: "id", in: "path", required: true },
+    ]);
+    expect(item.get.operationId).toBe("GetThing");
+    expect(item.get.responses).toBeUndefined();
+  });
+
+  test("drops a path with parameters but no operations", () => {
+    const doc: OpenApiDoc = {
+      paths: { "/api/empty": { parameters: [{ name: "x", in: "query" }] } },
+    };
+    expect(projectCompactOpenApi(doc).paths?.["/api/empty"]).toBeUndefined();
+  });
 });

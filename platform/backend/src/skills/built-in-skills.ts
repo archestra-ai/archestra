@@ -172,11 +172,13 @@ that is **not** a plain REST call.
   distinguished by \`agentType\`. List/read/create/update/delete there.
 - **MCP servers** — register a catalog entry under \`/api/internal_mcp_catalog\`,
   then deploy it (see the deploy note in \`references/platform-api.md\`), then
-  assign its tools via \`/api/agent-tools\`.
-- **Policies** — tool-invocation policies under \`/api/tool-invocation\`,
-  trusted-data policies under \`/api/trusted-data-policies\`. Read
-  \`references/policies-and-security.md\` before changing either — a wrong policy
-  can block legitimate work or let sensitive data leak.
+  assign its tools to agents under \`/api/agents\` (e.g. bulk-assign at
+  \`POST /api/agents/tools/bulk-assign\`).
+- **Policies** — tool-invocation policies under
+  \`/api/autonomy-policies/tool-invocation\`, trusted-data policies under
+  \`/api/trusted-data-policies\`. Read \`references/policies-and-security.md\`
+  before changing either — a wrong policy can block legitimate work or let
+  sensitive data leak.
 - **Cost limits** — \`/api/limits\` and \`/api/default-user-limits\`.
 - **Knowledge** — \`/api/knowledge-bases\` and \`/api/connectors\`.
 - **Org administration** — \`/api/members\`, \`/api/roles\`, \`/api/teams\`,
@@ -221,8 +223,10 @@ All three are the same resource distinguished by \`agentType\`. When you
 \`POST /api/agents\`, **set \`agentType\` explicitly** — \`"agent"\`, \`"llm_proxy"\`,
 or \`"mcp_gateway"\` — because the route defaults it to \`mcp_gateway\` and defaults
 \`scope\` to \`personal\`. Tool assignments and sub-agent delegations are separate
-follow-up calls (\`/api/agent-tools\`, \`/api/agent-delegations\`), not fields on the
-create body.
+follow-up calls on the agent's sub-routes (\`/api/agents/:agentId/tools/:toolId\`
+or bulk \`/api/agents/tools/bulk-assign\`; \`/api/agents/:agentId/delegations\`), not
+fields on the create body — discover their shapes with
+\`?compact=1&path=/api/agents\`.
 
 ## The one non-REST operation: deploying an MCP server
 Registering a catalog entry (\`POST /api/internal_mcp_catalog\`) only records the
@@ -230,20 +234,22 @@ server; it is not running yet. **Starting it is the exception to "everything is 
 REST call":** use the \`archestra__deploy_mcp_server\` tool (\`catalogId\`, \`scope\`,
 optional \`teamId\`/\`agentIds\`). It orchestrates the deploy and the asynchronous
 tool discovery that follows, which a single REST call does not express. After it
-reports the server's tools, assign them via \`/api/agent-tools\`.
+reports the server's tools, assign them under \`/api/agents\` (e.g.
+\`POST /api/agents/tools/bulk-assign\`).
 `;
 
 const POLICIES_AND_SECURITY_REFERENCE = `# Policies and security model
 
 Archestra evaluates two independent policy layers on every (non-Archestra) tool
 call. Both are scoped to a specific \`toolId\` and match on \`conditions\`, an
-array of \`{ key, operator, value }\`. GET \`/api/autonomy-policies\` for the
-supported condition operators and their labels. Discover the exact request body
-for each route with \`GET /openapi.json?compact=1&path=/api/tool-invocation\`.
+array of \`{ key, operator, value }\`. GET \`/api/autonomy-policies/operators\` for
+the supported condition operators and their labels. Discover the exact request
+body for each route with
+\`GET /openapi.json?compact=1&path=/api/autonomy-policies\`.
 
 ## Tool invocation policies — *when* a tool may run
-Managed under \`/api/tool-invocation\` (POST to create, PUT to update, DELETE to
-remove, GET to list).
+Managed under \`/api/autonomy-policies/tool-invocation\` (GET to list, POST to
+create; PUT to update and DELETE to remove on \`/{id}\`).
 
 \`action\`:
 - \`allow\` — permit the call when conditions match.

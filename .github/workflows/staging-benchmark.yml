@@ -47,6 +47,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      # docker-container driver — the default docker driver cannot export the registry build cache.
+      - name: Set up Docker builder
+        uses: ./.github/actions/setup-blacksmith-builder
+
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar
         with:

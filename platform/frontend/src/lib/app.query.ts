@@ -6,14 +6,15 @@ import { handleApiError } from "@/lib/utils";
 const {
   getApps,
   getApp,
-  getAppTemplates,
   getAppVersions,
   getAppTools,
-  createApp,
   updateApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
+  openNewAppBuilder,
+  openAppBuilder,
+  getAppBuilderBinding,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
@@ -54,22 +55,6 @@ export function useApp(appId: string | null) {
   });
 }
 
-export function useAppTemplates(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["apps", "templates"],
-    enabled: options?.enabled ?? true,
-    staleTime: Infinity,
-    queryFn: async () => {
-      const { data, error } = await getAppTemplates();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
-      return data;
-    },
-  });
-}
-
 export function useAppVersions(appId: string | null) {
   return useQuery({
     queryKey: ["apps", appId, "versions"],
@@ -104,26 +89,53 @@ export function useAppTools(appId: string | null) {
   });
 }
 
-// ===== Mutation hooks =====
-
-export function useCreateApp() {
-  const queryClient = useQueryClient();
+/** Open a new App Builder conversation (no app yet); returns its conversationId. */
+export function useOpenNewBuilder() {
   return useMutation({
-    mutationFn: async (body: archestraApiTypes.CreateAppData["body"]) => {
-      const { data, error } = await createApp({ body });
+    mutationFn: async () => {
+      const { data, error } = await openNewAppBuilder();
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    onSuccess: (data) => {
-      if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["apps"] });
-      toast.success("App created");
+  });
+}
+
+/** Open or resume the caller's builder conversation for an existing app. */
+export function useOpenAppBuilder() {
+  return useMutation({
+    mutationFn: async (appId: string) => {
+      const { data, error } = await openAppBuilder({ path: { appId } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
   });
 }
+
+/** Whether a conversation is a builder, and the app it builds (null until created). */
+export function useBuilderBinding(conversationId: string | null) {
+  return useQuery({
+    queryKey: ["apps", "builder-binding", conversationId],
+    enabled: !!conversationId,
+    queryFn: async () => {
+      const { data, error } = await getAppBuilderBinding({
+        query: { conversationId: conversationId as string },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+// ===== Mutation hooks =====
 
 export function useUpdateApp() {
   const queryClient = useQueryClient();

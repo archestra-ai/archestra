@@ -89,6 +89,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useBuilderBinding } from "@/lib/app.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   clearOAuthReauthChatResume,
@@ -176,6 +177,14 @@ export function ChatPageContent({
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
+  );
+
+  // App Builder (FR-25): the entry points route here with ?builder=app. Confirm
+  // server-side that this conversation is the caller's builder so the preview
+  // can take the foreground; gated on the param so ordinary chats issue no call.
+  const isBuilderEntry = searchParams.get("builder") === "app";
+  const { data: builderBinding } = useBuilderBinding(
+    isBuilderEntry ? (conversationId ?? null) : null,
   );
 
   useEffect(() => {
@@ -1409,6 +1418,17 @@ export function ChatPageContent({
       openRightPanelTab("canvas");
     }
   }, [conversationId, openRightPanelTab]);
+
+  // In the App Builder, surface the live app preview alongside the build chat
+  // (FR-25). The canvas tab shows its own no-app placeholder until the first
+  // create_app renders, then advances with each new version.
+  const builderCanvasOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversationId || !builderBinding?.isBuilder) return;
+    if (builderCanvasOpenedRef.current === conversationId) return;
+    builderCanvasOpenedRef.current = conversationId;
+    openRightPanelTab("canvas");
+  }, [conversationId, builderBinding?.isBuilder, openRightPanelTab]);
 
   const browserAutoOpenConversationRef = useRef<string | undefined>(undefined);
   const seenBrowserToolCallIdsRef = useRef<Set<string>>(new Set());

@@ -15,6 +15,7 @@ import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AppBuilderConversationModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -102,7 +103,12 @@ TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools —
 const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (tools param on create_app/update_app), then — interactively — call preview_app_tool with the new app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet, so create the app first; a minimal scaffold is fine). In non-interactive contexts preview is unavailable — code defensively against the tool's documented schema instead. After create/update/edit, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its run page); if the current version has not been rendered yet it returns no_render_observed, and any runtime errors will instead arrive on the user's next message.`;
 
 const CreateAppSchema = z.strictObject({
-  name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
+  name: z
+    .string()
+    .min(1)
+    .max(APP_NAME_MAX_LENGTH)
+    .optional()
+    .describe("App name. Optional — when omitted a unique name is derived."),
   description: z
     .string()
     .max(APP_DESCRIPTION_MAX_LENGTH)
@@ -280,7 +286,7 @@ const registry = defineArchestraTools([
 
 ${APP_BUILD_LOOP_GUIDANCE}
 
-Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When viewed in chat the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
+Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When viewed in chat the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). The name is optional — when omitted a unique one is derived (the user can rename it later in the Apps UI). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -340,7 +346,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           organizationId: context.organizationId,
           authorId: context.userId,
           scope,
-          name: args.name,
+          name: args.name ?? null,
           description: args.description ?? null,
           templateId: args.templateId ?? null,
         },
@@ -349,7 +355,9 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
 
       if (!app) {
         return errorResult(
-          `An app named "${args.name}" already exists in this scope.`,
+          args.name
+            ? `An app named "${args.name}" already exists in this scope.`
+            : "Could not create the app.",
         );
       }
 
@@ -365,6 +373,29 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           );
           return errorResult(
             `Created app "${app.name}" (${app.id}), but assigning its tools failed. Retry via update_app with the tools param.`,
+          );
+        }
+      }
+
+      // Builder binding (FR-25): when this create runs inside a builder
+      // conversation that has no app yet, claim it for the created app. A no-op
+      // for ordinary chats (no draft row) and headless executions (no
+      // conversationId), so it never binds outside the builder.
+      if (context.conversationId) {
+        try {
+          await AppBuilderConversationModel.bindDraft({
+            conversationId: context.conversationId,
+            appId: app.id,
+            editorUserId: context.userId,
+          });
+        } catch (error) {
+          logger.warn(
+            {
+              err: error,
+              appId: app.id,
+              conversationId: context.conversationId,
+            },
+            "create_app: builder binding failed",
           );
         }
       }

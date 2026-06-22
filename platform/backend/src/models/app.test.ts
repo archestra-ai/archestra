@@ -1,7 +1,9 @@
 import { describe, expect, test } from "@/test";
 import AppModel from "./app";
+import AppBuilderConversationModel from "./app-builder-conversation";
 import AppTeamModel from "./app-team";
 import AppVersionModel from "./app-version";
+import ConversationModel from "./conversation";
 
 describe("AppModel.create", () => {
   test("creates an app with an immutable version 1", async ({ makeApp }) => {
@@ -44,6 +46,33 @@ describe("AppModel.create", () => {
       payload: { html: "<p/>", uiPermissions: null },
     });
     expect(second).not.toBeNull();
+  });
+
+  test("derives a unique name when none is supplied", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const app = await AppModel.create({
+      app: { scope: "org", organizationId: org.id },
+      payload: { html: "<p/>", uiPermissions: null },
+    });
+    expect(app?.name).toBe("Untitled app");
+  });
+
+  test("disambiguates the derived name against a collision", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const first = await AppModel.create({
+      app: { scope: "org", organizationId: org.id },
+      payload: { html: "<p/>", uiPermissions: null },
+    });
+    const second = await AppModel.create({
+      app: { scope: "org", organizationId: org.id },
+      payload: { html: "<p/>", uiPermissions: null },
+    });
+    expect(first?.name).toBe("Untitled app");
+    expect(second?.name).toBe("Untitled app 2");
   });
 });
 
@@ -96,6 +125,53 @@ describe("AppModel.delete (soft)", () => {
       payload: { html: "<p/>", uiPermissions: null },
     });
     expect(recreated).not.toBeNull();
+  });
+
+  test("severs the app's builder bindings (keeps the conversation)", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const app = await makeApp({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "personal",
+    });
+    await AppBuilderConversationModel.createBound({
+      conversationId: conversation.id,
+      appId: app.id,
+      editorUserId: user.id,
+      organizationId: org.id,
+    });
+
+    await AppModel.delete(app.id);
+
+    expect(
+      await AppBuilderConversationModel.findByAppAndEditor({
+        appId: app.id,
+        editorUserId: user.id,
+      }),
+    ).toBeNull();
+    // The conversation survives as ordinary chat history.
+    expect(
+      await AppBuilderConversationModel.findByConversation(conversation.id),
+    ).toBeNull();
+    expect(
+      await ConversationModel.findById({
+        id: conversation.id,
+        userId: user.id,
+        organizationId: org.id,
+      }),
+    ).not.toBeNull();
   });
 });
 

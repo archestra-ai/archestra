@@ -328,6 +328,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "ephemeral per-viewer render screenshot; best-effort, not admin state",
   },
+  appBuilderConversationsTable: {
+    audited: false,
+    reason:
+      "binds a builder conversation to its app; parent (app) carries the signal",
+  },
   labelKeysTable: { audited: false, reason: "label taxonomy; low-value churn" },
   labelValuesTable: {
     audited: false,

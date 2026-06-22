@@ -18,6 +18,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import {
+  AppBuilderConversationModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -1048,5 +1049,81 @@ describe("create_app/update_app tools param", () => {
     expect(cleared.isError).toBe(false);
     expect(structured(cleared).tools).toEqual([]);
     expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
+  });
+});
+
+describe("create_app builder binding (FR-25)", () => {
+  test("binds the created app to its builder draft conversation", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent({ name: "Builder Agent" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: orgId,
+    });
+    await AppBuilderConversationModel.createDraft({
+      conversationId: conversation.id,
+      editorUserId: user.id,
+      organizationId: orgId,
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+
+    // No name supplied — exercises derivation through the builder path too.
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { html: "<h1>todo</h1>" },
+      ctx,
+    );
+    expect(created.isError).toBe(false);
+    expect(structured(created).name).toBe("Untitled app");
+
+    const binding = await AppBuilderConversationModel.findByConversation(
+      conversation.id,
+    );
+    expect(binding?.appId).toBe(structured(created).id);
+  });
+
+  test("an ordinary chat's create_app establishes no binding", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent({ name: "Chat Agent" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    // An ordinary conversation has no builder draft row.
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: orgId,
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Plain App", html: "<p/>" },
+      ctx,
+    );
+    expect(created.isError).toBe(false);
+    expect(
+      await AppBuilderConversationModel.findByConversation(conversation.id),
+    ).toBeNull();
   });
 });

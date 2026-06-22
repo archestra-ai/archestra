@@ -10,13 +10,18 @@ import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  AgentModel,
+  AppBuilderConversationModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
+  ConversationModel,
+  MemberModel,
   TeamModel,
+  ToolModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -43,6 +48,7 @@ import {
   UpdateAppSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 
 // REST bodies extend the shared create/update schemas (kept in sync with the
 // create_app/update_app MCP tools) with team assignments, which only the REST
@@ -58,6 +64,16 @@ const UpdateAppBodySchema = UpdateAppSchema.extend({
 // succeeded; the html has structural issues worth surfacing to the author).
 const AppWithWarningsSchema = SelectAppSchema.extend({
   warnings: z.array(z.string()).optional(),
+});
+
+// Builder routes (FR-25) return the conversation to open; the binding lookup
+// also reports the bound app (null while the builder has no app yet).
+const BuilderConversationResponseSchema = z.object({
+  conversationId: UuidIdSchema,
+});
+const AppBuilderBindingResponseSchema = z.object({
+  isBuilder: z.boolean(),
+  appId: UuidIdSchema.nullable(),
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -566,6 +582,135 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success });
     },
   );
+
+  // FR-25: open a new builder — a conversation with no app yet (a draft
+  // binding). Its first create_app claims the binding for the created app.
+  fastify.post(
+    "/api/apps/builder",
+    {
+      schema: {
+        operationId: RouteId.OpenNewAppBuilder,
+        description:
+          "Open a new App Builder conversation (no app yet) and return its id.",
+        tags: ["Apps"],
+        response: constructResponseSchema(BuilderConversationResponseSchema),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const conversation = await createBuilderConversation({
+        userId: user.id,
+        organizationId,
+        title: "New app",
+      });
+      await AppBuilderConversationModel.createDraft({
+        conversationId: conversation.id,
+        editorUserId: user.id,
+        organizationId,
+      });
+      return reply.send({ conversationId: conversation.id });
+    },
+  );
+
+  // FR-25: open (or resume) the caller's builder for an existing app. At most
+  // one builder conversation per (app, editor) — resume it, or establish a
+  // fresh binding (e.g. for an app that was created in an ordinary chat).
+  fastify.get(
+    "/api/apps/:appId/builder",
+    {
+      schema: {
+        operationId: RouteId.OpenAppBuilder,
+        description:
+          "Open or resume the caller's App Builder conversation for an app.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        response: constructResponseSchema(BuilderConversationResponseSchema),
+      },
+    },
+    async ({ params: { appId }, user, organizationId }, reply) => {
+      const app = await loadViewableApp({
+        appId,
+        userId: user.id,
+        organizationId,
+      });
+      await assertCallerMayModifyApp({
+        userId: user.id,
+        organizationId,
+        scope: app.scope,
+        authorId: app.authorId,
+        resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+      });
+      const existing = await AppBuilderConversationModel.findByAppAndEditor({
+        appId,
+        editorUserId: user.id,
+      });
+      if (existing) {
+        return reply.send({ conversationId: existing.conversationId });
+      }
+      const conversation = await createBuilderConversation({
+        userId: user.id,
+        organizationId,
+        title: app.name,
+      });
+      try {
+        await AppBuilderConversationModel.createBound({
+          conversationId: conversation.id,
+          appId,
+          editorUserId: user.id,
+          organizationId,
+        });
+      } catch (error) {
+        // A concurrent open of the same app's builder won the (app, editor)
+        // unique index; resume that winner so both requests converge on one
+        // builder conversation (LIM-19) and drop the conversation this request
+        // just created so it does not linger as an empty chat.
+        if (isUniqueConstraintError(error)) {
+          const winner = await AppBuilderConversationModel.findByAppAndEditor({
+            appId,
+            editorUserId: user.id,
+          });
+          if (winner) {
+            await ConversationModel.delete(
+              conversation.id,
+              user.id,
+              organizationId,
+            );
+            return reply.send({ conversationId: winner.conversationId });
+          }
+        }
+        throw error;
+      }
+      return reply.send({ conversationId: conversation.id });
+    },
+  );
+
+  // FR-25: lets the chat surface learn whether a conversation is a builder and
+  // which app it builds. Scoped to the caller's own conversation so one
+  // editor's build chat is never revealed to another.
+  fastify.get(
+    "/api/apps/builder-binding",
+    {
+      schema: {
+        operationId: RouteId.GetAppBuilderBinding,
+        description:
+          "Report whether a conversation is an App Builder and the app it is bound to.",
+        tags: ["Apps"],
+        querystring: z.object({ conversationId: UuidIdSchema }),
+        response: constructResponseSchema(AppBuilderBindingResponseSchema),
+      },
+    },
+    async ({ query: { conversationId }, user, organizationId }, reply) => {
+      const binding =
+        await AppBuilderConversationModel.findByConversation(conversationId);
+      if (
+        !binding ||
+        binding.editorUserId !== user.id ||
+        binding.organizationId !== organizationId
+      ) {
+        return reply.send({ isBuilder: false, appId: null });
+      }
+      return reply.send({ isBuilder: true, appId: binding.appId });
+    },
+  );
 };
 
 // =============================================================================
@@ -595,6 +740,52 @@ async function resolveOrgTeamIds(
     );
   }
   return unique;
+}
+
+/**
+ * Create a builder conversation: resolve an agent for the editor, ensure it
+ * carries the app authoring tool set (FR-25 — new agents get it via FR-17, but
+ * a pre-existing agent may not), and open a conversation bound to it. The caller
+ * then writes the draft/bound binding row.
+ */
+async function createBuilderConversation(params: {
+  userId: string;
+  organizationId: string;
+  title: string;
+}): Promise<{ id: string }> {
+  const agentId = await resolveBuilderAgentId(
+    params.userId,
+    params.organizationId,
+  );
+  await ToolModel.assignAppToolsToAgent(agentId, params.organizationId);
+  return ConversationModel.create({
+    agentId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    title: params.title,
+  });
+}
+
+/** The agent a builder conversation runs as: the editor's default, else the org's newest. */
+async function resolveBuilderAgentId(
+  userId: string,
+  organizationId: string,
+): Promise<string> {
+  const activeAgents = await AgentModel.findByOrganizationId(organizationId, {
+    agentType: "agent",
+  });
+  if (activeAgents.length === 0) {
+    throw new ApiError(
+      400,
+      "No agent is available to build an app with. Create an agent first.",
+    );
+  }
+  const memberDefault = await MemberModel.getDefaultAgentId(
+    userId,
+    organizationId,
+  );
+  const fromDefault = activeAgents.find((agent) => agent.id === memberDefault);
+  return (fromDefault ?? activeAgents[0]).id;
 }
 
 /** Load an app the caller may view, or throw 404 (no existence leak). */

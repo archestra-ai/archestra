@@ -1,12 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Pencil } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApp } from "@/lib/app.query";
+import { useApp, useOpenAppBuilder } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppRuntimeFrame } from "../_parts/app-runtime-frame";
 import { AppSettingsForm } from "../_parts/app-settings-form";
@@ -15,8 +17,18 @@ import { AppToolsTab } from "../_parts/app-tools-tab";
 import { AppVersionsTab } from "../_parts/app-versions-tab";
 
 export default function AppDetailPage({ appId }: { appId: string }) {
+  const router = useRouter();
   const { data: app, isPending } = useApp(appId);
   const { data: session } = useSession();
+  const openBuilder = useOpenAppBuilder();
+
+  const editInBuilder = () => {
+    openBuilder.mutate(appId, {
+      onSuccess: (result) => {
+        if (result) router.push(`/chat/${result.conversationId}?builder=app`);
+      },
+    });
+  };
 
   if (!isPending && !app) {
     return (
@@ -46,12 +58,22 @@ export default function AppDetailPage({ appId }: { appId: string }) {
       }
       description={app?.description ?? ""}
       actionButton={
-        <Button asChild variant="outline">
-          <Link href={`/apps/${appId}/run`}>
-            <ExternalLink className="h-4 w-4" />
-            Open standalone
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <PermissionButton
+            permissions={{ app: ["update"] }}
+            onClick={editInBuilder}
+            disabled={openBuilder.isPending}
+          >
+            <Pencil className="h-4 w-4" />
+            Edit in builder
+          </PermissionButton>
+          <Button asChild variant="outline">
+            <Link href={`/apps/${appId}/run`}>
+              <ExternalLink className="h-4 w-4" />
+              Open standalone
+            </Link>
+          </Button>
+        </div>
       }
     >
       <Tabs defaultValue="preview">

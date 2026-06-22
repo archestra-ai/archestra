@@ -2,8 +2,7 @@
 
 import { AppWindow, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -15,13 +14,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useApps, useDeleteApp } from "@/lib/app.query";
+import { useApps, useDeleteApp, useOpenNewBuilder } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { AppCreateDialog } from "./_parts/app-create-dialog";
 
 const PAGE_SIZE = 100;
 
 export default function AppsPage() {
+  const router = useRouter();
   const search = useSearchParams().get("search") ?? "";
   const { data: session } = useSession();
   const { data, isPending } = useApps({
@@ -30,9 +29,17 @@ export default function AppsPage() {
     search: search || undefined,
   });
   const deleteApp = useDeleteApp();
-  const [createOpen, setCreateOpen] = useState(false);
+  const openNewBuilder = useOpenNewBuilder();
 
   const apps = data?.data ?? [];
+
+  const startNewApp = () => {
+    openNewBuilder.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result) router.push(`/chat/${result.conversationId}?builder=app`);
+      },
+    });
+  };
 
   return (
     <PageLayout
@@ -41,7 +48,8 @@ export default function AppsPage() {
       actionButton={
         <PermissionButton
           permissions={{ app: ["create"] }}
-          onClick={() => setCreateOpen(true)}
+          onClick={startNewApp}
+          disabled={openNewBuilder.isPending}
         >
           <Plus className="h-4 w-4" />
           New app
@@ -67,7 +75,8 @@ export default function AppsPage() {
               {search ? "No apps match your search" : "No apps yet"}
             </h2>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Create an app from a template to get started.
+              Click “New app” to describe one in chat — the builder writes and
+              previews it for you.
             </p>
           </div>
         ) : (
@@ -119,8 +128,6 @@ export default function AppsPage() {
           </div>
         )}
       </LoadingWrapper>
-
-      <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
 }

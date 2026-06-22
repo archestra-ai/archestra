@@ -596,6 +596,10 @@ export const RouteId = {
   GetAppTemplates: "getAppTemplates",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // App Builder Routes (FR-25)
+  OpenNewAppBuilder: "openNewAppBuilder",
+  OpenAppBuilder: "openAppBuilder",
+  GetAppBuilderBinding: "getAppBuilderBinding",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

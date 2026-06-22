@@ -6,7 +6,11 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { AppRenderDiagnosticsModel, AppVersionModel } from "@/models";
+import {
+  AppBuilderConversationModel,
+  AppRenderDiagnosticsModel,
+  AppVersionModel,
+} from "@/models";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import appRoutes from "./app";
@@ -642,5 +646,134 @@ describe("appRoutes /api/apps", () => {
     expect(
       await AppRenderDiagnosticsModel.getForUser(personalApp.id, other.id),
     ).toBeNull();
+  });
+});
+
+describe("appRoutes builder (FR-25)", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  test("POST /api/apps/builder opens a draft builder conversation", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeAgent({ organizationId: org.id, agentType: "agent" });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps/builder",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { conversationId } = response.json();
+    const binding =
+      await AppBuilderConversationModel.findByConversation(conversationId);
+    expect(binding?.appId).toBeNull();
+    expect(binding?.editorUserId).toBe(user.id);
+  });
+
+  test("GET /api/apps/:appId/builder establishes then resumes one conversation", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeAgent({ organizationId: org.id, agentType: "agent" });
+    const ownedApp = await makeApp({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "personal",
+    });
+    app = await buildApp(user.id, org.id);
+
+    const first = await app.inject({
+      method: "GET",
+      url: `/api/apps/${ownedApp.id}/builder`,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstId = first.json().conversationId;
+
+    const second = await app.inject({
+      method: "GET",
+      url: `/api/apps/${ownedApp.id}/builder`,
+    });
+    expect(second.json().conversationId).toBe(firstId);
+  });
+
+  test("GET /api/apps/builder-binding reports the caller's builder", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    await AppBuilderConversationModel.createDraft({
+      conversationId: conversation.id,
+      editorUserId: user.id,
+      organizationId: org.id,
+    });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/builder-binding?conversationId=${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ isBuilder: true, appId: null });
+  });
+
+  test("GET /api/apps/builder-binding is false for an ordinary chat", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/builder-binding?conversationId=${conversation.id}`,
+    });
+
+    expect(response.json()).toEqual({ isBuilder: false, appId: null });
+  });
+
+  test("POST /api/apps/builder 404s when the feature is disabled", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    (config.apps as { enabled: boolean }).enabled = false;
+    app = await buildApp(user.id, org.id);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps/builder",
+    });
+    (config.apps as { enabled: boolean }).enabled = true;
+    expect(response.statusCode).toBe(404);
   });
 });

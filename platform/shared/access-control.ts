@@ -1342,6 +1342,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
 
+  // App Builder Routes (FR-25). Opening the builder for an existing app is an
+  // editing surface, so it carries the same coarse gate as UpdateApp, with the
+  // per-instance modify check enforced in the handler.
+  [RouteId.OpenNewAppBuilder]: { app: ["create"] },
+  [RouteId.OpenAppBuilder]: { app: ["update"] },
+  [RouteId.GetAppBuilderBinding]: { app: ["read"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 

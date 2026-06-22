@@ -5,8 +5,13 @@ import { softDelete } from "@/database/soft-delete";
 import { ApiError } from "@/types";
 import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
+import AppBuilderConversationModel from "./app-builder-conversation";
 import AppTeamModel from "./app-team";
 import AppVersionModel, { type VersionPayload } from "./app-version";
+
+/** Base for a derived app name when the builder / `create_app` omits one (FR-2). */
+const DERIVED_APP_NAME_BASE = "Untitled app";
+const MAX_DERIVED_NAME_ATTEMPTS = 1000;
 
 function buildOrgFilters(params: {
   organizationId: string;
@@ -118,18 +123,24 @@ class AppModel {
 
   /**
    * Create an app, its team assignments, and its immutable version 1 in one
-   * transaction. Returns `null` on a name conflict within the app's visibility
-   * namespace (`ON CONFLICT DO NOTHING` against the partial unique indexes, so
-   * it is race-free).
+   * transaction. When `name` is supplied, returns `null` on a conflict within
+   * the app's visibility namespace (`ON CONFLICT DO NOTHING` against the partial
+   * unique indexes, so it is race-free). When `name` is omitted, derives a
+   * unique name (FR-2) by disambiguating against the namespace until one lands,
+   * rather than rejecting.
    */
   static async create(
-    params: { app: InsertApp; payload: VersionPayload; teamIds?: string[] },
+    params: {
+      app: Omit<InsertApp, "name"> & { name?: string | null };
+      payload: VersionPayload;
+      teamIds?: string[];
+    },
     tx?: Transaction,
   ): Promise<App | null> {
-    const run = async (tx: Transaction) => {
+    const insertOnce = async (tx: Transaction, name: string) => {
       const [app] = await tx
         .insert(schema.appsTable)
-        .values({ ...params.app, latestVersion: 1 })
+        .values({ ...params.app, name, latestVersion: 1 })
         .onConflictDoNothing()
         .returning();
       if (!app) return null;
@@ -147,6 +158,22 @@ class AppModel {
         contentHash: AppVersionModel.computeContentHash(params.payload),
       });
       return app;
+    };
+
+    const run = async (tx: Transaction) => {
+      if (params.app.name != null) return insertOnce(tx, params.app.name);
+      for (let attempt = 0; attempt < MAX_DERIVED_NAME_ATTEMPTS; attempt++) {
+        const candidate =
+          attempt === 0
+            ? DERIVED_APP_NAME_BASE
+            : `${DERIVED_APP_NAME_BASE} ${attempt + 1}`;
+        const app = await insertOnce(tx, candidate);
+        if (app) return app;
+      }
+      throw new ApiError(
+        409,
+        "Could not derive a unique app name; please supply one.",
+      );
     };
 
     return tx ? await run(tx) : await withDbTransaction(run);
@@ -267,12 +294,20 @@ class AppModel {
 
   /** Soft-delete an app (frees its name for re-use via the partial unique indexes). */
   static async delete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await softDelete(
-      tx ?? db,
-      schema.appsTable,
-      eq(schema.appsTable.id, id),
-    );
-    return count > 0;
+    const run = async (tx: Transaction) => {
+      const count = await softDelete(
+        tx,
+        schema.appsTable,
+        eq(schema.appsTable.id, id),
+      );
+      if (count === 0) return false;
+      // A soft-delete won't FK-cascade, so sever builder bindings explicitly
+      // (FR-7): the app must not stay reopenable in the builder. The bound
+      // conversations are kept as ordinary chat history.
+      await AppBuilderConversationModel.severForApp(id, tx);
+      return true;
+    };
+    return tx ? await run(tx) : await withDbTransaction(run);
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

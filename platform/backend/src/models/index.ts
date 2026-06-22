@@ -10,6 +10,7 @@ export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as AppModel } from "./app";
+export { default as AppBuilderConversationModel } from "./app-builder-conversation";
 export { default as AppDataModel } from "./app-data";
 export { default as AppRenderDiagnosticsModel } from "./app-render-diagnostics";
 export { default as AppRenderScreenshotModel } from "./app-render-screenshot";

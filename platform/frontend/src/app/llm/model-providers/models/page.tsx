@@ -592,8 +592,7 @@ function EditModelDialog({
   const handleSubmit = async (values: EditModelFormValues) => {
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
-    const cacheReadPrice =
-      values.customPricePerMillionCacheRead.trim() || null;
+    const cacheReadPrice = values.customPricePerMillionCacheRead.trim() || null;
     const cacheWritePrice =
       values.customPricePerMillionCacheWrite.trim() || null;
     const embeddingDimensions = getEmbeddingDimensionsValue(
@@ -769,8 +768,8 @@ function EditModelDialog({
                 </div>
                 {model.cachePriceSource === "derived_multiplier" && (
                   <p className="text-xs text-muted-foreground">
-                    Cache prices are estimated from the input price. Set a custom
-                    cache price to override.
+                    Cache prices are estimated from the input price. Set a
+                    custom cache price to override.
                   </p>
                 )}
               </div>
@@ -1108,7 +1107,8 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionInput: model.customPricePerMillionInput ?? "",
     customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
     customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
-    customPricePerMillionCacheWrite: model.customPricePerMillionCacheWrite ?? "",
+    customPricePerMillionCacheWrite:
+      model.customPricePerMillionCacheWrite ?? "",
     ignored: model.ignored,
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)

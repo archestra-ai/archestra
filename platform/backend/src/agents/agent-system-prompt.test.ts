@@ -117,6 +117,57 @@ describe("buildAgentSystemPrompt", () => {
     expect(withoutCatalog).not.toContain("<available_skills>");
   });
 
+  test("adds the sandbox fallback instruction only when the sandbox is usable", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const agent = await makeAgent({
+        systemPrompt: "Base.",
+        toolExposureMode: "full",
+      });
+      const user = await makeUser();
+      const role = await makeCustomRole(agent.organizationId, {
+        permission: { sandbox: ["execute"] },
+      });
+      await makeMember(user.id, agent.organizationId, { role: role.role });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const withSandbox = await buildAgentSystemPrompt({
+        agent,
+        mcpTools: {},
+        organizationId: agent.organizationId,
+        userId: user.id,
+        agentId: agent.id,
+      });
+      expect(withSandbox).toContain("code execution environment");
+
+      // a bare agent (no sandbox tools assigned) never gets the instruction
+      const bareAgent = await makeAgent({
+        systemPrompt: "Base.",
+        toolExposureMode: "full",
+        organizationId: agent.organizationId,
+      });
+      const withoutSandbox = await buildAgentSystemPrompt({
+        agent: bareAgent,
+        mcpTools: {},
+        organizationId: bareAgent.organizationId,
+        userId: user.id,
+        agentId: bareAgent.id,
+      });
+      expect(withoutSandbox).not.toContain("code execution environment");
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+    }
+  });
+
   test("adds the tool-result instruction only when tools are present", async ({
     makeAgent,
     makeUser,

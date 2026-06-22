@@ -12,7 +12,11 @@ import {
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import { AgentToolModel, ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  AgentToolModel,
+  ConversationEnabledToolModel,
+  ToolModel,
+} from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   afterAll,

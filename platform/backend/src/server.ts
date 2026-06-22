@@ -67,6 +67,7 @@ import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { projectCompactOpenApi } from "@/openapi/project-compact-openapi";
 import { activeChatRunService } from "@/services/active-chat-run";
 import {
   APP_BASE_CSS_PATH,
@@ -1135,10 +1136,20 @@ const startWebServer = async () => {
      */
     await registerSwaggerPlugin(fastify);
 
-    // Register routes
-    fastify.get("/openapi.json", async () =>
-      enrichOpenApiWithRbac(fastify.swagger()),
-    );
+    // Register routes. `?compact=1` returns a request-focused projection
+    // (drops the inlined response schemas that bloat the full spec to ~9MB);
+    // `&path=/api/agents` narrows to one route group. The archestra__api tool
+    // and the Platform Operations skill use this for cheap route discovery.
+    fastify.get("/openapi.json", async (request) => {
+      const enriched = enrichOpenApiWithRbac(fastify.swagger());
+      const { compact, path } = request.query as {
+        compact?: string;
+        path?: string;
+      };
+      return compact === undefined
+        ? enriched
+        : projectCompactOpenApi(enriched, { pathPrefix: path });
+    });
 
     if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({

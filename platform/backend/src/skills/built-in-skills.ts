@@ -138,117 +138,112 @@ const ARCHESTRA_PLATFORM_OPERATIONS_SKILL = `# Archestra Platform Operations
 Use this skill when the user asks you to administer Archestra itself — for
 example "add the GitHub MCP server and let the support agent use it", "give the
 research agent web-search tools", "scope the billing tools to the finance team",
-or "require approval before the delete tool runs".
+"require approval before the delete tool runs", or "add Dana to the finance team".
 
 Archestra is an MCP gateway: it centralizes MCP servers, routes every tool call
 through a policy engine, and assigns tools to agents and gateways. You drive all
-of this with Archestra's built-in tools (their names are prefixed
-\`archestra__\`). These tools bypass tool-invocation and trusted-data policies,
-but the caller's RBAC permissions are still enforced — if a call fails with a
-permission error, tell the user which permission is missing instead of retrying.
+of this through Archestra's own REST API — the same API the web UI uses — by
+calling the \`archestra__api\` tool. Anything an admin can do in the UI is a route
+on that API, so a single tool covers agents, MCP servers, tool assignment,
+policies, limits, knowledge bases, and org administration (members, roles, teams,
+environments).
 
-## Core workflows
+## How to drive the API
 
-### Register an MCP server and assign its tools to an agent
-1. Find or create the server in the private registry:
-   - \`search_private_mcp_registry\` or \`get_mcp_servers\` to find an existing
-     catalog entry, or
-   - \`create_mcp_server\` to register a new one — remote (\`serverUrl\`) or local
-     (\`command\`/\`arguments\`/\`dockerImage\`).
-2. \`deploy_mcp_server\` (\`catalogId\`, \`scope\`, optional \`teamId\`/\`agentIds\`)
-   to create a running instance.
-3. \`get_mcp_server_tools\` (\`mcpServerId\`) to list the tool IDs it exposes.
-4. \`bulk_assign_tools_to_agents\` (or \`bulk_assign_tools_to_mcp_gateways\`) with
-   the tool IDs and target agent ID(s). Set \`resolveAtCallTime: true\` to bind
-   every current and future tool of the server.
+1. **Discover the route.** Call \`archestra__api\` with
+   \`{ method: "GET", path: "/openapi.json", query: { compact: "1", path: "/api/agents" } }\`.
+   This returns a compact index of each operation under that prefix: its method,
+   request body shape, and \`x-required-permissions\`. Omit \`path\` to list every
+   route group. Always look the shape up here rather than guessing field names.
+2. **Make the call.** Call \`archestra__api\` with \`{ method, path, query?, body? }\`.
+   Request bodies are JSON in camelCase.
+3. **Handle the result.** You get back \`{ status, body }\`. A 4xx \`status\` is a
+   real failure — read \`body\` for the reason. A 403 means your role lacks the
+   route's \`x-required-permissions\`; tell the user which permission is missing
+   instead of retrying.
 
-Parameter details and the local-vs-remote server fields are in
-\`references/mcp-and-tools.md\`.
+\`references/platform-api.md\` covers the conventions that bite (creating
+agents vs proxies vs gateways, scope defaults, pagination) and the one operation
+that is **not** a plain REST call.
 
-### Scope who can use what
-- Set a resource's \`scope\` to \`personal\`, \`team\`, or \`org\`, and pass \`teams\`
-  when creating or editing agents, gateways, or servers.
-- Custom RBAC roles and team membership have **no MCP tool** — they are managed
-  in the UI (Settings → Roles / Members) or the REST API. If the user asks to
-  create a role or add a member, point them there rather than inventing a tool.
+## Orientation
 
-### Control autonomy and data handling
-- \`create_tool_invocation_policy\` (\`toolId\`, \`conditions\`, \`action\`:
-  \`allow\`/\`deny\`/\`require_approval\`) gates *when* a tool may run. Use
-  \`get_autonomy_policy_operators\` for the valid condition operators.
-- \`create_trusted_data_policy\` (\`toolId\`, \`conditions\`, \`action\`:
-  \`trust\`/\`redact\`) controls how a tool's *results* are treated.
+- **Agents, LLM proxies, MCP gateways** — all live under \`/api/agents\`,
+  distinguished by \`agentType\`. List/read/create/update/delete there.
+- **MCP servers** — register a catalog entry under \`/api/internal_mcp_catalog\`,
+  then deploy it (see the deploy note in \`references/platform-api.md\`), then
+  assign its tools via \`/api/agent-tools\`.
+- **Policies** — tool-invocation policies under \`/api/tool-invocation\`,
+  trusted-data policies under \`/api/trusted-data-policies\`. Read
+  \`references/policies-and-security.md\` before changing either — a wrong policy
+  can block legitimate work or let sensitive data leak.
+- **Cost limits** — \`/api/limits\` and \`/api/default-user-limits\`.
+- **Knowledge** — \`/api/knowledge-bases\` and \`/api/connectors\`.
+- **Org administration** — \`/api/members\`, \`/api/roles\`, \`/api/teams\`,
+  \`/api/environments\`. (These have no bespoke tool; the REST API is the way to
+  manage them.)
 
-Read \`references/policies-and-security.md\` before changing policies — a wrong
-policy can either block legitimate work or let sensitive data leak.
+This is orientation, not the full list — discover exact paths and bodies with the
+\`?compact=1\` call above.
+
+## Deprecated bespoke tools
+
+You may also see older \`archestra__\`-prefixed management tools (\`create_agent\`,
+\`create_tool_invocation_policy\`, …). They still work but are deprecated wrappers
+over this same API — prefer \`archestra__api\`. The one exception is
+\`archestra__deploy_mcp_server\`, which has no single REST route; keep using it (see
+\`references/platform-api.md\`).
 
 ## Operating principles
-- Read before you write: inspect current state (\`list_agents\`,
-  \`get_mcp_servers\`, \`get_tool_invocation_policies\`) before creating or editing.
-- Prefer the bulk assignment tools over many single calls.
+- Read before you write: GET the current state before creating or editing.
 - Confirm broad or destructive changes (deleting policies, org-wide scope,
   org-wide deploys) with the user before making them.
-- After a change, verify it with the matching read tool and report exactly what
-  you did, including the IDs and names involved.
+- After a change, re-read the resource and report exactly what you did, including
+  the IDs and names involved.
 `;
 
-const MCP_AND_TOOLS_REFERENCE = `# MCP servers and tool assignment
+const PLATFORM_API_REFERENCE = `# Driving the platform API
 
-## Registering a server: \`create_mcp_server\`
-Two shapes, selected by \`serverType\`:
+All routes are called through \`archestra__api\`. Discover exact shapes with
+\`GET /openapi.json?compact=1&path=/api/<group>\` (see SKILL.md); this file covers
+the conventions that are easy to get wrong.
 
-- **Remote** — set \`serverUrl\` to an HTTP MCP endpoint. Use \`requiresAuth\`,
-  \`authDescription\`, \`authFields\`, or \`oauthConfig\` when the endpoint needs
-  credentials.
-- **Local** — runs in a Kubernetes pod. Provide either a \`command\` +
-  \`arguments\` (+ \`environment\`) or a \`dockerImage\`. \`transportType\` is
-  \`stdio\` (default) or \`streamable-http\` (set \`httpPort\`/\`httpPath\` for the
-  latter).
+## Conventions
+- **Bodies are camelCase JSON.** The compact schema lists each route's request
+  body and which fields are required.
+- **Pagination.** List routes take \`limit\` and \`offset\` query params and return
+  a paginated envelope; don't assume an unbounded array.
+- **Scope.** Resources carry a \`scope\` of \`personal\`, \`team\`, or \`org\`; pass
+  \`teams\` for team scope. Confirm before creating anything at \`org\` scope.
 
-Shared metadata: \`name\`, \`description\`, \`icon\`, \`docsUrl\`, \`repository\`,
-\`version\`, \`instructions\`, \`scope\`, \`labels\`, \`teams\`.
+## Agents, LLM proxies, and MCP gateways share \`/api/agents\`
+All three are the same resource distinguished by \`agentType\`. When you
+\`POST /api/agents\`, **set \`agentType\` explicitly** — \`"agent"\`, \`"llm_proxy"\`,
+or \`"mcp_gateway"\` — because the route defaults it to \`mcp_gateway\` and defaults
+\`scope\` to \`personal\`. Tool assignments and sub-agent delegations are separate
+follow-up calls (\`/api/agent-tools\`, \`/api/agent-delegations\`), not fields on the
+create body.
 
-Registering a server only adds a catalog entry. It is not running yet.
-
-## Deploying: \`deploy_mcp_server\`
-\`catalogId\` is the catalog entry's ID. \`scope\` is \`personal\`, \`team\`, or
-\`org\`; pass \`teamId\` for team scope. \`agentIds\` optionally assigns the
-server's tools to those agents as part of the deploy.
-
-Inspect deployments with \`list_mcp_server_deployments\`; for a misbehaving local
-server read \`get_mcp_server_logs\` (\`serverId\`, optional \`lines\`).
-
-## Listing tools: \`get_mcp_server_tools\`
-Takes \`mcpServerId\` (the catalog ID) and returns the tools with their IDs. You
-need these IDs for assignment.
-
-## Assigning tools
-Both bulk tools take an \`assignments\` array:
-
-- \`bulk_assign_tools_to_agents\`: \`{ toolId, agentId, resolveAtCallTime,
-  mcpServerId? }\`
-- \`bulk_assign_tools_to_mcp_gateways\`: \`{ toolId, mcpGatewayId,
-  resolveAtCallTime, mcpServerId? }\`
-
-\`resolveAtCallTime: true\` assigns the whole server (current and future tools)
-rather than a single pinned tool — prefer it when the user wants "all of this
-server's tools". Pass \`mcpServerId\` alongside it so the binding resolves
-against the right server.
-
-You can also assign tools at creation time via \`create_agent\`'s
-\`toolAssignments\` field, which has the same per-assignment shape.
+## The one non-REST operation: deploying an MCP server
+Registering a catalog entry (\`POST /api/internal_mcp_catalog\`) only records the
+server; it is not running yet. **Starting it is the exception to "everything is a
+REST call":** use the \`archestra__deploy_mcp_server\` tool (\`catalogId\`, \`scope\`,
+optional \`teamId\`/\`agentIds\`). It orchestrates the deploy and the asynchronous
+tool discovery that follows, which a single REST call does not express. After it
+reports the server's tools, assign them via \`/api/agent-tools\`.
 `;
 
 const POLICIES_AND_SECURITY_REFERENCE = `# Policies and security model
 
 Archestra evaluates two independent policy layers on every (non-Archestra) tool
 call. Both are scoped to a specific \`toolId\` and match on \`conditions\`, an
-array of \`{ key, operator, value }\`. Call \`get_autonomy_policy_operators\` for
-the supported operators and their labels.
+array of \`{ key, operator, value }\`. GET \`/api/autonomy-policies\` for the
+supported condition operators and their labels. Discover the exact request body
+for each route with \`GET /openapi.json?compact=1&path=/api/tool-invocation\`.
 
 ## Tool invocation policies — *when* a tool may run
-\`create_tool_invocation_policy\` / \`update_tool_invocation_policy\` /
-\`delete_tool_invocation_policy\`, listed with \`get_tool_invocation_policies\`.
+Managed under \`/api/tool-invocation\` (POST to create, PUT to update, DELETE to
+remove, GET to list).
 
 \`action\`:
 - \`allow\` — permit the call when conditions match.
@@ -257,11 +252,10 @@ the supported operators and their labels.
   autonomous sessions (API, A2A, subagents) where no human is present.
 
 Use \`require_approval\` for consequential writes (create/send/charge/merge) and
-\`deny\`/\`block\` for destructive operations.
+\`deny\` for destructive operations.
 
 ## Trusted data policies — *how* results are treated
-\`create_trusted_data_policy\` / \`update_trusted_data_policy\` /
-\`delete_trusted_data_policy\`, listed with \`get_trusted_data_policies\`.
+Managed under \`/api/trusted-data-policies\` (same POST/PUT/DELETE/GET shape).
 
 \`action\`:
 - \`trust\` — treat the tool's output as safe, trusted context.
@@ -277,12 +271,11 @@ context to external services, and may route untrusted output through a
 quarantine (Dual LLM) step before it reaches the main model. When a call is
 blocked, explain the reason to the user — do not loop retrying the same call.
 
-## Archestra's own tools
-The \`archestra__*\` tools bypass both policy layers (they are trusted
-administrative operations) but still enforce the caller's RBAC permissions. A
-permission error means the caller's role lacks the required
-\`{resource, action}\`; that is fixed by an admin in Settings → Roles, not by
-retrying.
+## How \`archestra__api\` itself is governed
+\`archestra__api\` runs every request through the platform's real RBAC, so a call
+returns 403 when the caller's role lacks the route's \`x-required-permissions\` —
+fixed by an admin under \`/api/roles\`, not by retrying. Writes through it may also
+require human approval per tool-invocation policy.
 `;
 
 // The build-app playbook embeds the SDK/CSP/storage contract and build-loop
@@ -315,13 +308,13 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
     builtInSkillId: "archestra-platform-operations",
     name: "Archestra Platform Operations",
     description:
-      "Operate the Archestra platform through its built-in tools: register and deploy MCP servers, assign their tools to agents and gateways, scope access to teams, and set tool-invocation and trusted-data policies.",
+      "Operate the Archestra platform through its REST API via the archestra__api tool: manage agents, MCP servers, tool assignment, tool-invocation and trusted-data policies, cost limits, knowledge bases, and org administration (members, roles, teams, environments).",
     content: ARCHESTRA_PLATFORM_OPERATIONS_SKILL,
     files: [
       {
-        path: "references/mcp-and-tools.md",
+        path: "references/platform-api.md",
         kind: "reference",
-        content: MCP_AND_TOOLS_REFERENCE,
+        content: PLATFORM_API_REFERENCE,
       },
       {
         path: "references/policies-and-security.md",

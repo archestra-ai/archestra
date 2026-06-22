@@ -10,6 +10,7 @@ import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -323,6 +324,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/limits/:id": {
     resourceType: "limit",
     fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+
+  // Default user limits (per-environment + org-wide)
+  "/api/default-user-limits": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
+  },
+  "/api/default-user-limits/:id": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
 
   // Optimization Rules

@@ -632,3 +632,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @prassamin
 - @ashoksivakoti
 - @ghorhh473-coder
+- @Vinayakjain7

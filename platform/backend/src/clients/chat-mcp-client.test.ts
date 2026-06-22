@@ -1031,13 +1031,21 @@ describe("filterToolsByEnabledIds", () => {
     expect(Object.keys(result)).toHaveLength(2);
   });
 
-  test("returns empty when enabledToolIds is empty array", async () => {
+  test("empty array retains archestra built-in tools and drops the rest", async () => {
+    archestraMcpBranding.syncFromOrganization(null);
+    const searchToolsName = getArchestraToolFullName("search_tools");
+
     const tools = {
       github__list_repos: makeMockTool(),
+      [searchToolsName]: makeMockTool("Search tools"),
     };
 
+    // Empty custom selection = zero user-selectable tools enabled. Built-ins
+    // (search_tools/run_tool) must still survive so search_and_run_only agents
+    // can call tools; only the user-selectable tool is dropped.
     const result = await filterToolsByEnabledIds(tools, []);
-    expect(Object.keys(result)).toHaveLength(0);
+
+    expect(Object.keys(result)).toEqual([searchToolsName]);
   });
 
   test("white-labeled built-in tools bypass custom selection filtering", async ({

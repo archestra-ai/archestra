@@ -1057,7 +1057,8 @@ export async function fetchToolUiResource({
 /**
  * Filter tools by enabled tool IDs
  * If enabledToolIds is undefined, returns all tools (no custom selection = all enabled)
- * If enabledToolIds is empty array, returns no tools (explicit selection of zero tools)
+ * If enabledToolIds is empty array, returns only archestra built-in tools (a custom
+ *   selection of zero user-selectable tools; built-ins always bypass the selection)
  * If enabledToolIds has items, fetches tool names by IDs and filters to only include those
  *
  * @param tools - All available tools (keyed by tool name)
@@ -1080,25 +1081,15 @@ async function filterToolsByEnabledIds(
     return tools;
   }
 
-  // Empty array = explicit selection of zero tools
-  if (enabledToolIds.length === 0) {
-    logger.info(
-      {
-        totalTools: Object.keys(tools).length,
-        enabledToolIds: 0,
-        reason: "empty array - all tools explicitly disabled",
-      },
-      "All tools filtered out - user disabled all tools",
-    );
-    return {};
-  }
-
-  // Fetch tool names for the enabled IDs
+  // Fetch tool names for the enabled IDs (empty array -> empty set, leaving only
+  // the built-in bypass below to populate the result)
   const enabledToolNames = await ToolModel.getNamesByIds(enabledToolIds);
 
-  // Filter tools to only include enabled ones
+  // Filter tools to only include enabled ones.
   // Archestra built-in tools always bypass custom selection (they are auto-injected
-  // and hidden from the UI, so users cannot select them)
+  // and hidden from the UI, so users cannot select or deselect them). This is what
+  // keeps search_tools/run_tool available to search_and_run_only agents even when a
+  // conversation's custom selection enables zero user-selectable tools.
   const filteredTools: Record<string, Tool> = {};
   const excludedTools: string[] = [];
   for (const [name, tool] of Object.entries(tools)) {

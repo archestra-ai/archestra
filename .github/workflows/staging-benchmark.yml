@@ -9,6 +9,10 @@ on:
   schedule:
     - cron: "0 4 * * *" # daily 04:00 UTC
   workflow_dispatch:
+  # Label a PR with `run-staging-benchmark` to test the workflow from its branch before merge (the
+  # default-branch-only limitation of workflow_dispatch). Fork PRs are excluded so secrets never leak.
+  pull_request:
+    types: [labeled]
 
 permissions: {}
 
@@ -26,6 +30,12 @@ env:
 jobs:
   benchmark:
     name: Run staging benchmark
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+      github.event.label.name == 'run-staging-benchmark' &&
+      github.event.pull_request.head.repo.fork != true)
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read # checkout
@@ -61,8 +71,7 @@ jobs:
           [ -n "${PLATFORM_SA}" ] || PLATFORM_SA=default
           DAGGER_RUNNER_HOST=$(get '{range .spec.template.spec.containers[0].env[?(@.name=="ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")]}{.value}{end}')
           if [ -z "${PLATFORM_IMAGE}" ] || [ -z "${DAGGER_RUNNER_HOST}" ]; then
-            echo "::error::could not resolve platform image / dagger host from the live Deployment \
-(is the dagger host a literal env .value on containers[0], not a valueFrom/envFrom ref?)"
+            echo "::error::could not resolve platform image / dagger host from the live Deployment (is the dagger host a literal env .value on containers[0], not a valueFrom/envFrom ref?)"
             exit 1
           fi
           # Dagger namespace for the RBAC preflight: the namespace= query param of the kube-pod:// host,

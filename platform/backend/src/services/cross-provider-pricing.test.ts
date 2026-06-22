@@ -74,6 +74,33 @@ describe("resolveCrossProviderPrices — Bedrock", () => {
     expect(prices?.promptPricePerToken).toBe("0.000003");
   });
 
+  test("resolves an application-inference-profile (opaque id) via the foundation-model id from its ARN", () => {
+    const prices = resolveCrossProviderPrices({
+      provider: "bedrock",
+      // Application inference profiles have an opaque id with no vendor encoded.
+      modelId:
+        "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123",
+      // ...but the profile's model ARN yields the canonical foundation-model id.
+      underlyingModelName: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(prices?.cacheReadPricePerToken).toBe("3e-7");
+    expect(prices?.cacheWritePricePerToken).toBe("0.00000375");
+  });
+
+  test("prefers the resolved underlying model id over the inference-profile id", () => {
+    const prices = resolveCrossProviderPrices({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      underlyingModelName: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    // Resolves to the underlying-model entry, not the profile-id one.
+    expect(prices?.promptPricePerToken).toBe("0.000003");
+  });
+
   test("returns null for an unknown vendor", () => {
     const prices = resolveCrossProviderPrices({
       provider: "bedrock",

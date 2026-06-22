@@ -43,7 +43,10 @@ export function resolveCrossProviderPrices(params: {
 
   const target =
     provider === "bedrock"
-      ? resolveBedrockTarget(modelId)
+      ? // Prefer the foundation-model id resolved from the profile's model ARN;
+        // fall back to parsing the inference-profile id (system/cross-region
+        // profiles encode it, application profiles do not).
+        resolveBedrockTarget(underlyingModelName ?? modelId)
       : provider === "azure"
         ? resolveAzureTarget(underlyingModelName ?? modelId)
         : null;

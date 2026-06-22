@@ -69,7 +69,7 @@ Required RBAC permission: `agent:create`
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_result, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
-| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -187,7 +187,7 @@ Required RBAC permission: `agent:update`
 | `connectorIds` | `string[]` | No | Replace the agent's directly assigned knowledge connectors with this set. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the agent. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
-| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. |
+| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'. |
 | `suggestedPrompts` | `object[]` | No | Replace the agent's suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
@@ -218,7 +218,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_result, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
-| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 
 
 #### get_llm_proxy
@@ -305,7 +305,7 @@ Required RBAC permission: `mcpGateway:create`
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
-| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
 | `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
 

@@ -450,7 +450,7 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
  * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
  * without a manual assignment.
  */
-const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
+export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,

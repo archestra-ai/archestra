@@ -10,7 +10,8 @@
 #   manifest.json   raw `prepare` manifest
 #   metrics.md      the metrics block (for doc assembly, step 4)
 #   order.tsv       "idx<TAB>id<TAB>outcome", manifest order (for doc assembly)
-#   map-args.json   ready-to-pass `args` for workflows/map.mjs (triageDir + mapTemplate + rollouts)
+#   prompts/NN.txt  one pre-rendered triage prompt per rollout (read by the map agents, not relayed)
+#   map-args.json   ready-to-pass `args` for workflows/map.mjs (triageDir + promptsDir + rollouts[{idx,id}])
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -18,8 +19,10 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROMPTS="$SKILL_DIR/reference/prompts.md"
 ARG="${1:-}"
 
+# Newest by mtime, restricted to timestamp-named dirs so `repro_*` reproduction
+# dirs (which lexically sort after `2026…` and often have a null `outcome`) never win.
 RUN_DIR="$(realpath "$( [ -n "$ARG" ] && echo "$ARG" \
-  || ls -1d "$ROOT"/archestra-bench/experiments/*/ | sort | tail -1 )")"
+  || ls -1dt "$ROOT"/archestra-bench/experiments/[0-9]*/ | head -1 )")"
 TS="$(date +%Y%m%d-%H%M%S)"
 TRIAGE_DIR="$RUN_DIR/_triage_claude"
 PREP="$RUN_DIR/_prep_claude"
@@ -46,14 +49,26 @@ if ! grep -qF '{ROLLOUT_ID}' <<<"$MAP_TEMPLATE" || ! grep -qF '{TRAJECTORY_MD_PA
   exit 1
 fi
 
-# --- ready-to-pass args for workflows/map.mjs ---
-jq -n --arg triageDir "$TRIAGE_DIR" --arg mapTemplate "$MAP_TEMPLATE" --slurpfile m "$MANIFEST" '{
+# --- pre-render one filled triage prompt per rollout, so the map args (and thus the
+#     orchestrator's context) carry only tiny scalars, not the full manifest ---
+PROMPTS_DIR="$PREP/prompts"
+rm -rf "$PROMPTS_DIR"; mkdir -p "$PROMPTS_DIR"
+N="$(jq '.rollouts | length' "$MANIFEST")"
+for ((i=0; i<N; i++)); do
+  id="$(jq -r ".rollouts[$i].id" "$MANIFEST")"
+  os="$(jq -r ".rollouts[$i].outcome_summary" "$MANIFEST")"
+  tm="$(jq -r ".rollouts[$i].trajectory_md" "$MANIFEST")"
+  p="${MAP_TEMPLATE//\{ROLLOUT_ID\}/$id}"
+  p="${p//\{OUTCOME_SUMMARY\}/$os}"
+  p="${p//\{TRAJECTORY_MD_PATH\}/$tm}"
+  printf '%s' "$p" >"$(printf '%s/%02d.txt' "$PROMPTS_DIR" "$i")"
+done
+
+# --- ready-to-pass args for workflows/map.mjs (small: the prompts live on disk) ---
+jq -n --arg triageDir "$TRIAGE_DIR" --arg promptsDir "$PROMPTS_DIR" --slurpfile m "$MANIFEST" '{
   triageDir: $triageDir,
-  mapTemplate: $mapTemplate,
-  rollouts: ($m[0].rollouts | to_entries | map({
-    idx: .key, id: .value.id, outcome: .value.outcome,
-    outcomeSummary: .value.outcome_summary, trajectoryMd: .value.trajectory_md
-  }))
+  promptsDir: $promptsDir,
+  rollouts: ($m[0].rollouts | to_entries | map({ idx: .key, id: .value.id }))
 }' >"$PREP/map-args.json"
 
 cat <<EOF

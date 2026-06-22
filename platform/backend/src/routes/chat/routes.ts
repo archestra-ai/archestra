@@ -87,6 +87,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
@@ -1951,6 +1952,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const runningRunId = conversation
         ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
         : null;
+
+      // The conversation owns its no-project files, so they must die with it
+      // rather than linger as unreachable orphans (the FK is SET NULL). Purge
+      // them BEFORE the delete, while they still carry the conversation id, and
+      // only when the owner-scoped lookup above confirmed the caller owns it.
+      if (conversation) {
+        await fileStore.purgeConversationFiles({
+          organizationId,
+          conversationId: id,
+        });
+      }
 
       // The delete is the source of truth. Do not stop the stream or tear down
       // browser runtime before it succeeds: a failed delete must leave the

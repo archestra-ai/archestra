@@ -1147,15 +1147,22 @@ const registry = defineArchestraTools([
       // Overwrite: replace an existing same-named file in this scope in place,
       // keeping its id (and download URL). Falls through to create when none
       // exists. Without overwrite, a duplicate name surfaces as an error below.
-      // A headless no-project write (no scope) has nothing to replace → create.
+      // A headless no-project write resolves the orphan it created on a prior run
+      // (no conversation/project scope), so re-runs stay idempotent.
       const fileScope = resolveChatFileScope(scope, context.conversationId);
-      if (args.overwrite && fileScope) {
-        const existing = await fileStore.resolveMyFileRef({
-          organizationId: guard.userCtx.organizationId,
-          userId: guard.userCtx.userId,
-          filename,
-          scope: fileScope,
-        });
+      if (args.overwrite) {
+        const existing = fileScope
+          ? await fileStore.resolveMyFileRef({
+              organizationId: guard.userCtx.organizationId,
+              userId: guard.userCtx.userId,
+              filename,
+              scope: fileScope,
+            })
+          : await fileStore.resolveOrphanRef({
+              organizationId: guard.userCtx.organizationId,
+              userId: guard.userCtx.userId,
+              filename,
+            });
         if (!("error" in existing)) {
           const updated = await fileStore.update({
             file: existing,

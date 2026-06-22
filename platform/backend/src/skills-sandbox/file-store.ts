@@ -146,20 +146,7 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return null;
       if (!(await this.canAccessScope(parsed.scope, params))) return null;
-      // Bind the opaque key to the authorized scope: it must be an object that
-      // scope actually owns. Without this, a ref carrying the caller's own scope
-      // but a sibling folder's key (e.g. `other@x.com/secret`, no traversal)
-      // would read another tenant's file under the shared root. Enumeration is
-      // provider-agnostic and already skips symlinks.
-      const ownerScope =
-        parsed.scope.kind === "user"
-          ? await this.userScope(parsed.scope.userId)
-          : await this.projectScope(parsed.scope.projectId);
-      if (!ownerScope) return null;
-      const owned = (await store.enumerate(ownerScope)).some(
-        (o) => o.key === parsed.key,
-      );
-      if (!owned) return null;
+      if (!(await this.objectRefOwned(parsed, store))) return null;
       let data: Buffer;
       try {
         data = await store.read(parsed.key);
@@ -200,6 +187,9 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return false;
       if (!(await this.canAccessScope(parsed.scope, params))) return false;
+      // Same key→scope binding as `get`: a crafted ref carrying the caller's own
+      // scope but a sibling folder's key must NOT delete another scope's object.
+      if (!(await this.objectRefOwned(parsed, store))) return false;
       await store.remove(parsed.key).catch(() => {});
       return true;
     }
@@ -231,6 +221,31 @@ class FileStore {
           objectKey: row.objectKey,
         }).catch(() => {}),
       ),
+    );
+  }
+
+  /**
+   * Delete a conversation's no-project files — both rows and external bytes —
+   * when the conversation is deleted. No-project files belong to their
+   * conversation, so they must not outlive it as unreachable orphans (the
+   * `conversation_id` FK is `SET NULL`, so there is no row cascade; project
+   * files, which outlive the conversation, are excluded). Must run BEFORE the
+   * conversation row is deleted, while the files still carry its id. Best-effort
+   * per file's bytes. Inline (`db`) rows just drop with the row.
+   */
+  async purgeConversationFiles(params: {
+    organizationId: string;
+    conversationId: string;
+  }): Promise<void> {
+    const rows = await FileModel.listNoProjectFilesForConversation(params);
+    await Promise.all(
+      rows.map(async (row) => {
+        await FileModel.deleteById(row.id);
+        await deleteRowBytes({
+          provider: row.storageProvider,
+          objectKey: row.objectKey,
+        }).catch(() => {});
+      }),
     );
   }
 
@@ -385,6 +400,20 @@ class FileStore {
     const row = await this.findMyFileRow(params);
     if (row === null) return { error: "not_found" };
     return row;
+  }
+
+  /**
+   * Resolve a headless (no-project, no-conversation) file by name, for a
+   * headless `save_result` overwrite — there is no conversation/project scope to
+   * resolve within, so this targets the orphan bucket directly.
+   */
+  async resolveOrphanRef(params: {
+    organizationId: string;
+    userId: string;
+    filename: string;
+  }): Promise<PersistedFile | MyFileResolutionError> {
+    const row = await FileModel.findOrphanByName(params);
+    return row ?? { error: "not_found" };
   }
 
   /**
@@ -577,6 +606,31 @@ class FileStore {
       if (error instanceof UnsafePathError) return { error: "not_found" };
       throw error;
     }
+  }
+
+  /**
+   * Bind an `obj_` ref's opaque key to the scope it claims: the key must be an
+   * object that scope actually owns (verified by enumeration), so a ref carrying
+   * the caller's own scope but a sibling folder's key (e.g. `other@x.com/secret`,
+   * no traversal) resolves to "not owned" rather than reaching another tenant's
+   * file under the shared root. Enumeration is provider-agnostic and skips
+   * symlinks. Only project refs are minted today (personal untracked objects were
+   * dropped with conversation scoping); the `user` scope arm is retained as
+   * defense-in-depth for a hand-crafted ref and enumerates the flat `<email>`
+   * folder.
+   */
+  private async objectRefOwned(
+    parsed: { scope: RefScope; key: string },
+    store: NonNullable<ReturnType<typeof getObjectStore>>,
+  ): Promise<boolean> {
+    const ownerScope =
+      parsed.scope.kind === "user"
+        ? await this.userScope(parsed.scope.userId)
+        : await this.projectScope(parsed.scope.projectId);
+    if (!ownerScope) return false;
+    return (await store.enumerate(ownerScope)).some(
+      (o) => o.key === parsed.key,
+    );
   }
 
   /** Can the caller reach an untracked object's owner scope? */

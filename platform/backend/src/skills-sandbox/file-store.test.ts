@@ -5,7 +5,7 @@ import { afterEach, beforeEach } from "vitest";
 import config from "@/config";
 import { ProjectModel } from "@/models";
 import ConversationModel from "@/models/conversation";
-import { FileNameExistsError } from "@/models/file";
+import FileModel, { FileNameExistsError } from "@/models/file";
 import { projectService } from "@/services/project";
 import { describe, expect, test } from "@/test";
 import { fileStore } from "./file-store";
@@ -636,6 +636,62 @@ describe("fileStore.resolveMyFileSource", () => {
   });
 });
 
+describe("fileStore.purgeConversationFiles", () => {
+  test("deletes the conversation's no-project files; keeps project files and other conversations' files", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const conv = await newConversation({ org, user, makeAgent });
+    const otherConv = await newConversation({ org, user, makeAgent });
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      name: "keep",
+      description: null,
+    });
+    const a = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv,
+      filename: "a.txt",
+    });
+    const b = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv,
+      filename: "b.txt",
+    });
+    // a project file produced in the same conversation must outlive it
+    const projectFile = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv,
+      projectId: project.id,
+      filename: "p.txt",
+    });
+    // another conversation's no-project file must be untouched
+    const elsewhere = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: otherConv,
+      filename: "c.txt",
+    });
+
+    await fileStore.purgeConversationFiles({
+      organizationId: org.id,
+      conversationId: conv,
+    });
+
+    expect(await FileModel.findById(a.id)).toBeNull();
+    expect(await FileModel.findById(b.id)).toBeNull();
+    expect((await FileModel.findById(projectFile.id))?.id).toBe(projectFile.id);
+    expect((await FileModel.findById(elsewhere.id))?.id).toBe(elsewhere.id);
+  });
+});
+
 describe("fileStore disk overlay (filesystem provider)", () => {
   let root: string;
   let savedProvider: typeof config.fileStorage.provider;
@@ -795,6 +851,63 @@ describe("fileStore disk overlay (filesystem provider)", () => {
       userId: owner.id,
     });
     expect(got?.data.toString()).toBe("secret");
+  });
+
+  test("delete denies a user obj_ ref whose key is a sibling folder (no arbitrary delete)", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await drop(owner.email, "private.txt", "secret");
+    const attacker = await makeUser({ email: "del-ref-attacker@test.com" });
+    // a well-formed ref for the ATTACKER's own scope, but with the OWNER's key.
+    // delete must bind the key to the caller's scope (like get) and refuse it.
+    const crafted = `obj_${Buffer.from(
+      JSON.stringify({
+        s: { kind: "user", userId: attacker.id },
+        k: `${owner.email}/private.txt`,
+      }),
+      "utf8",
+    ).toString("base64url")}`;
+    expect(
+      await fileStore.delete({
+        ref: crafted,
+        organizationId: org.id,
+        userId: attacker.id,
+      }),
+    ).toBe(false);
+    // the owner's bytes are still on disk and readable
+    expect(
+      await fs.readFile(path.join(root, owner.email, "private.txt"), "utf8"),
+    ).toBe("secret");
+  });
+
+  test("purgeConversationFiles removes the conversation's no-project bytes from disk", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const conv = await newConversation({ org, user, makeAgent });
+    const file = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv,
+      filename: "out.txt",
+      data: Buffer.from("bytes"),
+    });
+    const onDisk = path.join(root, user.email, conv, "out.txt");
+    expect(await fs.readFile(onDisk, "utf8")).toBe("bytes");
+
+    await fileStore.purgeConversationFiles({
+      organizationId: org.id,
+      conversationId: conv,
+    });
+
+    expect(await FileModel.findById(file.id)).toBeNull();
+    await expect(fs.readFile(onDisk, "utf8")).rejects.toThrow();
   });
 
   test("a disk-only file in a project folder follows project access", async ({

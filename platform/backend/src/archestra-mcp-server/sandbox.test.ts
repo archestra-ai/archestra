@@ -1545,6 +1545,34 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(textOf(second)).toContain("already exists");
   });
 
+  test("save_result overwrite is idempotent for a headless (no-conversation) write", async () => {
+    // the base context has no conversationId and no project → the orphan scope.
+    const first = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "run.md", content: "v1" },
+      context,
+    );
+    expect(first.isError).toBe(false);
+    const firstId = structuredOf<{ fileId: string }>(first).fileId;
+
+    // a re-run with overwrite must replace the orphan in place, not dead-end
+    // with FileNameExistsError.
+    const second = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "run.md", content: "v2", overwrite: true },
+      context,
+    );
+    expect(second.isError).toBe(false);
+    const out = structuredOf<{ fileId: string; overwritten: boolean }>(second);
+    expect(out.fileId).toBe(firstId);
+    expect(out.overwritten).toBe(true);
+
+    const { FileModel } = await import("@/models");
+    const row = await FileModel.findById(firstId);
+    expect(row?.conversationId).toBeNull();
+    expect(row?.data?.toString()).toBe("v2");
+  });
+
   test("save_result overwrite replaces an existing file in place, keeping its id", async () => {
     const ctx = await makePlainChatCtx();
     const first = await executeArchestraTool(

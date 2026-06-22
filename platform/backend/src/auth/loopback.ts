@@ -17,7 +17,7 @@ export type LoopbackIdentity = {
   organizationId: string;
 };
 
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 type LoopbackRequest = LoopbackIdentity & {
   method: HttpMethod;

@@ -8,6 +8,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_API_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
@@ -83,12 +84,19 @@ class ArchestraMcpBranding {
 
   /**
    * Whether a tool bypasses tool-invocation and trusted-data policies. All
-   * built-in archestra tools are trusted and bypass — except `archestra__api`,
-   * which dispatches to arbitrary REST routes and is therefore policy-governed.
+   * built-in archestra tools are trusted and bypass — except `archestra__api`
+   * (dispatches to arbitrary REST routes) and the deprecated governance-mutating
+   * platform tools, which stay policy-governed so policy edits keep their gate.
    */
   bypassesToolPolicies(toolName: string): boolean {
     const shortName = this.getToolShortName(toolName);
-    return shortName !== null && shortName !== TOOL_API_SHORT_NAME;
+    return (
+      shortName !== null &&
+      shortName !== TOOL_API_SHORT_NAME &&
+      !POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES.includes(
+        shortName as (typeof POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES)[number],
+      )
+    );
   }
 
   /**
@@ -98,6 +106,21 @@ class ArchestraMcpBranding {
    */
   isApiTool(toolName: string): boolean {
     return this.getToolShortName(toolName) === TOOL_API_SHORT_NAME;
+  }
+
+  /**
+   * Built-in tools whose approval gate must survive permissive mode: the
+   * `archestra__api` REST primitive and the governance-mutating platform tools.
+   * Everything else is skipped under a permissive global policy.
+   */
+  isPermissiveModeGated(toolName: string): boolean {
+    const shortName = this.getToolShortName(toolName);
+    return (
+      shortName === TOOL_API_SHORT_NAME ||
+      POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES.includes(
+        shortName as (typeof POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES)[number],
+      )
+    );
   }
 
   private state: ArchestraBrandingState = {

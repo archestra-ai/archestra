@@ -2,8 +2,8 @@ import { posix } from "node:path";
 import { TOOL_API_SHORT_NAME } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { loopbackGateway } from "@/auth";
 import {
+  callArchestraApi,
   catchError,
   defineArchestraTool,
   defineArchestraTools,
@@ -68,13 +68,12 @@ const registry = defineArchestraTools([
       }
 
       try {
-        const response = await loopbackGateway.request({
+        const response = await callArchestraApi({
           method: args.method,
           path: args.path,
           query: args.query,
           body: args.body,
-          userId: context.userId,
-          organizationId: context.organizationId,
+          context,
         });
 
         return {

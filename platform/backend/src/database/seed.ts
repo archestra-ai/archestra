@@ -12,6 +12,7 @@ import {
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES,
   PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   providerRequiresPerUserCredential,
@@ -350,6 +351,7 @@ export async function seedArchestraCatalogAndTools(): Promise<void> {
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   await seedArchestraApiDefaultPolicy(newlyCreatedToolNames);
+  await seedPolicyMutatingToolDefaultPolicies(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 
@@ -391,6 +393,45 @@ async function seedArchestraApiDefaultPolicy(
     reason: "Archestra API writes require human approval by default.",
   });
   logger.info("Seeded default archestra__api tool-invocation policy");
+}
+
+/**
+ * Default tool-invocation policies for the deprecated governance-mutating
+ * platform tools (autonomy / trusted-data policy writes): every call requires
+ * human approval. Seeded once per tool, the first time its row is created (same
+ * marker semantics as {@link seedArchestraApiDefaultPolicy}), so an admin's
+ * later deletion or relaxation is never resurrected.
+ */
+async function seedPolicyMutatingToolDefaultPolicies(
+  newlyCreatedToolNames: string[],
+): Promise<void> {
+  for (const shortName of POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES) {
+    const toolName = archestraMcpBranding.getToolName(shortName);
+    if (!newlyCreatedToolNames.includes(toolName)) {
+      continue;
+    }
+
+    const [tool] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, toolName));
+
+    if (!tool) {
+      logger.warn(
+        { toolName },
+        "Policy-mutating tool row not found; skipping default policy seed",
+      );
+      continue;
+    }
+
+    await ToolInvocationPolicyModel.create({
+      toolId: tool.id,
+      conditions: [],
+      action: "require_approval",
+      reason: "Governance policy changes require human approval by default.",
+    });
+    logger.info({ toolName }, "Seeded default policy-mutating tool policy");
+  }
 }
 
 /**

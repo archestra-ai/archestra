@@ -3,9 +3,11 @@ import {
   type ArchestraToolShortName,
   getArchestraToolFullName,
   type McpToolError,
+  TOOL_API_FULL_NAME,
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
+import { type HttpMethod, loopbackGateway } from "@/auth/loopback";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -240,6 +242,72 @@ export function structuredToolErrorResult(params: {
       archestraError: params.error,
     },
     isError: params.isError ?? true,
+  };
+}
+
+// === archestra__api delegation (deprecated platform-management wrappers) ===
+
+/**
+ * Steer appended (centrally, in index.ts) to every deprecated platform tool's
+ * description and responses, pointing callers at the {@link TOOL_API_FULL_NAME}
+ * tool that supersedes the whole group.
+ */
+export const ARCHESTRA_API_DEPRECATION_NOTE = `Deprecated: prefer the ${TOOL_API_FULL_NAME} tool, which drives the same platform REST API directly (discover routes via GET /openapi.json).`;
+
+/** Append the deprecation note as a trailing text block on a tool result. */
+export function withDeprecationNote(result: CallToolResult): CallToolResult {
+  return {
+    ...result,
+    content: [
+      ...result.content,
+      { type: "text" as const, text: ARCHESTRA_API_DEPRECATION_NOTE },
+    ],
+  };
+}
+
+/**
+ * Issue an in-process request to the platform's own REST API as the calling
+ * user — the same path {@link TOOL_API_FULL_NAME} uses. Deprecated wrappers call
+ * this to route writes through the route's validation/RBAC/audit instead of
+ * mutating models directly. Throws if invoked without a user context.
+ */
+export async function callArchestraApi(params: {
+  method: HttpMethod;
+  path: string;
+  query?: Record<string, string>;
+  body?: unknown;
+  context: ArchestraContext;
+}): Promise<{ status: number; body: unknown }> {
+  const { userId, organizationId } = params.context;
+  if (!userId || !organizationId) {
+    throw new Error(
+      "archestra API call requires an authenticated user context",
+    );
+  }
+  return loopbackGateway.request({
+    method: params.method,
+    path: params.path,
+    query: params.query,
+    body: params.body,
+    userId,
+    organizationId,
+  });
+}
+
+/** Build a tool result mirroring the {@link TOOL_API_FULL_NAME} output shape. */
+export function apiResult(response: {
+  status: number;
+  body: unknown;
+}): CallToolResult {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: `HTTP ${response.status}\n${JSON.stringify(response.body, null, 2)}`,
+      },
+    ],
+    structuredContent: { status: response.status, body: response.body },
+    isError: response.status >= 400,
   };
 }
 

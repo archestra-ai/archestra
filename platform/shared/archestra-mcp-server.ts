@@ -421,6 +421,21 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * Deprecated platform tools that mutate governance (autonomy / trusted-data
+ * policies). Unlike other built-ins they do NOT bypass the tool-invocation
+ * approval gate, so a policy change still requires the seeded default approval —
+ * the same protection `archestra__api` writes get.
+ */
+export const POLICY_MUTATING_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
+  TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
+  TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME,
+  TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME,
+  TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME,
+  TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
  * Agent Skill tools — only assigned to agents once an org admin opts in via
  * the "Enable and create a new skill" empty-state action on /skills
  * (sets `organization.skillToolsEnabled`).

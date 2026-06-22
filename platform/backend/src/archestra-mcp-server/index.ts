@@ -30,11 +30,13 @@ import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
 import {
+  ARCHESTRA_API_DEPRECATION_NOTE,
   type ArchestraRuntimeToolEntry,
   errorResult,
   formatZodError,
   formatZodErrorWithSchema,
   structuredToolErrorResult,
+  withDeprecationNote,
 } from "./helpers";
 import {
   toolEntries as identityToolEntries,
@@ -139,6 +141,33 @@ const projectFeatureToolFullNames = new Set<string>(
   projectTools.map((t) => t.name),
 );
 
+// Deprecated platform-management tools: superseded by archestra__api, kept as
+// working wrappers. Derived from the group tool arrays so it tracks the files
+// automatically. Drives the deprecation note appended to their descriptions and
+// responses (see getArchestraMcpTools / executeArchestraTool).
+const DEPRECATED_PLATFORM_TOOL_SHORT_NAMES = new Set<ArchestraToolShortName>(
+  [
+    ...agentTools,
+    ...llmProxyTools,
+    ...mcpGatewayTools,
+    ...mcpServerTools,
+    ...limitTools,
+    ...policyTools,
+    ...toolAssignmentTools,
+  ]
+    .map((tool) => getArchestraToolShortName(tool.name))
+    .filter(
+      (shortName): shortName is ArchestraToolShortName => shortName !== null,
+    ),
+);
+
+function isDeprecatedPlatformTool(toolName: string): boolean {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return (
+    shortName !== null && DEPRECATED_PLATFORM_TOOL_SHORT_NAMES.has(shortName)
+  );
+}
+
 export function getArchestraMcpTools() {
   const tools = [
     ...identityTools,
@@ -166,9 +195,8 @@ export function getArchestraMcpTools() {
       : []),
   ];
 
-  if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
-    return tools;
-  }
+  const whiteLabeled =
+    archestraMcpBranding.toolPrefix !== ARCHESTRA_TOOL_PREFIX;
 
   return tools.map((tool) => {
     const shortName = getArchestraToolShortName(tool.name);
@@ -176,10 +204,17 @@ export function getArchestraMcpTools() {
       return tool;
     }
 
-    return {
-      ...tool,
-      name: archestraMcpBranding.getToolName(shortName),
-    };
+    const name = whiteLabeled
+      ? archestraMcpBranding.getToolName(shortName)
+      : tool.name;
+    const description = DEPRECATED_PLATFORM_TOOL_SHORT_NAMES.has(shortName)
+      ? `${tool.description}\n\n${ARCHESTRA_API_DEPRECATION_NOTE}`
+      : tool.description;
+
+    if (name === tool.name && description === tool.description) {
+      return tool;
+    }
+    return { ...tool, name, description };
   });
 }
 
@@ -256,6 +291,9 @@ export async function executeArchestraTool(
     return parsedArgs.error;
   }
 
+  const finalize = (result: CallToolResult): CallToolResult =>
+    isDeprecatedPlatformTool(toolName) ? withDeprecationNote(result) : result;
+
   try {
     const result = await toolEntry.invoke({
       args: parsedArgs.value,
@@ -272,10 +310,10 @@ export async function executeArchestraTool(
       if ("error" in validatedResult) {
         return validatedResult.error;
       }
-      return validatedResult.value;
+      return finalize(validatedResult.value);
     }
 
-    return result;
+    return finalize(result);
   } catch (error) {
     if (error instanceof ZodError) {
       return errorResult(

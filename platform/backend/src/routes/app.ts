@@ -11,6 +11,7 @@ import {
   getAppTemplates,
   resolveCreateAppHtml,
 } from "@/app-templates";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -20,6 +21,7 @@ import {
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
+  McpServerModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -35,12 +37,15 @@ import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import {
   ApiError,
   type App,
+  type AppListItem,
+  AppListItemSchema,
   AppRenderDiagnosticEntrySchema,
   AppTemplateSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ExternalAppListItemSchema,
   SelectAppSchema,
   SelectAppVersionSchema,
   SelectToolSchema,
@@ -83,31 +88,116 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAppSchema),
+          createPaginatedResponseSchema(AppListItemSchema),
         ),
       },
     },
     async ({ query, user, organizationId }, reply) => {
+      // The Apps surface unifies two sources: owned apps (this org's app rows)
+      // and external UI-providing installed MCP servers. Both are access-filtered
+      // by their own model; we merge, sort, and paginate over the combined set.
+      // Cardinality is small (tens), so fetching all-then-slicing is fine.
+      const isMcpServerAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      );
       const accessibleAppIds = await AppTeamModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
       });
-      const filters = {
+      const ownedFilters = {
         organizationId,
         accessibleAppIds,
         ...(query.search ? { search: query.search } : {}),
       };
-      const [data, total] = await Promise.all([
-        AppModel.findByOrganization({
-          ...filters,
-          limit: query.limit,
-          offset: query.offset,
+      const [ownedCount, external] = await Promise.all([
+        AppModel.countByOrganization(ownedFilters),
+        McpServerModel.findUiCapableForCaller({
+          userId: user.id,
+          isMcpServerAdmin,
+          ...(query.search ? { search: query.search } : {}),
         }),
-        AppModel.countByOrganization(filters),
       ]);
+      const owned = await AppModel.findByOrganization({
+        ...ownedFilters,
+        limit: ownedCount,
+        offset: 0,
+      });
+
+      const items: AppListItem[] = [
+        ...owned.map((app) => ({
+          source: "owned" as const,
+          id: app.id,
+          name: app.name,
+          description: app.description,
+          scope: app.scope,
+          authorId: app.authorId,
+          latestVersion: app.latestVersion,
+          executionModel: "viewer-scoped" as const,
+          cspOrigin: "platform-pinned" as const,
+        })),
+        ...external.map((server) => ({
+          source: "external" as const,
+          mcpServerId: server.mcpServerId,
+          name: server.name,
+          description: server.description,
+          scope: server.scope,
+          authorId: server.ownerId,
+          resourceUri: server.resourceUri,
+          executionModel: "server-scoped" as const,
+          cspOrigin: "author-declared" as const,
+        })),
+      ];
+      items.sort((a, b) => a.name.localeCompare(b.name));
+
       return reply.send({
-        data,
-        pagination: calculatePaginationMeta(total, query),
+        data: items.slice(query.offset, query.offset + query.limit),
+        pagination: calculatePaginationMeta(items.length, query),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/apps/external/:mcpServerId",
+    {
+      schema: {
+        operationId: RouteId.GetExternalApp,
+        description:
+          "Resolve a single external UI-providing app entry by installed MCP server id (for the standalone run page).",
+        tags: ["Apps"],
+        params: z.object({ mcpServerId: UuidIdSchema }),
+        response: constructResponseSchema(ExternalAppListItemSchema),
+      },
+    },
+    async ({ params, user, organizationId }, reply) => {
+      const isMcpServerAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      );
+      const candidates = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin,
+      });
+      const match = candidates.find(
+        (server) => server.mcpServerId === params.mcpServerId,
+      );
+      if (!match) {
+        throw new ApiError(404, "Not found");
+      }
+      return reply.send({
+        source: "external",
+        mcpServerId: match.mcpServerId,
+        name: match.name,
+        description: match.description,
+        scope: match.scope,
+        authorId: match.ownerId,
+        resourceUri: match.resourceUri,
+        executionModel: "server-scoped",
+        cspOrigin: "author-declared",
       });
     },
   );

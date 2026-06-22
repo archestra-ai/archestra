@@ -276,17 +276,16 @@ export async function calculateCacheCost(
     model,
   );
   const pricing = ModelModel.getEffectivePricing(model_entry, model, provider);
-  if (
-    pricing.cacheSource == null ||
-    pricing.pricePerMillionCacheRead == null ||
-    pricing.pricePerMillionCacheWrite == null
-  ) {
+  if (pricing.cacheSource == null) {
     // Provider has no cache pricing model; don't fabricate cost/savings.
     return undefined;
   }
+  // One direction may be unpriced (e.g. providers that don't charge for cache
+  // writes); treat a missing price as zero rather than discarding the whole
+  // breakdown.
   const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
-  const cacheReadPrice = Number.parseFloat(pricing.pricePerMillionCacheRead);
-  const cacheWrite5mPrice = Number.parseFloat(pricing.pricePerMillionCacheWrite);
+  const cacheReadPrice = parsePriceOrZero(pricing.pricePerMillionCacheRead);
+  const cacheWrite5mPrice = parsePriceOrZero(pricing.pricePerMillionCacheWrite);
   const cacheWrite1hPrice = cacheWrite5mPrice * cacheWrite1hFactor(provider);
 
   // Split writes by TTL: 1h is billed at a higher surcharge than the 5m default.
@@ -303,8 +302,7 @@ export async function calculateCacheCost(
     (readTokens / 1_000_000) * cacheReadPrice +
     (write5m / 1_000_000) * cacheWrite5mPrice +
     (write1h / 1_000_000) * cacheWrite1hPrice;
-  const cacheReadSavings =
-    readFull - (readTokens / 1_000_000) * cacheReadPrice;
+  const cacheReadSavings = readFull - (readTokens / 1_000_000) * cacheReadPrice;
   const cacheSavings =
     cacheReadSavings -
     ((write5m / 1_000_000) * cacheWrite5mPrice - write5mFull) -

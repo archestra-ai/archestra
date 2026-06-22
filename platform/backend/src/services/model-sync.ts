@@ -9,10 +9,6 @@ import {
   modelsDevClient,
   modelsDevCostToPerToken,
 } from "@/clients/models-dev-client";
-import {
-  type CrossProviderPrices,
-  resolveCrossProviderPrices,
-} from "@/services/cross-provider-pricing";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -21,6 +17,10 @@ import {
 } from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
+import {
+  type CrossProviderPrices,
+  resolveCrossProviderPrices,
+} from "@/services/cross-provider-pricing";
 import type {
   CreateModel,
   ModelInputModality,

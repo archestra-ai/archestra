@@ -68,6 +68,67 @@ function getDefaultModelPrice(model: string): {
   };
 }
 
+/**
+ * Resolve one cache direction (read or write) with per-field precedence:
+ * custom override → registry-synced → multiplier-derived from the input price.
+ * Returns a null price + null source when none of those apply.
+ */
+function resolveCacheDirection(params: {
+  custom: string | null | undefined;
+  syncedPerToken: string | null | undefined;
+  multiplierFactor: number | undefined;
+  effectivePricePerMillionInput: number;
+}): { price: string | null; source: PriceSource | null } {
+  const {
+    custom,
+    syncedPerToken,
+    multiplierFactor,
+    effectivePricePerMillionInput,
+  } = params;
+  if (custom != null) {
+    return { price: custom, source: "custom" };
+  }
+  if (syncedPerToken != null) {
+    return {
+      price: formatCachePrice(Number.parseFloat(syncedPerToken) * 1_000_000),
+      source: "models_dev",
+    };
+  }
+  if (multiplierFactor !== undefined) {
+    return {
+      price: formatCachePrice(effectivePricePerMillionInput * multiplierFactor),
+      source: "derived_multiplier",
+    };
+  }
+  return { price: null, source: null };
+}
+
+/**
+ * Collapse the read/write cache-price sources into one label for display.
+ * Signals estimation (`derived_multiplier`) if either direction is derived;
+ * otherwise prefers `custom`, then `models_dev`.
+ */
+function combineCacheSource(
+  readSource: PriceSource | null,
+  writeSource: PriceSource | null,
+): PriceSource {
+  const sources = [readSource, writeSource].filter(
+    (s): s is PriceSource => s != null,
+  );
+  if (sources.includes("derived_multiplier")) return "derived_multiplier";
+  if (sources.includes("custom")) return "custom";
+  return "models_dev";
+}
+
+/**
+ * Format a per-million cache price as a precise, trailing-zero-free string.
+ * Cache prices are often sub-cent per million, so the 2-decimal rounding used
+ * for the larger input/output magnitudes would be materially lossy here.
+ */
+function formatCachePrice(perMillion: number): string {
+  return Number.parseFloat(perMillion.toFixed(8)).toString();
+}
+
 class ModelModel {
   /**
    * Find all models discovered via LLM Proxy requests.
@@ -479,7 +540,8 @@ class ModelModel {
       set.customPricePerMillionCacheRead = data.customPricePerMillionCacheRead;
     }
     if (data.customPricePerMillionCacheWrite !== undefined) {
-      set.customPricePerMillionCacheWrite = data.customPricePerMillionCacheWrite;
+      set.customPricePerMillionCacheWrite =
+        data.customPricePerMillionCacheWrite;
     }
     if (data.ignored !== undefined) {
       set.ignored = data.ignored;
@@ -624,40 +686,28 @@ class ModelModel {
     pricePerMillionCacheWrite: string | null;
     cacheSource: PriceSource | null;
   } {
-    // Tier 1: Custom admin-set cache price
-    if (
-      model?.customPricePerMillionCacheRead != null &&
-      model?.customPricePerMillionCacheWrite != null
-    ) {
-      return {
-        pricePerMillionCacheRead: model.customPricePerMillionCacheRead,
-        pricePerMillionCacheWrite: model.customPricePerMillionCacheWrite,
-        cacheSource: "custom",
-      };
-    }
-
-    // Tier 2: synced cache price (convert per-token to per-million)
-    if (
-      model?.cacheReadPricePerToken != null &&
-      model?.cacheWritePricePerToken != null
-    ) {
-      return {
-        pricePerMillionCacheRead: (
-          Number.parseFloat(model.cacheReadPricePerToken) * 1_000_000
-        ).toFixed(2),
-        pricePerMillionCacheWrite: (
-          Number.parseFloat(model.cacheWritePricePerToken) * 1_000_000
-        ).toFixed(2),
-        cacheSource: "models_dev",
-      };
-    }
-
-    // Tier 3: Derive from the effective input price via the provider multiplier.
+    // Read and write are resolved independently: a registry may price one
+    // direction and not the other (e.g. OpenAI/Gemini publish a cache-read
+    // price but no cache-write price), so we must not discard a known price
+    // just because its counterpart is missing.
     const provider = model?.provider ?? providerHint;
-    const multiplier = provider
-      ? CACHE_PRICE_MULTIPLIERS[provider]
-      : undefined;
-    if (!multiplier) {
+    const multiplier = provider ? CACHE_PRICE_MULTIPLIERS[provider] : undefined;
+    const priceIn = Number.parseFloat(effectivePricePerMillionInput);
+
+    const read = resolveCacheDirection({
+      custom: model?.customPricePerMillionCacheRead,
+      syncedPerToken: model?.cacheReadPricePerToken,
+      multiplierFactor: multiplier?.read,
+      effectivePricePerMillionInput: priceIn,
+    });
+    const write = resolveCacheDirection({
+      custom: model?.customPricePerMillionCacheWrite,
+      syncedPerToken: model?.cacheWritePricePerToken,
+      multiplierFactor: multiplier?.write,
+      effectivePricePerMillionInput: priceIn,
+    });
+
+    if (read.price === null && write.price === null) {
       // Provider has no cache pricing model; leave cache unpriced.
       return {
         pricePerMillionCacheRead: null,
@@ -666,11 +716,10 @@ class ModelModel {
       };
     }
 
-    const priceIn = Number.parseFloat(effectivePricePerMillionInput);
     return {
-      pricePerMillionCacheRead: (priceIn * multiplier.read).toFixed(2),
-      pricePerMillionCacheWrite: (priceIn * multiplier.write).toFixed(2),
-      cacheSource: "derived_multiplier",
+      pricePerMillionCacheRead: read.price,
+      pricePerMillionCacheWrite: write.price,
+      cacheSource: combineCacheSource(read.source, write.source),
     };
   }
 
@@ -687,7 +736,11 @@ class ModelModel {
       provider,
       modelId,
     );
-    const pricing = ModelModel.getEffectivePricing(modelEntry, modelId, provider);
+    const pricing = ModelModel.getEffectivePricing(
+      modelEntry,
+      modelId,
+      provider,
+    );
     const inputPricePerToken = Number(pricing.pricePerMillionInput) / 1_000_000;
     return tokensSaved * inputPricePerToken;
   }

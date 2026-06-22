@@ -91,8 +91,11 @@ const BEDROCK_VENDOR_TO_MODELS_DEV_PROVIDER: Record<string, string> = {
 const BEDROCK_REGION_PREFIX = /^(us-gov|us|eu|apac|ap|sa|ca|global)\./;
 /** Trailing Bedrock model version, e.g. `-v1:0` or `:0`. */
 const BEDROCK_VERSION_SUFFIX = /(?:-v\d+)?:\d+$/;
-/** Trailing 8-digit date stamp, e.g. `-20250929`. */
-const DATE_SUFFIX = /-\d{8}$/;
+/**
+ * Trailing date stamp in either the contiguous Bedrock form (`-20250929`) or
+ * the hyphenated OpenAI/Azure form (`-2024-08-06`).
+ */
+const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
 
 function resolveBedrockTarget(modelId: string): CrossProviderTarget | null {
   const withoutRegion = modelId.replace(BEDROCK_REGION_PREFIX, "");

@@ -122,6 +122,17 @@ describe("resolveCrossProviderPrices — Azure", () => {
     expect(prices?.promptPricePerToken).toBe("0.0000025");
   });
 
+  test("strips a hyphenated date suffix from a versioned model name", () => {
+    const prices = resolveCrossProviderPrices({
+      provider: "azure",
+      modelId: "prod-deployment",
+      underlyingModelName: "gpt-4o-2024-08-06",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(prices?.promptPricePerToken).toBe("0.0000025");
+  });
+
   test("returns null when the deployment name matches no known model", () => {
     const prices = resolveCrossProviderPrices({
       provider: "azure",

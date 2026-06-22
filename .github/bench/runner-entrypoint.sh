@@ -19,6 +19,12 @@ cat > /app/.env <<EOF
 ARCHESTRA_BENCH_DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@localhost:5432/postgres
 EOF
 
+# The prod image runs NODE_ENV=production, where better-auth refuses to boot on its built-in default
+# secret. The bench DB is fresh and dropped each run, so the value is throwaway — a random per-run
+# secret satisfies the guard without persisting or committing one. build_backend_env seeds the backend
+# from the process env, so exporting it here is enough.
+export ARCHESTRA_AUTH_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+
 mkdir -p /work/run
 
 set +e

@@ -48,7 +48,9 @@ behavior when unset:
 Gotchas: the bench resolves its Postgres from `ARCHESTRA_BENCH_DATABASE_URL` and creates its own
 per-run DB on it. The sandbox (`run_command`) is gated only by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a
 valid Dagger host; the `basic` env additionally needs `ARCHESTRA_AGENTS_SKILLS_ENABLED` +
-`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`.
+`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`. The prod image runs `NODE_ENV=production`, where better-auth
+hard-exits on its default secret — set `ARCHESTRA_AUTH_SECRET` (the entrypoint generates a throwaway
+one per run; the DB is fresh and dropped each run, so the value never matters).
 
 ## Skills are pinned, not live
 

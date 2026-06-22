@@ -740,6 +740,9 @@ export async function getChatMcpTools({
     // and lives for the cache TTL, so without this a later run on the same scope
     // would inherit the previous run's repeat counts. getChatMcpTools is called
     // once per run, and every wrapper reads the tracker through this context.
+    // Best-effort under concurrency: two overlapping no-abortSignal runs on the
+    // same scope share this context, so a reset can clear the other's in-flight
+    // streak — fail-open (the breaker under-fires, never falsely fires).
     cached.context.repeatTracker = new ToolCallRepeatTracker();
     logger.info(
       {

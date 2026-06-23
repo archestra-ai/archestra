@@ -210,6 +210,16 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return false;
       if (!(await this.canAccessScope(parsed.scope, params))) return false;
+      // The instructions file is never deletable — including via an object ref
+      // that addresses its bytes directly. Without this, deleting through the
+      // object path would orphan the row (bytes gone, row left unreadable),
+      // bypassing the row-level guard below.
+      if (
+        parsed.scope.kind === "project" &&
+        keyName(parsed.key) === PROJECT_INSTRUCTIONS_FILENAME
+      ) {
+        throw new FileNotDeletableError(PROJECT_INSTRUCTIONS_FILENAME);
+      }
       // Same key→scope binding as `get`: a crafted ref carrying the caller's own
       // scope but a sibling folder's key must NOT delete another scope's object.
       if (!(await this.objectRefOwned(parsed, store))) return false;

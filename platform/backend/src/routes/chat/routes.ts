@@ -6,6 +6,7 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   isModelSelectionComplete,
+  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -464,7 +465,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // prompt. Kicked off as a promise so it runs concurrently with the org
         // reads below rather than adding a serial read on the hot path.
         // Best-effort: a read failure (or lost project access) must never break
-        // the chat, and an empty file injects nothing.
+        // the chat, and an empty file injects nothing. The injected length is
+        // clamped: the editor caps saves at the same limit, but the file is
+        // also writable by the agent tools (bounded only by the much larger
+        // artifact byte limit), and this content goes into every turn's prompt.
         const projectInstructionsPromise: Promise<string | undefined> =
           conversation.projectId
             ? projectService
@@ -473,7 +477,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                   userId: user.id,
                 })
-                .then(({ content }) => (content.trim() ? content : undefined))
+                .then(({ content }) =>
+                  content.trim()
+                    ? content.slice(0, PROJECT_INSTRUCTIONS_MAX_LENGTH)
+                    : undefined,
+                )
                 .catch((error) => {
                   logger.warn(
                     {

@@ -1047,6 +1047,53 @@ describe("fileStore disk overlay (filesystem provider)", () => {
       await fs.rm(outside, { recursive: true, force: true });
     }
   });
+
+  test("the instructions file cannot be deleted via an obj_ ref to its bytes", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      name: "instr-obj",
+      description: null,
+    });
+    await fileStore.writeProjectInstructions({
+      organizationId: org.id,
+      userId: user.id,
+      projectId: project.id,
+      content: "keep me",
+    });
+    const row = await FileModel.findByProjectAndName({
+      organizationId: org.id,
+      projectId: project.id,
+      filename: PROJECT_INSTRUCTIONS_FILENAME,
+    });
+    expect(row?.objectKey).toBeTruthy();
+
+    // A crafted obj_ ref addressing the instructions bytes directly must be
+    // refused too — otherwise it would orphan the row (bytes gone, unreadable).
+    const ref = `obj_${Buffer.from(
+      JSON.stringify({
+        s: { kind: "project", projectId: project.id },
+        k: row?.objectKey,
+      }),
+      "utf8",
+    ).toString("base64url")}`;
+    await expect(
+      fileStore.delete({ ref, organizationId: org.id, userId: user.id }),
+    ).rejects.toBeInstanceOf(FileNotDeletableError);
+
+    // bytes + row still intact
+    expect(
+      await fileStore.readProjectInstructions({
+        organizationId: org.id,
+        projectId: project.id,
+      }),
+    ).toBe("keep me");
+  });
 });
 
 describe("fileStore project instructions", () => {

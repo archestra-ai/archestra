@@ -26,7 +26,11 @@ import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-reg
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import type { MyFileResolutionError } from "@/skills-sandbox/file-store";
-import { fileStore, OBJECT_REF_PREFIX } from "@/skills-sandbox/file-store";
+import {
+  FileNotDeletableError,
+  fileStore,
+  OBJECT_REF_PREFIX,
+} from "@/skills-sandbox/file-store";
 import {
   isInlineSafeImageMime,
   resolveArtifactMime,
@@ -1334,13 +1338,14 @@ const registry = defineArchestraTools([
         return errorResult(describeMyFileError(resolved.error, ref));
       }
       // The project instructions file is available but never deletable — refuse
-      // with a clear message instead of letting the store throw.
+      // up front with the canonical message (the store would otherwise throw,
+      // and this call site is not wrapped to surface it).
       if (
         resolved.projectId &&
         resolved.filename === PROJECT_INSTRUCTIONS_FILENAME
       ) {
         return errorResult(
-          `"${resolved.filename}" is the project's instructions file and can't be deleted. Clear its contents from the project's Instructions panel instead.`,
+          new FileNotDeletableError(resolved.filename).message,
         );
       }
 

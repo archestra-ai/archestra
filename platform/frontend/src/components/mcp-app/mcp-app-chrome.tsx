@@ -2,6 +2,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import {
   AppWindow,
   ChevronDown,
+  type LucideIcon,
   Minimize,
   PanelRight,
   RefreshCw,
@@ -121,37 +122,66 @@ export function McpAppTopBar({
   );
 }
 
+/**
+ * Shared icon button for the address pill — a single place for the ghost / icon
+ * sizing so the per-action wrappers below just pass an icon, a label (used for
+ * both `aria-label` and `title`), and either an `onClick` or a `href`. A `href`
+ * renders as a link (via `Button asChild`); `target="_blank"` adds `rel`.
+ */
+function McpAppIconButton({
+  icon: Icon,
+  label,
+  onClick,
+  href,
+  target,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  target?: React.HTMLAttributeAnchorTarget;
+}) {
+  const shared = {
+    variant: "ghost",
+    size: "icon",
+    className: "h-6 w-6 text-muted-foreground",
+    "aria-label": label,
+    title: label,
+  } as const;
+  const icon = <Icon className="h-3.5 w-3.5" />;
+
+  return href ? (
+    <Button asChild {...shared}>
+      <Link
+        href={href}
+        target={target}
+        rel={target === "_blank" ? "noreferrer" : undefined}
+      >
+        {icon}
+      </Link>
+    </Button>
+  ) : (
+    <Button type="button" onClick={onClick} {...shared}>
+      {icon}
+    </Button>
+  );
+}
+
 /** Top-bar control that opens the right panel and shows this app there. */
 export function McpAppSidebarButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 text-muted-foreground"
+    <McpAppIconButton
+      icon={PanelRight}
+      label="Show in sidebar"
       onClick={onClick}
-      aria-label="Show in sidebar"
-      title="Show in sidebar"
-    >
-      <PanelRight className="h-3.5 w-3.5" />
-    </Button>
+    />
   );
 }
 
 /** Reload (refresh) icon button for the address pill. */
 export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 text-muted-foreground"
-      onClick={onClick}
-      aria-label="Reload app"
-      title="Reload app"
-    >
-      <RefreshCw className="h-3.5 w-3.5" />
-    </Button>
+    <McpAppIconButton icon={RefreshCw} label="Reload app" onClick={onClick} />
   );
 }
 
@@ -162,53 +192,34 @@ export function McpAppFullscreenExitButton({
   onClick: () => void;
 }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 text-muted-foreground"
+    <McpAppIconButton
+      icon={Minimize}
+      label="Exit fullscreen"
       onClick={onClick}
-      aria-label="Exit fullscreen"
-      title="Exit fullscreen"
-    >
-      <Minimize className="h-3.5 w-3.5" />
-    </Button>
+    />
   );
 }
 
 /** Opens the owned app's standalone run page in a new tab. */
 export function McpAppStandaloneButton({ appId }: { appId: string }) {
   return (
-    <Button
-      asChild
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 text-muted-foreground"
-      aria-label="Open standalone"
-      title="Open standalone"
-    >
-      <Link href={`/apps/${appId}/run`} target="_blank" rel="noreferrer">
-        <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-      </Link>
-    </Button>
+    <McpAppIconButton
+      icon={SquareArrowOutUpRight}
+      label="Open standalone"
+      href={`/apps/${appId}/run`}
+      target="_blank"
+    />
   );
 }
 
 /** Links to the owned app's detail page. */
 export function McpAppAppsPageButton({ appId }: { appId: string }) {
   return (
-    <Button
-      asChild
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 text-muted-foreground"
-      aria-label="Go to Apps page"
-      title="Go to Apps page"
-    >
-      <Link href={`/apps/${appId}`}>
-        <AppWindow className="h-3.5 w-3.5" />
-      </Link>
-    </Button>
+    <McpAppIconButton
+      icon={AppWindow}
+      label="Go to Apps page"
+      href={`/apps/${appId}`}
+    />
   );
 }
 

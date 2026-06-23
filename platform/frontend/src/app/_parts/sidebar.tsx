@@ -629,6 +629,11 @@ export function AppSidebar() {
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
+    // With ARCHESTRA_BETA on, these nav items point at their beta routes.
+    const betaNavUrls: Record<string, string> = {
+      Connect: "/connection_beta",
+      MCPs: "/mcp/registry/beta",
+    };
     return contentNavGroups
       .filter((group) => group.label !== "Apps" || appsEnabled)
       .map((group) => ({
@@ -642,11 +647,8 @@ export function AppSidebar() {
             return true;
           })
           .map((item) => {
-            // With ARCHESTRA_BETA on, send Connect to the new connection page.
-            const resolved =
-              item.title === "Connect" && betaEnabled
-                ? { ...item, url: "/connection_beta" }
-                : item;
+            const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+            const resolved = betaUrl ? { ...item, url: betaUrl } : item;
             return resolved.subItems
               ? {
                   ...resolved,

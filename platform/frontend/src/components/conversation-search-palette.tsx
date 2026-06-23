@@ -201,6 +201,13 @@ const navigationItems = [
   },
 ];
 
+// With ARCHESTRA_BETA on, these nav items point at their beta routes (keyed by
+// navigationItems `value`).
+const betaNavHrefs: Record<string, string> = {
+  connect: "/connection_beta",
+  "mcp-registry": "/mcp/registry/beta",
+};
+
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -558,11 +565,10 @@ export function ConversationSearchPalette({
                             key={item.value}
                             value={`${item.value} ${item.keywords} ${item.label}`}
                             onSelect={() => {
-                              router.push(
-                                item.value === "connect" && betaEnabled
-                                  ? "/connection_beta"
-                                  : item.href,
-                              );
+                              const betaHref = betaEnabled
+                                ? betaNavHrefs[item.value]
+                                : undefined;
+                              router.push(betaHref ?? item.href);
                               onOpenChange(false);
                             }}
                             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"

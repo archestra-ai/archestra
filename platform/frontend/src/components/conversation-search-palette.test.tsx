@@ -226,6 +226,20 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/connection_beta");
   });
 
+  it("routes MCP Registry to the beta registry when ARCHESTRA_BETA is on", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseFeature.mockReturnValue(true);
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("MCP Registry"));
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/beta");
+  });
+
   it("does not show the recent chats empty state in the full search palette", () => {
     mockUseConversations.mockReturnValue({
       data: [],

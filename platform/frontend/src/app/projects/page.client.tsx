@@ -1,9 +1,16 @@
 "use client";
 
-import { FolderKanban, Pin, PinOff, Plus, Users } from "lucide-react";
+import {
+  FolderKanban,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Plus,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
@@ -13,9 +20,16 @@ import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
+import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
   usePinProject,
@@ -37,7 +51,7 @@ function ProjectsList() {
   const { data, isPending } = useProjects();
   const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
-  const projects = data ?? [];
+  const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
   const pinProjectMutation = usePinProject();
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
@@ -72,42 +86,33 @@ function ProjectsList() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Link
+            <div
               key={project.id}
-              href={`/projects/${project.id}`}
               className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  <AgentIcon
-                    icon={project.icon}
-                    fallbackType="project"
-                    size={18}
-                  />
-                  <span className="truncate font-medium">{project.name}</span>
-                </span>
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="flex min-w-0 items-center gap-2"
+                >
+                  <span className="shrink-0">
+                    <AgentIcon
+                      icon={project.icon}
+                      fallbackType="project"
+                      size={18}
+                    />
+                  </span>
+                  <span className="min-w-0 truncate font-medium">
+                    {project.name}
+                  </span>
+                  {project.pinnedAt && (
+                    <Pin
+                      className="h-3.5 w-3.5 shrink-0 fill-muted-foreground text-muted-foreground"
+                      aria-label="Pinned project"
+                    />
+                  )}
+                </Link>
                 <span className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={
-                      project.pinnedAt ? "Unpin project" : "Pin project"
-                    }
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      pinProjectMutation.mutate({
-                        id: project.id,
-                        pinned: !project.pinnedAt,
-                      });
-                    }}
-                  >
-                    {project.pinnedAt ? (
-                      <PinOff className="h-4 w-4" />
-                    ) : (
-                      <Pin className="h-4 w-4" />
-                    )}
-                  </Button>
                   {!project.isOwner && (
                     <Badge variant="secondary">Shared with you</Badge>
                   )}
@@ -117,14 +122,26 @@ function ProjectsList() {
                       {project.visibility === "organization" ? "Org" : "Teams"}
                     </Badge>
                   )}
+                  <ProjectCardActions
+                    pinned={!!project.pinnedAt}
+                    onTogglePin={() =>
+                      pinProjectMutation.mutate({
+                        id: project.id,
+                        pinned: !project.pinnedAt,
+                      })
+                    }
+                  />
                 </span>
               </div>
               {project.description && (
-                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="mt-1 block line-clamp-2 text-sm text-muted-foreground"
+                >
                   {project.description}
-                </p>
+                </Link>
               )}
-            </Link>
+            </div>
           ))}
         </div>
       )}
@@ -133,6 +150,34 @@ function ProjectsList() {
 }
 
 // === internal components ===
+
+function ProjectCardActions({
+  pinned,
+  onTogglePin,
+}: {
+  pinned: boolean;
+  onTogglePin: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="Project actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onTogglePin}>
+          {pinned ? (
+            <PinOff className="h-4 w-4" />
+          ) : (
+            <Pin className="h-4 w-4" />
+          )}
+          {pinned ? "Unpin" : "Pin"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 type CreateProjectForm = {
   name: string;

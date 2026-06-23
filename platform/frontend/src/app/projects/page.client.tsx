@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import { FolderKanban, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -124,9 +128,15 @@ function CreateProjectDialog({
   const router = useRouter();
   const form = useForm<CreateProjectForm>({
     defaultValues: { name: "", description: "", icon: null },
+    mode: "onChange",
   });
   const createProject = useCreateProject();
   const icon = form.watch("icon");
+  const name = form.watch("name");
+  const description = form.watch("description");
+  const hasLengthError =
+    name.length > PROJECT_NAME_MAX_LENGTH ||
+    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
     const project = await createProject.mutateAsync({
@@ -161,7 +171,7 @@ function CreateProjectDialog({
           <Button
             type="submit"
             disabled={
-              createProject.isPending || !form.watch("name").trim().length
+              createProject.isPending || !name.trim().length || hasLengthError
             }
           >
             Create
@@ -175,17 +185,42 @@ function CreateProjectDialog({
           onChange={(next) => form.setValue("icon", next)}
           fallbackType="project"
         />
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Input
             autoFocus
             placeholder="Project name"
-            {...form.register("name", { required: true, maxLength: 256 })}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name", {
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
           <Textarea
             placeholder="Description (optional)"
             rows={3}
-            {...form.register("description", { maxLength: 4096 })}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.description}
+            {...form.register("description", {
+              maxLength: {
+                value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.description?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          )}
         </div>
       </div>
     </StandardFormDialog>

@@ -3367,11 +3367,36 @@ async function forkConversation(params: {
     throw new ApiError(404, "Agent not found");
   }
 
+  // A chat started from a (shared) chat in a project belongs to that project,
+  // just like one started from the project composer. Carry the source's
+  // project over to the fork — but only when the forker can still access it.
+  // Conversation shares are independent of project shares, so a conversation
+  // can be shared without its project being shared; in that case drop the link
+  // rather than attaching the fork to a project the user cannot see (which
+  // would leave it invisible and unmanageable to them).
+  let projectId: string | null = null;
+  if (params.sourceConversation.projectId) {
+    const project = await ProjectModel.findById(
+      params.sourceConversation.projectId,
+    );
+    if (
+      project &&
+      (await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      projectId = project.id;
+    }
+  }
+
   const newConversation = await ConversationModel.create({
     userId: params.userId,
     organizationId: params.organizationId,
     agentId: agent.id,
     modelId: params.sourceConversation.modelId,
+    projectId,
   });
 
   if (params.sourceConversation.messages.length > 0) {

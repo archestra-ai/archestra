@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.71"
+    "version": "1.2.72"
   },
   "components": {
     "schemas": {
@@ -205118,12 +205118,12 @@
                   "name": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 256
+                    "maxLength": 64
                   },
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 4096
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,
@@ -206079,12 +206079,12 @@
                   "name": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 256
+                    "maxLength": 64
                   },
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 4096
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,

@@ -1,3 +1,5 @@
+import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
+
 /**
  * Validate a project's display name. Returns an error message, or null when
  * valid. One validator for every entry point (route schema, agent tools). The
@@ -7,7 +9,9 @@
 export function validateProjectName(raw: string): string | null {
   const name = raw.trim();
   if (name.length === 0) return "project name must not be empty";
-  if (name.length > 128) return "project name must be at most 128 characters";
+  if (name.length > PROJECT_NAME_MAX_LENGTH) {
+    return `project name must be at most ${PROJECT_NAME_MAX_LENGTH} characters`;
+  }
   if (name.includes("/") || name.includes("\\")) {
     return "project name must not contain slashes";
   }

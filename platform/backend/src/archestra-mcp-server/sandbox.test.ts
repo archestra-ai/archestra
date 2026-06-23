@@ -731,7 +731,7 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 
   describe("download_file", () => {
-    test("delegates to the runtime service and returns fileId + downloadUrl", async () => {
+    test("delegates to the runtime service and returns fileId without a download link", async () => {
       const ctx = await makeConversationCtx();
       const exportSpy = vi
         .spyOn(skillSandboxRuntimeService, "exportArtifact")
@@ -759,15 +759,19 @@ describe("sandbox tools (runtime enabled)", () => {
       const structured = structuredOf<{
         fileId: string;
         sizeBytes: number;
-        downloadUrl: string;
+        downloadUrl?: string;
       }>(result);
       expect(structured.fileId).toBe("artifact-1");
       expect(structured.sizeBytes).toBe(42);
-      expect(structured.downloadUrl).toBe(
-        "/api/skill-sandbox/artifacts/artifact-1",
+      // No download link is surfaced anymore — the file is reached via the Files
+      // panel, and neither the structured output nor the text mentions a URL.
+      expect(structured.downloadUrl).toBeUndefined();
+      expect(JSON.stringify(result.content)).not.toContain(
+        "/api/skill-sandbox/artifacts",
       );
-      // text-only — bytes flow sandbox -> DB -> UI via the URL, never via the
-      // MCP content array (which the chat layer would stringify into context).
+      // text-only — bytes flow sandbox -> DB -> Files panel via the artifacts
+      // route, never via the MCP content array (which the chat layer would
+      // stringify into context).
       const contentTypes = (result.content as Array<{ type: string }>).map(
         (c) => c.type,
       );
@@ -1475,10 +1479,14 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     const out = structuredOf<{
       fileId: string;
       projectName: string | null;
-      downloadUrl: string;
+      downloadUrl?: string;
     }>(result);
     expect(out.projectName).toBeNull();
-    expect(out.downloadUrl).toBe(`/api/skill-sandbox/artifacts/${out.fileId}`);
+    // save_result no longer surfaces a download link.
+    expect(out.downloadUrl).toBeUndefined();
+    expect(JSON.stringify(result.content)).not.toContain(
+      "/api/skill-sandbox/artifacts",
+    );
 
     const { FileModel } = await import("@/models");
     const row = await FileModel.findById(out.fileId);

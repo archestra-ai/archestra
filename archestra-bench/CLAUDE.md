@@ -36,6 +36,26 @@ file layout, lifecycle) live in `../README.md` -- this file is the discipline, n
 If a weak model scores 100% on a task, it is leaking or trivial: de-clue the prompt or strengthen the
 oracle. Solving it should require the work, not pattern-matching the phrasing.
 
+## Running against a prod image (benchmark CI)
+
+The daily benchmark (`.github/bench/`, see its README) runs this harness inside the deployed
+platform image instead of the dev repo. Three knobs make that work, all defaulting to today's local
+behavior when unset:
+
+- `--platform-dir` / `ARCHESTRA_BENCH_PLATFORM_DIR` — the platform dir is `/app` in the prod image,
+  not `<repo>/platform`.
+- `ARCHESTRA_BENCH_MIGRATE_CMD` — the prod image has no pnpm; it runs `drizzle-kit migrate` directly.
+- The Dagger runner host + CLI bin arrive via **process env**, not `/app/.env`: `build_backend_env`
+  force-overwrites those two keys, so `.env` can't steer them (it seeds from `std::env::vars()`, so
+  other container env vars — feature flags — do flow through).
+
+Gotchas: the bench resolves its Postgres from `ARCHESTRA_BENCH_DATABASE_URL` and creates its own
+per-run DB on it. The sandbox (`run_command`) is gated only by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a
+valid Dagger host; the `basic` env additionally needs `ARCHESTRA_AGENTS_SKILLS_ENABLED` +
+`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`. The prod image runs `NODE_ENV=production`, where better-auth
+hard-exits on its default secret — set `ARCHESTRA_AUTH_SECRET` (the entrypoint generates a throwaway
+one per run; the DB is fresh and dropped each run, so the value never matters).
+
 ## Skills are pinned, not live
 
 Benchmark-owned skills are imported by pinned GitHub commit SHA in `../envs/basic.toml`, not from the

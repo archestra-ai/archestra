@@ -156,16 +156,16 @@ export function McpAppSection({
   const headerName = appName || shortToolName;
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const sidebarHostingActive = portalTarget !== null;
-  // When the sidebar Apps tab is open, every inline app is replaced by a
-  // placeholder; only the *selected* app's iframe lives in the sidebar.
+  // Only the *selected* app moves to the sidebar: its iframe is portaled into
+  // the panel and its inline spot becomes a placeholder. Every other inline app
+  // keeps rendering live in the chat.
   const renderInSidebar = sidebarHostingActive && isSelected;
-  const renderPlaceholder = sidebarHostingActive;
 
   // Track the last inline body height while the app shows inline; once it moves
   // to the panel we stop updating, so the chat placeholder keeps that frozen
   // footprint and messages below it don't reflow.
   const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
-  if (!renderPlaceholder) {
+  if (!renderInSidebar) {
     lastInlineHeightRef.current = clampInlineHeight(
       size?.height ?? INITIAL_INLINE_HEIGHT,
       inlineCeiling,
@@ -330,7 +330,7 @@ export function McpAppSection({
     </McpAppErrorBoundary>
   );
 
-  if (renderPlaceholder) {
+  if (renderInSidebar) {
     return (
       <>
         <McpAppCard
@@ -339,28 +339,12 @@ export function McpAppSection({
           size={size}
           inlineCeiling={inlineCeiling}
           frozenHeight={lastInlineHeightRef.current}
-          topBar={
-            <McpAppTopBar
-              label={headerName}
-              // Unselected placeholders carry the open-in-side-panel control so
-              // the user can switch the panel to this app; the selected one is
-              // already shown there.
-              right={
-                isSelected ? undefined : (
-                  <McpAppSidebarButton onClick={handleShowInSidebar} />
-                )
-              }
-            />
-          }
+          topBar={<McpAppTopBar label={headerName} />}
           placeholder={
-            <span className="text-muted-foreground">
-              {isSelected ? "Showing in sidebar" : "Open in the side panel"}
-            </span>
+            <span className="text-muted-foreground">Showing in sidebar</span>
           }
         />
-        {renderInSidebar &&
-          portalTarget &&
-          createPortal(liveSurface, portalTarget)}
+        {portalTarget && createPortal(liveSurface, portalTarget)}
       </>
     );
   }

@@ -527,7 +527,7 @@ describe("McpAppSection sidebar hosting", () => {
     target.remove();
   });
 
-  it("offers a Show in sidebar control for a second, unselected app", async () => {
+  it("keeps a second, unselected app live inline while the panel hosts another", async () => {
     const user = userEvent.setup();
     const target = document.createElement("div");
     document.body.appendChild(target);
@@ -553,11 +553,16 @@ describe("McpAppSection sidebar hosting", () => {
       );
     });
 
-    // tc1 auto-selected (latest), so tc2 shows the placeholder control; clicking
-    // it selects tc2 and portals its iframe into the sidebar target.
+    // tc1 is auto-selected and hosted in the panel. The unselected tc2 keeps
+    // rendering live inline (not a placeholder) and is NOT shown in the sidebar,
+    // while still offering its own Show in sidebar control.
     const showButton = screen.getByRole("button", { name: /show in sidebar/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText(/showing in sidebar/i)).not.toBeInTheDocument();
+    // tc2's live iframe renders inline (in the document, outside the sidebar target).
+    expect(document.querySelector("iframe")).toBeInTheDocument();
 
+    // Clicking it selects tc2 and portals its iframe into the sidebar target.
     await act(async () => {
       await user.click(showButton);
     });

@@ -242,3 +242,113 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
     background-color: var(--scrollbar-thumb-hover);
   }
 }
+
+/* ── Aceternity-style effects (MCP registry wizard & detail dashboard) ──
+   CSS-only ports of Aceternity UI patterns (spotlight, shimmer, meteors,
+   dot hero, animated gradient border). All colors derive from theme tokens
+   so white-label themes and dark mode are respected. */
+
+@keyframes aceternity-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.aceternity-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    var(--primary) 42%,
+    color-mix(in oklab, var(--primary), white 30%) 50%,
+    var(--primary) 58%
+  );
+  background-size: 220% 100%;
+  animation: aceternity-shimmer 2.8s linear infinite;
+}
+
+.aceternity-dots {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--primary) 35%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 18px 18px;
+  mask-image: radial-gradient(
+    ellipse 70% 90% at 50% 0%,
+    black 20%,
+    transparent 72%
+  );
+}
+
+@keyframes aceternity-meteor {
+  0% {
+    transform: rotate(215deg) translateX(0);
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(215deg) translateX(-320px);
+    opacity: 0;
+  }
+}
+
+.aceternity-meteor {
+  position: absolute;
+  height: 2px;
+  width: 2px;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--primary) 80%, white);
+  transform: rotate(215deg);
+  animation: aceternity-meteor linear infinite;
+}
+
+.aceternity-meteor::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--primary) 60%, transparent),
+    transparent
+  );
+}
+
+@property --aceternity-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes aceternity-border-spin {
+  to {
+    --aceternity-angle: 360deg;
+  }
+}
+
+.aceternity-gradient-border {
+  position: relative;
+}
+
+.aceternity-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--aceternity-angle),
+    transparent 0%,
+    color-mix(in oklab, var(--primary) 80%, transparent) 12%,
+    transparent 28%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: aceternity-border-spin 3.5s linear infinite;
+  pointer-events: none;
+}

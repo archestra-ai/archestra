@@ -1,0 +1,224 @@
+name: Benchmark
+
+# Runs archestra-bench once per day against staging-grade infrastructure: the currently-deployed
+# platform image, an ephemeral Postgres sidecar, and the shared staging managed Dagger engine. Never
+# mutates the live staging Deployment, its DB, or its data. See .github/bench/README.md for the
+# one-time prerequisites (GCS bucket + IAM, ZAI_API_KEY / Slack secrets).
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # daily 03:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: benchmark
+  cancel-in-progress: false
+
+env:
+  GAR_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  GKE_CLUSTER: archestra-staging
+  GKE_ZONE: us-central1-a
+  GKE_PROJECT: friendly-path-465518-r6
+  GCS_BUCKET: gs://archestra-bench-history
+
+jobs:
+  benchmark:
+    name: Run benchmark
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read # checkout
+      id-token: write # Workload Identity Federation + GKE credentials
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # docker-container driver — the default docker driver cannot export the registry build cache.
+      - name: Set up Docker builder
+        uses: ./.github/actions/setup-blacksmith-builder
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: gcloud components install gke-gcloud-auth-plugin
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials "${GKE_CLUSTER}" \
+            --zone "${GKE_ZONE}" --project "${GKE_PROJECT}"
+
+      # Since CI releases at the fail-fast window, a prior run's pod outlives its GitHub job — the
+      # Actions-level concurrency group no longer prevents two pods sharing the Dagger engine. Refuse to
+      # start if a benchmark Job is still active, before spending a build on it.
+      - name: Guard against an overlapping run
+        run: |
+          set -uo pipefail
+          if kubectl get jobs -n archestra -l app=archestra-bench \
+               -o jsonpath='{.items[*].status.active}' 2>/dev/null | grep -q '[1-9]'; then
+            echo "::error::a benchmark Job is still active in archestra; refusing to start an overlapping run"
+            exit 1
+          fi
+
+      - name: Resolve staging deployment facts
+        id: resolve
+        run: |
+          set -euo pipefail
+          get() { kubectl get deployment archestra-platform -n archestra -o jsonpath="$1"; }
+          PLATFORM_IMAGE=$(get '{.spec.template.spec.containers[0].image}')
+          PLATFORM_SA=$(get '{.spec.template.spec.serviceAccountName}')
+          [ -n "${PLATFORM_SA}" ] || PLATFORM_SA=default
+          DAGGER_RUNNER_HOST=$(get '{range .spec.template.spec.containers[0].env[?(@.name=="ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")]}{.value}{end}')
+          if [ -z "${PLATFORM_IMAGE}" ] || [ -z "${DAGGER_RUNNER_HOST}" ]; then
+            echo "::error::could not resolve platform image / dagger host from the live Deployment (is the dagger host a literal env .value on containers[0], not a valueFrom/envFrom ref?)"
+            exit 1
+          fi
+          # Dagger namespace for the RBAC preflight: the namespace= query param of the kube-pod:// host,
+          # defaulting to archestra when absent.
+          DAGGER_NS=$(printf '%s' "${DAGGER_RUNNER_HOST}" | sed -n 's/.*[?&]namespace=\([^&]*\).*/\1/p')
+          [ -n "${DAGGER_NS}" ] || DAGGER_NS=archestra
+          {
+            echo "platform_image=${PLATFORM_IMAGE}"
+            echo "platform_sa=${PLATFORM_SA}"
+            echo "dagger_runner_host=${DAGGER_RUNNER_HOST}"
+            echo "dagger_ns=${DAGGER_NS}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Resolved image=${PLATFORM_IMAGE} sa=${PLATFORM_SA} dagger_ns=${DAGGER_NS}"
+
+      - name: Assert native sidecar support (control plane >= 1.29)
+        run: |
+          set -euo pipefail
+          MINOR=$(kubectl version -o json | jq -r '.serverVersion.minor' | tr -dc '0-9')
+          echo "control plane minor version: ${MINOR}"
+          if [ "${MINOR}" -lt 29 ]; then
+            echo "::error::native sidecars need control plane >= 1.29 (found 1.${MINOR})"
+            exit 1
+          fi
+
+      - name: RBAC preflight (platform SA can exec into the Dagger pod)
+        env:
+          PLATFORM_SA: ${{ steps.resolve.outputs.platform_sa }}
+          DAGGER_NS: ${{ steps.resolve.outputs.dagger_ns }}
+        run: |
+          set -euo pipefail
+          RC=0
+          VERDICT=$(kubectl auth can-i create pods/exec \
+            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n "${DAGGER_NS}" 2>&1) || RC=$?
+          echo "can-i create pods/exec in ${DAGGER_NS}: ${VERDICT} (rc=${RC})"
+          # Fail closed: only an explicit allow proceeds. An API/impersonation error or a "no - <reason>"
+          # response must not slip through as if permitted.
+          if [ "${RC}" -ne 0 ] || [ "${VERDICT}" != "yes" ]; then
+            echo "::error::platform SA ${PLATFORM_SA} cannot create pods/exec in ${DAGGER_NS} (verdict: ${VERDICT}); Dagger calls will fail"
+            exit 1
+          fi
+
+      - name: Build and push bench runner image
+        id: image
+        env:
+          PLATFORM_IMAGE: ${{ steps.resolve.outputs.platform_image }}
+        run: |
+          set -euo pipefail
+          BENCH_IMAGE="${GAR_REGISTRY}/bench-runner:${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          CACHE_REF="${GAR_REGISTRY}/bench-runner:buildcache"
+          # Registry cache keeps the (stable) musl Rust compile warm across daily runs; only the final
+          # FROM ${PLATFORM_IMAGE} layers re-resolve when staging redeploys.
+          docker buildx build --platform linux/amd64 --push \
+            -f .github/bench/Dockerfile \
+            --build-arg "PLATFORM_IMAGE=${PLATFORM_IMAGE}" \
+            --cache-from "type=registry,ref=${CACHE_REF}" \
+            --cache-to "type=registry,ref=${CACHE_REF},mode=max" \
+            -t "${BENCH_IMAGE}" .
+          echo "bench_image=${BENCH_IMAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create bench secret
+        env:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          SLACK_BENCH_WEBHOOK_URL: ${{ secrets.SLACK_BENCH_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          # The pod reads both: the glm lane key and (optionally, empty when unset) the Slack webhook it
+          # posts the summary to. Recreated each run; left in place since the pod needs it after CI exits.
+          kubectl create secret generic archestra-bench-secrets -n archestra \
+            --from-literal=ZAI_API_KEY="${ZAI_API_KEY}" \
+            --from-literal=SLACK_BENCH_WEBHOOK_URL="${SLACK_BENCH_WEBHOOK_URL:-}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply benchmark Job
+        id: apply
+        env:
+          BENCH_IMAGE: ${{ steps.image.outputs.bench_image }}
+          PLATFORM_SA: ${{ steps.resolve.outputs.platform_sa }}
+          DAGGER_RUNNER_HOST: ${{ steps.resolve.outputs.dagger_runner_host }}
+        run: |
+          set -euo pipefail
+          RUN_NUMBER="${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # An ephemeral, localhost-only sidecar password (the DB dies with the pod); alphanumeric so it
+          # is safe in the bench .env URL.
+          POSTGRES_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          export BENCH_IMAGE PLATFORM_SA DAGGER_RUNNER_HOST RUN_NUMBER POSTGRES_PASSWORD
+          export GCS_BUCKET RUN_URL GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT
+          echo "run_number=${RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
+          # The single-quoted list is envsubst's allowlist of vars to expand (not shell expansion).
+          # shellcheck disable=SC2016
+          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT}' \
+            < .github/bench/job.yaml | kubectl apply -f -
+
+      # The pod runs the full benchmark and reports its own results (GCS + Slack), so CI does not wait
+      # out the ~30 min run. But a boot/infra failure makes the bench fast-fail and the pod terminate
+      # within a minute or two — so we watch a short window: a pod that fails fast reds this job (with
+      # its logs dumped inline), while a pod still running past the window has cleared the fast-fail zone
+      # and is left to finish and self-report.
+      - name: Confirm bench started (fail-fast window)
+        env:
+          RUN_NUMBER: ${{ steps.apply.outputs.run_number }}
+        run: |
+          set -uo pipefail
+          SEL="app=archestra-bench,run=${RUN_NUMBER}"
+          # Find the pod (give the scheduler + image pull a moment).
+          POD=""
+          for _ in $(seq 1 60); do
+            POD=$(kubectl get pods -n archestra -l "${SEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+            [ -n "${POD}" ] && break
+            sleep 5
+          done
+          if [ -z "${POD}" ]; then
+            echo "::error::no pod found for ${SEL}"
+            exit 1
+          fi
+          echo "watching pod ${POD} for a fast-fail window"
+          # A healthy run takes far longer than the fast-fail zone, so ~3 min of *running* means it has
+          # cleared boot/infra failures. The watch ceiling (90 * 10s = 15 min, on top of up to 5 min of
+          # pod discovery above) bounds a stuck Pending / slow pull.
+          RUNNING_TICKS=0
+          for _ in $(seq 1 90); do
+            PHASE=$(kubectl get pod "${POD}" -n archestra -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            case "${PHASE}" in
+              Failed)
+                echo "::error::pod ${POD} terminated Failed within the fast-fail window — harness broken"
+                kubectl logs "${POD}" -n archestra -c bench --tail=80 || true
+                exit 1 ;;
+              Succeeded)
+                echo "pod ${POD} finished fast and healthy (self-reported)"
+                exit 0 ;;
+              Running)
+                RUNNING_TICKS=$((RUNNING_TICKS + 1))
+                if [ "${RUNNING_TICKS}" -ge 18 ]; then
+                  echo "pod ${POD} running $((RUNNING_TICKS * 10))s — cleared fast-fail; left to self-report"
+                  exit 0
+                fi ;;
+            esac
+            sleep 10
+          done
+          echo "::error::pod ${POD} never cleared the fast-fail window (stuck Pending / slow pull?)"
+          exit 1

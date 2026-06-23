@@ -1,3 +1,7 @@
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import { ProjectModel, ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -80,6 +84,42 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     });
     expect(del.statusCode).toBe(200);
     expect(await ProjectModel.findById(project.id)).toBeNull();
+  });
+
+  test("rejects a description update over the max length with 400", async () => {
+    const project = await seedProject("desc-limit");
+
+    const atLimit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "x".repeat(PROJECT_DESCRIPTION_MAX_LENGTH) },
+    });
+    expect(atLimit.statusCode).toBe(200);
+
+    const overLimit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "x".repeat(PROJECT_DESCRIPTION_MAX_LENGTH + 1) },
+    });
+    expect(overLimit.statusCode).toBe(400);
+  });
+
+  test("accepts a name update at the max length but rejects one over it", async () => {
+    const project = await seedProject("name-limit");
+
+    const atLimit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { name: "x".repeat(PROJECT_NAME_MAX_LENGTH) },
+    });
+    expect(atLimit.statusCode).toBe(200);
+
+    const overLimit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { name: "x".repeat(PROJECT_NAME_MAX_LENGTH + 1) },
+    });
+    expect(overLimit.statusCode).toBe(400);
   });
 
   test("renaming to an existing project name returns 409", async () => {

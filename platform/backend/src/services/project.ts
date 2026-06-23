@@ -1,6 +1,7 @@
 import {
   ProjectModel,
   ProjectNameExistsError,
+  ProjectPinModel,
   ProjectShareModel,
 } from "@/models";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -57,9 +58,14 @@ class ProjectService {
     userId: string;
   }): Promise<ProjectListItem[]> {
     const projects = await ProjectShareModel.listAccessibleProjects(params);
-    const counts = await ProjectModel.countConversations(
-      projects.map((p) => p.id),
-    );
+    const projectIds = projects.map((p) => p.id);
+    const [counts, pins] = await Promise.all([
+      ProjectModel.countConversations(projectIds),
+      ProjectPinModel.getPinnedAtForProjects({
+        userId: params.userId,
+        projectIds,
+      }),
+    ]);
     return projects.map((p) => ({
       id: p.id,
       name: p.name,
@@ -68,6 +74,7 @@ class ProjectService {
       isOwner: p.userId === params.userId,
       conversationCount: counts.get(p.id) ?? 0,
       visibility: p.visibility,
+      pinnedAt: pins.get(p.id) ?? null,
       createdAt: p.createdAt,
     }));
   }
@@ -78,9 +85,13 @@ class ProjectService {
     userId: string;
   }): Promise<ProjectDetail> {
     const project = await this.requireReadable(params);
-    const [share, counts] = await Promise.all([
+    const [share, counts, pins] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
+      ProjectPinModel.getPinnedAtForProjects({
+        userId: params.userId,
+        projectIds: [project.id],
+      }),
     ]);
     const isOwner = project.userId === params.userId;
     return {
@@ -93,6 +104,7 @@ class ProjectService {
       visibility: share?.visibility ?? null,
       // share targets are the owner's business only
       shareTeamIds: isOwner ? (share?.teamIds ?? []) : null,
+      pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
     };
   }
@@ -209,6 +221,32 @@ class ProjectService {
       ...row,
       readOnly: row.authorUserId !== params.userId,
     }));
+  }
+
+  /** Pin a project to the caller's sidebar (any reader may pin). */
+  async pin(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    await this.requireReadable(params);
+    await ProjectPinModel.pin({ userId: params.userId, projectId: params.id });
+  }
+
+  /**
+   * Remove the caller's pin. Intentionally does NOT check readability: an owner
+   * can unshare a project after you pinned it, and you must still be able to
+   * clear your own stale pin. Scoped to the caller's own row; idempotent.
+   */
+  async unpin(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    await ProjectPinModel.unpin({
+      userId: params.userId,
+      projectId: params.id,
+    });
   }
 
   /** Project the caller may read, by id; "no access" reads as 404. */

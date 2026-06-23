@@ -130,6 +130,7 @@ export {
   projectSharesTable,
   projectShareTeamsTable,
 } from "./project";
+export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";

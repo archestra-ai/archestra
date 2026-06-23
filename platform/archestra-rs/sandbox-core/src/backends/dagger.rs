@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use base64::Engine;
 use dagger_sdk::core::DAGGER_ENGINE_VERSION;
-use dagger_sdk::core::cli_session::DaggerSessionProc;
 use dagger_sdk::core::connect_params::ConnectParams;
 use dagger_sdk::core::downloader::Downloader;
 use dagger_sdk::core::gql_client::GraphQlExtension;
@@ -21,8 +20,8 @@ use dagger_sdk::{
     ReturnType,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
-use tokio::sync::{OnceCell, mpsc, oneshot};
+use tokio::process::{Child, Command};
+use tokio::sync::{OnceCell, broadcast, mpsc, oneshot};
 use tracing::Span;
 
 use crate::backend::{ArtifactRequest, Backend, RunRequest, SandboxBackend};
@@ -79,6 +78,11 @@ const DAGGER_RUNNER_HOST_ENV: &str = "_EXPERIMENTAL_DAGGER_RUNNER_HOST";
 const DAGGER_CLI_BIN_ENV: &str = "_EXPERIMENTAL_DAGGER_CLI_BIN";
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
+/// How often an idle session pings the engine to keep its `kube-pod://` attachable
+/// channel warm. The channel was observed going half-open after minutes of idle;
+/// 30s stays well inside that. A Dagger transport concern, so it lives here rather
+/// than in the backend-agnostic session actor.
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 /// the dagger SDK message emitted when the engine accepted `/query` but timed
 /// out waiting for this client's session attachables. see [`classify_engine_fault`].
 const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attachables";
@@ -317,6 +321,45 @@ fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) 
     cmd
 }
 
+/// Owns the spawned `dagger session` CLI child and the broadcast that stops our
+/// stdout/stderr reader tasks. Replaces the SDK's `DaggerSessionProc`, whose
+/// `shutdown()` only awaits the child's *voluntary* exit (it sends no signal and
+/// never closes stdin), so it blocks forever on a reconnect-looping child —
+/// leaving an orphaned session hammering the engine. We own the child and
+/// force-kill it instead. `Query.proc` is left `None`: it is a pure keep-alive
+/// the SDK plumbs through clones, never the transport (that is `graphql_client`).
+struct SessionProc {
+    child: Child,
+    shutdown: broadcast::Sender<()>,
+}
+
+impl SessionProc {
+    fn subscribe_shutdown(&self) -> broadcast::Receiver<()> {
+        self.shutdown.subscribe()
+    }
+
+    /// Stop the reader tasks, then forcibly SIGKILL and reap the child. Bounded,
+    /// unlike the SDK's wait-for-voluntary-exit teardown. Consumes `self` so the
+    /// child has exactly one owner. On the connect-abort path this is never
+    /// reached; `kill_on_drop(true)` reaps the dropped child there instead.
+    async fn shutdown(mut self) {
+        let _ = self.shutdown.send(());
+        // `kill()` is SIGKILL + reap. If the child already exited, `start_kill`
+        // errors before the internal wait, so reap explicitly to avoid a zombie.
+        if let Err(err) = self.child.kill().await {
+            tracing::debug!(error = %err, "dagger session child kill errored; reaping");
+            let _ = self.child.wait().await;
+        }
+    }
+}
+
+impl From<Child> for SessionProc {
+    fn from(child: Child) -> Self {
+        let (shutdown, _) = broadcast::channel::<()>(1);
+        Self { child, shutdown }
+    }
+}
+
 /// Spawn the `dagger session` CLI child and read its `ConnectParams` handshake —
 /// a faithful reimplementation of dagger-sdk's private `CliSession::get_conn`,
 /// pinned to `=0.21.5`. The ordering is load-bearing: take stdout/stderr off the
@@ -325,7 +368,7 @@ fn build_session_command(cli: &Path, workdir: &Path, runner_host: Option<&str>) 
 /// the first JSON line as `ConnectParams`.
 async fn spawn_and_read_connect_params(
     mut cmd: Command,
-) -> eyre::Result<(ConnectParams, DaggerSessionProc)> {
+) -> eyre::Result<(ConnectParams, SessionProc)> {
     let mut child = cmd.spawn()?;
     let stdout = child
         .stdout
@@ -335,7 +378,7 @@ async fn spawn_and_read_connect_params(
         .stderr
         .take()
         .ok_or_else(|| eyre::eyre!("could not acquire stderr from the dagger session"))?;
-    let session: DaggerSessionProc = child.into();
+    let session: SessionProc = child.into();
 
     let (sender, receiver) = oneshot::channel::<ConnectParams>();
     let mut sender = Some(sender);
@@ -410,21 +453,65 @@ where
     let (conn, proc) = spawn_and_read_connect_params(cmd)
         .await
         .map_err(ConnectError::FailedToConnect)?;
-    let proc = Arc::new(proc);
 
+    // `proc: None` — we own the CLI child via `proc` and shut it down ourselves;
+    // the field is only an SDK keep-alive, never the transport.
     let client = Query {
-        proc: Some(proc.clone()),
+        proc: None,
         selection: Default::default(),
         graphql_client: Arc::new(DefaultGraphQLClient::new(&conn, &cfg)),
     };
 
+    // Keep the attachable channel warm across idle gaps so the next request doesn't
+    // meet a half-open channel. A failing ping is only logged — a dead channel is
+    // recovered reactively when the next request respawns.
+    let keepalive = spawn_channel_keepalive(client.clone(), proc.subscribe_shutdown());
+
     let outcome = f(client).await;
-    // `DaggerSessionProc` has no `Drop`, so shut down explicitly on success and
-    // error to release the engine session and reader tasks. The readiness-timeout
-    // abort path never reaches this line; `kill_on_drop(true)` on the child reaps
-    // it there instead.
-    let _ = proc.shutdown().await;
+    // Force-kill the child on teardown (success and error alike) to release the
+    // engine session and reader tasks. Unlike the SDK's `shutdown()`, this never
+    // blocks on a reconnect-looping child. The readiness-timeout abort path never
+    // reaches this line; `kill_on_drop(true)` reaps the dropped child there.
+    proc.shutdown().await;
+    keepalive.abort();
     outcome.map_err(ConnectError::DaggerContext)
+}
+
+/// Background task that pings the engine on `KEEPALIVE_INTERVAL` to keep an idle
+/// session's attachable channel warm. `version()` is the cheapest query that
+/// still exercises the channel.
+fn spawn_channel_keepalive(
+    client: DaggerConn,
+    shutdown: broadcast::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(keepalive_loop(KEEPALIVE_INTERVAL, shutdown, move || {
+        let client = client.clone();
+        async move {
+            if let Err(err) = client.version().await {
+                tracing::warn!(error = %err, "dagger session keepalive ping failed");
+            }
+        }
+    }))
+}
+
+/// Tick `ping` every `interval` until the shutdown broadcast fires. The transport
+/// ping is injected so the loop's control flow is testable without a live engine.
+async fn keepalive_loop<F, Fut>(interval: Duration, mut shutdown: broadcast::Receiver<()>, mut ping: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let mut tick = tokio::time::interval(interval);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // the first tick fires immediately; skip it so a freshly-connected session
+    // isn't pinged before it has had a chance to go idle.
+    tick.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.recv() => break,
+            _ = tick.tick() => ping().await,
+        }
+    }
 }
 
 /// connect to the Dagger engine and drive the generic actor loop for the
@@ -1079,7 +1166,7 @@ mod tests {
         assert_eq!(conn.port, 12345);
         assert_eq!(conn.session_token, "tok");
 
-        let _ = proc.shutdown().await;
+        proc.shutdown().await;
         std::fs::remove_file(&script).ok();
     }
 
@@ -1091,7 +1178,8 @@ mod tests {
         let script = write_fake_session("#!/bin/sh\nexit 0\n");
         let cmd = build_session_command(&script, Path::new("/"), None);
 
-        // `DaggerSessionProc` isn't `Debug`, so match instead of `unwrap_err`.
+        // the success arm holds a `SessionProc` (not `Debug`), so match instead
+        // of `unwrap_err`.
         let Err(err) = spawn_and_read_connect_params(cmd).await else {
             panic!("expected an error when the child exits without reporting params");
         };
@@ -1138,46 +1226,88 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn shutdown_does_not_reap_a_child_that_refuses_to_exit() {
-        // Characterises the teardown-reap limitation behind the dagger zombie.
-        // `DaggerSessionProc::shutdown` (dagger-sdk =0.21.5) only broadcasts to
-        // our in-process reader tasks and then *awaits* the child's voluntary
-        // exit — it sends no signal and never closes the child's stdin. Against a
-        // `dagger session` that keeps running (the reconnect-loop shape), it
-        // blocks and never reaps the process. Only dropping the proc force-kills
-        // it via kill_on_drop, and the post-ready teardown path calls shutdown(),
-        // not drop — so retiring a session does not, on its own, guarantee its
-        // CLI child dies.
+    async fn shutdown_reaps_a_child_that_refuses_to_exit() {
+        // Regression for the dagger zombie: teardown must forcibly reap the CLI
+        // child even when it never exits on its own (the reconnect-loop shape).
+        // The SDK's `DaggerSessionProc::shutdown` only broadcasts to our reader
+        // tasks and then *awaits* the child's voluntary exit — no signal, no
+        // stdin close — so it blocked here forever. `SessionProc::shutdown`
+        // SIGKILLs and reaps instead, so it returns promptly and leaves no
+        // orphaned `dagger session` hammering the engine.
         let script = write_fake_session("#!/bin/sh\nsleep 120\n");
         let mut cmd = build_session_command(&script, Path::new("/"), None);
         let child = cmd.spawn().unwrap();
         let pid = child.id().expect("a spawned child has a pid");
-        let proc: DaggerSessionProc = child.into();
+        let proc: SessionProc = child.into();
 
-        // shutdown() blocks on the child's own exit, which never comes.
-        let returned = tokio::time::timeout(Duration::from_secs(2), proc.shutdown()).await;
+        let returned = tokio::time::timeout(Duration::from_secs(5), proc.shutdown()).await;
         assert!(
-            returned.is_err(),
-            "shutdown() returned for a child that never exits — SDK reaping semantics changed"
+            returned.is_ok(),
+            "shutdown() must return promptly for a child that never exits on its own"
         );
         assert!(
-            !process_finished(pid),
-            "shutdown() left the child alive: it does not forcibly reap"
+            process_finished(pid),
+            "shutdown() must forcibly reap the child"
         );
+        std::fs::remove_file(&script).ok();
+    }
 
-        // Dropping the proc IS the forceful reaper (kill_on_drop); the post-ready
-        // teardown path never reaches a drop while shutdown() is still pending.
-        drop(proc);
-        let mut reaped = false;
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn shutdown_reaps_a_child_that_already_exited() {
+        // If the child exits on its own first, `kill()` errors before its internal
+        // wait; shutdown() must still reap the zombie rather than leak it.
+        let script = write_fake_session("#!/bin/sh\nexit 0\n");
+        let mut cmd = build_session_command(&script, Path::new("/"), None);
+        let child = cmd.spawn().unwrap();
+        let pid = child.id().expect("a spawned child has a pid");
+        let proc: SessionProc = child.into();
+
+        // wait until the child has exited (becomes a zombie awaiting reap).
         for _ in 0..100 {
             if process_finished(pid) {
-                reaped = true;
                 break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        assert!(reaped, "child {pid} should be reaped once the proc is dropped");
+
+        let returned = tokio::time::timeout(Duration::from_secs(5), proc.shutdown()).await;
+        assert!(returned.is_ok(), "shutdown() must return promptly");
+        assert!(process_finished(pid), "shutdown() must reap the exited child");
         std::fs::remove_file(&script).ok();
+    }
+
+    #[tokio::test]
+    async fn keepalive_loop_pings_until_shutdown() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
+        let pings = Arc::new(AtomicU64::new(0));
+        let counter = pings.clone();
+        let handle = tokio::spawn(keepalive_loop(
+            Duration::from_millis(10),
+            shutdown_rx,
+            move || {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                }
+            },
+        ));
+
+        // let several ticks fire (the immediate first tick is skipped), then stop.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        shutdown_tx.send(()).unwrap();
+        // the loop must observe the broadcast and return; a hang here is a failure.
+        tokio::time::timeout(Duration::from_secs(1), handle)
+            .await
+            .expect("keepalive loop must stop on shutdown")
+            .unwrap();
+
+        assert!(
+            pings.load(Ordering::Relaxed) >= 2,
+            "keepalive must ping repeatedly before shutdown"
+        );
     }
 
     #[test]

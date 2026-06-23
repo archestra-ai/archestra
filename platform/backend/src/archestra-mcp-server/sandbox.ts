@@ -78,7 +78,7 @@ const READ_FILE_DEFAULT_LINES = 2000;
 
 // Cap raw image bytes read_file will return inline so the base64 payload stays
 // under the model's ~5 MB per-image limit (base64 inflates by ~4/3). Larger
-// images are refused with a pointer to the download URL.
+// images are refused with a hint to copy the file into the sandbox instead.
 const READ_FILE_IMAGE_BYTES_LIMIT = 3.75 * 1024 * 1024;
 
 // typed target — no magic strings. omitted = the conversation's default
@@ -193,9 +193,9 @@ const DownloadFileSchema = z
     target: SandboxTargetSchema,
   })
   .describe(
-    "Copy a file out of the sandbox into durable storage and return a " +
-      "download URL. Use this for any binary or generated output — run_command " +
-      "only returns text. In a project chat the file is saved to the " +
+    "Copy a file out of the sandbox into durable storage, where it shows up in " +
+      "the chat's Files panel. Use this for any binary or generated output — " +
+      "run_command only returns text. In a project chat the file is saved to the " +
       "project. (To read a skill's source files, use load_skill with a path.)",
   );
 
@@ -205,12 +205,6 @@ const DownloadFileOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /**
-   * Stable URL the frontend can fetch the bytes from (auth-scoped to the
-   * caller). Relative to the backend origin; safe to pass straight to `<img
-   * src>` or `<a href>` in the same-origin chat UI.
-   */
-  downloadUrl: z.string(),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -397,7 +391,7 @@ const ReadFileSchema = z
       "WebP, GIF) are returned inline so you can see them. Identify the file by " +
       "`id` (from search_files / save_result) or by `filename`. Page large text " +
       "files with `offset`/`limit`. For other binary types (PDF, archives, …), " +
-      "use the download URL or upload_file + run_command. Only this " +
+      "copy the file into the sandbox with upload_file + run_command. Only this " +
       "conversation's files are visible (in a project chat, the project's " +
       "files). Requires `sandbox:execute`.",
   );
@@ -453,8 +447,8 @@ const SaveResultSchema = z
       .optional()
       .default(false)
       .describe(
-        "Replace an existing file of the same name in place, keeping its id and " +
-          "download URL. Default false errors if the name is already taken.",
+        "Replace an existing file of the same name in place, keeping its id. " +
+          "Default false errors if the name is already taken.",
       ),
   })
   .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
@@ -474,8 +468,6 @@ const SaveResultOutputSchema = z.object({
     .describe("Owning project when saved in a project chat; null otherwise."),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /** See DownloadFileOutputSchema.downloadUrl. */
-  downloadUrl: z.string(),
   overwritten: z
     .boolean()
     .describe("True when an existing same-named file was replaced in place."),
@@ -534,8 +526,6 @@ const EditFileOutputSchema = z.object({
   filename: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /** See DownloadFileOutputSchema.downloadUrl. */
-  downloadUrl: z.string(),
   replacements: z
     .number()
     .describe("How many occurrences of old_string were replaced."),
@@ -635,10 +625,10 @@ const registry = defineArchestraTools([
     shortName: TOOL_DOWNLOAD_FILE_SHORT_NAME,
     title: "Download File",
     description:
-      "Copy a file out of the conversation's sandbox into durable storage and " +
-      "return a download URL. Use this for any binary or generated output — " +
-      "run_command only returns text. To read a skill's own source files, use " +
-      "load_skill with a path instead. Requires `sandbox:execute`.",
+      "Copy a file out of the conversation's sandbox into durable storage, where " +
+      "it shows up in the chat's Files panel. Use this for any binary or " +
+      "generated output — run_command only returns text. To read a skill's own " +
+      "source files, use load_skill with a path instead. Requires `sandbox:execute`.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
@@ -682,9 +672,8 @@ const registry = defineArchestraTools([
           "[Sandbox] file downloaded",
         );
 
-        // Bytes flow sandbox -> DB -> UI via the artifacts route; the model
-        // only ever sees a short reference + URL here, never the blob.
-        const downloadUrl = `/api/skill-sandbox/artifacts/${result.artifactId}`;
+        // Bytes flow sandbox -> DB -> Files panel via the artifacts route; the
+        // model only ever sees a short reference here, never the blob or a link.
         return structuredSuccessResult(
           {
             fileId: result.artifactId,
@@ -692,14 +681,10 @@ const registry = defineArchestraTools([
             path: result.path,
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
-            downloadUrl,
             stagingNotices: result.stagingNotices,
           },
           withStagingNotices(
-            [
-              `Saved ${result.path} (${result.sizeBytes} bytes).`,
-              `Download URL (use this for links, not the sandbox path): ${downloadUrl}`,
-            ].join("\n"),
+            `Saved ${result.path} (${result.sizeBytes} bytes). It is available in the Files panel.`,
             result.stagingNotices,
           ),
         );
@@ -861,7 +846,7 @@ const registry = defineArchestraTools([
       "files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are " +
       "returned inline so you can see them. Identify the file by `id` (from " +
       "search_files / save_result) or by `filename`. Page large text files with " +
-      "`offset`/`limit`. For other binary types, use the download URL or copy " +
+      "`offset`/`limit`. For other binary types, copy " +
       "the file into the sandbox with upload_file and inspect it with " +
       "run_command. Only this conversation's files are visible (in a project " +
       "chat, the project's files). Requires `sandbox:execute`.",
@@ -901,9 +886,6 @@ const registry = defineArchestraTools([
       }
 
       const { data, mimeType, originalName, fileId } = resolved;
-      const downloadHint = fileId
-        ? `Download it at /api/skill-sandbox/artifacts/${fileId}, or `
-        : "";
 
       // Inline-safe raster image? Decide from the BYTES, not the (spoofable) mime
       // label — `claimed: undefined` means only a real PNG/JPEG/WebP/GIF signature
@@ -916,7 +898,7 @@ const registry = defineArchestraTools([
         if (data.byteLength > READ_FILE_IMAGE_BYTES_LIMIT) {
           return errorResult(
             `"${originalName}" is too large to view inline (${data.byteLength} bytes > ${READ_FILE_IMAGE_BYTES_LIMIT} byte limit). ` +
-              `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+              `Copy it into the sandbox with upload_file and inspect it with run_command.`,
           );
         }
         logger.info(
@@ -950,7 +932,7 @@ const registry = defineArchestraTools([
       if (data.byteLength > limit) {
         return errorResult(
           `"${originalName}" is too large to read inline (${data.byteLength} bytes > ${limit} byte limit). ` +
-            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
         );
       }
 
@@ -961,7 +943,7 @@ const registry = defineArchestraTools([
       if (text === null) {
         return errorResult(
           `"${originalName}" (${mimeType}) is not text or a supported image. ` +
-            `${downloadHint}copy it into the sandbox with upload_file and process it with run_command.`,
+            `Copy it into the sandbox with upload_file and process it with run_command.`,
         );
       }
 
@@ -1010,7 +992,7 @@ const registry = defineArchestraTools([
         // could be rendered — explain rather than imply the range is empty.
         summary.push(
           `Line ${startLine} is too large to render inline (over the ${config.skillsSandbox.outputBytesLimit}-byte output cap). ` +
-            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
         );
       } else {
         // offset past end of file.
@@ -1049,7 +1031,7 @@ const registry = defineArchestraTools([
     title: "Save Result",
     description:
       "Save inline content directly to the user's persistent file storage " +
-      "(My Files) and return a download URL — no sandbox roundtrip. Use it " +
+      "(My Files) — no sandbox roundtrip. Use it " +
       "for results you produced in the conversation itself (text, markdown, " +
       "small data files). Pass `overwrite: true` to replace an existing " +
       "same-named file in place (e.g. a full rewrite); otherwise a duplicate " +
@@ -1112,7 +1094,7 @@ const registry = defineArchestraTools([
       });
 
       // Overwrite: replace an existing same-named file in this scope in place,
-      // keeping its id (and download URL). Falls through to create when none
+      // keeping its id. Falls through to create when none
       // exists. Without overwrite, a duplicate name surfaces as an error below.
       // A headless no-project write resolves the orphan it created on a prior run
       // (no conversation/project scope), so re-runs stay idempotent.
@@ -1297,20 +1279,15 @@ const registry = defineArchestraTools([
         "[Sandbox] file edited in PFS",
       );
 
-      const downloadUrl = `/api/skill-sandbox/artifacts/${updated.id}`;
       return structuredSuccessResult(
         {
           fileId: updated.id,
           filename: updated.filename,
           mimeType: updated.mimeType,
           sizeBytes: updated.sizeBytes,
-          downloadUrl,
           replacements,
         },
-        [
-          `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
-          `Download URL (use this for links): ${downloadUrl}`,
-        ].join("\n"),
+        `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
       );
     },
   }),
@@ -1758,7 +1735,6 @@ function saveResultSuccess(params: {
     },
     "[Sandbox] result saved to PFS",
   );
-  const downloadUrl = `/api/skill-sandbox/artifacts/${row.id}`;
   return structuredSuccessResult(
     {
       fileId: row.id,
@@ -1766,13 +1742,9 @@ function saveResultSuccess(params: {
       projectName: scope?.projectName ?? null,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
-      downloadUrl,
       overwritten,
     },
-    [
-      `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
-      `Download URL (use this for links): ${downloadUrl}`,
-    ].join("\n"),
+    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
   );
 }
 

@@ -1,15 +1,11 @@
 [[stages]]
-text = """Handing off the overnight shift -- I've attached flows.csv, a flow export from last night's traffic. Columns are src_ip, dst_ip, dst_port, proto, packets, bytes, first_ts, last_ts (timestamps are epoch seconds). Could you run our usual triage over it and tell me which source IPs look suspicious?
+text = """Handing off the overnight traffic review -- I've attached flows.csv from last night. The columns are src_ip, dst_ip, dst_port, proto, packets, bytes, first_ts, last_ts, and the timestamps are epoch seconds. Could you run it through our usual triage and tell me which source IPs look off?
 
-Here are the rules of thumb we use:
+The patterns we watch for: For port scanning, look at each (src_ip, dst_ip) pair -- if a pair hits more than 20 distinct destination ports, that source counts. For flooding, a source counts if any single flow runs above 1000 packets per second, which is just packets over the flow's duration (last_ts minus first_ts), treating any duration under a second as 1 second. For beaconing, take each (src_ip, dst_ip) pair with 5 or more flows, sort them by first_ts, and look at the gaps between consecutive first_ts values; if the largest and smallest gap are within 5 seconds of each other, that source counts.
 
-- Port scanning: group flows by (src_ip, dst_ip). A src_ip is scanning if for some dst_ip the number of distinct dst_port values is more than 20.
-- Flood / DoS: a src_ip is flooding if any single flow has a rate above 1000 packets per second, where rate = packets / max(1, last_ts - first_ts).
-- Beaconing / C2: group flows by (src_ip, dst_ip). If a pair has 5 or more flows, sort them by first_ts and look at the gaps between consecutive first_ts values; the src_ip is beaconing if the spread of those gaps (max gap minus min gap) is 5 seconds or less.
+I'd also like the flow count per proto.
 
-I'd also like the protocol breakdown -- the count of flows per proto value.
-
-Send it back with submit_result as result = {"protocol_counts": {"<proto>": <count>, ...}, "port_scan_src_ips": [...], "dos_src_ips": [...], "beaconing_src_ips": [...], "flags": {"port_scan": <bool>, "dos": <bool>, "beaconing": <bool>}}, where each flag says whether the matching list came back non-empty."""
+Send it back with submit_result as result = {"protocol_counts": {"<proto>": <count>, ...}, "port_scan_src_ips": [...], "dos_src_ips": [...], "beaconing_src_ips": [...], "flags": {"port_scan": <bool>, "dos": <bool>, "beaconing": <bool>}}, where each flag just says whether the matching list came back non-empty."""
 
   [[stages.files]]
   src = "flows.csv"

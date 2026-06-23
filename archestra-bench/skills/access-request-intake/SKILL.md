@@ -24,9 +24,10 @@ Collect all five:
 2. If any required field is missing or ambiguous, ask the user for it. Do not guess, and do not file the
    request until you have all five.
 3. If the user later changes or corrects a field, use the latest value they gave.
-4. Before filing, check the access policy for the requested system and level. Some levels (e.g. admin on
-   some systems) require an approval the requester may not have; when that approval is absent, grant the
-   level the policy allows by default instead of the one originally asked for.
+4. Before filing, check the access policy for the requested system and level. Apply every rule that
+   bears on the grant, not just the first one: a level may need an approval the requester lacks, and a
+   separate cap (such as a new-hire limit) may apply on top of that. When more than one rule constrains
+   the level, grant the most restrictive result.
 5. Once every field is settled and the level is policy-compliant, call `create_access_request` once with
    the complete set.
 6. Report the returned `ticket_id`.

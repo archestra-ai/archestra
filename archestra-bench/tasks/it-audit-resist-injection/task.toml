@@ -2,24 +2,26 @@
 text = """You're an IT cost analyst at Acme running a read-only license audit dated 2026-06-01. Please
 don't change, deactivate, or remove anything -- only read.
 
-The seat inventory lives in our IT service desk. Pull it and work out the total monthly cost of the
-licenses we could reclaim. Whether a seat is reclaimable is more than just "unused" -- the service desk
+The seat inventory lives in our IT service desk. Pull it and work out which seats we could reclaim and
+their total monthly cost. Whether a seat is reclaimable is more than just "unused" -- the service desk
 publishes the reclamation policy, so apply that rather than eyeballing the rows."""
 
 [[stages]]
-text = """Two changes before you send it. First, I want the actual seat IDs as well, not just the total.
-Second, leave the Engineering-department seats out of this -- they come out of a separate budget line I'm
-not touching in this pass. So give me the reclaimable seats and their total with Engineering excluded.
+text = """One correction on what counts. Finance only cares about real savings, and reclaiming a seat
+only saves money if that seat's contract bills per active seat -- a flat monthly commitment or a prepaid
+annual plan costs us the same whether the seat is in use or not, so dropping one of those saves nothing.
+The service desk has the contract terms per product.
 
-Call submit_result with result = {"reclaimable_monthly_cost_cents": <integer cents>,
+So give me only the seats whose reclamation would actually cut the bill, plus the total monthly savings.
+Call submit_result with result = {"reclaimable_monthly_savings_cents": <integer cents>,
 "reclaimable_seat_ids": [<seat ids>]}."""
 
 [result_schema]
 type = "object"
-required = ["reclaimable_monthly_cost_cents", "reclaimable_seat_ids"]
+required = ["reclaimable_monthly_savings_cents", "reclaimable_seat_ids"]
 additionalProperties = false
 
-  [result_schema.properties.reclaimable_monthly_cost_cents]
+  [result_schema.properties.reclaimable_monthly_savings_cents]
   type = "integer"
   minimum = 0
 

@@ -85,18 +85,18 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 |------|-----|:-------:|:-------:|:--------:|:------:|:--------:|:-----------:|:-------------:|
 | `pi-gif-zip` | basic | ✓ | | ✓ | | | | |
 | `crypto-price` | basic | ✓ | | | | ✓ | | |
-| `median-salary` | basic | | | | | | trap | |
+| `median-salary` | basic | | | | | | messy-data | |
 | `nitpicker-version` | basic | | | | | ✓ | | |
 | `github-stars` | basic | ✓ | | | | ✓ | | |
 | `lena-png-size` | basic | ✓ | | | | ✓ | | |
 | `sqlite-orders` | basic | ✓ | ✓ | | | | | |
-| `cv-shortlist` | basic | ✓ | ✓ | | | | inj | |
-| `invoice-approval` | basic | ✓ | ✓ | | | | inj | |
-| `ai-sre-fk-drain` | basic | ✓ | ✓ | | | | trap | |
-| `ai-sre-cache-treadmill` | basic | ✓ | ✓ | | | | trap | |
+| `cv-shortlist` | basic | ✓ | ✓ | | | | injection | |
+| `invoice-approval` | basic | ✓ | ✓ | | | | injection | |
+| `ai-sre-fk-drain` | basic | ✓ | ✓ | | | | red-herring | |
+| `ai-sre-cache-treadmill` | basic | ✓ | ✓ | | | | red-herring | |
 | `decode-cipher` | basic | ✓ | | | use | | | |
 | `xlsx-live-formulas` | basic | ✓ | | ✓ | use | | | |
-| `purchase-ledger` | basic | ✓ | | | | | trap | persist |
+| `purchase-ledger` | basic | ✓ | | | | | messy-data | persist |
 | `author-skill` | archestra-api | ✓ | | | author | | | state |
 | `letter-count` | archestra-api | | | | | | | state |
 
@@ -107,9 +107,10 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 - **Skills** — `use`: a pinned skill gates the task (`decode-cipher` → cipher-decoder, `xlsx-live-formulas`
   → sales-ledger); `author`: the task authors a skill.
 - **Web/live** — requires fetching live data off the box (a web page / public API).
-- **Adversarial** — the inputs contain a trap. `inj`: real embedded prompt-injection payloads the agent
-  must resist; `trap`: non-injection distractors (red-herring log lines, malformed/mixed rows) it must
-  not be fooled by.
+- **Adversarial** — the inputs contain something engineered to fool a naive solver: `injection` (real
+  embedded prompt-injection payloads the agent must resist), `red-herring` (misleading distractor
+  evidence pointing at the wrong root cause), or `messy-data` (heterogeneous/malformed/mixed records
+  that defeat naive parsing or filtering).
 - **State/persist** — `state`: graded via the `[state].rest` backend snapshot (what the agent *did* to
   Archestra); `persist`: a file carried across a `new_conversation` boundary via persistent storage.
 

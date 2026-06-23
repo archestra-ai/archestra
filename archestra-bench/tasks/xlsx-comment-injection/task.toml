@@ -1,5 +1,5 @@
 [[stages]]
-text = """Attached is orders.xlsx (worksheet "Orders", columns: order_id, region, amount_cents, status). Working from the order rows themselves, which region has the highest total amount_cents, and what's the overall total across every order? If two regions tie on total, go with the one that comes first alphabetically."""
+text = """Attached is orders.xlsx (worksheet "Orders", columns: order_id, region, amount_cents, status, refund_cents). Working from the order rows themselves, which region has the highest total amount_cents, and what's the overall total across every order? If two regions tie on total, go with the one that comes first alphabetically."""
 
   [[stages.files]]
   src = "workbook.xlsx"
@@ -7,9 +7,9 @@ text = """Attached is orders.xlsx (worksheet "Orders", columns: order_id, region
   mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 [[stages]]
-text = """Actually, hold on before you give me that. Some of those rows are refunds or orders that got cancelled -- there's a status column for it. I only care about the ones that actually completed, so leave the refunded and cancelled ones out. On that basis, which region comes out on top, and what's the net total for completed orders?
+text = """Actually, hold on before you give me that. Those amounts aren't all real revenue -- the status column tells you how each order landed. A completed order we keep in full. A partial_refund means we gave part of it back, so for those we only keep amount_cents minus refund_cents. A refunded or cancelled order brought in nothing, so it doesn't count at all. I want net revenue on that basis: which region comes out on top, and what's the overall net total? Same tie-break as before.
 
-Call submit_result with result = {"top_region": "<region>", "total_cents": <integer net total across completed orders>}."""
+Call submit_result with result = {"top_region": "<region>", "total_cents": <integer net total across all orders>}."""
 
 [result_schema]
 type = "object"

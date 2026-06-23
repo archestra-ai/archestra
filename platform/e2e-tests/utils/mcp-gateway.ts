@@ -522,37 +522,35 @@ export async function openManageCredentialsDialog(
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );
-  // Credentials live on the catalog item detail page
-  // (/mcp/registry/<id>?tab=credentials) since the registry redesign.
-  const credentialsTab = page.getByTestId(
+  const settingsDialog = page.getByRole("dialog", {
+    name: new RegExp(`^${escapeRegExp(catalogItemName)} Settings$`),
+  });
+  const connectionsNavButton = settingsDialog.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
-  const connectionsHeading = page.getByRole("heading", {
+  const connectionsHeading = settingsDialog.getByRole("heading", {
     name: "Credentials",
     exact: true,
   });
-  const ensureCredentialsTab = async (timeoutMs: number) => {
+  if (await settingsDialog.isVisible().catch(() => false)) {
     if (!(await connectionsHeading.isVisible().catch(() => false))) {
-      await credentialsTab.click();
+      await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: timeoutMs });
-  };
-
-  // Already on the item detail page?
-  if (await credentialsTab.isVisible().catch(() => false)) {
-    await ensureCredentialsTab(10_000);
+    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
     return;
   }
 
-  // The standalone manage-credentials dialog (reauth deep link) still exists.
   const standaloneDialog = page.getByTestId(E2eTestId.ManageCredentialsDialog);
   if (await standaloneDialog.isVisible().catch(() => false)) {
     return;
   }
 
   await expect(async () => {
-    if (await credentialsTab.isVisible().catch(() => false)) {
-      await ensureCredentialsTab(2_000);
+    if (await settingsDialog.isVisible().catch(() => false)) {
+      if (!(await connectionsHeading.isVisible().catch(() => false))) {
+        await connectionsNavButton.click();
+      }
+      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -590,28 +588,24 @@ export async function openManageCredentialsDialog(
       await deploymentButton.click();
     }
 
-    await expect(credentialsTab).toBeVisible({ timeout: 2_000 });
-    await ensureCredentialsTab(2_000);
+    await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
+    if (!(await connectionsHeading.isVisible().catch(() => false))) {
+      await connectionsNavButton.click();
+    }
+    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  // Credentials render either in the standalone manage-credentials dialog
-  // (reauth deep link) or on the catalog item detail page.
   const visibleDialog = page
     .getByRole("dialog")
     .filter({ visible: true })
     .last();
-  const scope = (await visibleDialog.isVisible().catch(() => false))
-    ? visibleDialog
-    : page;
-
-  // The connection count badge lives on the Credentials tab of the item page;
-  // when absent (standalone dialog) skip the row-count poll.
-  const credentialsTab = scope.getByTestId(
-    E2eTestId.McpServerSettingsConnectionsNavButton,
-  );
-  const badgeText = (await credentialsTab.textContent().catch(() => "")) ?? "";
+  const connectionsNavButton = visibleDialog.getByRole("button", {
+    name: /^Credentials\b/,
+  });
+  const badgeText =
+    (await connectionsNavButton.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(
     badgeText.match(/\d+/)?.[0] ?? "0",
     10,
@@ -620,13 +614,16 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
   if (expectedConnectionCount > 0) {
     await expect
       .poll(
-        async () => await scope.getByTestId(E2eTestId.CredentialOwner).count(),
+        async () =>
+          await visibleDialog.getByTestId(E2eTestId.CredentialOwner).count(),
         { timeout: 10_000, intervals: [250, 500, 1000] },
       )
       .toBeGreaterThan(0);
   }
 
-  return await scope.getByTestId(E2eTestId.CredentialOwner).allTextContents();
+  return await visibleDialog
+    .getByTestId(E2eTestId.CredentialOwner)
+    .allTextContents();
 }
 
 export async function getVisibleStaticCredentials(
@@ -756,4 +753,8 @@ export async function createTeamMcpGatewayViaApi({
     );
   }
   return { id: createResponse.data.id, name: createResponse.data.name };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

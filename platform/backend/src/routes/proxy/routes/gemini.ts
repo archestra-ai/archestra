@@ -1,10 +1,11 @@
-import { hasArchestraTokenPrefix } from "@archestra/shared";
+import { hasArchestraTokenPrefix, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { fetchGeminiGenerateContentModels } from "@/routes/chat/model-fetchers/gemini";
 import {
   constructResponseSchema,
   ErrorResponsesSchema,
@@ -18,6 +19,12 @@ import {
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { validateVirtualApiKey } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import {
+  extractGeminiToken,
+  GeminiModelsHeadersSchema,
+  GeminiModelsListResponseSchema,
+  resolveProxyModelsApiKey,
+} from "./proxy-model-listing";
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -45,6 +52,75 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1",
     preHandler: createGeminiProxyPreHandler(),
   });
+
+  /**
+   * Lists Gemini models for a virtual or raw key, filtered to models that
+   * support `generateContent`. A dedicated route is needed so it takes
+   * precedence over this prefix's catch-all http-proxy, which would otherwise
+   * forward Google's entire catalog -- including embedding-only, `aqa`, and
+   * live/audio models that aren't usable through the proxy's generateContent
+   * endpoints. Returns Google's native models shape.
+   */
+  async function handleListModels(
+    request: FastifyRequest,
+    agentId: string | undefined,
+  ) {
+    const token = extractGeminiToken({
+      queryKey: (request.query as { key?: string } | undefined)?.key,
+      headers: request.headers,
+    });
+    const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
+      request,
+      provider: "gemini",
+      token,
+    });
+    logger.debug({ agentId }, "[UnifiedProxy] Listing Gemini models");
+    const models = await fetchGeminiGenerateContentModels(
+      apiKey,
+      baseUrl,
+      extraHeaders,
+    );
+    return { models };
+  }
+
+  const ListModelsQuerystringSchema = z
+    .object({ key: z.string().optional() })
+    .passthrough();
+
+  fastify.get(
+    `${API_PREFIX}/v1beta/models`,
+    {
+      schema: {
+        operationId: RouteId.GeminiListModelsWithDefaultAgent,
+        description:
+          "List Gemini models usable through the proxy (default agent)",
+        summary: "List Gemini models (default agent)",
+        tags: ["LLM Proxy"],
+        querystring: ListModelsQuerystringSchema,
+        headers: GeminiModelsHeadersSchema,
+        response: constructResponseSchema(GeminiModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, undefined),
+  );
+
+  fastify.get(
+    `${API_PREFIX}/:agentId/v1beta/models`,
+    {
+      schema: {
+        operationId: RouteId.GeminiListModelsWithAgent,
+        description:
+          "List Gemini models usable through the proxy (specific agent)",
+        summary: "List Gemini models (specific agent)",
+        tags: ["LLM Proxy"],
+        params: z.object({ agentId: UuidIdSchema }),
+        querystring: ListModelsQuerystringSchema,
+        headers: GeminiModelsHeadersSchema,
+        response: constructResponseSchema(GeminiModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, request.params.agentId),
+  );
 
   /**
    * Generate route endpoint pattern for Gemini

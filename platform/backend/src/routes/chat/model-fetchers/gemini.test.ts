@@ -1,7 +1,11 @@
 import type { GoogleGenAI } from "@google/genai";
 import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
-import { fetchGeminiModels, fetchGeminiModelsViaVertexAi } from "./gemini";
+import {
+  fetchGeminiGenerateContentModels,
+  fetchGeminiModels,
+  fetchGeminiModelsViaVertexAi,
+} from "./gemini";
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -111,6 +115,72 @@ describe("gemini model fetchers", () => {
       await expect(fetchGeminiModels("invalid-key")).rejects.toThrow(
         "Failed to fetch Gemini models: 401",
       );
+    });
+  });
+
+  describe("fetchGeminiGenerateContentModels", () => {
+    test("returns only generateContent-capable models in native shape", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            models: [
+              {
+                name: "models/gemini-2.5-pro",
+                displayName: "Gemini 2.5 Pro",
+                supportedGenerationMethods: ["generateContent", "countTokens"],
+              },
+              {
+                name: "models/gemini-embedding-001",
+                displayName: "Gemini Embedding 001",
+                supportedGenerationMethods: [
+                  "embedContent",
+                  "batchEmbedContents",
+                ],
+              },
+              {
+                name: "models/aqa",
+                displayName: "AQA",
+                supportedGenerationMethods: ["generateAnswer"],
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchGeminiGenerateContentModels("test-api-key");
+
+      // Embedding-only and aqa/generateAnswer models are excluded; the native
+      // Gemini object shape is preserved (unlike fetchGeminiModels).
+      expect(models).toEqual([
+        {
+          name: "models/gemini-2.5-pro",
+          displayName: "Gemini 2.5 Pro",
+          supportedGenerationMethods: ["generateContent", "countTokens"],
+        },
+      ]);
+    });
+
+    test("returns an empty list when upstream omits models", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const models = await fetchGeminiGenerateContentModels("test-api-key");
+
+      expect(models).toEqual([]);
+    });
+
+    test("throws error on API failure", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve("Forbidden"),
+      });
+
+      await expect(
+        fetchGeminiGenerateContentModels("invalid-key"),
+      ).rejects.toThrow("Failed to fetch Gemini models: 403");
     });
   });
 

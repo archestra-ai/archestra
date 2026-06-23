@@ -23,14 +23,26 @@ vi.mock("@/routes/chat/model-fetchers/openai", async (importOriginal) => ({
   >()),
   fetchOpenAiModels: vi.fn(),
 }));
+vi.mock("@/routes/chat/model-fetchers/gemini", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/routes/chat/model-fetchers/gemini")
+  >()),
+  fetchGeminiGenerateContentModels: vi.fn(),
+}));
 
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import { fetchGeminiGenerateContentModels } from "@/routes/chat/model-fetchers/gemini";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import type { Gemini } from "@/types";
 import anthropicProxyRoutes from "./anthropic";
+import geminiProxyRoutes from "./gemini";
 import openAiProxyRoutes from "./openai";
 
 async function buildApp(
-  plugin: typeof anthropicProxyRoutes | typeof openAiProxyRoutes,
+  plugin:
+    | typeof anthropicProxyRoutes
+    | typeof openAiProxyRoutes
+    | typeof geminiProxyRoutes,
 ) {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
@@ -67,6 +79,16 @@ const OPENAI_MODELS: ModelInfo[] = [
     displayName: "GPT-5.4",
     provider: "openai",
     createdAt: "2025-01-01T00:00:00.000Z",
+  },
+];
+
+const GEMINI_MODELS: Gemini.Types.Model[] = [
+  {
+    name: "models/gemini-2.5-pro",
+    baseModelId: "gemini-2.5-pro",
+    version: "001",
+    displayName: "Gemini 2.5 Pro",
+    supportedGenerationMethods: ["generateContent", "countTokens"],
   },
 ];
 
@@ -340,5 +362,110 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     expect(response.statusCode).toBe(401);
     expect(fetchOpenAiModels).not.toHaveBeenCalled();
+  });
+
+  test("gemini: resolves an x-goog-api-key virtual key and returns the native models shape", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    vi.mocked(fetchGeminiGenerateContentModels).mockResolvedValue(
+      GEMINI_MODELS,
+    );
+    const app = await buildApp(geminiProxyRoutes);
+
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "gemini-real" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "gemini",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-gemini",
+      providerApiKeys: [
+        { provider: "gemini", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/gemini/${randomUUID()}/v1beta/models`,
+      headers: { "x-goog-api-key": value },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ models: GEMINI_MODELS });
+    expect(fetchGeminiGenerateContentModels).toHaveBeenCalledWith(
+      "gemini-real",
+      undefined,
+      null,
+    );
+  });
+
+  test("gemini: resolves a virtual key passed via the ?key= query param", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    vi.mocked(fetchGeminiGenerateContentModels).mockResolvedValue(
+      GEMINI_MODELS,
+    );
+    const app = await buildApp(geminiProxyRoutes);
+
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "gemini-real" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "gemini",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-gemini-query",
+      providerApiKeys: [
+        { provider: "gemini", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/gemini/v1beta/models?key=${encodeURIComponent(value)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().models).toHaveLength(1);
+    expect(fetchGeminiGenerateContentModels).toHaveBeenCalledWith(
+      "gemini-real",
+      undefined,
+      null,
+    );
+  });
+
+  test("gemini: default-agent route lists models", async () => {
+    vi.mocked(fetchGeminiGenerateContentModels).mockResolvedValue(
+      GEMINI_MODELS,
+    );
+    const app = await buildApp(geminiProxyRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/gemini/v1beta/models?key=gemini-raw",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().models).toHaveLength(1);
+    expect(fetchGeminiGenerateContentModels).toHaveBeenCalledWith(
+      "gemini-raw",
+      undefined,
+      null,
+    );
+  });
+
+  test("gemini: a missing key is rejected with 401", async () => {
+    const app = await buildApp(geminiProxyRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/gemini/v1beta/models",
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchGeminiGenerateContentModels).not.toHaveBeenCalled();
   });
 });

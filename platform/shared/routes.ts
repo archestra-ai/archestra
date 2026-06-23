@@ -197,6 +197,10 @@ export const RouteId = {
   AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
   AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
+  // Proxy Routes - Gemini
+  GeminiListModelsWithDefaultAgent: "geminiListModelsWithDefaultAgent",
+  GeminiListModelsWithAgent: "geminiListModelsWithAgent",
+
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
   CohereChatWithAgent: "cohereChatWithAgent",

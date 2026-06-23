@@ -21,6 +21,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
@@ -324,6 +325,75 @@ describe("Gemini streaming mode", () => {
   });
 });
 
+describe("Gemini GET /v1beta/models (filtered listing)", () => {
+  let app: FastifyInstance;
+  let mockUpstream: FastifyInstance;
+  let upstreamPort: number;
+  let originalBaseUrl: string;
+
+  beforeEach(async () => {
+    mockUpstream = Fastify();
+
+    // Google's catalog includes models that are NOT usable through the proxy's
+    // generateContent endpoints (embedding-only, `aqa`/generateAnswer). The
+    // dedicated handler must filter these out.
+    mockUpstream.get("/v1beta/models", async () => ({
+      models: [
+        {
+          name: "models/gemini-2.5-pro",
+          displayName: "Gemini 2.5 Pro",
+          supportedGenerationMethods: ["generateContent", "countTokens"],
+        },
+        {
+          name: "models/gemini-embedding-001",
+          displayName: "Gemini Embedding 001",
+          supportedGenerationMethods: ["embedContent", "batchEmbedContents"],
+        },
+        {
+          name: "models/aqa",
+          displayName: "AQA",
+          supportedGenerationMethods: ["generateAnswer"],
+        },
+      ],
+    }));
+
+    await mockUpstream.listen({ port: 0 });
+    const address = mockUpstream.server.address();
+    upstreamPort = typeof address === "string" ? 0 : address?.port || 0;
+
+    originalBaseUrl = config.llm.gemini.baseUrl;
+    config.llm.gemini.baseUrl = `http://localhost:${upstreamPort}`;
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+  });
+
+  afterEach(async () => {
+    config.llm.gemini.baseUrl = originalBaseUrl;
+    await app.close();
+    await mockUpstream.close();
+  });
+
+  test("returns only generateContent-capable models in native shape", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/gemini/v1beta/models?key=test-key",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    // embedding-only and aqa models are excluded; only the generateContent
+    // model survives, in Google's native shape.
+    expect(body.models).toHaveLength(1);
+    expect(body.models[0].name).toBe("models/gemini-2.5-pro");
+    expect(body.models[0].supportedGenerationMethods).toContain(
+      "generateContent",
+    );
+  });
+});
+
 describe("Gemini proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
@@ -383,17 +453,6 @@ describe("Gemini proxy routing", () => {
   afterEach(async () => {
     await app.close();
     await mockUpstream.close();
-  });
-
-  test("proxies /v1/gemini/v1beta/models", async () => {
-    const response = await app.inject({
-      method: "GET",
-      url: "/v1/gemini/v1beta/models",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.models).toHaveLength(2);
   });
 
   test("proxies /v1/gemini/v1beta/models/:model", async () => {

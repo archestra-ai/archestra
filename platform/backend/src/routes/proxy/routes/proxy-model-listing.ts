@@ -22,6 +22,11 @@ export const OpenAiModelsHeadersSchema = z.object({
   authorization: z.string().optional(),
 });
 
+export const GeminiModelsHeadersSchema = z.object({
+  "x-goog-api-key": z.string().optional(),
+  authorization: z.string().optional(),
+});
+
 export const AnthropicModelsListResponseSchema = z.object({
   data: z.array(
     z.object({
@@ -45,6 +50,14 @@ export const OpenAiModelsListResponseSchema = z.object({
     }),
   ),
 });
+
+// Permissive: preserve Google's native model fields so SDK/REST clients get the
+// full shape they expect. Only `name` is guaranteed.
+export const GeminiModelsListResponseSchema = z
+  .object({
+    models: z.array(z.object({ name: z.string() }).passthrough()),
+  })
+  .passthrough();
 
 export interface ResolvedProxyModelsKey {
   apiKey: string;
@@ -127,6 +140,26 @@ export function extractAnthropicToken(headers: {
 }): string | undefined {
   return (
     headerValue(headers["x-api-key"]) ??
+    extractBearerToken(headers.authorization)
+  );
+}
+
+/**
+ * Token for a Gemini-style request: Gemini uses the `?key=` query param or the
+ * `x-goog-api-key` header, falling back to a Bearer token. Precedence:
+ * queryKey ?? x-goog-api-key header ?? Bearer from authorization.
+ */
+export function extractGeminiToken(params: {
+  queryKey?: string;
+  headers: {
+    "x-goog-api-key"?: string | string[];
+    authorization?: string | string[];
+  };
+}): string | undefined {
+  const { queryKey, headers } = params;
+  return (
+    queryKey ??
+    headerValue(headers["x-goog-api-key"]) ??
     extractBearerToken(headers.authorization)
   );
 }

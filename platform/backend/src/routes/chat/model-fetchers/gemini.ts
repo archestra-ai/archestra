@@ -51,6 +51,46 @@ export async function fetchGeminiModels(
     });
 }
 
+/**
+ * Fetches Gemini models in Google's native shape, filtered to those that
+ * support `generateContent`. Used by the proxy `GET /v1beta/models` listing so
+ * callers only see models usable through the proxy's generateContent endpoints
+ * (unlike `fetchGeminiModels`, which also returns embedding-only models for the
+ * chat/embeddings catalog).
+ */
+export async function fetchGeminiGenerateContentModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<Gemini.Types.Model[]> {
+  const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
+  const url = joinBaseUrl(
+    baseUrl,
+    `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=1000`,
+  );
+
+  const response = await fetch(url, {
+    headers: extraHeaders ?? undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Gemini models",
+    );
+    throw new Error(`Failed to fetch Gemini models: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models: Gemini.Types.Model[];
+  };
+
+  return (data.models ?? []).filter((model) =>
+    model.supportedGenerationMethods?.includes("generateContent"),
+  );
+}
+
 export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   logger.debug(
     {

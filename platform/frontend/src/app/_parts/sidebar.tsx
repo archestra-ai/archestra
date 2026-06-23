@@ -119,6 +119,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/knowledge",
     "/audit",
     "/connection",
+    "/connection_beta",
   ];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -613,6 +614,9 @@ export function AppSidebar() {
   const chatListFadeIn = useOnce();
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
+  // ARCHESTRA_BETA master switch — when on, the new connection page is the
+  // default Connect destination.
+  const betaEnabled = useFeature("betaEnabled") === true;
 
   // Projects exist only when the projects feature is on.
   const filteredChatsNavItems = React.useMemo(
@@ -637,21 +641,26 @@ export function AppSidebar() {
             if (item.url === "/agents/skills" && !skillsEnabled) return false;
             return true;
           })
-          .map((item) =>
-            item.subItems
+          .map((item) => {
+            // With ARCHESTRA_BETA on, send Connect to the new connection page.
+            const resolved =
+              item.title === "Connect" && betaEnabled
+                ? { ...item, url: "/connection_beta" }
+                : item;
+            return resolved.subItems
               ? {
-                  ...item,
-                  subItems: item.subItems.filter((sub) => {
+                  ...resolved,
+                  subItems: resolved.subItems.filter((sub) => {
                     // With projects on, schedules are managed per-project on the
                     // project detail page, so the standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;
                     return true;
                   }),
                 }
-              : item,
-          ),
+              : resolved;
+          }),
       }));
-  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled]);
+  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled, betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

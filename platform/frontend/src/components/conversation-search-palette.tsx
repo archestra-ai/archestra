@@ -54,6 +54,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -213,6 +214,8 @@ export function ConversationSearchPalette({
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
+  // ARCHESTRA_BETA master switch — Connect points at the new connection page.
+  const betaEnabled = useFeature("betaEnabled") === true;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
@@ -555,7 +558,11 @@ export function ConversationSearchPalette({
                             key={item.value}
                             value={`${item.value} ${item.keywords} ${item.label}`}
                             onSelect={() => {
-                              router.push(item.href);
+                              router.push(
+                                item.value === "connect" && betaEnabled
+                                  ? "/connection_beta"
+                                  : item.href,
+                              );
                               onOpenChange(false);
                             }}
                             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"

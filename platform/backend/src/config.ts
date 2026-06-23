@@ -1414,6 +1414,12 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
+  /**
+   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
+   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
+   * the new connection page the default Connect destination — can key off it.
+   */
+  beta: process.env.ARCHESTRA_BETA === "true",
   ngrok: {
     // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
     // agent SDK) so the instance is reachable from the Internet for inbound

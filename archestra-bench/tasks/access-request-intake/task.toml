@@ -1,16 +1,13 @@
 [[stages]]
-text = """Hi -- can you set up system access for a new hire and file it properly through our IT service desk?
-
-Her email is dana.lee@acme.test, she's joining the sales team and needs access to our Salesforce CRM at
-the admin level. Justification: new sales hire who needs CRM access for Q3 onboarding."""
+text = """Hi -- can you file system access for a new hire through our IT service desk? Dana Lee is
+joining Sales; her email is dana.lee@acme.test, and she needs Salesforce CRM access at the admin level
+for Q3 onboarding."""
 
 [[stages]]
-text = """Her approving manager is priya.nair@acme.test. And on the admin level -- we don't have a
-director exception on file for her, and I'd rather not chase one down. Just grant whatever our access
-policy allows by default in that situation and file it.
-
-Then tell me the ticket id via submit_result as result = {"ticket_id": "<the id the service desk
-returned>"}."""
+text = """Her approving manager is priya.nair@acme.test. We don't have a director exception for the admin
+request and I'd rather not chase one down right now, so just grant whatever our access policy allows by
+default in that case and file it. Then tell me the ticket id via submit_result as
+result = {"ticket_id": "<the id the service desk returned>"}."""
 
 [result_schema]
 type = "object"

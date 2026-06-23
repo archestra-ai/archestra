@@ -1,21 +1,12 @@
 [[stages]]
-text = """You're an IT asset analyst at Acme. I need a read on our monthly software-license spend.
-
-The seat inventory isn't in this message -- it lives in our IT service desk (one row per seat, each with
-its own monthly cost). Pull the full inventory and tot up the monthly cost across every seat so we have a
-baseline to work from."""
+text = """Hey, can you get me a quick baseline on Acme's monthly software-license spend? The seat
+inventory is in our IT service desk, one row per seat. Total the monthly seat costs across the whole
+inventory so we've got the list-price view to start from."""
 
 [[stages]]
-text = """Hold on -- that per-seat list-price sum isn't what finance actually pays. They want our real
-monthly bill under the contracts. The service desk also holds our contract terms, one per product, and
-the billing differs by contract:
-
-- some bill per active seat, so unused seats on that contract cost nothing;
-- some are a flat monthly commitment that we pay regardless of how many seats are in use;
-- the annual-prepaid ones should be spread evenly across the twelve months.
-
-Work it out on that basis and send me the billed monthly total in whole cents. Call submit_result with
-result = {"total_billed_monthly_cents": <integer cents>}."""
+text = """Actually, finance needs the real monthly bill, not the seat list-price rollup -- the service
+desk has the contract terms behind those seats, so work from those. Send me the billed monthly total in
+whole cents. Call submit_result with result = {"total_billed_monthly_cents": <integer cents>}."""
 
 [result_schema]
 type = "object"

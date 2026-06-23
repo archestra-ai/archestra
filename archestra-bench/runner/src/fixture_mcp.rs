@@ -255,7 +255,14 @@ fn list_seats(args: &Map<String, JsonValue>) -> CallToolResult {
 }
 
 fn list_license_contracts() -> CallToolResult {
-    let body = serde_json::json!({ "contracts": contracts() });
+    let body = serde_json::json!({
+        "contracts": contracts(),
+        "billing_model_descriptions": {
+            "per_active_seat": "Billed rate_cents times the number of active seats on the contract; unused seats on the contract cost nothing.",
+            "flat_monthly_commit": "Billed commit_cents per month for the contract, regardless of how many seats are active or unused.",
+            "annual_prepaid": "Paid annually; the monthly figure is annual_cents / 12 and does not vary with active or unused seat count."
+        }
+    });
     text(serde_json::to_string(&body).unwrap_or_else(|_| "{\"contracts\":[]}".to_string()))
 }
 

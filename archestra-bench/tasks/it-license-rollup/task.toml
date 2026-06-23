@@ -1,18 +1,28 @@
 [[stages]]
-text = """You are an IT asset analyst at Acme. I need our total monthly software-license spend, in whole cents.
+text = """You're an IT asset analyst at Acme. I need a read on our monthly software-license spend.
 
-The seat inventory isn't in this message -- it lives in our IT service desk. Pull the full inventory
-from there (one row per seat, each with its own monthly cost) and add up the monthly cost across every
-seat, all departments and all statuses. Please work from the real inventory rather than an estimate.
+The seat inventory isn't in this message -- it lives in our IT service desk (one row per seat, each with
+its own monthly cost). Pull the full inventory and tot up the monthly cost across every seat so we have a
+baseline to work from."""
 
-Then call submit_result with result = {"total_monthly_cost_cents": <integer total in cents>}."""
+[[stages]]
+text = """Hold on -- that per-seat list-price sum isn't what finance actually pays. They want our real
+monthly bill under the contracts. The service desk also holds our contract terms, one per product, and
+the billing differs by contract:
+
+- some bill per active seat, so unused seats on that contract cost nothing;
+- some are a flat monthly commitment that we pay regardless of how many seats are in use;
+- the annual-prepaid ones should be spread evenly across the twelve months.
+
+Work it out on that basis and send me the billed monthly total in whole cents. Call submit_result with
+result = {"total_billed_monthly_cents": <integer cents>}."""
 
 [result_schema]
 type = "object"
-required = ["total_monthly_cost_cents"]
+required = ["total_billed_monthly_cents"]
 additionalProperties = false
 
-  [result_schema.properties.total_monthly_cost_cents]
+  [result_schema.properties.total_billed_monthly_cents]
   type = "integer"
   minimum = 1
 

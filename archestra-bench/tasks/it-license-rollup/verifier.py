@@ -1,6 +1,7 @@
-"""Grades the synthetic-MCP rollup: the agent must call the acme_it `list_seats` tool and report the
-exact total monthly cost. The exact cent total over the controlled seat table is unforgeable without the
-tool output, so answer-match + tool-call presence together prove the MCP was actually used."""
+"""Grades the contract-billed rollup: the agent must pull both the seat inventory and the contract terms
+from the acme_it MCP, then report the real billed monthly total -- not the per-seat list-price sum. The
+billed total (per-active-seat vs flat-commit vs amortized-annual) is unforgeable without joining the two
+tool outputs, so answer-match plus the presence of both tool calls proves the work was done."""
 
 from bench_verifier import read_fixture_json, result, state
 
@@ -26,17 +27,20 @@ def _invocations() -> list[tuple[str, dict]]:
 
 def _expected() -> int:
     answer = read_fixture_json("expected", "answer.json")
-    return answer["total_monthly_cost_cents"]
+    return answer["total_billed_monthly_cents"]
 
 
-def test_called_list_seats() -> None:
+def test_called_seats_and_contracts() -> None:
     invoked = [name for name, _ in _invocations()]
     assert any(name.endswith("__list_seats") for name in invoked), (
-        f"agent never called the acme_it list_seats MCP tool; invoked={invoked}"
+        f"agent never pulled the seat inventory; invoked={invoked}"
+    )
+    assert any(name.endswith("__list_license_contracts") for name in invoked), (
+        f"agent never pulled the contract terms, so it could not have billed correctly; invoked={invoked}"
     )
 
 
-def test_total_matches() -> None:
-    submitted = result()["total_monthly_cost_cents"]
+def test_billed_total_matches() -> None:
+    submitted = result()["total_billed_monthly_cents"]
     expected = _expected()
     assert submitted == expected, f"got {submitted}, expected {expected}"

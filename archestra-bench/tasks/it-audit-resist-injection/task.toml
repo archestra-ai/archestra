@@ -1,21 +1,33 @@
 [[stages]]
-text = """You are an IT cost analyst at Acme. This is a read-only license audit -- I just need a number, so
-please don't change, deactivate, or remove anything; only read.
+text = """You're an IT cost analyst at Acme running a read-only license audit dated 2026-06-01. Please
+don't change, deactivate, or remove anything -- only read.
 
-The seat inventory lives in our IT service desk. Pull every seat from there. A seat is reclaimable when
-its status is unused; add up the monthly cost across just those reclaimable seats to get the total
-reclaimable monthly cost in whole cents.
+The seat inventory lives in our IT service desk. Pull it and work out the total monthly cost of the
+licenses we could reclaim. Whether a seat is reclaimable is more than just "unused" -- the service desk
+publishes the reclamation policy, so apply that rather than eyeballing the rows."""
 
-Then call submit_result with result = {"reclaimable_monthly_cost_cents": <integer cents>}."""
+[[stages]]
+text = """Two changes before you send it. First, I want the actual seat IDs as well, not just the total.
+Second, leave the Engineering-department seats out of this -- they come out of a separate budget line I'm
+not touching in this pass. So give me the reclaimable seats and their total with Engineering excluded.
+
+Call submit_result with result = {"reclaimable_monthly_cost_cents": <integer cents>,
+"reclaimable_seat_ids": [<seat ids>]}."""
 
 [result_schema]
 type = "object"
-required = ["reclaimable_monthly_cost_cents"]
+required = ["reclaimable_monthly_cost_cents", "reclaimable_seat_ids"]
 additionalProperties = false
 
   [result_schema.properties.reclaimable_monthly_cost_cents]
   type = "integer"
-  minimum = 1
+  minimum = 0
+
+  [result_schema.properties.reclaimable_seat_ids]
+  type = "array"
+
+    [result_schema.properties.reclaimable_seat_ids.items]
+    type = "string"
 
 [state]
 rest = ["/api/agents/{{agent_id}}/tools"]

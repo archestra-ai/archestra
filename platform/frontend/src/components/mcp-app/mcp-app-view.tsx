@@ -94,7 +94,7 @@ export const McpAppRuntime = function McpAppRuntime({
   preloadedResource,
   onResourceStateChange,
   appVersion,
-  containerMaxHeight,
+  containerDimensions,
   reloadNonce,
   inlineInitialHeight,
 }: {
@@ -113,9 +113,11 @@ export const McpAppRuntime = function McpAppRuntime({
   onResourceStateChange: (state: "renderable" | "empty") => void;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
-  /** Inline visual ceiling from the host card; absent on full-bleed surfaces
-   * (run page, preview). Drives the guest size hint and pre-report height. */
-  containerMaxHeight?: number;
+  /** Container size hint forwarded to the guest (SEP-1865 `containerDimensions`).
+   * `maxHeight` is the inline visual ceiling from the host card; absent on
+   * full-bleed surfaces (run page, preview). Drives the guest size hint and the
+   * pre-report height. */
+  containerDimensions?: { maxHeight?: number };
   /** Bump to remount (reload) the sandboxed iframe — re-runs its creation effect. */
   reloadNonce?: number;
   /** Last measured inline height; seeds the iframe + loading box so a fresh
@@ -123,6 +125,9 @@ export const McpAppRuntime = function McpAppRuntime({
   inlineInitialHeight?: number;
 }) {
   const { resolvedTheme } = useTheme();
+  // The host only ever caps height (width is unbounded); unpack the SEP-shaped
+  // hint into the single value the size logic below threads through.
+  const containerMaxHeight = containerDimensions?.maxHeight;
   const [bridge, setBridge] = useState<AppBridge | null>(null);
   const [appResource, setAppResource] = useState<AppResourceMeta | null>(
     preloadedResource ?? null,

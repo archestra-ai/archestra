@@ -12,8 +12,9 @@ import { cn } from "@/lib/utils";
  * Owns the card frame, the inline / fullscreen / fill geometry, body sizing, and
  * the optional frozen placeholder. The per-surface controls are passed in as the
  * `topBar` and `bottomBar` slots — see the building blocks in `mcp-app-chrome`
- * ({@link McpAppTopBar} / {@link McpAppRefreshButton} / {@link McpAppVersionBar})
- * and {@link McpAppActions} — so the card itself stays free of action wiring.
+ * ({@link McpAppTopBar} / {@link McpAppRefreshButton} / {@link McpAppVersionBar}
+ * and the discrete action buttons) — so the card itself stays free of action
+ * wiring.
  *
  * Between the bars sit an optional diagnostics badge and the app body — either
  * the live runtime (`children`) or, when `placeholder` is set, a frozen-height

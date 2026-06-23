@@ -1,11 +1,12 @@
 "use client";
 
+import { AppFrame } from "@/components/mcp-app/app-frame";
+import { McpAppStandaloneButton } from "@/components/mcp-app/mcp-app-chrome";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { AppRuntimeFrame } from "../_parts/app-runtime-frame";
 import { AppSettingsForm } from "../_parts/app-settings-form";
 import { AppShareTab } from "../_parts/app-share-tab";
 import { AppToolsTab } from "../_parts/app-tools-tab";
@@ -54,9 +55,10 @@ export default function AppDetailPage({ appId }: { appId: string }) {
 
         <TabsContent value="preview">
           <div className="min-h-[400px] overflow-hidden rounded-lg border">
-            <AppRuntimeFrame
-              appId={appId}
-              actions={["fullscreen", "openStandalone"]}
+            <AppFrame
+              endpoint={{ kind: "app", appId }}
+              fillContainer
+              actions={<McpAppStandaloneButton appId={appId} />}
             />
           </div>
         </TabsContent>

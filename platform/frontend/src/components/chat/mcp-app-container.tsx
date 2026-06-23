@@ -1,5 +1,4 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import type React from "react";
 import {
   Component,
@@ -20,15 +19,13 @@ import {
   INITIAL_INLINE_HEIGHT,
   useInlineCeiling,
 } from "@/components/mcp-app/app-height";
-import {
-  type McpAppAction,
-  McpAppActions,
-} from "@/components/mcp-app/mcp-app-actions";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppChangelogPill,
+  McpAppFullscreenExitButton,
   McpAppRefreshButton,
   McpAppSidebarButton,
+  McpAppStandaloneButton,
   McpAppTopBar,
   McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
@@ -38,6 +35,7 @@ import {
   McpAppRuntime,
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
+import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -133,12 +131,11 @@ export function McpAppSection({
 }) {
   const resourceKey = `${agentId}:${uiResourceUri}`;
   const inlineCeiling = useInlineCeiling();
-  const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
+  const { displayMode, setDisplayMode, toggleFullscreen, reloadNonce, reload } =
+    useAppRuntimeControls();
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
-  // Bump to remount (reload) the sandboxed iframe via the runtime's reload nonce.
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -196,14 +193,6 @@ export function McpAppSection({
     showInSidebar(toolCallId);
   };
 
-  const handleToggleFullscreen = useCallback(() => {
-    setDisplayMode((mode) => (mode === "fullscreen" ? "inline" : "fullscreen"));
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    setReloadNonce((nonce) => nonce + 1);
-  }, []);
-
   const handleResourceStateChange = useCallback(
     (state: "renderable" | "empty") => {
       setResourceState({ key: resourceKey, state });
@@ -259,17 +248,11 @@ export function McpAppSection({
       </div>
     ) : null;
 
-  // Address-pill actions: open-standalone (new tab) plus a fullscreen exit
-  // button that only appears while fullscreen (the enter icon is hidden for now,
-  // but app-requested fullscreen stays usable). The open-in-side-panel control
-  // lives in the top bar's right zone, not here.
-  const liveActions: McpAppAction[] = ["fullscreen", "openStandalone"];
-
   const liveSurface = (
     <McpAppErrorBoundary>
       <McpAppCard
         displayMode={displayMode}
-        onToggleFullscreen={handleToggleFullscreen}
+        onToggleFullscreen={toggleFullscreen}
         diagnostics={diagnosticsBadge}
         size={size}
         inlineCeiling={inlineCeiling}
@@ -290,14 +273,16 @@ export function McpAppSection({
                 : undefined
             }
             actions={
+              // Refresh, plus a fullscreen-exit button that only appears while
+              // fullscreen (the enter icon is hidden for now, but app-requested
+              // fullscreen stays usable), plus open-standalone for owned apps.
+              // The open-in-side-panel control lives in the top bar's right zone.
               <>
-                <McpAppRefreshButton onClick={handleRefresh} />
-                <McpAppActions
-                  appId={appId}
-                  actions={liveActions}
-                  isFullscreen={displayMode === "fullscreen"}
-                  onToggleFullscreen={handleToggleFullscreen}
-                />
+                <McpAppRefreshButton onClick={reload} />
+                {displayMode === "fullscreen" && (
+                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+                )}
+                {appId && <McpAppStandaloneButton appId={appId} />}
               </>
             }
             right={
@@ -331,7 +316,9 @@ export function McpAppSection({
           // would overwrite the last inline size and make the card return at the
           // panel's height when the panel closes.
           onSizeChange={renderInSidebar ? noopSizeChange : setSize}
-          containerMaxHeight={renderInSidebar ? undefined : inlineCeiling}
+          containerDimensions={
+            renderInSidebar ? undefined : { maxHeight: inlineCeiling }
+          }
           // Seed the iframe + loading box at the last measured inline height so a
           // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
           inlineInitialHeight={
@@ -354,7 +341,7 @@ export function McpAppSection({
       <>
         <McpAppCard
           displayMode="inline"
-          onToggleFullscreen={handleToggleFullscreen}
+          onToggleFullscreen={toggleFullscreen}
           size={size}
           inlineCeiling={inlineCeiling}
           frozenHeight={lastInlineHeightRef.current}

@@ -1,12 +1,19 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { McpAppChangelogPill, McpAppVersionBar } from "./mcp-app-chrome";
+import {
+  McpAppAppsPageButton,
+  McpAppChangelogPill,
+  McpAppFullscreenExitButton,
+  McpAppStandaloneButton,
+  McpAppVersionBar,
+} from "./mcp-app-chrome";
 
 vi.mock("next/link", () => ({
-  default: ({ children, href }: { children: ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({ children, ...props }: { children: ReactNode }) => (
+    <a {...props}>{children}</a>
   ),
 }));
 
@@ -16,6 +23,33 @@ describe("McpAppVersionBar", () => {
 
     const versionLink = screen.getByRole("link", { name: /version 3/i });
     expect(versionLink).toHaveAttribute("href", "/apps/app-123");
+  });
+});
+
+describe("address-pill action buttons", () => {
+  it("opens the owned app's standalone run page in a new tab", () => {
+    render(<McpAppStandaloneButton appId="app-123" />);
+
+    const link = screen.getByRole("link", { name: /open standalone/i });
+    expect(link).toHaveAttribute("href", "/apps/app-123/run");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("links to the owned app's detail page", () => {
+    render(<McpAppAppsPageButton appId="app-123" />);
+
+    const link = screen.getByRole("link", { name: /go to apps page/i });
+    expect(link).toHaveAttribute("href", "/apps/app-123");
+  });
+
+  it("fires onClick when the fullscreen-exit button is pressed", async () => {
+    const onClick = vi.fn();
+    render(<McpAppFullscreenExitButton onClick={onClick} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /exit fullscreen/i }),
+    );
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });
 

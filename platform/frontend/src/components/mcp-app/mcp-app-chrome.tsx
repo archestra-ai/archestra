@@ -1,5 +1,12 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { AppWindow, ChevronDown, PanelRight, RefreshCw } from "lucide-react";
+import {
+  AppWindow,
+  ChevronDown,
+  Minimize,
+  PanelRight,
+  RefreshCw,
+  SquareArrowOutUpRight,
+} from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { Button } from "@/components/ui/button";
@@ -144,6 +151,63 @@ export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
       title="Reload app"
     >
       <RefreshCw className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+/** Exit-fullscreen icon for the address pill; render only while fullscreen. */
+export function McpAppFullscreenExitButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 text-muted-foreground"
+      onClick={onClick}
+      aria-label="Exit fullscreen"
+      title="Exit fullscreen"
+    >
+      <Minimize className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+/** Opens the owned app's standalone run page in a new tab. */
+export function McpAppStandaloneButton({ appId }: { appId: string }) {
+  return (
+    <Button
+      asChild
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 text-muted-foreground"
+      aria-label="Open standalone"
+      title="Open standalone"
+    >
+      <Link href={`/apps/${appId}/run`} target="_blank" rel="noreferrer">
+        <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+      </Link>
+    </Button>
+  );
+}
+
+/** Links to the owned app's detail page. */
+export function McpAppAppsPageButton({ appId }: { appId: string }) {
+  return (
+    <Button
+      asChild
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 text-muted-foreground"
+      aria-label="Go to Apps page"
+      title="Go to Apps page"
+    >
+      <Link href={`/apps/${appId}`}>
+        <AppWindow className="h-3.5 w-3.5" />
+      </Link>
     </Button>
   );
 }

@@ -357,14 +357,15 @@ export function ChatSidebarSection({
               </span>
               {conv.projectName && (
                 <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                  <Folder className="h-2.5 w-2.5 shrink-0" />
                   {conv.projectIcon ? (
                     <AgentIcon
                       icon={conv.projectIcon}
                       fallbackType="project"
                       size={10}
                     />
-                  ) : null}
+                  ) : (
+                    <Folder className="h-2.5 w-2.5 shrink-0" />
+                  )}
                   <span className="truncate">{conv.projectName}</span>
                 </span>
               )}
@@ -461,14 +462,15 @@ export function ChatSidebarSection({
             className="cursor-pointer flex-1 justify-between"
           >
             <span className="flex items-center gap-2 min-w-0 flex-1">
-              <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               {project.icon ? (
                 <AgentIcon
                   icon={project.icon}
                   fallbackType="project"
                   size={14}
                 />
-              ) : null}
+              ) : (
+                <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
               <TruncatedText
                 message={project.name}
                 maxLength={MAX_TITLE_LENGTH}

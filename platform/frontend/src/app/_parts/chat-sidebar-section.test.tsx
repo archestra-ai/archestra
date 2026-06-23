@@ -358,7 +358,7 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("shows a pinned project's icon, emoji, and name when an emoji is present", () => {
+  it("shows a pinned project's emoji and name when an emoji is present", () => {
     mockProjects = [
       {
         id: "project-1",
@@ -371,11 +371,11 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Generic Project")).toBeInTheDocument();
-    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
     expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
   });
 
-  it("shows the project icon and name without a fallback emoji when no emoji is set", () => {
+  it("shows the project folder icon and name when no emoji is set", () => {
     mockProjects = [
       {
         id: "project-1",
@@ -392,7 +392,7 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 
-  it("shows a chat's project icon, emoji, and name when its project has an emoji", () => {
+  it("shows a chat's project emoji and name when its project has an emoji", () => {
     mockConversations = [
       {
         ...makeConv("c1", "Project Chat"),
@@ -405,11 +405,11 @@ describe("ChatSidebarSection", () => {
 
     expect(screen.getByText("Project Chat")).toBeInTheDocument();
     expect(screen.getByText("Generic Project")).toBeInTheDocument();
-    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
     expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
   });
 
-  it("shows a chat's project icon and name without a fallback emoji when the project has no emoji", () => {
+  it("shows a chat's project folder icon and name when the project has no emoji", () => {
     mockConversations = [
       {
         ...makeConv("c1", "Project Chat"),

@@ -27,10 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tb", type=Path, required=True, help="TensorBoard event dir to publish")
-    parser.add_argument("--run-dir", type=Path, required=True, help="bench run dir (aggregate.json, report.md)")
+    parser.add_argument(
+        "--tb", type=Path, required=True, help="TensorBoard event dir to publish"
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="bench run dir (aggregate.json, report.md)",
+    )
     parser.add_argument("--tarball", type=Path, required=True, help="packaged run.tgz")
     args = parser.parse_args()
 
@@ -73,9 +82,14 @@ def _summarize(aggregate_path: Path) -> _Summary:
         logger.exception("could not parse %s", aggregate_path)
         return failed
     if total == 0 or passed == 0:
-        return _Summary(healthy=False, text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}")
+        return _Summary(
+            healthy=False,
+            text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}",
+        )
     rate = int(pass_rate * 100)
-    return _Summary(healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}")
+    return _Summary(
+        healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}"
+    )
 
 
 def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]:
@@ -91,8 +105,16 @@ def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]
     # report.md / aggregate.json from rendering as latin-1 (mojibake) when opened via the browser URL.
     for local, remote, content_type in (
         (tarball, f"runs/{run_id}/run.tgz", None),
-        (run_dir / "aggregate.json", f"runs/{run_id}/aggregate.json", "application/json; charset=utf-8"),
-        (run_dir / "report.md", f"runs/{run_id}/report.md", "text/plain; charset=utf-8"),
+        (
+            run_dir / "aggregate.json",
+            f"runs/{run_id}/aggregate.json",
+            "application/json; charset=utf-8",
+        ),
+        (
+            run_dir / "report.md",
+            f"runs/{run_id}/report.md",
+            "text/plain; charset=utf-8",
+        ),
     ):
         if not local.is_file():
             warnings.append(f"missing {local.name}")
@@ -110,7 +132,9 @@ def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]
     return warnings
 
 
-def _upload_one(bucket: storage.Bucket, local: Path, remote: str, *, content_type: str | None = None) -> bool:
+def _upload_one(
+    bucket: storage.Bucket, local: Path, remote: str, *, content_type: str | None = None
+) -> bool:
     try:
         bucket.blob(remote).upload_from_filename(str(local), content_type=content_type)
         logger.info("uploaded %s -> %s", local, remote)
@@ -120,7 +144,9 @@ def _upload_one(bucket: storage.Bucket, local: Path, remote: str, *, content_typ
         return False
 
 
-def _post_slack(summary: _Summary, warnings: list[str], *, links: dict[str, str]) -> None:
+def _post_slack(
+    summary: _Summary, warnings: list[str], *, links: dict[str, str]
+) -> None:
     webhook = os.environ.get("SLACK_BENCH_WEBHOOK_URL", "").strip()
     if not webhook:
         logger.info("no Slack webhook configured; skipping")
@@ -134,7 +160,9 @@ def _post_slack(summary: _Summary, warnings: list[str], *, links: dict[str, str]
     if run_url:
         text += f" · <{run_url}|run>"
     payload = json.dumps({"text": text}).encode()
-    request = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
+    request = urllib.request.Request(
+        webhook, data=payload, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             logger.info("posted Slack summary (%s)", response.status)

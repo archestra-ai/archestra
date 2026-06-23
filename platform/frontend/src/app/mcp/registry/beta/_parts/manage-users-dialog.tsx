@@ -75,7 +75,6 @@ import {
   setOAuthMcpServerId,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -979,10 +978,6 @@ function AgentConnectionsSection({
 }) {
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const dynamicToolAccessEnabled = useFeature("dynamicToolAccessEnabled");
-  // Gated behind the dynamic-tool-access feature flag. When off, servers
-  // resolve on behalf of the caller (the default) and the selector is hidden.
-  if (!dynamicToolAccessEnabled) return null;
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
   const pinnedConnection = pinnedId
     ? connections.find((connection) => connection.id === pinnedId)

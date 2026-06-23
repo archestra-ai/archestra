@@ -34,7 +34,9 @@ printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30,"matchesPrefi
 gcloud storage buckets update gs://archestra-bench-history --lifecycle-file=/tmp/lifecycle.json
 
 # The pod uploads results as the platform Deployment's service account (Workload Identity), so grant
-# THAT GCP SA object write. Resolve it from the k8s SA annotation:
+# THAT GCP SA object write. Resolve it from the k8s SA annotation (point kubectl at staging first):
+gcloud container clusters get-credentials archestra-staging \
+  --zone us-central1-a --project friendly-path-465518-r6
 PLATFORM_GSA=$(kubectl get sa archestra-platform -n archestra \
   -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}')
 gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \

@@ -253,7 +253,6 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
-        allowAdminOversight: true,
       }),
   );
 

@@ -114,8 +114,10 @@ function ProjectDetail() {
     );
   }
 
-  // A project admin overseeing someone else's project gets read-only access:
-  // no chat composer, no pin, no new schedules — but can edit/delete it.
+  // A project admin overseeing someone else's project can manage it (edit /
+  // delete / sharing) and read its files, but NOT its chats: no composer, no
+  // chats list, no pin, no new schedules. Existing schedules follow their
+  // scheduledTask permissions.
   const isAdminView = project.viewerRole === "admin";
   const canManage = project.viewerRole === "owner" || isAdminView;
   const canChat = !isAdminView;
@@ -219,7 +221,7 @@ function ProjectDetail() {
               projectId={project.id}
               canCreate={canChat}
             />
-            <ChatsList conversations={conversations ?? []} />
+            {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
         </PageLayout>
       </div>

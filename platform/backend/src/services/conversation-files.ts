@@ -1,11 +1,9 @@
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
 import {
   type ProjectFileScope,
   resolveProjectFileScope,
-  resolveProjectFileScopeForAdmin,
 } from "@/skills-sandbox/project-file-scope";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import type { ConversationFilesResponse } from "@/types/conversation-file";
@@ -29,13 +27,6 @@ class ConversationFilesService {
     organizationId: string;
     /** Who is asking; their project access gates the project files. */
     requestingUserId: string;
-    /**
-     * When the requester is a `project:admin` overseeing a foreign project,
-     * surface the project's files read-only even without share access. The
-     * route sets this on read-only GETs; the service still verifies the
-     * permission before bypassing the share check.
-     */
-    allowProjectAdminOversight?: boolean;
   }): Promise<ConversationFilesResponse> {
     const [artifacts, attachments, projectScope] = await Promise.all([
       FileModel.listMetadataByConversationId(params),
@@ -94,14 +85,12 @@ class ConversationFilesService {
     conversationId: string;
     organizationId: string;
     requestingUserId: string;
-    allowProjectAdminOversight?: boolean;
   }): Promise<{ files: ProjectFile[]; projectName: string | null }> {
     if (!config.projects.enabled) {
       return { files: [], projectName: null };
     }
 
     let scope: ProjectFileScope | null = null;
-    let deniedShareAccess = false;
     try {
       scope = await resolveProjectFileScope({
         conversationId: params.conversationId,
@@ -109,25 +98,9 @@ class ConversationFilesService {
         organizationId: params.organizationId,
       });
     } catch (error) {
-      // Fail-closed scope: the requester is in a project chat but lacks share
-      // access. A project admin may still read it for oversight (below).
+      // Fail-closed scope: a member who has since lost share access can't reach
+      // the project's files through a chat they still own.
       if (!(error instanceof SkillSandboxError)) throw error;
-      deniedShareAccess = true;
-    }
-
-    if (!scope && deniedShareAccess && params.allowProjectAdminOversight) {
-      const isProjectAdmin = await userHasPermission(
-        params.requestingUserId,
-        params.organizationId,
-        "project",
-        "admin",
-      );
-      if (isProjectAdmin) {
-        scope = await resolveProjectFileScopeForAdmin({
-          conversationId: params.conversationId,
-          organizationId: params.organizationId,
-        });
-      }
     }
 
     if (!scope) {

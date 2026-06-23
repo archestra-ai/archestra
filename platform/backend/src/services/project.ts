@@ -279,9 +279,10 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
-    allowAdminOversight?: boolean;
   }): Promise<ProjectConversationItem[]> {
-    const { project } = await this.requireViewable(params);
+    // Chats are NOT part of admin oversight — this stays share/owner-only, so a
+    // `project:admin` viewing a foreign project cannot list (or open) its chats.
+    const project = await this.requireReadable(params);
     const rows = await ProjectModel.listConversations(project.id);
     return rows.map((row) => ({
       ...row,

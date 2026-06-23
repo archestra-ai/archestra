@@ -4,12 +4,11 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-// The caller is a custom `project:admin` role (NOT a `scheduledTask:admin`) — the
-// only way to exercise the distinct project-admin schedule branch, since an org
-// admin would short-circuit on scheduledTask:admin and get full schedule access.
-// No session header is set, so the header-based scheduledTask:admin check
-// resolves false on its own; userHasPermission reads the role from the DB.
-describe("schedule trigger routes — project admin oversight", () => {
+// Schedule oversight rides the existing `scheduledTask:admin` — there is NO
+// separate `project:admin` schedule path. The caller here is a custom
+// `project:admin` role (NOT `scheduledTask:admin`); with no session header the
+// scheduledTask:admin check resolves false, so trigger-level ops must be denied.
+describe("schedule trigger routes — project:admin has no schedule access", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let projectId: string;
@@ -84,68 +83,30 @@ describe("schedule trigger routes — project admin oversight", () => {
     await app.close();
   });
 
-  test("project admin can read, edit, enable, disable, and delete an existing project trigger", async () => {
-    const read = await app.inject({
-      method: "GET",
-      url: `/api/schedule-triggers/${triggerId}`,
-    });
-    expect(read.statusCode).toBe(200);
-
-    const edit = await app.inject({
-      method: "PUT",
-      url: `/api/schedule-triggers/${triggerId}`,
-      payload: { name: "renamed-by-admin" },
-    });
-    expect(edit.statusCode).toBe(200);
-    expect(edit.json<{ name: string }>().name).toBe("renamed-by-admin");
-
-    const disable = await app.inject({
-      method: "POST",
-      url: `/api/schedule-triggers/${triggerId}/disable`,
-    });
-    expect(disable.statusCode).toBe(200);
-    const enable = await app.inject({
-      method: "POST",
-      url: `/api/schedule-triggers/${triggerId}/enable`,
-    });
-    expect(enable.statusCode).toBe(200);
-
-    // Delete shares the same authorization seam as enable/disable; assert the
-    // admin is authorized (not 403) and the trigger is actually removed. (The
-    // route's rowCount-based 200/404 is unreliable under PGlite, so verify the
-    // effect via a follow-up read rather than the delete's own status.)
-    const del = await app.inject({
-      method: "DELETE",
-      url: `/api/schedule-triggers/${triggerId}`,
-    });
-    expect(del.statusCode).not.toBe(403);
-    const afterDelete = await app.inject({
-      method: "GET",
-      url: `/api/schedule-triggers/${triggerId}`,
-    });
-    expect(afterDelete.statusCode).toBe(404);
-  });
-
-  test("project admin cannot run-now or create schedules", async () => {
-    const runNow = await app.inject({
-      method: "POST",
-      url: `/api/schedule-triggers/${triggerId}/run-now`,
-    });
-    expect(runNow.statusCode).toBe(403);
-
-    const create = await app.inject({
-      method: "POST",
-      url: "/api/schedule-triggers",
-      payload: {
-        name: "admin-made",
-        agentId,
-        projectId,
-        cronExpression: "0 0 * * *",
-        timezone: "UTC",
-        messageTemplate: "hello",
+  test("a project:admin (without scheduledTask:admin) cannot read or manage a project trigger", async () => {
+    for (const req of [
+      { method: "GET" as const, url: `/api/schedule-triggers/${triggerId}` },
+      {
+        method: "PUT" as const,
+        url: `/api/schedule-triggers/${triggerId}`,
+        payload: { name: "renamed-by-admin" },
       },
-    });
-    expect(create.statusCode).toBeGreaterThanOrEqual(400);
+      {
+        method: "POST" as const,
+        url: `/api/schedule-triggers/${triggerId}/enable`,
+      },
+      {
+        method: "POST" as const,
+        url: `/api/schedule-triggers/${triggerId}/disable`,
+      },
+      {
+        method: "POST" as const,
+        url: `/api/schedule-triggers/${triggerId}/run-now`,
+      },
+      { method: "DELETE" as const, url: `/api/schedule-triggers/${triggerId}` },
+    ]) {
+      expect((await app.inject(req)).statusCode).toBe(403);
+    }
   });
 
   test("a non-admin member cannot access another user's project trigger", async () => {

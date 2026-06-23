@@ -20,9 +20,9 @@ A project is private to its owner until shared. Sharing makes it visible to the 
 
 The projects list has a search box and a scope filter that mirrors the agents filter: All (your own plus those shared with you), Personal (yours), and Shared with me. Search matches a project's name and description.
 
-Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can read the chats and files read-only, edit or delete the project, and manage its existing scheduled tasks (edit, enable/disable, delete) — but cannot start a chat, create a schedule, or run one manually, since those would generate new activity in someone else's project. The Other users list is not grouped by pinned.
+Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can edit or delete the project, change its sharing, and view or download its files — but cannot see or start its chats: the Chats panel is hidden, and the project's conversations remain private to its members. The Other users list is not grouped by pinned.
 
-`project:admin` is an oversight scope that layers on top of the standard project, chat, and scheduled-task read/manage permissions rather than replacing them; the predefined Admin role already includes all of them. To build a custom oversight role, grant `project:admin` alongside those base permissions from [Access Control](./platform-access-control).
+`project:admin` governs the project and its files only; a foreign project's chats stay private. Managing that project's scheduled runs is not part of `project:admin` — it continues to ride the separate `scheduledTask:admin` permission. The predefined Admin role holds both (plus `scheduledTask:admin`), so an admin can both oversee projects and manage everyone's schedules. To build a custom oversight role, grant `project:admin` for project and file oversight, and add `scheduledTask:admin` if schedule management is also needed, from [Access Control](./platform-access-control).
 
 ## Files
 

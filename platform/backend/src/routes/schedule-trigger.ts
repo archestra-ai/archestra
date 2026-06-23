@@ -7,11 +7,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  hasAnyAgentTypeAdminPermission,
-  hasPermission,
-  userHasPermission,
-} from "@/auth";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -325,7 +321,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       return reply.send(trigger);
@@ -350,7 +345,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -428,8 +422,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: body.projectId,
           organizationId,
           userId: user.id,
-          // editing an existing trigger is allowed for a project admin
-          allowAdminOversight: true,
         });
       }
 
@@ -460,7 +452,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       const success = await ScheduleTriggerModel.delete(id);
@@ -489,7 +480,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -521,7 +511,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -605,7 +594,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       const [data, total] = await Promise.all([
@@ -651,7 +639,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       return reply.send(run);
@@ -674,10 +661,10 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId, headers }, reply) => {
-      // No `allowProjectAdmin` here: this path can MINT a run conversation when
-      // one isn't linked yet (createAndLinkRunConversation below), which is a
-      // chat-generating action a project admin must not perform on a foreign
-      // project. Owners and scheduledTask admins keep their existing access.
+      // Access is owner / scheduledTask:admin (findAccessibleRunOrThrow) — the
+      // same gate as every other schedule op. Loading the run conversation can
+      // MINT one when it isn't linked yet (createAndLinkRunConversation below),
+      // so it stays on that existing permission rather than any project scope.
       const run = await findAccessibleRunOrThrow({
         triggerId: id,
         runId,
@@ -704,12 +691,6 @@ async function findAccessibleTriggerOrThrow(params: {
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
-  /**
-   * Also admit a `project:admin` when the trigger belongs to a project (oversight
-   * — manage/read an existing project schedule). Off by default; callers set it
-   * for everything except run-now (which would mint a new chat).
-   */
-  allowProjectAdmin?: boolean;
 }): Promise<z.infer<typeof SelectScheduleTriggerSchema>> {
   const trigger = await ScheduleTriggerModel.findById(params.id);
   if (!trigger || trigger.organizationId !== params.organizationId) {
@@ -721,26 +702,14 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // scheduledTask:admin can access any trigger
+  // scheduledTask:admin can access any trigger (incl. ones inside a project).
+  // Project oversight of schedules rides this existing permission — there is no
+  // separate project:admin path here.
   const { success: isScheduledTaskAdmin } = await hasPermission(
     { scheduledTask: ["admin"] },
     params.headers,
   );
   if (isScheduledTaskAdmin) {
-    return trigger;
-  }
-
-  // project:admin may manage/read an existing PROJECT trigger for oversight.
-  if (
-    params.allowProjectAdmin &&
-    trigger.projectId &&
-    (await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "project",
-      "admin",
-    ))
-  ) {
     return trigger;
   }
 
@@ -753,14 +722,12 @@ async function findAccessibleRunOrThrow(params: {
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
-  allowProjectAdmin?: boolean;
 }): Promise<z.infer<typeof SelectScheduleTriggerRunSchema>> {
   await findAccessibleTriggerOrThrow({
     id: params.triggerId,
     userId: params.userId,
     organizationId: params.organizationId,
     headers: params.headers,
-    allowProjectAdmin: params.allowProjectAdmin,
   });
 
   const run = await ScheduleTriggerRunModel.findById(params.runId);

@@ -10,6 +10,7 @@ import {
   filterOptimisticToolCalls,
   getAppRenderVerb,
   hasTextPart,
+  humanizeToolLabel,
   identifyCompactToolGroups,
   isSupersededOwnedRender,
 } from "./chat-messages.utils";
@@ -242,6 +243,28 @@ describe("collectBrowserToolCallIds", () => {
   });
 });
 
+describe("humanizeToolLabel", () => {
+  it("humanizes server and tool from a prefixed name", () => {
+    expect(humanizeToolLabel("system__get-system-stats")).toBe(
+      "System / Get System Stats",
+    );
+  });
+
+  it("handles underscore-separated tool names", () => {
+    expect(humanizeToolLabel("weather__get_forecast")).toBe(
+      "Weather / Get Forecast",
+    );
+  });
+
+  it("splits camelCase tool names", () => {
+    expect(humanizeToolLabel("fs__listFiles")).toBe("Fs / List Files");
+  });
+
+  it("humanizes a bare tool name with no server prefix", () => {
+    expect(humanizeToolLabel("render_app")).toBe("Render App");
+  });
+});
+
 describe("deriveAppsFromMessages", () => {
   it("returns an app for a tool call whose output carries _meta.ui.resourceUri", () => {
     const messages = [
@@ -264,7 +287,7 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
+        label: "Pm / Show Board",
         appId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
@@ -303,7 +326,7 @@ describe("deriveAppsFromMessages", () => {
     ).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
+        label: "Pm / Show Board",
         appId: null,
         version: null,
         createdAt: 0,
@@ -343,7 +366,7 @@ describe("deriveAppsFromMessages", () => {
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({
       toolCallId: "call_1",
-      label: "show_board",
+      label: "Pm / Show Board",
     });
   });
 

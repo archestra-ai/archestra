@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { useApps } from "@/components/chat/apps-context";
 import {
   getAppRenderVerb,
+  humanizeToolLabel,
   isSupersededOwnedRender,
 } from "@/components/chat/chat-messages.utils";
 import {
@@ -154,9 +155,7 @@ export function McpAppSection({
   const { apps, selectedToolCallId, select, showInSidebar, portalTarget } =
     useApps();
 
-  const parsedToolName = parseFullToolName(toolName);
-  const shortToolName = parsedToolName.toolName ?? toolName;
-  const headerName = appName || shortToolName;
+  const headerName = appName || humanizeToolLabel(toolName);
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const sidebarHostingActive = portalTarget !== null;
   // Only the *selected* app moves to the sidebar: its iframe is portaled into

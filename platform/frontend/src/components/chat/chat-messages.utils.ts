@@ -12,6 +12,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
+import { startCase } from "lodash-es";
 import {
   getToolErrorText,
   isCompactEligible,
@@ -192,6 +193,18 @@ export function getAppRenderVerb(toolName: string): string | null {
  * toolCallId and version), so the panel defaults to the newest version. External
  * MCP-UI tool calls stay one entry per call — each is a distinct invocation.
  */
+
+/**
+ * Friendly label for an external MCP tool, derived from its full name.
+ * "system__get-system-stats" -> "System / Get System Stats"; "render_app" -> "Render App".
+ */
+export function humanizeToolLabel(fullToolName: string): string {
+  const { serverName, toolName } = parseFullToolName(fullToolName);
+  return serverName
+    ? `${startCase(serverName)} / ${startCase(toolName)}`
+    : startCase(toolName);
+}
+
 export function deriveAppsFromMessages(
   messages: UIMessage[],
   earlyToolUiStarts: Record<
@@ -231,10 +244,9 @@ export function deriveAppsFromMessages(
       if (!hasUiResource && !ownedApp) continue;
 
       seen.add(toolCallId);
-      const parsed = parseFullToolName(fullToolName);
       const entry: PanelApp = {
         toolCallId,
-        label: ownedApp?.appName ?? (parsed.toolName || fullToolName),
+        label: ownedApp?.appName ?? humanizeToolLabel(fullToolName),
         appId: ownedApp?.appId ?? null,
         version: ownedApp?.latestVersion ?? null,
         createdAt: createdAt ?? 0,

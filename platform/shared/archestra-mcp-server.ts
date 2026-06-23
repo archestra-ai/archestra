@@ -411,7 +411,7 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * Agent Skill tools — only assigned to agents once an org admin opts in via
- * the "Enable and create a new skill" empty-state action on /agents/skills
+ * the "Enable and create a new skill" empty-state action on /skills
  * (sets `organization.skillToolsEnabled`).
  */
 export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [

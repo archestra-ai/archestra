@@ -202,10 +202,7 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/triggers") &&
-          !pathname.startsWith("/agents/skills"),
+        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
         subItems: [
           {
             title: "Scheduled Tasks",
@@ -217,17 +214,16 @@ const contentNavGroups: NavGroup[] = [
       },
       {
         title: "Skills",
-        url: "/agents/skills",
+        url: "/skills",
         icon: Sparkles,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents/skills"),
+        customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
         title: "Messaging Channels",
-        url: "/agents/triggers",
+        url: "/messaging-channels",
         icon: Inbox,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents/triggers"),
+          pathname.startsWith("/messaging-channels"),
       },
     ],
   },
@@ -635,7 +631,7 @@ export function AppSidebar() {
             if (item.title === "Connect" && !showConnect) return false;
             // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
             // var. It's a top-level item now, so gate it here (not in subItems).
-            if (item.url === "/agents/skills" && !skillsEnabled) return false;
+            if (item.url === "/skills" && !skillsEnabled) return false;
             return true;
           })
           .map((item) =>

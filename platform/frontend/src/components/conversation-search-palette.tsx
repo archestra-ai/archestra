@@ -123,10 +123,11 @@ const navigationItems = [
   },
   {
     icon: Zap,
-    label: "Agent Triggers",
-    value: "agent-triggers",
-    keywords: "triggers automation webhooks ms teams",
-    href: "/agents/triggers/ms-teams",
+    label: "Messaging Channels",
+    value: "messaging-channels",
+    keywords:
+      "messaging channels triggers automation webhooks slack ms teams email a2a",
+    href: "/messaging-channels/ms-teams",
   },
   {
     icon: Shield,

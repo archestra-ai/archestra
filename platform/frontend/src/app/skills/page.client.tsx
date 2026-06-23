@@ -263,7 +263,7 @@ function SkillsList() {
         actionButton={
           !showEmptyState && (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/agents/skills/new">
+              <Link href="/skills/new">
                 <Plus className="h-4 w-4" />
                 Add new skill
               </Link>
@@ -427,7 +427,7 @@ function SkillsEmptyState() {
   const handleEnableAndCreate = useCallback(async () => {
     const result = await enableDefaults.mutateAsync();
     if (result) {
-      router.push("/agents/skills/new");
+      router.push("/skills/new");
     }
   }, [enableDefaults, router]);
 
@@ -451,7 +451,7 @@ function SkillsEmptyState() {
         <div className="flex items-center justify-center">
           {alreadyEnabled ? (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/agents/skills/new">
+              <Link href="/skills/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Add your first skill
               </Link>

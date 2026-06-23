@@ -48,7 +48,7 @@ export function AgentEmailDisabledMessage({
     <p className={className}>
       Email invocation is not enabled for this agent. Enable it in the{" "}
       <Link
-        href="/agents/triggers/email"
+        href="/messaging-channels/email"
         className="text-primary hover:underline"
       >
         agent trigger settings

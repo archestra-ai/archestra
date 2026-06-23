@@ -58,7 +58,7 @@ function NewSkillChooser() {
         fileCount: skill.fileCount,
       },
     });
-  const goToSkills = () => router.push("/agents/skills");
+  const goToSkills = () => router.push("/skills");
 
   const catalogSearch = useSearchSkillCatalog(search);
   const skillResults = catalogSearch.data?.results ?? [];
@@ -83,7 +83,7 @@ function NewSkillChooser() {
         description="Import from a GitHub repo or start from a blank template."
         actionButton={
           <Button variant="outline" asChild>
-            <Link href="/agents/skills">
+            <Link href="/skills">
               <ArrowLeft className="h-4 w-4" />
               Back to skills
             </Link>

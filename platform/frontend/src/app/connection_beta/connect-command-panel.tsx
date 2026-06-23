@@ -534,7 +534,7 @@ export function ConnectCommandPanel({
               {includeSkills ? (
                 <>
                   Install{" "}
-                  <ResourceLink href="/agents/skills">
+                  <ResourceLink href="/skills">
                     {totalSkills} shared skill{totalSkills === 1 ? "" : "s"}
                   </ResourceLink>
                 </>

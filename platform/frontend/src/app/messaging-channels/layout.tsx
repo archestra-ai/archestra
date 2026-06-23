@@ -67,7 +67,7 @@ export default function AgentTriggersLayout({
             active={msTeamsActive}
           />
         ),
-        href: "/agents/triggers/ms-teams",
+        href: "/messaging-channels/ms-teams",
         active: msTeamsActive,
       },
       {
@@ -78,12 +78,12 @@ export default function AgentTriggersLayout({
             active={slackActive}
           />
         ),
-        href: "/agents/triggers/slack",
+        href: "/messaging-channels/slack",
         active: slackActive,
       },
       {
         label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
-        href: "/agents/triggers/email",
+        href: "/messaging-channels/email",
         active: emailActive,
       },
     ];
@@ -93,7 +93,7 @@ export default function AgentTriggersLayout({
       ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
       {
         label: <TabLabel icon={Bot} label="A2A" active={a2aActive} />,
-        href: "/agents/triggers/a2a",
+        href: "/messaging-channels/a2a",
         active: a2aActive,
       },
     ];

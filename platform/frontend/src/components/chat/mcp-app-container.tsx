@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { useApps } from "@/components/chat/apps-context";
+import { type PanelApp, useApps } from "@/components/chat/apps-context";
 import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
@@ -24,6 +24,13 @@ import {
   McpAppRuntime,
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -139,7 +146,8 @@ export function McpAppSection({
   const effectiveResourceState =
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
-  const { selectedToolCallId, showInSidebar, portalTarget } = useApps();
+  const { apps, selectedToolCallId, select, showInSidebar, portalTarget } =
+    useApps();
 
   const parsedToolName = parseFullToolName(toolName);
   const shortToolName = parsedToolName.toolName ?? toolName;
@@ -246,7 +254,17 @@ export function McpAppSection({
         size={size}
         inlineCeiling={inlineCeiling}
         fillContainer={renderInSidebar}
-        appName={headerName}
+        appName={
+          renderInSidebar && apps.length > 1 ? (
+            <SidebarAppSwitcher
+              apps={apps}
+              value={selectedToolCallId}
+              onSelect={select}
+            />
+          ) : (
+            headerName
+          )
+        }
         onRefresh={handleRefresh}
         appId={appId}
         actions={liveActions}
@@ -319,4 +337,31 @@ export function McpAppSection({
   }
 
   return liveSurface;
+}
+
+/** App-switcher rendered in the panel card's header when the conversation has
+ * more than one app, so the user can switch which app the panel shows. */
+function SidebarAppSwitcher({
+  apps,
+  value,
+  onSelect,
+}: {
+  apps: PanelApp[];
+  value: string | null;
+  onSelect: (toolCallId: string) => void;
+}) {
+  return (
+    <Select value={value ?? undefined} onValueChange={onSelect}>
+      <SelectTrigger className="h-7 w-auto max-w-[220px] gap-1 border-none bg-transparent px-2 text-xs font-medium shadow-none focus:ring-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {apps.map((app) => (
+          <SelectItem key={app.toolCallId} value={app.toolCallId}>
+            <span className="truncate">{app.label}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }

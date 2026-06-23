@@ -56,7 +56,9 @@ export function McpAppCard({
   inlineCeiling: number;
   /** When true, the app fills its parent container (used when portaled to the panel). */
   fillContainer?: boolean;
-  appName?: string;
+  /** Center of the top bar. A string renders as the app name; a node (e.g. an
+   * app-switcher select used in the panel) renders as-is. */
+  appName?: React.ReactNode;
   /** Reload the iframe (bumps the runtime's reload nonce). Refresh icon hidden when absent. */
   onRefresh?: () => void;
   /**
@@ -148,9 +150,13 @@ export function McpAppCard({
             </Button>
           )}
         </div>
-        <span className="truncate text-center text-xs font-medium text-foreground">
-          {appName}
-        </span>
+        {typeof appName === "string" ? (
+          <span className="truncate text-center text-xs font-medium text-foreground">
+            {appName}
+          </span>
+        ) : (
+          <div className="flex min-w-0 justify-center">{appName}</div>
+        )}
         <div className="flex items-center justify-end gap-0.5">
           <McpAppActions
             appId={appId}

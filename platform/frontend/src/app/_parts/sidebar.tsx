@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 import {
   COMMUNITY_DOCS_URL,
@@ -593,7 +594,11 @@ export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
+// SPDX-SnippetEnd
   // GitHub stars are cosmetic and external, so defer them until after the
   // authenticated shell data has had a chance to load.
   const { data: starCount } = useGithubStars({

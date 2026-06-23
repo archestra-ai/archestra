@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { randomBytes } from "node:crypto";
 import {
   DEFAULT_ADMIN_EMAIL,
@@ -711,6 +712,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   fastify.route({
     method: "POST",
     url: "/api/auth/sign-in/sso",
@@ -739,6 +743,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send(response.body ? await response.text() : null);
     },
   });
+// SPDX-SnippetEnd
 
   // Existing auth handler for all other auth routes
   fastify.route({
@@ -821,6 +826,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default authRoutes;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function rewriteGoogleSsoResponseWithHostedDomainHint(params: {
   requestBody?: Record<string, unknown>;
   response: Response;
@@ -893,6 +901,7 @@ function appendHostedDomainHint(urlString: string, hostedDomainHint: string) {
   url.searchParams.set("hd", hostedDomainHint);
   return url.toString();
 }
+// SPDX-SnippetEnd
 
 function extractOAuthClientCredentials(params: {
   authorizationHeader: string | string[] | undefined;

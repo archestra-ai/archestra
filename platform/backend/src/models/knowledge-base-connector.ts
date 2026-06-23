@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
@@ -502,6 +503,9 @@ class KnowledgeBaseConnectorModel {
 
 export default KnowledgeBaseConnectorModel;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function buildVisibilityFilter(params: {
   canReadAll?: boolean;
   teamIds?: string[];
@@ -526,3 +530,4 @@ function buildVisibilityFilter(params: {
     OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
   )`;
 }
+// SPDX-SnippetEnd

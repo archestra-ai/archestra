@@ -28,8 +28,10 @@ export type FileListItem = {
 
 /**
  * The chat Files panel's list section, shared so every files surface (chat
- * sidebar, project pages) renders identically: titled group, icon per file
- * type, row click selects/previews, trailing download link.
+ * sidebar, project pages) renders identically: icon per file type, row click
+ * selects/previews, trailing download link. The title header is shown only when
+ * a `title` is given — callers omit it when the panel holds a single group, so
+ * a lone set of files needs no header to tell it apart.
  */
 export function FileSection({
   title,
@@ -38,7 +40,7 @@ export function FileSection({
   onSelect,
   renderActions,
 }: {
-  title: string;
+  title?: string;
   items: FileListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -51,9 +53,11 @@ export function FileSection({
   if (items.length === 0) return null;
   return (
     <div className="mb-4">
-      <p className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
+      {title && (
+        <p className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+      )}
       <div className="overflow-hidden rounded-md border">
         {items.map((item, i) => {
           const customActions = renderActions?.(item) ?? null;

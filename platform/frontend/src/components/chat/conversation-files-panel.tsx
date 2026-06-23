@@ -32,8 +32,15 @@ export function ConversationFilesPanel({
     hasArtifact ? "artifact" : null,
   );
 
-  const all = [...generated, ...attachments, ...projectFiles];
+  // This chat's own outputs and the project's files are one group ("Results");
+  // only attachments stand apart.
+  const results = [...generated, ...projectFiles];
+  const all = [...results, ...attachments];
   const selected = all.find((f) => f.id === selectedId) ?? null;
+
+  // The Results header only earns its place when attachments sit beside it; a
+  // lone group needs no label to tell it apart.
+  const showHeaders = results.length > 0 && attachments.length > 0;
 
   // download_file outputs only (the artifact has its own default handling).
   const generatedFileIds = generated
@@ -99,11 +106,7 @@ export function ConversationFilesPanel({
     printMarkdownElementAsPdf(artifactRef.current, "Artifact");
   const artifactSelected = selected?.source === "artifact";
 
-  if (
-    generated.length === 0 &&
-    attachments.length === 0 &&
-    projectFiles.length === 0
-  ) {
+  if (results.length === 0 && attachments.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
         <FileIcon className="mb-2 h-6 w-6 opacity-50" />
@@ -128,8 +131,8 @@ export function ConversationFilesPanel({
         )}
       >
         <FileSection
-          title="Results"
-          items={generated}
+          title={showHeaders ? "Results" : undefined}
+          items={results}
           selectedId={selectedId}
           onSelect={setSelectedId}
           renderActions={(item) =>
@@ -142,14 +145,8 @@ export function ConversationFilesPanel({
           }
         />
         <FileSection
-          title="Attachments"
+          title={showHeaders ? "Attachments" : undefined}
           items={attachments}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
-        <FileSection
-          title="Project files"
-          items={projectFiles}
           selectedId={selectedId}
           onSelect={setSelectedId}
         />

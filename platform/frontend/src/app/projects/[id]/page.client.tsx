@@ -351,7 +351,6 @@ function ProjectFilesSidebar({
                 )}
               >
                 <FileSection
-                  title="Results"
                   items={items}
                   selectedId={selectedId}
                   onSelect={setSelectedId}

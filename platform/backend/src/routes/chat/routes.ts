@@ -2849,6 +2849,10 @@ async function persistRegeneratedTurn(params: {
   await withDbTransaction(async (tx) => {
     await MessageModel.deleteByIds(staleIds, tx);
     await MessageModel.bulkCreate(newRows, tx);
+    // The stale turn we just replaced may have left a persisted chat-error row
+    // that renders as a stuck error banner. Clear it atomically so a successful
+    // regenerate doesn't leave a phantom error on screen.
+    await ConversationChatErrorModel.deleteByConversation(conversationId, tx);
   });
 
   logger.info(

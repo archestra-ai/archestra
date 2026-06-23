@@ -113,6 +113,43 @@ describe("ConversationChatErrorModel", () => {
     expect(result.code).toBe(ChatErrorCode.Unknown);
     expect(result.message).toContain('"a":1');
   });
+
+  test("deleteByConversation removes all rows for the conversation", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent();
+    const conversation = await makeConversation(agent.id);
+    const otherConversation = await makeConversation(agent.id);
+
+    const error: ChatErrorResponse = {
+      code: ChatErrorCode.ServerError,
+      message: "Boom",
+      isRetryable: true,
+    };
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: otherConversation.id,
+      error,
+    });
+
+    await ConversationChatErrorModel.deleteByConversation(conversation.id);
+
+    expect(
+      await ConversationChatErrorModel.findByConversation(conversation.id),
+    ).toEqual([]);
+    // Other conversations' errors are untouched.
+    expect(
+      await ConversationChatErrorModel.findByConversation(otherConversation.id),
+    ).toHaveLength(1);
+  });
 });
 
 async function createErrorAndRead(params: {

@@ -11,6 +11,10 @@ import type {
   InsertConversationChatError,
 } from "@/types";
 
+type DbExecutor =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 class ConversationChatErrorModel {
   static async create(
     data: InsertConversationChatError,
@@ -38,6 +42,23 @@ class ConversationChatErrorModel {
       ...chatError,
       error: normalizeChatErrorResponse(chatError.error),
     }));
+  }
+
+  /**
+   * Delete all persisted chat-error rows for a conversation. Accepts an
+   * optional executor so a regenerate can clear the stale error in the same
+   * transaction that replaces the trailing turn, keeping the timeline and the
+   * error banner consistent.
+   */
+  static async deleteByConversation(
+    conversationId: string,
+    executor: DbExecutor = db,
+  ): Promise<void> {
+    await executor
+      .delete(schema.conversationChatErrorsTable)
+      .where(
+        eq(schema.conversationChatErrorsTable.conversationId, conversationId),
+      );
   }
 }
 

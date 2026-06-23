@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@shared";
+import { SupportedProvidersSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -18,15 +18,21 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
+/** How a conversation was started: a person, or a scheduled trigger run. */
+export const ConversationOriginSchema = z.enum(["user", "schedule_trigger"]);
+export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
+  origin: ConversationOriginSchema,
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
+  origin: ConversationOriginSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
@@ -44,6 +50,10 @@ export const SelectConversationSchema = createSelectSchema(
     })
     .nullable(),
   share: ConversationShareSummarySchema,
+  /** Project name when the chat belongs to one; populated by list queries only. */
+  projectName: z.string().nullable().optional(),
+  /** Project icon (emoji or data URL) for the chat's project; list queries only. */
+  projectIcon: z.string().nullable().optional(),
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),

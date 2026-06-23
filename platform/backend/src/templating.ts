@@ -4,7 +4,7 @@ import {
   registerSsoTemplateHelpers,
   SYSTEM_PROMPT_HELPER_NAMES,
   type UserSystemPromptContext,
-} from "@shared";
+} from "@archestra/shared";
 import Handlebars from "handlebars";
 import logger from "@/logging";
 

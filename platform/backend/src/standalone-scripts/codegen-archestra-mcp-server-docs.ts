@@ -5,7 +5,7 @@ import {
   type ArchestraToolShortName,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolShortName,
-} from "@shared";
+} from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
@@ -33,6 +33,7 @@ enum ToolGroup {
   CodeExecution = "Code Execution",
   Skills = "Skills",
   SkillSandbox = "Skill Sandbox",
+  Apps = "Apps",
 }
 
 const groupOrder: Record<ToolGroup, number> = {
@@ -50,6 +51,7 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.CodeExecution]: 11,
   [ToolGroup.Skills]: 12,
   [ToolGroup.SkillSandbox]: 13,
+  [ToolGroup.Apps]: 14,
 };
 
 /**
@@ -133,16 +135,36 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   search_tools: ToolGroup.Meta,
   run_tool: ToolGroup.Meta,
 
-  run_python: ToolGroup.CodeExecution,
   list_skills: ToolGroup.Skills,
-  activate_skill: ToolGroup.Skills,
-  read_skill_file: ToolGroup.Skills,
+  load_skill: ToolGroup.Skills,
   create_skill: ToolGroup.Skills,
   update_skill: ToolGroup.Skills,
 
-  create_skill_sandbox: ToolGroup.SkillSandbox,
-  run_skill_command: ToolGroup.SkillSandbox,
-  get_skill_sandbox_artifact: ToolGroup.SkillSandbox,
+  run_command: ToolGroup.SkillSandbox,
+  download_file: ToolGroup.SkillSandbox,
+  upload_file: ToolGroup.SkillSandbox,
+  search_files: ToolGroup.SkillSandbox,
+  read_file: ToolGroup.SkillSandbox,
+  save_result: ToolGroup.SkillSandbox,
+  edit_file: ToolGroup.SkillSandbox,
+  delete_file: ToolGroup.SkillSandbox,
+
+  scaffold_app: ToolGroup.Apps,
+  refine_app: ToolGroup.Apps,
+  list_apps: ToolGroup.Apps,
+  render_app: ToolGroup.Apps,
+  read_app: ToolGroup.Apps,
+  edit_app: ToolGroup.Apps,
+  validate_app: ToolGroup.Apps,
+  publish_app: ToolGroup.Apps,
+  delete_app: ToolGroup.Apps,
+  preview_app_tool: ToolGroup.Apps,
+  get_app_diagnostics: ToolGroup.Apps,
+  app_data_get: ToolGroup.Apps,
+  app_data_set: ToolGroup.Apps,
+  app_data_list: ToolGroup.Apps,
+  app_data_delete: ToolGroup.Apps,
+  llm_complete: ToolGroup.Apps,
 };
 
 // === Script entry point ===

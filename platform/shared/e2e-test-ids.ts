@@ -7,8 +7,6 @@ export const E2eTestId = {
   OnboardingNextButton: "onboarding-next-button",
   OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
-  DefaultPasswordChangePrompt: "default-password-change-prompt",
-  DefaultPasswordChangeSkipButton: "default-password-change-skip-button",
   SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
   InviteEmailInput: "invite-email-input",
@@ -63,6 +61,7 @@ export const E2eTestId = {
   RevokeCredentialButton: "revoke-credential-button",
   ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
+  SelectEnvironment: "select-environment",
   AddCatalogItemButton: "add-catalog-item-button",
   ConfigureVaultFolderButton: "configure-vault-folder-button",
   ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
@@ -107,6 +106,8 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  ChatContextUsageTrigger: "chat-context-usage-trigger",
+  ChatContextUsagePanel: "chat-context-usage-panel",
   ChatApiKeySelectorTrigger: "chat-api-key-selector-trigger",
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector

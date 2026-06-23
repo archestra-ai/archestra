@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({
@@ -9,6 +10,22 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
+}));
+
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useCreateLlmProviderApiKey: () => ({
+    isPending: false,
+    mutateAsync: vi.fn().mockResolvedValue({ id: "key-1" }),
+  }),
+}));
+
+// Invoke onToken on click so we can exercise the connect → auto-resend flow.
+vi.mock("@/components/github-copilot-sign-in", () => ({
+  GithubCopilotSignIn: ({ onToken }: { onToken: (token: string) => void }) => (
+    <button type="button" onClick={() => onToken("gho_test")}>
+      Sign in with GitHub
+    </button>
+  ),
 }));
 
 import { InlineChatError } from "./inline-chat-error";
@@ -133,6 +150,69 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders an empty-response turn as a neutral outcome, not a destructive error", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "empty_response",
+              message:
+                "The model ended its turn without a reply. Rephrasing your message may help.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The model ended its turn without a reply. Rephrasing your message may help.",
+      ),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".bg-destructive\\/10")).toBeNull();
+    expect(container.querySelector(".bg-muted\\/30")).not.toBeNull();
+  });
+
+  it("renders an incomplete-tool-call turn as a retryable destructive error, not a neutral outcome", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "incomplete_tool_call",
+              message:
+                "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(container.querySelector(".bg-destructive\\/10")).not.toBeNull();
+    expect(container.querySelector(".bg-muted\\/30")).toBeNull();
+  });
+
+  it("keeps destructive styling for genuine errors", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "server_error",
+              message: "The AI provider is experiencing issues.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(container.querySelector(".bg-destructive\\/10")).not.toBeNull();
+  });
+
   it("falls back to the structured error message and conversation ID as session", () => {
     render(
       <InlineChatError
@@ -152,5 +232,59 @@ describe("InlineChatError", () => {
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
     expect(screen.getByText("conversation-12345678")).toBeInTheDocument();
     expect(screen.getByText("Session")).toBeInTheDocument();
+  });
+
+  it("renders a connect-account card for a per-user provider auth error", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "provider_auth_required",
+              message: "Connect your GitHub Copilot account to use this model.",
+              isRetryable: false,
+              authAction: {
+                provider: "github-copilot",
+                providerLabel: "GitHub Copilot",
+              },
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(screen.getByText("Connect GitHub Copilot")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Sign in with GitHub/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("auto-resends the original prompt after connecting the provider", async () => {
+    const onProviderConnected = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "provider_auth_required",
+              message: "Connect your GitHub Copilot account to use this model.",
+              isRetryable: false,
+              authAction: {
+                provider: "github-copilot",
+                providerLabel: "GitHub Copilot",
+              },
+            }),
+          )
+        }
+        onProviderConnected={onProviderConnected}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Sign in with GitHub/i }),
+    );
+
+    await waitFor(() => expect(onProviderConnected).toHaveBeenCalledTimes(1));
   });
 });

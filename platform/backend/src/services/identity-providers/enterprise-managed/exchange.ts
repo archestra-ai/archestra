@@ -1,4 +1,5 @@
-import { isEntraHostname, isOktaHostname } from "@shared";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { isEntraHostname, isOktaHostname } from "@archestra/shared";
 import logger from "@/logging";
 import {
   type ExternalIdentityProviderConfig,

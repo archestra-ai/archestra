@@ -46,6 +46,15 @@ let mockConversations: Array<{
   updatedAt: string;
   messages: unknown[];
   agent: { id: string; name: string };
+  projectName?: string | null;
+  projectIcon?: string | null;
+}> = [];
+
+let mockProjects: Array<{
+  id: string;
+  name: string;
+  icon: string | null;
+  pinnedAt: string | null;
 }> = [];
 
 vi.mock("@/lib/chat/chat.query", () => ({
@@ -66,9 +75,39 @@ vi.mock("@/lib/chat/chat.query", () => ({
   usePinConversation: () => ({ mutate: vi.fn() }),
 }));
 
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => true,
+}));
+
+vi.mock("@/lib/projects/projects.query", () => ({
+  useProjects: () => ({ data: mockProjects }),
+  usePinProject: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/components/agent-icon", () => ({
+  AgentIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="project-emoji">{icon}</span>
+  ),
+}));
+
 // Minimal sidebar UI mock - render children directly
 vi.mock("@/components/ui/sidebar", () => ({
   useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
+  SidebarGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SidebarGroupLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SidebarGroupContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SidebarMenu: ({ children }: { children: React.ReactNode }) => (
+    <ul>{children}</ul>
+  ),
+  SidebarMenuItem: ({ children }: { children: React.ReactNode }) => (
+    <li>{children}</li>
+  ),
   SidebarMenuButton: ({
     children,
     onClick,
@@ -157,6 +196,16 @@ vi.mock("@/lib/utils", () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
 }));
 
+vi.mock("lucide-react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("lucide-react")>();
+  return {
+    ...actual,
+    Folder: (props: React.SVGProps<SVGSVGElement>) => (
+      <svg aria-label="projects icon" {...props} />
+    ),
+  };
+});
+
 // Import after mocks
 import { ChatSidebarSection } from "./chat-sidebar-section";
 
@@ -176,14 +225,20 @@ function makeConv(
 }
 
 describe("ChatSidebarSection", () => {
+  const fadeIn = {
+    pending: () => true,
+    done: () => {},
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockConversations = [];
+    mockProjects = [];
   });
 
   it("does not render when no conversations exist", () => {
     mockConversations = [];
-    const { container } = render(<ChatSidebarSection />);
+    const { container } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -196,7 +251,7 @@ describe("ChatSidebarSection", () => {
       makeConv("c5", "Chat Five", { updatedAt: "2026-01-01T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     // Should show first 3 recent (conversations come pre-sorted from API)
     expect(screen.getByText("Chat One")).toBeInTheDocument();
@@ -211,7 +266,7 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("More")).toBeInTheDocument();
   });
 
-  it("shows only pinned chats when 3 are pinned (no recent unpinned)", () => {
+  it("shows pinned and recents in separate sections", () => {
     mockConversations = [
       makeConv("c1", "Pinned One", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -228,21 +283,25 @@ describe("ChatSidebarSection", () => {
       makeConv("c4", "Unpinned One", { updatedAt: "2026-01-02T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
-    // All 3 pinned should show
+    // Section labels
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("Recents")).toBeInTheDocument();
+
+    // Pinned chats are not capped by the recents budget — all 3 show...
     expect(screen.getByText("Pinned One")).toBeInTheDocument();
     expect(screen.getByText("Pinned Two")).toBeInTheDocument();
     expect(screen.getByText("Pinned Three")).toBeInTheDocument();
 
-    // Unpinned should NOT show (all 3 slots taken by pinned)
-    expect(screen.queryByText("Unpinned One")).not.toBeInTheDocument();
+    // ...and the unpinned chat still shows under Recents.
+    expect(screen.getByText("Unpinned One")).toBeInTheDocument();
 
-    // Should show "More" to open search
-    expect(screen.getByText("More")).toBeInTheDocument();
+    // Only 1 unpinned recent, so no "More".
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("fills remaining slots with recent chats when fewer than 3 are pinned", () => {
+  it("shows all recents when within the slot budget", () => {
     mockConversations = [
       makeConv("c1", "Pinned Chat", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -253,21 +312,19 @@ describe("ChatSidebarSection", () => {
       makeConv("c4", "Recent Three", { updatedAt: "2026-01-02T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
-    // 1 pinned + 2 recent = 3 total
+    // Pinned shows in its own section; all 3 recents fit the slot budget.
     expect(screen.getByText("Pinned Chat")).toBeInTheDocument();
     expect(screen.getByText("Recent One")).toBeInTheDocument();
     expect(screen.getByText("Recent Two")).toBeInTheDocument();
+    expect(screen.getByText("Recent Three")).toBeInTheDocument();
 
-    // 3rd recent should NOT show (only 2 remaining slots)
-    expect(screen.queryByText("Recent Three")).not.toBeInTheDocument();
-
-    // Should show "More" to open search
-    expect(screen.getByText("More")).toBeInTheDocument();
+    // 3 unpinned == slots, so no "More".
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("shows 2 pinned + 1 recent when 2 are pinned", () => {
+  it("does not render a Recents section or 'More' when all chats are pinned", () => {
     mockConversations = [
       makeConv("c1", "Pinned A", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -277,19 +334,17 @@ describe("ChatSidebarSection", () => {
         pinnedAt: "2026-01-04T00:00:00Z",
         updatedAt: "2026-01-04T00:00:00Z",
       }),
-      makeConv("c3", "Recent A", { updatedAt: "2026-01-03T00:00:00Z" }),
-      makeConv("c4", "Recent B", { updatedAt: "2026-01-02T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
-    // 2 pinned + 1 recent = 3 total
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
     expect(screen.getByText("Pinned A")).toBeInTheDocument();
     expect(screen.getByText("Pinned B")).toBeInTheDocument();
-    expect(screen.getByText("Recent A")).toBeInTheDocument();
 
-    // 2nd recent should not show
-    expect(screen.queryByText("Recent B")).not.toBeInTheDocument();
+    // No unpinned chats → no Recents section and no dangling "More".
+    expect(screen.queryByText("Recents")).not.toBeInTheDocument();
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
   it("does not show 'More' when total conversations fit in slots", () => {
@@ -297,9 +352,77 @@ describe("ChatSidebarSection", () => {
       makeConv("c1", "Only Chat", { updatedAt: "2026-01-01T00:00:00Z" }),
     ];
 
-    render(<ChatSidebarSection />);
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
+  });
+
+  it("shows a pinned project's emoji and name when an emoji is present", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Generic Project",
+        icon: "📌",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
+  });
+
+  it("shows the project folder icon and name when no emoji is set", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Generic Project",
+        icon: null,
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
+  });
+
+  it("shows a chat's project emoji and name when its project has an emoji", () => {
+    mockConversations = [
+      {
+        ...makeConv("c1", "Project Chat"),
+        projectName: "Generic Project",
+        projectIcon: "📌",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Project Chat")).toBeInTheDocument();
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
+  });
+
+  it("shows a chat's project folder icon and name when the project has no emoji", () => {
+    mockConversations = [
+      {
+        ...makeConv("c1", "Project Chat"),
+        projectName: "Generic Project",
+        projectIcon: null,
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Project Chat")).toBeInTheDocument();
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 });

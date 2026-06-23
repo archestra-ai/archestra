@@ -1,29 +1,36 @@
 import crypto from "node:crypto";
 import {
-  buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@shared";
+} from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
   NoOutputGeneratedError,
   stepCountIs,
-  streamText,
+  type streamText,
 } from "ai";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
+import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
-import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
-import { mapProviderError, ProviderError } from "@/routes/chat/errors";
 import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
+  REPEAT_CALL_TERMINATION_NOTICE,
+  repeatCeilingStopCondition,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
+import logger from "@/logging";
+import { AgentModel, McpServerModel } from "@/models";
+import {
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
+  mapProviderError,
+  ProviderError,
+} from "@/routes/chat/errors";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
@@ -72,13 +79,20 @@ export interface A2AExecuteParams {
    */
   parentDelegationChain?: string;
   /**
-   * Conversation ID for browser tab isolation.
-   * When provided (e.g., from chat delegation), sub-agents get their own tab
-   * keyed by (agentId, userId, conversationId).
-   * When not provided (direct A2A call), a unique execution ID is generated
-   * and cleaned up after execution.
+   * Id of a persisted `conversations` row, when the execution belongs to one
+   * (chat delegation). Tools may persist it as a foreign key — never pass a
+   * synthetic id here. When absent, the execution is headless and an isolation
+   * key scopes its per-execution state instead.
    */
   conversationId?: string;
+  /**
+   * Isolation scope inherited from the parent execution (headless
+   * delegation), so sub-agents share the parent's browser tab tracking and
+   * per-execution sandbox. When neither this nor `conversationId` is
+   * provided (root headless call), a unique key is generated and its state is
+   * cleaned up after execution.
+   */
+  isolationKey?: string;
   /** Optional cancellation signal propagated from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
@@ -140,11 +154,15 @@ export async function executeA2AMessage(
     scheduleTriggerRunId,
   } = params;
 
-  // Generate isolation key for browser tab isolation.
-  // When called from chat delegation, conversationId is provided.
-  // When called directly (A2A route), generate a unique execution ID.
-  const isDirectExecutionOutsideConversation = !params.conversationId;
-  const isolationKey = params.conversationId ?? crypto.randomUUID();
+  // Isolation key scoping per-execution state (browser tabs, MCP client
+  // cache, headless sandboxes). Chat delegation provides the conversation id;
+  // headless delegation inherits the parent execution's key; a root headless
+  // call generates one and cleans its state up after execution. Only
+  // `params.conversationId` may ever be persisted as a conversation id.
+  const isDirectExecutionOutsideConversation =
+    !params.conversationId && !params.isolationKey;
+  const isolationKey =
+    params.conversationId ?? params.isolationKey ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
@@ -174,29 +192,6 @@ export async function executeA2AMessage(
       userId,
     });
 
-  // Build system prompt from agent's systemPrompt field
-  let systemPrompt: string | undefined;
-
-  // Build template context only when prompts use Handlebars syntax
-  let promptContext: UserSystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt)) {
-    const [userDetails, userTeams] = await Promise.all([
-      UserModel.getById(userId),
-      TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
-    ]);
-    promptContext = buildUserSystemPromptContext({
-      userName: userDetails?.name ?? "",
-      userEmail: userDetails?.email ?? "",
-      userTeams: userTeams.map((t) => t.name),
-    });
-  }
-
-  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
-
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
-  }
-
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
   // Only track delegated calls — direct A2A calls have no browser preview.
@@ -205,8 +200,12 @@ export async function executeA2AMessage(
   }
 
   try {
+    // One tracker per run, shared between the breaker (records each call) and the
+    // stop condition below (terminates the run once repeats hit the ceiling).
+    const repeatTracker = new ToolCallRepeatTracker();
+
     // Fetch MCP tools for the agent (including delegation tools)
-    // Pass sessionId, delegationChain, and conversationId for browser tab isolation
+    // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
       agentName: agent.name,
       agentId: agent.id,
@@ -216,10 +215,20 @@ export async function executeA2AMessage(
       chatOpsThreadId,
       sessionId,
       delegationChain,
-      conversationId: isolationKey,
+      conversationId: params.conversationId,
+      isolationKey,
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      repeatTracker,
+    });
+
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools,
+      organizationId,
+      userId,
+      agentId: agent.id,
     });
 
     logger.info(
@@ -229,7 +238,7 @@ export async function executeA2AMessage(
         orgId: organizationId,
         toolCount: Object.keys(mcpTools).length,
         model: selectedModel,
-        hasSystemPrompt: !!systemPrompt,
+        hasSystemPrompt: !!agent.systemPrompt,
         isolationKey,
         isDirectExecutionOutsideConversation,
       },
@@ -253,90 +262,96 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Execute with AI SDK using streamText (required for long-running requests)
-    // We stream internally but collect the full result.
-    // Capture stream-level errors (e.g. API billing errors) via onError so we
-    // can surface the real cause instead of a generic NoOutputGeneratedError.
-
     // Build multimodal user content when image attachments are present
     const { content: userContent, skippedNote } = buildUserContent(
       message,
       attachments,
     );
 
-    let capturedStreamError: unknown;
-    const onError = ({ error }: { error: unknown }) => {
-      capturedStreamError = error;
+    // Execute via the shared agent-run primitive: it owns the streamText call
+    // and transparently recovers empty/abortive/context-length turns before any
+    // result is collected. We stream internally but collect the full result.
+    // Behavior change: A2A (and its scheduled/email/ChatOps/delegation callers)
+    // previously had no recovery — a clean-but-empty turn returned an empty
+    // success. It now retries and, on exhaustion, throws (mapped to a
+    // ProviderError below), matching the interactive chat path.
+    // Prefer the explicit `messages` param; otherwise use a `messages` user turn
+    // when images are present, falling back to a plain `prompt` for text only.
+    const baseConfig = {
+      model,
+      system: systemPrompt,
+      tools: mcpTools,
+      stopWhen: [
+        stepCountIs(MAX_AGENT_STEPS),
+        repeatCeilingStopCondition(repeatTracker),
+      ],
+      abortSignal,
     };
-
-    // By-pass "messages" param when it's provided
-    // Legacy:
-    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
-    const stream =
+    const config: Parameters<typeof streamText>[0] =
       params.messages !== undefined
-        ? streamText({
-            model,
-            system: systemPrompt,
-            messages: params.messages,
-            tools: mcpTools,
-            stopWhen: stepCountIs(500),
-            abortSignal,
-            onError,
-          })
+        ? { ...baseConfig, messages: params.messages }
         : userContent
-          ? streamText({
-              model,
-              system: systemPrompt,
+          ? {
+              ...baseConfig,
               messages: [{ role: "user" as const, content: userContent }],
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            })
-          : streamText({
-              model,
-              system: systemPrompt,
-              prompt: message + skippedNote,
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            });
+            }
+          : { ...baseConfig, prompt: message + skippedNote };
 
+    let finalText: string;
+    let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
+    let finishReason: Awaited<ReturnType<typeof streamText>["finishReason"]>;
     let responseUiMessage: UIMessage | undefined;
-    const uiMessageStreamConsumption = consumeReadableStream({
-      stream: stream.toUIMessageStream<UIMessage>({
-        originalMessages: params.originalUiMessages,
-        generateMessageId: () => crypto.randomUUID(),
-        onFinish: ({ responseMessage }) => {
-          responseUiMessage = responseMessage;
-        },
+    // Captures the committed attempt's stream-level error (e.g. API billing
+    // errors) so a generic NoOutputGeneratedError can surface the real cause.
+    let getCapturedStreamError: () => unknown = () => undefined;
+    try {
+      const runStream = await runAgentStream({
+        config,
+        recovery: { logContext: { agentId: agent.id, sessionId } },
+      });
+      const stream = runStream.result;
+      getCapturedStreamError = runStream.getCapturedStreamError;
+
+      const uiMessageStreamConsumption = consumeReadableStream({
+        stream: stream.toUIMessageStream<UIMessage>({
+          originalMessages: params.originalUiMessages,
+          generateMessageId: () => crypto.randomUUID(),
+          onFinish: ({ responseMessage }) => {
+            responseUiMessage = responseMessage;
+          },
+          onError: (error) => {
+            // a nonexistent-tool call is recoverable: the SDK already feeds the
+            // tool-error back to the model and continues the loop, so return the
+            // recovery text as the part's errorText instead of killing the run
+            const unavailableToolError = getUnavailableToolErrorDetails(error);
+            if (unavailableToolError) {
+              logger.info(
+                { agentId: agent.id, unavailableToolError },
+                "Returning unavailable tool error as tool-level error in A2A execution",
+              );
+              return formatUnavailableToolErrorDetails(unavailableToolError);
+            }
+            logger.error(
+              { agentId: agent.id, error },
+              "Error stream.toUIMessageStream when parsing A2A execution response",
+            );
+            throw error;
+          },
+        }),
         onError: (error) => {
           logger.error(
             { agentId: agent.id, error },
-            "Error stream.toUIMessageStream when parsing A2A execution response",
+            "Error consuming UI message stream for A2A execution response",
           );
           throw error;
         },
-      }),
-      onError: (error) => {
-        logger.error(
-          { agentId: agent.id, error },
-          "Error consuming UI message stream for A2A execution response",
-        );
-        throw error;
-      },
-    });
+      });
 
-    // Wait for the stream to complete and get the final text.
-    // When the underlying provider returns an error (e.g. 400 insufficient
-    // credits), the stream produces zero steps and the AI SDK throws
-    // NoOutputGeneratedError.  Re-throw with the real error message so callers
-    // (and ultimately end-users) see what actually went wrong.
-    let finalText: string;
-    let usage: Awaited<typeof stream.usage>;
-    let finishReason: Awaited<typeof stream.finishReason>;
-    try {
+      // Wait for the stream to complete and get the final text.
+      // When the underlying provider returns an error (e.g. 400 insufficient
+      // credits), the stream produces zero steps and the AI SDK throws
+      // NoOutputGeneratedError.  Re-throw with the real error message so callers
+      // (and ultimately end-users) see what actually went wrong.
       [finalText, usage, finishReason] = await Promise.all([
         stream.text,
         stream.usage,
@@ -350,10 +365,21 @@ export async function executeA2AMessage(
           "A2A execution failed: no response UIMessage generated",
         );
       }
+
+      // The repeat-call ceiling stops the loop on a tool-call step, so the model
+      // never took a turn to produce assistant text and `finalText` is empty.
+      // Headless callers read only `text`, so surface why the run ended.
+      if (
+        finalText.trim() === "" &&
+        repeatTracker.hasReachedTerminationCeiling()
+      ) {
+        finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      }
     } catch (streamError) {
+      const capturedStreamError = getCapturedStreamError();
       if (
         NoOutputGeneratedError.isInstance(streamError) &&
-        capturedStreamError
+        capturedStreamError !== undefined
       ) {
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
@@ -400,6 +426,12 @@ export async function executeA2AMessage(
 
     if (!isDirectExecutionOutsideConversation) {
       subagentExecutionTracker.decrement(isolationKey);
+    }
+
+    // The root headless execution owns its generated isolation scope; drop the
+    // per-execution sandbox state once the run (and its delegations) finished.
+    if (isDirectExecutionOutsideConversation) {
+      executionSandboxRegistry.release(isolationKey);
     }
   }
 }
@@ -558,8 +590,9 @@ async function cleanupBrowserTab(params: {
     );
   }
 
-  // For direct A2A calls (not delegated from chat), also close MCP client
-  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  // Root executions own the MCP client, so close it to free the cache slot.
+  // Delegated runs (chat or headless) share their parent's scope and keep the
+  // client alive for reuse.
   if (isDirectExecutionOutsideConversation) {
     try {
       closeChatMcpClient(agentId, userId, isolationKey);

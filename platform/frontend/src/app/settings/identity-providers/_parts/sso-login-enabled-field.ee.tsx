@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, type IdentityProviderFormValues } from "@shared";
+import { DocsPage, type IdentityProviderFormValues } from "@archestra/shared";
 import type { UseFormReturn } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,10 +36,12 @@ export function SsoLoginEnabledField({ form }: SsoLoginEnabledFieldProps) {
             />
           </FormControl>
           <div className="space-y-1 leading-none">
-            <FormLabel>Show on sign-in page</FormLabel>
+            <FormLabel>Use for Single Sign-On</FormLabel>
             <FormDescription>
-              Disable this for providers used only to link delegated tokens for
-              MCP tool authentication.{" "}
+              When disabled, this provider is hidden from the sign-in page and
+              role mapping and team sync never run for it. Disable this for
+              providers used only to link delegated tokens for MCP tool
+              authentication.{" "}
               <ExternalDocsLink href={linkedDownstreamIdpDocsUrl}>
                 Learn more
               </ExternalDocsLink>

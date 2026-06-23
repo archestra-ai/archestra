@@ -1,36 +1,17 @@
 "use client";
 
-import {
-  type ChatSkillMetadata,
-  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
-  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-} from "@shared";
-import {
-  AlertTriangle,
-  FilePlus2,
-  FileText,
-  Paperclip,
-  Sparkles,
-} from "lucide-react";
+import type { ChatSkillMetadata } from "@archestra/shared";
+import { AlertTriangle, FileText, Paperclip, Sparkles } from "lucide-react";
 import Link from "next/link";
-import {
-  type KeyboardEventHandler,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  EditableMessageEditor,
+  useMessageEditor,
+} from "@/components/chat/editable-message-editor";
 import { MessageActions } from "@/components/chat/message-actions";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
@@ -52,7 +33,6 @@ interface EditableUserMessageProps {
   isEditing: boolean;
   editDisabled?: boolean;
   attachments?: FileAttachment[];
-  canPromoteAttachments?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: ChatSkillMetadata;
   onStartEdit: (partKey: string, messageId: string) => void;
@@ -62,7 +42,6 @@ interface EditableUserMessageProps {
     partIndex: number,
     newText: string,
   ) => Promise<void>;
-  onPromoteAttachment?: (attachment: FileAttachment) => void;
 }
 
 export function EditableUserMessage({
@@ -73,53 +52,22 @@ export function EditableUserMessage({
   isEditing,
   editDisabled = false,
   attachments = [],
-  canPromoteAttachments = false,
   skill,
   onStartEdit,
   onCancelEdit,
   onSave,
-  onPromoteAttachment,
 }: EditableUserMessageProps) {
-  const [editedText, setEditedText] = useState(text);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isComposing, setIsComposing] = useState(false);
   const [isRegenerateConfirming, setIsRegenerateConfirming] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Reset edited text when entering edit mode
-  useEffect(() => {
-    if (isEditing) {
-      setEditedText(text);
-    }
-  }, [isEditing, text]);
-
-  // Auto-focus textarea and move caret to end when entering edit mode
-  useLayoutEffect(() => {
-    if (isEditing && textareaRef.current) {
-      const textarea = textareaRef.current;
-      textarea.focus();
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      textarea.scrollTop = textarea.scrollHeight;
-    }
-  }, [isEditing]);
+  const editor = useMessageEditor({
+    text,
+    isEditing,
+    onSave: (newText) => onSave(messageId, partIndex, newText),
+    onCancelEdit,
+  });
+  const { setIsSaving } = editor;
 
   const handleStartEdit = () => {
     onStartEdit(partKey, messageId);
-  };
-
-  const handleCancelEdit = () => {
-    setEditedText(text);
-    onCancelEdit();
-  };
-
-  const handleSaveEdit = async () => {
-    setIsSaving(true);
-    try {
-      await onSave(messageId, partIndex, editedText);
-      onCancelEdit();
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const handleRegenerateClick = async () => {
@@ -137,80 +85,27 @@ export function EditableUserMessage({
     }
   };
 
-  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter") {
-      // IME (Input Method Editor) check for international keyboards
-      if (isComposing || e.nativeEvent.isComposing) {
-        return;
-      }
-
-      // Allow Shift+Enter for new line
-      if (e.shiftKey) {
-        return;
-      }
-
-      e.preventDefault();
-
-      // Don't submit if saving or text is empty
-      if (isSaving || editedText.trim() === "") {
-        return;
-      }
-
-      handleSaveEdit();
-    } else if (e.key === "Escape") {
-      handleCancelEdit();
-    }
-  };
-
   if (isEditing) {
     return (
-      <Message from="user" className="relative pb-9">
-        <MessageContent
-          aria-label="Message content"
-          className="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-primary/90 ring-primary/50"
-        >
-          <div>
-            <Textarea
-              ref={textareaRef}
-              value={editedText}
-              onChange={(e) => setEditedText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              className="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none bg-primary text-sm"
-              disabled={isSaving}
-              placeholder="Edit your message..."
-            />
-            <div className="flex gap-2 py-3 justify-between items-start">
-              <div className="flex gap-2 items-start">
-                <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0 mt-0.5" />
-                <span className="text-xs text-primary-foreground/80">
-                  Editing this message will <strong>regenerate</strong> the
-                  response and <strong>remove</strong> all subsequent messages.
-                </span>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline-transparent"
-                  onClick={handleCancelEdit}
-                  disabled={isSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleSaveEdit}
-                  disabled={isSaving || editedText.trim() === ""}
-                >
-                  Send
-                </Button>
-              </div>
-            </div>
+      <EditableMessageEditor
+        from="user"
+        editor={editor}
+        outerClassName="relative pb-9"
+        contentClassName="max-w-[70%] min-w-[50%] px-3 py-0 pt-3 ring-2 !bg-primary/90 ring-primary/50"
+        textareaClassName="max-h-[160px] resize-none border-0 focus-visible:ring-0 shadow-none bg-primary text-sm"
+        placeholder="Edit your message..."
+        saveLabel="Send"
+        saveVariant="secondary"
+        banner={
+          <div className="flex gap-2 items-start">
+            <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0 mt-0.5" />
+            <span className="text-xs text-primary-foreground/80">
+              Editing this message will <strong>regenerate</strong> the response
+              and <strong>remove</strong> all subsequent messages.
+            </span>
           </div>
-        </MessageContent>
-      </Message>
+        }
+      />
     );
   }
 
@@ -280,32 +175,10 @@ export function EditableUserMessage({
                       })}
                   </span>
                 </Link>
-                {canPromoteAttachments &&
-                  isPromotableKnowledgeAttachment(attachment) && (
-                    <PromoteAttachmentButton
-                      variant="ghost"
-                      onClick={() => onPromoteAttachment?.(attachment)}
-                    />
-                  )}
               </div>
             ))}
           </div>
         )}
-        {imageAttachments.length > 0 &&
-          canPromoteAttachments &&
-          imageAttachments.some(isPromotableKnowledgeAttachment) && (
-            <div className="flex flex-wrap gap-1 justify-end mb-2">
-              {imageAttachments
-                .filter(isPromotableKnowledgeAttachment)
-                .map((attachment) => (
-                  <PromoteAttachmentButton
-                    key={`promote-${attachment.url}`}
-                    variant="outline"
-                    onClick={() => onPromoteAttachment?.(attachment)}
-                  />
-                ))}
-            </div>
-          )}
         {/* Text message bubble - only show if there's text */}
         {text && (
           <div className="group/user-message-text-row flex max-w-[80%] items-center justify-end gap-2">
@@ -331,48 +204,3 @@ export function EditableUserMessage({
     </Message>
   );
 }
-
-function PromoteAttachmentButton({
-  variant,
-  onClick,
-}: {
-  variant: "ghost" | "outline";
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          size="icon"
-          variant={variant}
-          className="h-7 w-7 shrink-0"
-          aria-label="Save to Knowledge"
-          onClick={onClick}
-        >
-          <FilePlus2 className="h-3.5 w-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">Save to Knowledge</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function isPromotableKnowledgeAttachment(attachment: FileAttachment): boolean {
-  if (!attachment.url.includes("/api/chat/attachments/")) return false;
-  const filename = attachment.filename?.toLowerCase() ?? "";
-  const extension = filename.split(".").pop();
-  if (extension && supportedKnowledgeFileExtensions.has(extension)) {
-    return true;
-  }
-
-  const mimeType = attachment.mediaType.split(";")[0].trim().toLowerCase();
-  return supportedKnowledgeFileMimeTypes.has(mimeType);
-}
-
-const supportedKnowledgeFileExtensions = new Set<string>(
-  SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
-);
-const supportedKnowledgeFileMimeTypes = new Set<string>(
-  SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-);

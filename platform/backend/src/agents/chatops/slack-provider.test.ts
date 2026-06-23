@@ -1,6 +1,32 @@
 import { createHmac } from "node:crypto";
-import { SLACK_REQUIRED_BOT_SCOPES, SLACK_SLASH_COMMANDS } from "@shared";
+import {
+  SLACK_REQUIRED_BOT_SCOPES,
+  SLACK_SLASH_COMMANDS,
+} from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+// In-memory stand-in for the distributed cache so the sticky-thread activation
+// gate (channel-activation.ts) works without starting the real cache manager.
+// The `mock`-prefixed name is referenced lazily inside the factory so it
+// survives vi.mock hoisting. Tests that need specific cache behavior still
+// vi.spyOn(cacheManager, ...) and restore afterwards.
+const mockCacheStore = new Map<string, unknown>();
+vi.mock("@/cache-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/cache-manager")>();
+  return {
+    ...actual,
+    cacheManager: {
+      async get(key: string) {
+        return mockCacheStore.get(key);
+      },
+      async set(key: string, value: unknown) {
+        mockCacheStore.set(key, value);
+        return true;
+      },
+    },
+  };
+});
+
 import { CacheKey, cacheManager } from "@/cache-manager";
 import SlackProvider from "./slack-provider";
 
@@ -253,6 +279,8 @@ describe("SlackProvider.parseWebhookNotification", () => {
     expect(result?.metadata).toEqual({
       eventType: "app_mention",
       channelType: "channel",
+      conversationType: "channel",
+      botMentioned: true,
     });
   });
 
@@ -436,6 +464,247 @@ describe("SlackProvider.parseWebhookNotification", () => {
     expect(result).not.toBeNull();
     expect(result?.senderId).toBe("unknown");
     expect(result?.senderName).toBe("Unknown User");
+  });
+
+  test("channel message metadata carries conversationType and botMentioned", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload();
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.conversationType).toBe("channel");
+    expect(result?.metadata?.botMentioned).toBe(true);
+  });
+
+  test("DM metadata carries conversationType=personal and botMentioned=false", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D12345",
+        channel_type: "im",
+        text: "no mention needed",
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.conversationType).toBe("personal");
+    expect(result?.metadata?.botMentioned).toBe(false);
+  });
+
+  test("group DM (mpim) maps to conversationType=groupChat", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload(
+      {},
+      {
+        channel: "G_MPIM",
+        channel_type: "mpim",
+        text: "<@UBOT123> hello",
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.conversationType).toBe("groupChat");
+  });
+
+  test("mentionedOthers resolves other mentioned users, excluding the bot", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — stub Slack client
+    (provider as any).client = {
+      users: {
+        info: vi.fn(async ({ user }: { user: string }) => ({
+          user: { real_name: user === "UALICE1" ? "Alice" : "Bob" },
+        })),
+      },
+    };
+    const payload = makeEventPayload(
+      {},
+      { text: "<@UBOT123> ask <@UALICE1> and <@UBOB22>" },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.mentionedOthers).toEqual(["Alice", "Bob"]);
+  });
+
+  test("mentionedOthers is omitted when only the bot is mentioned", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload();
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.mentionedOthers).toBeUndefined();
+  });
+
+  test("botName carries the bot's Slack display name when resolvable", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — stub Slack client
+    (provider as any).client = {
+      users: {
+        info: vi.fn(async () => ({ user: { real_name: "Ildestra" } })),
+      },
+    };
+    const payload = makeEventPayload();
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.botName).toBe("Ildestra");
+  });
+
+  test("botName is omitted when the display name can't be resolved", async () => {
+    // Default test client has no users.info — resolution falls back to the
+    // raw user id, which must NOT be surfaced as a display name.
+    const provider = createProvider();
+    const payload = makeEventPayload();
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result?.metadata?.botName).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// Sticky channel auto-reply (mention once, then reply to the whole thread)
+// =============================================================================
+
+describe("SlackProvider.parseWebhookNotification — sticky thread auto-reply", () => {
+  test("un-mentioned channel message in an inactive thread returns null", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "C_STICKY_INACTIVE",
+        text: "no mention here",
+        thread_ts: "5555555555.000001",
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).toBeNull();
+  });
+
+  test("after a mention activates a thread, un-mentioned replies in it are processed", async () => {
+    const provider = createProvider();
+    const threadTs = "5555555555.000002";
+
+    // First message @mentions the bot → activates the thread.
+    const mention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_STICKY_ACTIVE",
+          text: "<@UBOT123> help me",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mention).not.toBeNull();
+
+    // Follow-up in the same thread without a mention → still processed.
+    const followUp = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_STICKY_ACTIVE",
+          text: "and another thing",
+          ts: "5555555555.000003",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(followUp).not.toBeNull();
+    expect(followUp?.text).toBe("and another thing");
+  });
+
+  test("activation does not leak to other threads in the same channel", async () => {
+    const provider = createProvider();
+
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_STICKY_SCOPED",
+          text: "<@UBOT123> hi",
+          thread_ts: "5555555555.000004",
+        },
+      ),
+      {},
+    );
+
+    const otherThread = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_STICKY_SCOPED",
+          text: "unrelated message",
+          ts: "5555555555.000006",
+          thread_ts: "5555555555.000005",
+        },
+      ),
+      {},
+    );
+
+    expect(otherThread).toBeNull();
+  });
+
+  test("DMs are processed without any mention or activation", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: "D_STICKY_DM",
+        channel_type: "im",
+        text: "direct message, no mention",
+        thread_ts: undefined,
+      },
+    );
+
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("direct message, no mention");
+  });
+
+  test("top-level channel messages without a mention stay gated even after a thread was activated", async () => {
+    const provider = createProvider();
+
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_STICKY_TOPLEVEL",
+          text: "<@UBOT123> hi",
+          thread_ts: "5555555555.000007",
+        },
+      ),
+      {},
+    );
+
+    // New top-level message (its own ts becomes the thread id) → not active.
+    const topLevel = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_STICKY_TOPLEVEL",
+          text: "new top-level post",
+          ts: "5555555555.000008",
+        },
+      ),
+      {},
+    );
+
+    expect(topLevel).toBeNull();
   });
 });
 

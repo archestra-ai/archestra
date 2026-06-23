@@ -3,9 +3,11 @@ import {
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -182,6 +184,73 @@ class AgentModel {
   }
 
   /**
+   * Resolve each agent's configured LLM provider server-side so every viewer
+   * sees the agent's true provider — even one who can't access the owner's
+   * per-user key. Provider comes from the attached key, falling back to the
+   * pinned model's provider when only a model is set.
+   */
+  private static async populateResolvedLlm(agents: Agent[]): Promise<void> {
+    if (agents.length === 0) return;
+
+    const apiKeyIds = [
+      ...new Set(
+        agents
+          .map((a) => a.llmApiKeyId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const modelIds = [
+      ...new Set(
+        agents.map((a) => a.modelId).filter((id): id is string => id !== null),
+      ),
+    ];
+
+    const [keyRows, modelRows] = await Promise.all([
+      apiKeyIds.length > 0
+        ? db
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
+            .from(schema.llmProviderApiKeysTable)
+            .where(inArray(schema.llmProviderApiKeysTable.id, apiKeyIds))
+        : Promise.resolve([]),
+      modelIds.length > 0
+        ? db
+            .select({
+              id: schema.modelsTable.id,
+              provider: schema.modelsTable.provider,
+              // The human-facing model identifier (e.g. "gpt-4"), distinct from
+              // the row's UUID `id`.
+              modelName: schema.modelsTable.modelId,
+            })
+            .from(schema.modelsTable)
+            .where(inArray(schema.modelsTable.id, modelIds))
+        : Promise.resolve([]),
+    ]);
+
+    const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
+    const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
+    const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
+
+    for (const agent of agents) {
+      const provider: SupportedProvider | null =
+        (agent.llmApiKeyId ? keyProviderMap.get(agent.llmApiKeyId) : null) ??
+        (agent.modelId ? modelProviderMap.get(agent.modelId) : null) ??
+        null;
+      agent.resolvedLlmProvider = provider;
+      agent.llmProviderRequiresPerUserCredential = provider
+        ? providerRequiresPerUserCredential(provider)
+        : false;
+      // The model's human name, so a viewer who can't access the configured
+      // key still sees "gpt-4" rather than the model row's UUID.
+      agent.resolvedLlmModelName = agent.modelId
+        ? (modelNameMap.get(agent.modelId) ?? null)
+        : null;
+    }
+  }
+
+  /**
    * Populate connectorIds on agents via batch lookup from the junction table.
    */
   private static async populateConnectorIds(agents: Agent[]): Promise<void> {
@@ -214,6 +283,13 @@ class AgentModel {
         .from(schema.organizationsTable)
         .limit(1);
       organizationId = firstOrg?.id || "";
+    }
+
+    // Dynamic tool access only works through the search/run dispatch surface, so
+    // an all-tools agent must use progressive loading. Coerce here so every
+    // create path (UI, MCP tools, REST, import, clone) keeps the invariant.
+    if (agent.accessAllTools === true) {
+      agent.toolExposureMode = "search_and_run_only";
     }
 
     const slug =
@@ -270,6 +346,14 @@ class AgentModel {
     // Auto-assign Agent Skill tools if the org has opted in via the
     // "Enable and create a new skill" empty-state action.
     await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
+
+    // Auto-assign the MCP App management tools when the apps feature is
+    // enabled, so new agents can build and use apps without per-agent setup.
+    await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+
+    // Auto-assign the code-execution sandbox + Projects file tools based on the
+    // runtime/Projects flags, so new agents can use them without manual setup.
+    await ToolModel.assignSandboxToolsToAgent(createdAgent.id, organizationId);
 
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
@@ -431,6 +515,7 @@ class AgentModel {
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
+      AgentModel.populateResolvedLlm(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -512,6 +597,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
     return results;
@@ -598,6 +684,7 @@ class AgentModel {
       connectorIds: connectorMap.get(agent.id) || [],
       suggestedPrompts: suggestedPromptsMap.get(agent.id) || [],
     }));
+    await AgentModel.populateResolvedLlm(results);
     AgentModel.filterUnavailableKnowledgeTools(results);
 
     return results;
@@ -1019,6 +1106,7 @@ class AgentModel {
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
+      AgentModel.populateResolvedLlm(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1124,6 +1212,16 @@ class AgentModel {
     return result?.organizationId ?? null;
   }
 
+  static async findEnvironmentId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ environmentId: schema.agentsTable.environmentId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.environmentId ?? null;
+  }
+
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })
@@ -1132,6 +1230,23 @@ class AgentModel {
       .limit(1);
 
     return result?.identityProviderId ?? null;
+  }
+
+  /**
+   * Whether the agent's "access all tools" toggle is on — the per-agent opt-in
+   * for dynamic tool access via search_tools/run_tool. Lean read on the tool
+   * dispatch path; intentionally not cached so toggling the setting affects
+   * the next discovery/dispatch call. Defaults to false when the agent is
+   * missing or deleted.
+   */
+  static async getAccessAllTools(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ accessAllTools: schema.agentsTable.accessAllTools })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.accessAllTools ?? false;
   }
 
   static async findIdsByOrganizationId(
@@ -1369,6 +1484,7 @@ class AgentModel {
     await Promise.all([
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
+      AgentModel.populateResolvedLlm([result]),
     ]);
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
@@ -1427,6 +1543,7 @@ class AgentModel {
     await Promise.all([
       AgentModel.populateAuthorNames([result]),
       AgentModel.populateSuggestedPrompts([result]),
+      AgentModel.populateResolvedLlm([result]),
     ]);
 
     return result;
@@ -1492,6 +1609,34 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  /**
+   * The org's default agent of a given type (`isDefault = true`), if one exists.
+   * Used as the implicit fallback when a caller cannot pick an agent — e.g. a
+   * user without `agent:read` creating a scheduled task. Returns id-level
+   * metadata only; null when the org has no default of that type.
+   */
+  static async findDefaultByType(params: {
+    organizationId: string;
+    agentType: AgentType;
+  }): Promise<{ id: string; agentType: AgentType } | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, params.agentType),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   private static async getOrCreateDefaultByType(
@@ -1596,6 +1741,21 @@ class AgentModel {
 
     if (!existingAgent) {
       return null;
+    }
+
+    // Keep the all-tools ⇒ progressive-loading invariant on every update path:
+    // if the agent's effective accessAllTools is on, force search_and_run_only.
+    // Only mutate when there is an actual inconsistency to fix, so unrelated
+    // updates don't spuriously rewrite the exposure mode.
+    const effectiveAccessAllTools =
+      agent.accessAllTools ?? existingAgent.accessAllTools;
+    const effectiveToolExposureMode =
+      agent.toolExposureMode ?? existingAgent.toolExposureMode;
+    if (
+      effectiveAccessAllTools &&
+      effectiveToolExposureMode !== "search_and_run_only"
+    ) {
+      agent.toolExposureMode = "search_and_run_only";
     }
 
     // If setting isDefault to true, unset isDefault for other agents of the same type
@@ -2083,6 +2243,166 @@ class AgentModel {
   }
 
   /**
+   * Returns the user's personal LLM proxy for the given organization, or null
+   * if none exists.
+   */
+  static async getPersonalLlmProxy(
+    userId: string,
+    organizationId: string,
+  ): Promise<Agent | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isPersonalProxy, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    return (await AgentModel.findById(row.id, userId, true)) ?? null;
+  }
+
+  /**
+   * Ensures the user has a personal LLM proxy for the given organization.
+   * Idempotent: returns the existing one if present, otherwise creates one.
+   * Mirrors {@link AgentModel.ensurePersonalMcpGateway}.
+   */
+  static async ensurePersonalLlmProxy(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Agent> {
+    const { userId, organizationId } = params;
+
+    const existing = await AgentModel.getPersonalLlmProxy(
+      userId,
+      organizationId,
+    );
+    if (existing) return existing;
+
+    try {
+      const proxy = await AgentModel.create(
+        {
+          organizationId,
+          name: PERSONAL_LLM_PROXY_NAME,
+          agentType: "llm_proxy",
+          scope: "personal",
+          description: PERSONAL_LLM_PROXY_DESCRIPTION,
+          isPersonalProxy: true,
+        },
+        userId,
+      );
+
+      logger.info(
+        { userId, organizationId, agentId: proxy.id },
+        "Created personal LLM proxy",
+      );
+
+      return proxy;
+    } catch (error) {
+      // Lost a race against a concurrent caller — re-fetch the row that won.
+      if (
+        !isUniqueConstraintError(error) ||
+        !errorMentions(error, "agents_personal_proxy_per_member_idx")
+      ) {
+        throw error;
+      }
+
+      const winner = await AgentModel.getPersonalLlmProxy(
+        userId,
+        organizationId,
+      );
+      if (!winner) throw error;
+      return winner;
+    }
+  }
+
+  /**
+   * Bulk-creates personal LLM proxies for every member that lacks one. Mirrors
+   * {@link AgentModel.bulkBackfillPersonalMcpGateways}. Returns the number of
+   * rows actually inserted.
+   */
+  static async bulkBackfillPersonalLlmProxies(): Promise<number> {
+    const missing = await db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentsTable.authorId, schema.membersTable.userId),
+          eq(
+            schema.agentsTable.organizationId,
+            schema.membersTable.organizationId,
+          ),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isPersonalProxy, true),
+        ),
+      )
+      .where(isNull(schema.agentsTable.id));
+
+    if (missing.length === 0) return 0;
+
+    const rows = missing.map((m) => ({
+      organizationId: m.organizationId,
+      authorId: m.userId,
+      name: PERSONAL_LLM_PROXY_NAME,
+      description: PERSONAL_LLM_PROXY_DESCRIPTION,
+      agentType: "llm_proxy" as const,
+      scope: "personal" as const,
+      isPersonalProxy: true,
+    }));
+
+    const inserted = await db
+      .insert(schema.agentsTable)
+      .values(rows)
+      .onConflictDoNothing({
+        target: [
+          schema.agentsTable.organizationId,
+          schema.agentsTable.authorId,
+        ],
+        where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isPersonalProxy} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
+      })
+      .returning({ id: schema.agentsTable.id });
+
+    if (inserted.length < missing.length) {
+      logger.warn(
+        { missing: missing.length, inserted: inserted.length },
+        "bulkBackfillPersonalLlmProxies inserted fewer rows than expected",
+      );
+    }
+
+    return inserted.length;
+  }
+
+  /**
+   * Deletes every personal LLM proxy authored by the given user across all
+   * organizations. Called from the better-auth user.delete hook, mirroring
+   * {@link AgentModel.deletePersonalMcpGatewaysForUser}.
+   */
+  static async deletePersonalLlmProxiesForUser(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.agentsTable,
+      and(
+        eq(schema.agentsTable.authorId, userId),
+        eq(schema.agentsTable.agentType, "llm_proxy"),
+        eq(schema.agentsTable.isPersonalProxy, true),
+      ),
+    );
+  }
+
+  /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
    */
@@ -2140,6 +2460,7 @@ class AgentModel {
           description: sourceAgent.description,
           icon: sourceAgent.icon,
           toolExposureMode: sourceAgent.toolExposureMode,
+          accessAllTools: sourceAgent.accessAllTools,
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
@@ -2264,6 +2585,7 @@ class AgentModel {
       isDefault: row.isDefault,
       llmModel: row.llmModel ?? null,
       toolExposureMode: row.toolExposureMode,
+      accessAllTools: row.accessAllTools,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
@@ -2279,6 +2601,10 @@ class AgentModel {
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
+
+const PERSONAL_LLM_PROXY_NAME = "My Proxy";
+const PERSONAL_LLM_PROXY_DESCRIPTION =
+  "Your personal LLM proxy — route a client's model traffic through it for security policies and observability.";
 
 type AgentRecordStatus = "active" | "deleted";
 

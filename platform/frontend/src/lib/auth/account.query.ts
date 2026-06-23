@@ -1,12 +1,7 @@
-import { archestraApiSdk, DEFAULT_ADMIN_EMAIL } from "@shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  clearDefaultPasswordChangePending,
-  setDefaultPasswordChangePending,
-} from "./default-password-change";
 
 type AuthClientError = {
   message?: string;
@@ -72,44 +67,26 @@ export function useSignInWithEmailMutation() {
       password: string;
       callbackURL?: string;
     }) => {
-      const isDefaultAdminEmail =
-        params.email.trim().toLowerCase() === DEFAULT_ADMIN_EMAIL;
-      let defaultCredentialsEnabled = false;
-
-      if (isDefaultAdminEmail) {
-        const { data: defaultCredentialsStatus } =
-          await archestraApiSdk.getDefaultCredentialsStatus();
-        defaultCredentialsEnabled = defaultCredentialsStatus?.enabled ?? false;
-      }
-
-      if (defaultCredentialsEnabled) {
-        setDefaultPasswordChangePending();
-      } else {
-        clearDefaultPasswordChangePending();
-      }
-
       const { data, error } = await authClient.signIn.email({
         email: params.email,
         password: params.password,
       });
 
       if (error) {
-        clearDefaultPasswordChangePending();
         toast.error(getAuthErrorMessage(error, "Failed to sign in"));
         return null;
       }
 
-      await queryClient.invalidateQueries({ queryKey: authQueryKeys.all });
-
-      if (!isDefaultAdminEmail) {
-        return {
-          requiresDefaultPasswordChange: false,
-          redirectUrl: data?.url ?? params.callbackURL ?? "/",
-        };
+      // Accounts with 2FA enabled get a pending session that must be
+      // completed on /auth/two-factor before any redirect.
+      if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) {
+        return { twoFactorRedirect: true as const, redirectUrl: null };
       }
 
+      await queryClient.invalidateQueries({ queryKey: authQueryKeys.all });
+
       return {
-        requiresDefaultPasswordChange: defaultCredentialsEnabled,
+        twoFactorRedirect: false as const,
         redirectUrl: data?.url ?? params.callbackURL ?? "/",
       };
     },

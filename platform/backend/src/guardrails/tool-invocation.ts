@@ -3,8 +3,9 @@ import {
   isAgentTool,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { disabledToolsNotRunMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -38,6 +39,12 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   contextIsTrusted: boolean;
   externalAgentId?: string;
   enforceApprovalRequired?: boolean;
+  /**
+   * Pre-fetched set of the agent's assigned tool names. When supplied (e.g. the
+   * run_tool dispatch already computed it for its existence pre-check), it is
+   * reused instead of re-querying ToolModel.getAssignedToolNames here.
+   */
+  enabledToolNames?: Set<string>;
 }): Promise<PolicyBlockResult | null> {
   if (
     archestraMcpBranding.isToolName(params.toolName) ||
@@ -46,14 +53,14 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     return null;
   }
 
-  const [teamIds, organizationPolicy, enabledTools] = await Promise.all([
+  const [teamIds, organizationPolicy, enabledToolNames] = await Promise.all([
     AgentTeamModel.getTeamsForAgent(params.agentId),
     params.organizationId
       ? OrganizationModel.getById(params.organizationId).then(
           (organization) => organization?.globalToolPolicy,
         )
       : Promise.resolve(undefined),
-    ToolModel.getMcpToolsByAgent(params.agentId),
+    params.enabledToolNames ?? ToolModel.getAssignedToolNames(params.agentId),
   ]);
   const globalToolPolicy =
     organizationPolicy ?? (await getGlobalToolPolicy(params.agentId));
@@ -72,7 +79,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     params.agentId,
     policyContext,
     params.contextIsTrusted,
-    new Set(enabledTools.map((tool) => tool.name)),
+    enabledToolNames,
     globalToolPolicy,
   );
   if (policyBlock) {
@@ -164,8 +171,7 @@ export const evaluatePolicies = async (
 
   // If any tools were disabled, return distinct message about them
   if (disabledToolNames.length > 0) {
-    const toolList = disabledToolNames.join(", ");
-    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
+    const message = disabledToolsNotRunMessage(disabledToolNames);
     const reason = TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
     return {
       refusalMessage: message,

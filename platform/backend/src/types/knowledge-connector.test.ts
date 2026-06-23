@@ -5,8 +5,11 @@ import {
   GithubConfigSchema,
   GitlabConfigSchema,
   JiraConfigSchema,
+  PerforceCheckpointSchema,
+  PerforceConfigSchema,
   SalesforceCheckpointSchema,
   SalesforceConfigSchema,
+  WebCrawlerConfigSchema,
 } from "./knowledge-connector";
 
 describe("knowledge-connector schemas", () => {
@@ -232,6 +235,38 @@ describe("knowledge-connector schemas", () => {
     });
   });
 
+  describe("WebCrawlerConfigSchema URL validation", () => {
+    test("normalizes web crawler start URLs without a protocol", () => {
+      const result = WebCrawlerConfigSchema.parse({
+        type: "web_crawler",
+        startUrl: "docs.example.com:8443/guide",
+      });
+
+      expect(result.startUrl).toBe("https://docs.example.com:8443/guide");
+    });
+
+    test("rejects explicit non-HTTP schemes before protocol normalization", () => {
+      for (const startUrl of [
+        "data:text/html,<main>Docs</main>",
+        "javascript:alert(1)",
+        "vbscript:msgbox('x')",
+        "ftp://docs.example.com/guide",
+      ]) {
+        const result = WebCrawlerConfigSchema.safeParse({
+          type: "web_crawler",
+          startUrl,
+        });
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toBe(
+            "startUrl must use HTTP or HTTPS",
+          );
+        }
+      }
+    });
+  });
+
   describe("GitHub connector schema", () => {
     test("accepts GitHub App authentication config", () => {
       const result = GithubConfigSchema.parse({
@@ -239,12 +274,26 @@ describe("knowledge-connector schemas", () => {
         githubUrl: "api.github.com",
         owner: "test-org",
         authMethod: "github_app",
-        githubAppId: "12345",
-        githubAppInstallationId: "67890",
+        githubAppConfigId: "123e4567-e89b-12d3-a456-426614174000",
       });
 
       expect(result.authMethod).toBe("github_app");
+      expect(result.githubAppConfigId).toBe(
+        "123e4567-e89b-12d3-a456-426614174000",
+      );
       expect(result.githubUrl).toBe("https://api.github.com");
+    });
+
+    test("rejects a non-UUID githubAppConfigId", () => {
+      expect(() =>
+        GithubConfigSchema.parse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: "not-a-uuid",
+        }),
+      ).toThrow();
     });
 
     test("accepts repository file type filters", () => {
@@ -322,6 +371,112 @@ describe("knowledge-connector schemas", () => {
       });
       expect(result.objectCursorMap?.Account).toBe("2026-01-01T00:00:00.000Z");
       expect(result.objectCursorMap?.Contact).toBe("2026-01-01T01:00:00.000Z");
+    });
+  });
+
+  describe("Perforce connector schema", () => {
+    test("normalizes the REST API server URL like other connector URLs", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "perforce.example.com:8080/",
+        depotPaths: ["//depot/docs"],
+      });
+      // ensureProtocol + stripTrailingSlashes, matching connectorUrlSchema.
+      expect(result.serverUrl).toBe("https://perforce.example.com:8080");
+    });
+
+    test("normalizes trailing /... and slashes on depot paths", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs/...", "//depot/specs/", "//stream/main"],
+      });
+      expect(result.depotPaths).toEqual([
+        "//depot/docs",
+        "//depot/specs",
+        "//stream/main",
+      ]);
+    });
+
+    test("rejects depot paths with Perforce metacharacters or bad shape", () => {
+      for (const depotPath of [
+        "depot/docs",
+        "//depot/docs@123",
+        "//depot/docs#3",
+        "//depot/*/docs",
+        "//depot/%%1/docs",
+        "//depot/.../docs",
+        "//depot/has space",
+        "//",
+      ]) {
+        const result = PerforceConfigSchema.safeParse({
+          type: "perforce",
+          serverUrl: "https://perforce.example.com:8080",
+          depotPaths: [depotPath],
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    test("requires at least one depot path", () => {
+      const result = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test("accepts extension filters and rejects filespec-unsafe ones", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        fileTypes: [".md", "yaml"],
+      });
+      expect(ok.fileTypes).toEqual([".md", "yaml"]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        fileTypes: ["*.md"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("accepts exclude paths with the same normalization and rejection rules as depot paths", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs/generated/...", "//depot/docs/vendor/"],
+      });
+      expect(ok.excludePaths).toEqual([
+        "//depot/docs/generated",
+        "//depot/docs/vendor",
+      ]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs@123"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("parses sweep cursor fields in checkpoint schema", () => {
+      const result = PerforceCheckpointSchema.parse({
+        type: "perforce",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        lastChangelist: 100,
+        targetChangelist: 120,
+        filesOffset: 50,
+      });
+      expect(result.lastChangelist).toBe(100);
+      expect(result.targetChangelist).toBe(120);
+      expect(result.filesOffset).toBe(50);
     });
   });
 });

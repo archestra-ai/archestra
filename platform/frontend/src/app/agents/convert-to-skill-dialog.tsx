@@ -1,8 +1,7 @@
 import {
   type archestraApiTypes,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
-} from "@shared";
+  TOOL_LOAD_SKILL_FULL_NAME,
+} from "@archestra/shared";
 import { Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -29,10 +28,7 @@ type Agent = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
 // skill-runtime tools every skill-enabled agent carries; recommending them in a
 // skill is circular, so they are excluded (mirrors the backend transform).
-const SKILL_RUNTIME_TOOL_NAMES = new Set<string>([
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
-]);
+const SKILL_RUNTIME_TOOL_NAMES = new Set<string>([TOOL_LOAD_SKILL_FULL_NAME]);
 
 type ConvertToSkillDialogProps = {
   agent: Agent | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

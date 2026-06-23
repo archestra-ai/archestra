@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   Bot,
@@ -34,10 +34,12 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentHooksEditor } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -48,8 +50,10 @@ import {
 import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
+  type McpEnvConflict,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
@@ -57,14 +61,13 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -104,6 +107,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -129,13 +133,18 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import {
+  useIsKnowledgeBaseConfigured,
+  useKnowledgeBases,
+} from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -208,6 +217,10 @@ function getBuiltInAgentConfigForSave(params: {
     case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
       return {
         name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      };
+    case BUILT_IN_AGENT_IDS.APP_RUNTIME:
+      return {
+        name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
@@ -575,6 +588,10 @@ export function AgentDialog({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
+  const { data: canAccessKnowledgeSettings } = useHasPermissions({
+    knowledgeSettings: ["read"],
+  });
+  const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
@@ -587,6 +604,22 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
+  // Sandbox environment binding (internal agents only): the agent's code sandbox
+  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
+  // Gated behind a feature flag (off by default) until the per-env runtime ships.
+  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
+  // Environment isolation is always enforced by the backend for agents and MCP
+  // gateways, so the tool picker reflects it (cross-environment catalogs are
+  // shown disabled). When the org only has the Default environment, nothing is
+  // cross-environment, so this is a no-op.
+  const environmentScopingEnabled =
+    agentType === "agent" || agentType === "mcp_gateway";
+  const { data: environmentsData } = useEnvironments(
+    open && environmentScopingEnabled,
+  );
+  // Used to resolve the selected environment's name for the tools editor; the
+  // EnvironmentSelector owns its own list + permission filtering.
+  const environments = environmentsData?.environments ?? [];
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -606,15 +639,18 @@ export function AgentDialog({
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
-  const { data: teams } = useTeams({
-    enabled: open && !!canReadTeams,
-  });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
     [resource]: ["admin"],
   });
   const { data: isTeamAdmin } = useHasPermissions({
     [resource]: ["team-admin"],
+  });
+  // Picker offers all teams to a full resource-admin, otherwise only the teams
+  // the user belongs to (the only ones the backend lets a team-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: open && !!canReadTeams,
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
@@ -641,6 +677,12 @@ export function AgentDialog({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
+  const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
+    undefined,
+  );
+  const agentEnvironmentName =
+    environments.find((env) => env.id === environmentId)?.name ?? null;
+  const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -650,11 +692,31 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
+  // New agents default to implicit ("All tools") access; editing an existing
+  // agent overwrites this from its stored value.
+  const [accessAllTools, setAccessAllTools] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
+  // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
+  // environment. For agents it binds the code sandbox runtime (feature-flagged);
+  // for LLM proxies / MCP gateways it is an attribution label so their
+  // inference/usage falls under environment-scoped cost limits.
+  const supportsEnvironment =
+    isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
+  const environmentHelpText =
+    agentType === "llm_proxy"
+      ? "The environment this proxy's inference is attributed to, so its usage counts against that environment's cost limits."
+      : agentType === "mcp_gateway"
+        ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
+        : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
+  const agentHooksEnabled = useFeature("agentHooksEnabled");
+  // "All tools" (implicit access) is the default for new agents; admins can
+  // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
+  // scoped to tools/knowledge visible to the user AND in the agent's environment.
+  const allToolsMode = accessAllTools;
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -709,10 +771,12 @@ export function AgentDialog({
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
         setIdentityProviderId(agentData.identityProviderId ?? undefined);
+        setEnvironmentId(agentData.environmentId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
         setToolExposureMode(agentData.toolExposureMode ?? "full");
+        setAccessAllTools(agentData.accessAllTools ?? false);
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -741,11 +805,15 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(undefined);
+        setEnvironmentId(undefined);
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
+        // New agents default to "All tools" (implicit access); admins can switch
+        // to "Custom" (explicitly assigned tools).
         setToolExposureMode("full");
+        setAccessAllTools(true);
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -948,6 +1016,9 @@ export function AgentDialog({
               modelId: llmModel || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
+            ...(supportsEnvironment && {
+              environmentId: environmentId || null,
+            }),
             ...(supportsIdentityProvider && {
               identityProviderId: identityProviderId || null,
             }),
@@ -955,6 +1026,7 @@ export function AgentDialog({
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
               toolExposureMode,
+              accessAllTools,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -985,6 +1057,9 @@ export function AgentDialog({
             modelId: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
+          ...(supportsEnvironment && {
+            environmentId: environmentId || null,
+          }),
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
@@ -992,6 +1067,7 @@ export function AgentDialog({
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
             toolExposureMode,
+            accessAllTools,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1069,6 +1145,7 @@ export function AgentDialog({
     llmApiKeyId,
     llmModel,
     identityProviderId,
+    environmentId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1093,6 +1170,8 @@ export function AgentDialog({
     passthroughHeaders,
     deleteAgent,
     toolExposureMode,
+    accessAllTools,
+    supportsEnvironment,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1201,6 +1280,22 @@ export function AgentDialog({
                         className="min-h-[60px]"
                       />
                     </div>
+                  )}
+
+                  {/* Environment assignment (below description).
+                      - Agent: binds the agent's code sandbox to a per-environment
+                        Dagger engine + egress policy (feature-flagged).
+                      - LLM proxy / MCP gateway: assigns the deployment environment
+                        so its usage falls under environment-scoped cost limits.
+                      Hidden when only the default environment is available. */}
+                  {((isInternalAgent && agentEnvironmentsEnabled) ||
+                    agentType === "llm_proxy" ||
+                    agentType === "mcp_gateway") && (
+                    <EnvironmentSelector
+                      value={environmentId ?? null}
+                      onChange={setEnvironmentId}
+                      helpText={environmentHelpText}
+                    />
                   )}
 
                   {/* Built-in agent config */}
@@ -1455,26 +1550,353 @@ export function AgentDialog({
                 >
                   <h3 className="text-sm font-semibold">Capabilities</h3>
 
-                  {/* Tools */}
+                  {/* Tools & knowledge */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label>Tools ({selectedToolsCount})</Label>
-                    </div>
-                    {!agent && selectedToolsCount > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Some recommended {appName} MCP tools are pre-selected
-                        for you
-                      </p>
+                    <Label>Tools & Knowledge Sources</Label>
+                    <Tabs
+                      value={allToolsMode ? "all" : "specific"}
+                      onValueChange={(value) => {
+                        const all = value === "all";
+                        setAccessAllTools(all);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (all) {
+                          setToolExposureMode("search_and_run_only");
+                        }
+                      }}
+                    >
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="specific">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    {allToolsMode && (
+                      <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          Every MCP tool and knowledge source the chatting user
+                          can access, in this agent's environment
+                        </li>
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          Connects per the server's policy — on behalf of the
+                          chatting user by default
+                        </li>
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          <span>
+                            Discovered on demand — the catalog never burns
+                            context tokens.{" "}
+                            <ExternalDocsLink
+                              href={toolExposureDocsUrl}
+                              className="underline"
+                              showIcon={false}
+                            >
+                              Learn more
+                            </ExternalDocsLink>
+                          </span>
+                        </li>
+                      </ul>
                     )}
-                    <AgentToolsEditor
-                      ref={agentToolsEditorRef}
-                      agentId={agent?.id}
-                      assignmentScope={scope}
-                      assignmentTeamIds={assignedTeamIds}
-                      onSelectedCountChange={setSelectedToolsCount}
-                      openComboboxOnMount={openToolsCombobox}
-                    />
+                    {/* Kept mounted while hidden so pending selections and the
+                        save-time ref survive switching to "All". */}
+                    <div className={cn("space-y-3", allToolsMode && "hidden")}>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Tools ({selectedToolsCount})
+                        </p>
+                        {((!agent && selectedToolsCount > 0) ||
+                          environmentScopingEnabled) && (
+                          <p className="text-xs text-muted-foreground">
+                            {!agent && selectedToolsCount > 0 && (
+                              <>
+                                Some recommended {appName} MCP tools are
+                                pre-selected for you.{" "}
+                              </>
+                            )}
+                            {environmentScopingEnabled && (
+                              <>
+                                MCP servers are filtered to the selected
+                                environment
+                                {agentEnvironmentName
+                                  ? ` ("${agentEnvironmentName}")`
+                                  : " (Default)"}
+                                .
+                              </>
+                            )}
+                          </p>
+                        )}
+                        <AgentToolsEditor
+                          ref={agentToolsEditorRef}
+                          agentId={agent?.id}
+                          assignmentScope={scope}
+                          assignmentTeamIds={assignedTeamIds}
+                          onSelectedCountChange={setSelectedToolsCount}
+                          environmentScopingEnabled={environmentScopingEnabled}
+                          agentEnvironmentId={environmentId ?? null}
+                          agentEnvironmentName={agentEnvironmentName}
+                          onConflictsChange={setMcpEnvConflicts}
+                          openComboboxOnMount={openToolsCombobox}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Knowledge Sources
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Assigning a source gives this{" "}
+                          {agentType === "mcp_gateway" ? "gateway" : "agent"} a{" "}
+                          <code>query_knowledge_sources</code> tool to search
+                          it.
+                        </p>
+                        {!isKnowledgeConfigured ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              Knowledge not configured
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              Configure embedding and reranking to use knowledge
+                              sources.
+                              {canAccessKnowledgeSettings && (
+                                <>
+                                  {" "}
+                                  <Link
+                                    href="/settings/knowledge"
+                                    className="underline underline-offset-2"
+                                  >
+                                    Configure knowledge
+                                  </Link>
+                                </>
+                              )}
+                            </p>
+                          </>
+                        ) : knowledgeBases.length === 0 &&
+                          connectors.length === 0 ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              No knowledge sources available
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              No knowledge bases or connectors yet.{" "}
+                              <Link
+                                href="/knowledge/connectors"
+                                className="underline underline-offset-2"
+                              >
+                                Add a connector
+                              </Link>
+                              .
+                            </p>
+                          </>
+                        ) : (
+                          <Popover modal>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-between font-normal"
+                              >
+                                {(() => {
+                                  const totalSelected =
+                                    knowledgeBaseIds.length +
+                                    connectorIds.length;
+                                  return totalSelected === 0
+                                    ? "Select connectors or knowledge bases"
+                                    : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                                })()}
+                                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-96 p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search knowledge sources..." />
+                                <CommandList>
+                                  <CommandEmpty>
+                                    No knowledge sources found.
+                                  </CommandEmpty>
+                                  {knowledgeBases.length > 0 && (
+                                    <CommandGroup heading="Knowledge Bases">
+                                      {knowledgeBases.map((kb) => {
+                                        const isSelected =
+                                          knowledgeBaseIds.includes(kb.id);
+                                        const connectorTypes = [
+                                          ...new Set<string>(
+                                            kb.connectors?.map(
+                                              (c) => c.connectorType,
+                                            ) ?? [],
+                                          ),
+                                        ];
+                                        return (
+                                          <CommandItem
+                                            key={kb.id}
+                                            value={kb.name}
+                                            className="data-[selected=true]:bg-transparent"
+                                            onSelect={() => {
+                                              setKnowledgeBaseIds((prev) =>
+                                                isSelected
+                                                  ? prev.filter(
+                                                      (id) => id !== kb.id,
+                                                    )
+                                                  : [...prev, kb.id],
+                                              );
+                                            }}
+                                          >
+                                            <CheckIcon
+                                              className={cn(
+                                                "mr-2 h-4 w-4 shrink-0",
+                                                isSelected
+                                                  ? "opacity-100"
+                                                  : "opacity-0",
+                                              )}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate text-sm">
+                                                {kb.name}
+                                              </div>
+                                              {kb.description && (
+                                                <div className="truncate text-xs text-muted-foreground">
+                                                  {kb.description}
+                                                </div>
+                                              )}
+                                            </div>
+                                            {connectorTypes.length > 0 && (
+                                              <OverlappedIcons
+                                                icons={connectorTypes.map(
+                                                  (type: string) => ({
+                                                    key: type,
+                                                    icon: (
+                                                      <ConnectorTypeIcon
+                                                        type={type}
+                                                        className="h-full w-full"
+                                                      />
+                                                    ),
+                                                    tooltip: type,
+                                                  }),
+                                                )}
+                                                maxVisible={3}
+                                                size="sm"
+                                                className="ml-2"
+                                              />
+                                            )}
+                                          </CommandItem>
+                                        );
+                                      })}
+                                    </CommandGroup>
+                                  )}
+                                  {connectors.length > 0 && (
+                                    <CommandGroup heading="Connectors">
+                                      {connectors.map((connector) => {
+                                        const isSelected =
+                                          connectorIds.includes(connector.id);
+                                        // Environment isolation: a connector in
+                                        // another environment can't be used by
+                                        // this agent, so it's shown disabled.
+                                        const isEnvIncompatible =
+                                          environmentScopingEnabled &&
+                                          (connector.environmentId ?? null) !==
+                                            (environmentId ?? null);
+                                        return (
+                                          <CommandItem
+                                            key={connector.id}
+                                            value={connector.name}
+                                            disabled={isEnvIncompatible}
+                                            className="data-[selected=true]:bg-transparent"
+                                            onSelect={() => {
+                                              if (isEnvIncompatible) return;
+                                              setConnectorIds((prev) =>
+                                                isSelected
+                                                  ? prev.filter(
+                                                      (id) =>
+                                                        id !== connector.id,
+                                                    )
+                                                  : [...prev, connector.id],
+                                              );
+                                            }}
+                                          >
+                                            <CheckIcon
+                                              className={cn(
+                                                "mr-2 h-4 w-4 shrink-0",
+                                                isSelected
+                                                  ? "opacity-100"
+                                                  : "opacity-0",
+                                              )}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate text-sm">
+                                                {connector.name}
+                                              </div>
+                                              <div className="truncate text-xs text-muted-foreground">
+                                                {isEnvIncompatible
+                                                  ? "Different environment"
+                                                  : connector.description || (
+                                                      <span className="capitalize">
+                                                        {
+                                                          connector.connectorType
+                                                        }
+                                                      </span>
+                                                    )}
+                                              </div>
+                                            </div>
+                                            <div className="ml-2 shrink-0">
+                                              <ConnectorTypeIcon
+                                                type={connector.connectorType}
+                                                className="h-4 w-4"
+                                              />
+                                            </div>
+                                          </CommandItem>
+                                        );
+                                      })}
+                                    </CommandGroup>
+                                  )}
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Progressive loading is only a choice for custom tools —
+                      "All" requires the search/run dispatch surface. */}
+                  {!allToolsMode && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="load-tools-when-needed">
+                          Load tools progressively when needed
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Exposes <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code>{" "}
+                          and <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> instead of
+                          the full list.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                      </div>
+                      <Switch
+                        id="load-tools-when-needed"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                      />
+                    </div>
+                  )}
 
                   {/* Subagents */}
                   <div className="space-y-2">
@@ -1488,207 +1910,15 @@ export function AgentDialog({
                       currentAgentId={agent?.id}
                     />
                   </div>
-
-                  <div className="rounded-md border p-3 space-y-2">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="load-tools-when-needed"
-                        checked={toolExposureMode === "search_and_run_only"}
-                        onCheckedChange={(checked) =>
-                          setToolExposureMode(
-                            checked ? "search_and_run_only" : "full",
-                          )
-                        }
-                        className="mt-0.5"
-                      />
-                      <div className="space-y-1">
-                        <Label
-                          htmlFor="load-tools-when-needed"
-                          className="font-medium"
-                        >
-                          Load tools when needed
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Keep the initial tool list small. Assigned tools can
-                          still be found with{" "}
-                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and run
-                          with <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.{" "}
-                          <ExternalDocsLink
-                            href={toolExposureDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Knowledge Sources */}
-                  {(knowledgeBases.length > 0 || connectors.length > 0) && (
-                    <div className="space-y-2">
-                      <Label>Knowledge Sources</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Choose which knowledge this{" "}
-                        {(agentTypeDisplayName[agentType] || "agent").replace(
-                          /^./,
-                          (c) => c.toUpperCase(),
-                        )}{" "}
-                        can draw from when responding
-                      </p>
-                      <Popover modal>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-between font-normal"
-                          >
-                            {(() => {
-                              const totalSelected =
-                                knowledgeBaseIds.length + connectorIds.length;
-                              return totalSelected === 0
-                                ? "Select connectors or knowledge bases"
-                                : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
-                            })()}
-                            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-96 p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search knowledge sources..." />
-                            <CommandList>
-                              <CommandEmpty>
-                                No knowledge sources found.
-                              </CommandEmpty>
-                              {knowledgeBases.length > 0 && (
-                                <CommandGroup heading="Knowledge Bases">
-                                  {knowledgeBases.map((kb) => {
-                                    const isSelected =
-                                      knowledgeBaseIds.includes(kb.id);
-                                    const connectorTypes = [
-                                      ...new Set<string>(
-                                        kb.connectors?.map(
-                                          (c) => c.connectorType,
-                                        ) ?? [],
-                                      ),
-                                    ];
-                                    return (
-                                      <CommandItem
-                                        key={kb.id}
-                                        value={kb.name}
-                                        className="data-[selected=true]:bg-transparent"
-                                        onSelect={() => {
-                                          setKnowledgeBaseIds((prev) =>
-                                            isSelected
-                                              ? prev.filter(
-                                                  (id) => id !== kb.id,
-                                                )
-                                              : [...prev, kb.id],
-                                          );
-                                        }}
-                                      >
-                                        <CheckIcon
-                                          className={cn(
-                                            "mr-2 h-4 w-4 shrink-0",
-                                            isSelected
-                                              ? "opacity-100"
-                                              : "opacity-0",
-                                          )}
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="truncate text-sm">
-                                            {kb.name}
-                                          </div>
-                                          {kb.description && (
-                                            <div className="truncate text-xs text-muted-foreground">
-                                              {kb.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {connectorTypes.length > 0 && (
-                                          <OverlappedIcons
-                                            icons={connectorTypes.map(
-                                              (type: string) => ({
-                                                key: type,
-                                                icon: (
-                                                  <ConnectorTypeIcon
-                                                    type={type}
-                                                    className="h-full w-full"
-                                                  />
-                                                ),
-                                                tooltip: type,
-                                              }),
-                                            )}
-                                            maxVisible={3}
-                                            size="sm"
-                                            className="ml-2"
-                                          />
-                                        )}
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                              {connectors.length > 0 && (
-                                <CommandGroup heading="Connectors">
-                                  {connectors.map((connector) => {
-                                    const isSelected = connectorIds.includes(
-                                      connector.id,
-                                    );
-                                    return (
-                                      <CommandItem
-                                        key={connector.id}
-                                        value={connector.name}
-                                        className="data-[selected=true]:bg-transparent"
-                                        onSelect={() => {
-                                          setConnectorIds((prev) =>
-                                            isSelected
-                                              ? prev.filter(
-                                                  (id) => id !== connector.id,
-                                                )
-                                              : [...prev, connector.id],
-                                          );
-                                        }}
-                                      >
-                                        <CheckIcon
-                                          className={cn(
-                                            "mr-2 h-4 w-4 shrink-0",
-                                            isSelected
-                                              ? "opacity-100"
-                                              : "opacity-0",
-                                          )}
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="truncate text-sm">
-                                            {connector.name}
-                                          </div>
-                                          <div className="truncate text-xs text-muted-foreground">
-                                            {connector.description || (
-                                              <span className="capitalize">
-                                                {connector.connectorType}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="ml-2 shrink-0">
-                                          <ConnectorTypeIcon
-                                            type={connector.connectorType}
-                                            className="h-4 w-4"
-                                          />
-                                        </div>
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  )}
                 </div>
               )}
+
+              {/* Hooks (internal agents only, existing agents only; gated by
+                  the agent-hooks feature flag, which requires the agent runtime) */}
+              {agentHooksEnabled &&
+                isInternalAgent &&
+                !isBuiltIn &&
+                agent?.id && <AgentHooksEditor agentId={agent.id} />}
 
               {/* Section 4: Access & LLM */}
               {(!isBuiltIn || isInternalAgent) && (
@@ -2012,6 +2242,36 @@ export function AgentDialog({
               )}
             </div>
           </fieldset>
+          {!readOnly && mcpEnvConflicts.length > 0 && (
+            <Alert variant="warning" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>
+                {mcpEnvConflicts.length} MCP server
+                {mcpEnvConflicts.length === 1 ? "" : "s"} not in this
+                environment
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or
+                  change the environment before saving:{" "}
+                  <span className="font-medium text-foreground">
+                    {mcpEnvConflicts.map((c) => c.name).join(", ")}
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() =>
+                    agentToolsEditorRef.current?.removeIncompatibleTools()
+                  }
+                >
+                  Remove incompatible
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={handleClose}>
               {readOnly ? "Close" : "Cancel"}
@@ -2025,6 +2285,7 @@ export function AgentDialog({
                   createAgent.isPending ||
                   updateAgent.isPending ||
                   requiresTeamSelection ||
+                  mcpEnvConflicts.length > 0 ||
                   (!isAdmin && scope === "team" && hasNoAvailableTeams)
                 }
               >

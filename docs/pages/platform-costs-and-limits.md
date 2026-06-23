@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-02
+lastUpdated: 2026-06-22
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -23,10 +23,11 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 - optimization rules that reroute requests to lower-cost models
 - TOON compression that reduces tool-result tokens before the result is sent to the model
+- prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
 ## Usage Limits
 
-Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, or virtual API key. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.
+Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, virtual API key, or environment. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.
 
 | Scope | Use when |
 | --- | --- |
@@ -35,6 +36,9 @@ Usage limits are guardrails for LLM spend. Archestra supports token-cost limits 
 | User | Individual users need their own budgets. |
 | Agent or LLM proxy | A specific profile needs a budget. |
 | Virtual API key | Spend should be capped per API key. |
+| Environment | A deployment environment (for example, production) needs its own combined budget across all users. |
+
+An environment-scoped limit caps total spend across every user whose agent runs in that environment. A request's environment is resolved from its agent's assigned environment; requests through an agent with no environment are not subject to environment-scoped limits.
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
@@ -42,7 +46,9 @@ Limits are evaluated from recorded model usage, so pricing configuration affects
 
 Admins can configure a default user limit in LLM settings. It applies to every current and future user.
 
-A custom per-user limit overrides the default for that user. Use this when one user needs a different budget.
+You can also set per-environment default user limits in LLM settings — for example, a smaller per-user cap in production than in development. When a request runs in an environment that has a per-environment default, that default applies (counting only the user's usage within that environment) and replaces the org-wide default for that request. Environments without a per-environment default fall back to the org-wide default.
+
+A custom per-user limit overrides both the org-wide and per-environment defaults for that user. Use this when one user needs a different budget.
 
 ## Limit Cleanup
 
@@ -58,6 +64,8 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 - token-cost limits use it to decide when a budget is reached
 - optimization reports use it to calculate savings
 - TOON compression savings are reported in dollars using the configured model price
+
+When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly, so Archestra maps them back to the underlying vendor model to recover real prices (including cache prices) where possible.
 
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 
@@ -98,3 +106,11 @@ You can enable TOON compression at:
 - team level when only certain teams should use it
 
 See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
+
+## Prompt Caching
+
+Prompt caching lets a provider reuse the unchanging prefix of a request, such as the system prompt, tool definitions, and earlier turns, instead of reprocessing it on every turn. Reused tokens are billed at a fraction of the input price, which matters most for agents with a long system prompt or many tools. The first request to cache a prefix pays a small write surcharge, while later requests that reuse it pay far less, so a multi-turn conversation is a net saving.
+
+Anthropic and Amazon Bedrock require explicit cache markers, which Archestra adds to the stable prefix and the most recent turn; OpenAI, Gemini, and DeepSeek cache eligible prefixes on their own. Caching applies automatically wherever the provider and model support it. Archestra records cache read and write token counts and the resulting savings, so they appear in logs and aggregate cost reporting.
+
+Cache cost uses the model's cache read and write prices when those are known (synced from the registry or set by an admin); otherwise it is estimated from the input price. Configure cache prices per model in the model editor for accurate caching costs.

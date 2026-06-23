@@ -1,4 +1,4 @@
-import { RouteId, SecretsManagerType } from "@shared";
+import { RouteId, SecretsManagerType } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import SecretModel from "@/models/secret";

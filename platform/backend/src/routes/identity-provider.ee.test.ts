@@ -489,6 +489,181 @@ describe("identity provider routes", () => {
     });
   });
 
+  describe("GET /api/identity-providers/:id/link-status", () => {
+    test("returns whether the current user has a usable provider token", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "linked-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      let response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "linked-provider",
+        connected: false,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "linked-provider",
+        idToken: createMockIdToken({
+          sub: "user-subject",
+          email: "admin@example.com",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      });
+
+      response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "linked-provider",
+        connected: true,
+      });
+    });
+
+    test("reports an Entra OBO link with a Graph-audience access token as not connected", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "entra-graph-audience",
+        oidcConfig: {
+          clientId: "archestra-app-client-id",
+          clientSecret: "test-secret",
+          issuer: "https://login.example.com/tenant/v2.0",
+          pkce: false,
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "entra_obo",
+            subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            tokenEndpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+            tokenEndpointAuthentication: "client_secret_post",
+          },
+        },
+      });
+
+      // Graph-audience tokens cannot be used as OBO assertions (AADSTS50013),
+      // so the link must be reported unusable to force a reconnect.
+      await makeAccount(user.id, {
+        providerId: "entra-graph-audience",
+        accessToken: createMockIdToken({
+          aud: "00000003-0000-0000-c000-000000000000",
+          scp: "User.Read profile openid email",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "entra-graph-audience",
+        connected: false,
+      });
+    });
+
+    test("reports an Entra OBO link with an app-audience access token as connected", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "entra-app-audience",
+        oidcConfig: {
+          clientId: "archestra-app-client-id",
+          clientSecret: "test-secret",
+          issuer: "https://login.example.com/tenant/v2.0",
+          pkce: false,
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "entra_obo",
+            subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            tokenEndpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+            tokenEndpointAuthentication: "client_secret_post",
+          },
+        },
+      });
+
+      await makeAccount(user.id, {
+        providerId: "entra-app-audience",
+        accessToken: createMockIdToken({
+          aud: "api://archestra-app-client-id",
+          scp: "access_as_user",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "entra-app-audience",
+        connected: true,
+      });
+    });
+
+    test("does not apply the Graph-audience check to non-Entra exchange strategies", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "rfc8693-graph-audience",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          enterpriseManagedCredentials: {
+            exchangeStrategy: "rfc8693",
+            subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
+          },
+        },
+      });
+
+      await makeAccount(user.id, {
+        providerId: "rfc8693-graph-audience",
+        accessToken: createMockIdToken({
+          aud: "https://graph.microsoft.com",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "rfc8693-graph-audience",
+        connected: true,
+      });
+    });
+  });
+
   describe("GET /api/identity-providers/:id/latest-id-token-claims", () => {
     test("returns decoded claims for the current user's latest account", async ({
       makeAccount,
@@ -532,6 +707,50 @@ describe("identity provider routes", () => {
         },
       });
       expect(response.json()).not.toHaveProperty("idToken");
+    });
+
+    test("returns decoded access token claims without exposing the raw token", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "access-claims-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      await makeAccount(user.id, {
+        providerId: "access-claims-provider",
+        accessToken: createMockIdToken({
+          aud: "exchange-client-id",
+          scp: "api.read",
+          oid: "user-object-id",
+        }),
+        accessTokenExpiresAt: new Date("2026-06-04T18:00:00.000Z"),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/latest-id-token-claims`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        providerId: "access-claims-provider",
+        claims: null,
+        accessTokenClaims: {
+          aud: "exchange-client-id",
+          scp: "api.read",
+          oid: "user-object-id",
+        },
+      });
+      expect(response.json()).not.toHaveProperty("accessToken");
     });
 
     test("does not expose another user's token claims", async ({

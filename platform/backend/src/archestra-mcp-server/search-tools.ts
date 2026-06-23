@@ -1,13 +1,24 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
+  isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
+  TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import safeRegex from "safe-regex2";
 import { z } from "zod";
-import { InternalMcpCatalogModel, ToolModel } from "@/models";
+import logger from "@/logging";
+import {
+  ConversationEnabledToolModel,
+  InternalMcpCatalogModel,
+  ToolModel,
+} from "@/models";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { archestraMcpBranding } from "./branding";
+import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
+import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -24,7 +35,7 @@ const SearchToolsArgsSchema = z
       .min(1)
       .max(200)
       .describe(
-        "Natural-language search query describing the capability you need. Searches tool names, descriptions, argument names, and argument descriptions.",
+        "Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match.",
       ),
     limit: z
       .number()
@@ -34,20 +45,73 @@ const SearchToolsArgsSchema = z
       .optional()
       .default(8)
       .describe("Maximum number of matching tools to return."),
+    mode: z
+      .enum(["keyword", "regex"])
+      .optional()
+      .default("keyword")
+      .describe(
+        "Search mode. 'keyword' (default) keyword-ranks the query across tool fields. 'regex' treats query as a case-insensitive regular expression matched against tool names, titles, and descriptions — use it when you know a naming pattern, e.g. '^github__' or 'search|find'.",
+      ),
   })
   .strict();
 
+// Internal intermediate only — the model sees the flat `params` string built from
+// these, never the structured form, so a plain recursive type is enough (no Zod,
+// no place in SearchToolsOutputSchema). `properties` carries one further nested
+// level; recursion depth is bounded by MAX_NESTED_DEPTH in summarizeNestedProperties.
+type NestedParameterSummary = {
+  name: string;
+  type: string | null;
+  required: boolean;
+  properties: NestedParameterSummary[] | null;
+};
+
+type InputParameterSummary = {
+  name: string;
+  required: boolean;
+  type: string | null;
+  enum: unknown[] | null;
+  description: string | null;
+  properties: NestedParameterSummary[] | null;
+  // True when the compact summary elides object content — a freeform/extensible
+  // object, or nesting deeper than the levels shown. Rendered as a trailing '…'.
+  hasHiddenDetail: boolean;
+};
+
+// cap on enum values rendered inline in a parameter signature; the full list
+// stays recoverable via run_tool validation feedback.
+const PARAM_ENUM_VALUE_CAP = 20;
+
+// how many nested levels below a top-level param the compact summary expands:
+// the param's children (level 1) and their children (level 2). Object content
+// past this is collapsed behind the hidden-detail marker.
+const MAX_NESTED_DEPTH = 2;
+
 const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
+  matchCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe(
+      "Total tools matching the query before the limit was applied (>= total).",
+    ),
+  truncated: z
+    .boolean()
+    .describe(
+      "True when matchCount exceeds the returned tools (results cut by limit).",
+    ),
+  hint: z
+    .string()
+    .nullable()
+    .describe(
+      "Actionable guidance when results were truncated, empty, or when some query terms matched no tool text.",
+    ),
   tools: z.array(
     z.object({
       toolName: z
         .string()
         .describe(`Exact tool name to pass to ${TOOL_RUN_TOOL_SHORT_NAME}.`),
-      title: z
-        .string()
-        .nullable()
-        .describe("Human-friendly title when available."),
       description: z
         .string()
         .nullable()
@@ -61,20 +125,20 @@ const SearchToolsOutputSchema = z.object({
         .describe(
           "MCP server prefix for third-party MCP tools when available.",
         ),
-      catalogName: z
+      params: z
         .string()
-        .nullable()
-        .describe("Catalog name for installed MCP tools when available."),
-      inputParameters: z.array(
-        z.object({
-          name: z.string().describe("Top-level input parameter name."),
-          required: z.boolean().describe("Whether the parameter is required."),
-          description: z
-            .string()
-            .nullable()
-            .describe("Parameter description, if available."),
-        }),
-      ),
+        .describe(
+          "Compact one-line input signature — a summary, not the full schema. Parameters are " +
+            "joined by '; ', each rendered as `name<!|?>:<type>` where `!` marks required and `?` " +
+            "optional. Object parameters are expanded up to two levels as " +
+            "`{child<!|?>:type{grandchild<!|?>:type}, …}`, enums as " +
+            "`enum(<json-values>)`, and a trailing ` — description` is added when available. A " +
+            "trailing `…` on a type marks an object whose content is not fully shown (freeform or " +
+            "more deeply nested) — consult the task instructions or the full schema for its shape. " +
+            "Empty string when the tool takes no input. Pass matching values inside tool_args when " +
+            `calling ${TOOL_RUN_TOOL_SHORT_NAME}; if a call is rejected as invalid, the error describes ` +
+            "the expected input (for third-party tools, the full input schema).",
+        ),
     }),
   ),
 });
@@ -86,31 +150,21 @@ type SearchCandidate = {
   source: "archestra" | "mcp" | "agent_delegation";
   server: string | null;
   catalogName: string | null;
-  inputParameters: Array<{
-    name: string;
-    required: boolean;
-    description: string | null;
-  }>;
+  inputParameters: InputParameterSummary[];
   searchText: {
     name: string;
     title: string;
     description: string;
     argNames: string;
     argDescriptions: string;
-    combined: string;
   };
 };
-
-const EXCLUDED_SHORT_NAMES = new Set([
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-]);
 
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SEARCH_TOOLS_SHORT_NAME,
     title: "Search Tools",
-    description: `Search the agent's available tools on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
+    description: `Search the tools available to this agent and to you on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
     schema: SearchToolsArgsSchema,
     outputSchema: SearchToolsOutputSchema,
     async handler({ args, context }) {
@@ -120,41 +174,78 @@ const registry = defineArchestraTools([
         );
       }
 
+      const startedAt = Date.now();
       const searchableTools = await getSearchableTools({
         agentId: context.agentId,
         organizationId: context.organizationId,
         userId: context.userId,
+        conversationId: context.conversationId,
       });
 
-      const preparedQuery = prepareSearchQuery(args.query);
-      const rankedTools = searchableTools
-        .map((tool) => ({
-          tool,
-          score: scoreCandidate(tool, preparedQuery),
-        }))
-        .filter(({ score }) => score > 0)
-        .sort(
-          (left, right) =>
-            right.score - left.score ||
-            left.tool.toolName.localeCompare(right.tool.toolName),
-        )
-        .slice(0, args.limit)
-        .map(({ tool }) => ({
-          toolName: tool.toolName,
-          title: tool.title,
-          description: tool.description,
-          source: tool.source,
-          server: tool.server,
-          catalogName: tool.catalogName,
-          inputParameters: tool.inputParameters,
-        }));
+      let matches: SearchCandidate[];
+      let unmatchedTerms: string[] = [];
+      if (args.mode === "regex") {
+        const result = rankCandidatesByRegex(searchableTools, args.query);
+        if (!result.ok) {
+          return errorResult(result.error);
+        }
+        matches = result.matches;
+      } else {
+        const preparedQuery = prepareSearchQuery(args.query);
+        matches = rankCandidatesByKeyword(searchableTools, preparedQuery);
+        unmatchedTerms = findUnmatchedQueryTerms(
+          searchableTools,
+          preparedQuery,
+        );
+      }
+
+      const matchCount = matches.length;
+      const tools = matches.slice(0, args.limit).map(toSearchResult);
+      const truncated = matchCount > tools.length;
+      // Only relevant to the zero-match hint, so resolve it lazily to avoid an
+      // extra permission/assignment lookup on every successful search.
+      const sandboxAvailable =
+        matchCount === 0 && context.organizationId != null
+          ? await isSkillSandboxAvailableForAgent({
+              userId: context.userId,
+              organizationId: context.organizationId,
+              agentId: context.agentId,
+            })
+          : false;
+      const hint = buildSearchHint({
+        matchCount,
+        truncated,
+        limit: args.limit,
+        searchableTools,
+        unmatchedTerms,
+        sandboxAvailable,
+      });
+
+      const structured = {
+        total: tools.length,
+        matchCount,
+        truncated,
+        hint,
+        tools,
+      };
+
+      logger.info(
+        {
+          agentId: context.agentId,
+          mode: args.mode,
+          queryLength: args.query.length,
+          matchCount,
+          returned: tools.length,
+          zeroResult: matchCount === 0,
+          topResultName: tools[0]?.toolName ?? null,
+          latencyMs: Date.now() - startedAt,
+        },
+        `${TOOL_SEARCH_TOOLS_SHORT_NAME} query`,
+      );
 
       return structuredSuccessResult(
-        {
-          total: rankedTools.length,
-          tools: rankedTools,
-        },
-        JSON.stringify(rankedTools, null, 2),
+        structured,
+        JSON.stringify(structured, null, 2),
       );
     },
   }),
@@ -163,24 +254,71 @@ const registry = defineArchestraTools([
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
+/** @public — exported for testability of the ranking logic in isolation */
+export const __test = {
+  prepareSearchQuery,
+  rankCandidatesByKeyword,
+  rankCandidatesByRegex,
+  findUnmatchedQueryTerms,
+  summarizeInputParameters,
+  formatParamsSignature,
+  makeRankingCandidate(input: {
+    toolName: string;
+    title?: string | null;
+    description?: string | null;
+    parameters?: Record<string, unknown>;
+  }): SearchCandidate {
+    return {
+      toolName: input.toolName,
+      title: input.title ?? null,
+      description: input.description ?? null,
+      source: "mcp",
+      server: null,
+      catalogName: null,
+      inputParameters: [],
+      searchText: buildSearchText({
+        name: input.toolName,
+        title: input.title ?? "",
+        description: input.description ?? null,
+        schema: input.parameters ?? {},
+      }),
+    };
+  },
+};
+
 // === Internal helpers ===
 
 async function getSearchableTools(params: {
   agentId: string;
   organizationId?: string;
   userId?: string;
+  conversationId?: string;
 }): Promise<SearchCandidate[]> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  const assignedNames = new Set(assignedTools.map((tool) => tool.name));
+  // Dynamic tool access: when the agent's "access all tools" setting is on,
+  // discovery also spans third-party tools from every catalog the user can
+  // access, the sandbox built-ins when the feature is on, and
+  // query_knowledge_sources when the user can access a knowledge connector.
+  // run_tool executes such a tool directly without assigning it; the MCP
+  // server's connection policy decides which credential the call uses.
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: assignedNames,
+    agentId,
+    userId,
+    organizationId,
+  });
+  const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(
-    assignedTools.map((tool) => tool.name),
+    searchSpace.map((tool) => tool.name),
     userId,
     organizationId,
   );
-  const filteredAssignedTools = assignedTools.filter(
+  const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
-      !isExcludedArchestraMetaTool(tool.name) &&
+      !isExcludedFromSearchResults(tool.name, assignedNames) &&
       !tool.name.startsWith("agent__"),
   );
 
@@ -194,9 +332,16 @@ async function getSearchableTools(params: {
         })
       : [];
 
-  const catalogNamesById = await getCatalogNamesById(filteredAssignedTools);
+  const catalogNamesById = await getCatalogNamesById(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
-  for (const tool of filteredAssignedTools) {
+  // First occurrence wins on duplicate names: assigned tools come before the
+  // discoverable ones, and the discoverable set is ordered newest-first — the
+  // same row resolveDynamicTool picks, so the description shown by search
+  // matches the row a later run_tool call executes.
+  for (const tool of filteredTools) {
+    if (candidates.has(tool.name)) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({
@@ -213,7 +358,17 @@ async function getSearchableTools(params: {
     candidates.set(tool.name, toDelegationToolCandidate(tool));
   }
 
-  return Array.from(candidates.values());
+  // Per-conversation enabled-tool gate: in a chat with a custom tool selection,
+  // a tool the user disabled must not be discoverable here either (mirrors the
+  // visible tool list and the run_tool gate). Archestra built-ins always pass.
+  const enabledNames =
+    conversationId != null
+      ? await ConversationEnabledToolModel.getEnabledToolNameSet(conversationId)
+      : null;
+
+  return Array.from(candidates.values()).filter((candidate) =>
+    isToolEnabledForConversation(candidate.toolName, enabledNames),
+  );
 }
 
 function toAssignedToolCandidate(params: {
@@ -310,28 +465,41 @@ function buildSearchText(params: {
     description,
     argNames,
     argDescriptions,
-    combined: [name, title, description, argNames, argDescriptions]
-      .filter(Boolean)
-      .join(" "),
   };
 }
 
-function summarizeInputParameters(schema: Record<string, unknown>) {
-  const properties = asRecord(schema.properties);
-  const required = new Set(asStringArray(schema.required));
+function summarizeInputParameters(
+  schema: Record<string, unknown>,
+): InputParameterSummary[] {
+  return mapObjectProperties(schema, (paramSchema, name, required) => ({
+    name,
+    required,
+    type: extractSchemaType(paramSchema),
+    enum: Array.isArray(paramSchema.enum) ? paramSchema.enum : null,
+    description:
+      typeof paramSchema.description === "string"
+        ? paramSchema.description
+        : null,
+    properties: summarizeNestedProperties(paramSchema, MAX_NESTED_DEPTH),
+    hasHiddenDetail: objectHasHiddenDetail(paramSchema),
+  }));
+}
 
+// Shared property walk: read an object schema's `properties`/`required`, build a
+// summary per entry, and order required-first then alphabetically. The build
+// callback yields the shape; the {name, required} bound lets the sort stay here.
+function mapObjectProperties<T extends { name: string; required: boolean }>(
+  objectSchema: Record<string, unknown>,
+  build: (
+    childSchema: Record<string, unknown>,
+    name: string,
+    required: boolean,
+  ) => T,
+): T[] {
+  const properties = asRecord(objectSchema.properties);
+  const required = new Set(asStringArray(objectSchema.required));
   return Object.entries(properties)
-    .map(([name, value]) => {
-      const paramSchema = asRecord(value);
-      return {
-        name,
-        required: required.has(name),
-        description:
-          typeof paramSchema.description === "string"
-            ? paramSchema.description
-            : null,
-      };
-    })
+    .map(([name, value]) => build(asRecord(value), name, required.has(name)))
     .sort(
       (left, right) =>
         Number(right.required) - Number(left.required) ||
@@ -339,8 +507,131 @@ function summarizeInputParameters(schema: Record<string, unknown>) {
     );
 }
 
+// JSON Schema `type` is a string ("object") or, for unions, an array
+// (["string", "null"]). Collapse arrays to "a|b" so the model sees the options.
+function extractSchemaType(
+  paramSchema: Record<string, unknown>,
+): string | null {
+  const type = paramSchema.type;
+  if (typeof type === "string") {
+    return type;
+  }
+  if (Array.isArray(type)) {
+    const parts = type.filter(
+      (part): part is string => typeof part === "string",
+    );
+    return parts.length > 0 ? parts.join("|") : null;
+  }
+  return null;
+}
+
+// Nested summary for object (or array-of-object) parameters, so the model can
+// call run_tool without guessing the nested shape. Recurses up to `depth` levels
+// (MAX_NESTED_DEPTH from the top-level param); each object child carries its own
+// next level. Structure past the budget is left to the actual call's validation
+// feedback and flagged by objectHasHiddenDetail.
+function summarizeNestedProperties(
+  paramSchema: Record<string, unknown>,
+  depth: number,
+): NestedParameterSummary[] | null {
+  const objectSchema = nestedObjectSchema(paramSchema);
+  if (!objectSchema || depth <= 0) {
+    return null;
+  }
+  return mapObjectProperties(objectSchema, (childSchema, name, required) => ({
+    name,
+    type: extractSchemaType(childSchema),
+    required,
+    properties: summarizeNestedProperties(childSchema, depth - 1),
+  }));
+}
+
+function nestedObjectSchema(
+  paramSchema: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (Object.keys(asRecord(paramSchema.properties)).length > 0) {
+    return paramSchema;
+  }
+  const items = asRecord(paramSchema.items);
+  if (Object.keys(asRecord(items.properties)).length > 0) {
+    return items;
+  }
+  return null;
+}
+
+// The object schema a parameter ultimately describes: the schema itself when it
+// is object-shaped, or its array `items` when those are. Unlike nestedObjectSchema
+// this recognizes object-typed schemas with no listed properties (opaque /
+// freeform), so an array of freeform objects is not mistaken for a leaf.
+function resolveObjectSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (isObjectSchema(schema)) {
+    return schema;
+  }
+  const items = asRecord(schema.items);
+  return isObjectSchema(items) ? items : null;
+}
+
+function isObjectSchema(schema: Record<string, unknown>): boolean {
+  return (
+    (extractSchemaType(schema)?.includes("object") ?? false) ||
+    Object.keys(asRecord(schema.properties)).length > 0
+  );
+}
+
+// Does the compact one-line rendering hide object content the model would need?
+// Mirrors summarizeNestedProperties' MAX_NESTED_DEPTH budget so the marker fires
+// exactly when content falls past the levels actually shown.
+function objectHasHiddenDetail(paramSchema: Record<string, unknown>): boolean {
+  return schemaHidesDetailBelow(paramSchema, MAX_NESTED_DEPTH);
+}
+
+// `remainingDepth` is how many more nested levels the compact summary still
+// renders below this schema. Detail is hidden when an object's content can't be
+// shown within that budget: a freeform/extensible object (additionalProperties)
+// or an opaque object with no listed properties at any shown level, or an object
+// child whose own object content falls past the budget. Resolves through array
+// items so an array of objects is judged by its element shape. Scalars and
+// objects fully shown within budget return false. Conservative: an object that
+// merely omits `additionalProperties` is not flagged, to avoid marking every
+// object. Always called with remainingDepth >= 1 (the <= 1 branch never recurses
+// further), so an object's own properties are never themselves unshown here.
+function schemaHidesDetailBelow(
+  schema: Record<string, unknown>,
+  remainingDepth: number,
+): boolean {
+  const objectSchema = resolveObjectSchema(schema);
+  if (!objectSchema) {
+    return false;
+  }
+  const additionalProperties = objectSchema.additionalProperties;
+  if (
+    additionalProperties === true ||
+    (additionalProperties != null && typeof additionalProperties === "object")
+  ) {
+    return true;
+  }
+  const properties = asRecord(objectSchema.properties);
+  if (Object.keys(properties).length === 0) {
+    return true;
+  }
+  // Last shown level: this object's children render, but their children do not,
+  // so any object child means unshown content.
+  if (remainingDepth <= 1) {
+    return Object.values(properties).some(
+      (value) => resolveObjectSchema(asRecord(value)) != null,
+    );
+  }
+  return Object.values(properties).some((value) =>
+    schemaHidesDetailBelow(asRecord(value), remainingDepth - 1),
+  );
+}
+
 type PreparedSearchQuery = {
   normalizedQuery: string;
+  // unique query terms — deduped so a repeated query word does not multiply its
+  // own contribution (field-side tokens keep duplicates for term frequency).
   tokens: string[];
 };
 
@@ -348,44 +639,432 @@ function prepareSearchQuery(query: string): PreparedSearchQuery {
   const normalizedQuery = normalizeText(query);
   return {
     normalizedQuery,
-    tokens: normalizedQuery ? tokenize(normalizedQuery) : [],
+    tokens: Array.from(new Set(tokenize(normalizedQuery))),
   };
 }
 
-function scoreCandidate(
-  candidate: SearchCandidate,
+function toSearchResult(candidate: SearchCandidate) {
+  return {
+    toolName: candidate.toolName,
+    description: candidate.description,
+    source: candidate.source,
+    server: candidate.server,
+    params: formatParamsSignature(candidate.inputParameters),
+  };
+}
+
+// Render the structured per-tool parameter summaries as a single compact line so
+// repeated search_tools calls do not accumulate verbose nested JSON in context.
+// Intentionally bounded (see PARAM_ENUM_VALUE_CAP) — the full schema stays
+// recoverable through run_tool's validation feedback, matching the existing
+// "deeper structure is left to the actual call" design above.
+function formatParamsSignature(params: InputParameterSummary[]): string {
+  return params.map(formatParamSignature).join("; ");
+}
+
+function formatParamSignature(param: InputParameterSummary): string {
+  const requiredMark = param.required ? "!" : "?";
+  const typePart = formatParamType(param);
+  const typeSuffix = typePart ? `:${typePart}` : "";
+  // collapse whitespace so a multiline schema description cannot break the
+  // one-line signature contract.
+  const description = param.description
+    ? param.description.replace(/\s+/g, " ").trim()
+    : "";
+  const descriptionSuffix = description ? ` — ${description}` : "";
+  return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
+}
+
+// Additive: a parameter can carry a scalar type, a nested object shape (up to
+// MAX_NESTED_DEPTH levels), and an enum constraint at once, so each present part
+// is appended rather than replacing the others (e.g. `sort?:string enum("asc"|"desc")`).
+function formatParamType(param: InputParameterSummary): string {
+  let type = param.type ?? "";
+  if (param.properties && param.properties.length > 0) {
+    type += formatNestedProperties(param.properties);
+  }
+  if (param.enum && param.enum.length > 0) {
+    const enumClause = formatEnumValues(param.enum);
+    type = type ? `${type} ${enumClause}` : enumClause;
+  }
+  // mark objects whose content the compact summary could not fully show, so the
+  // model knows to consult the full schema (returned on an invalid run_tool call).
+  if (param.hasHiddenDetail) {
+    type += "…";
+  }
+  return type;
+}
+
+function formatNestedProperties(properties: NestedParameterSummary[]): string {
+  return `{${properties.map(formatNestedProperty).join(", ")}}`;
+}
+
+function formatNestedProperty(property: NestedParameterSummary): string {
+  const requiredMark = property.required ? "!" : "?";
+  let type = property.type ?? "";
+  if (property.properties && property.properties.length > 0) {
+    type += formatNestedProperties(property.properties);
+  }
+  const typeSuffix = type ? `:${type}` : "";
+  return `${property.name}${requiredMark}${typeSuffix}`;
+}
+
+// enum values are arbitrary JSON (number/boolean/null/object, or strings that may
+// contain "|"), so JSON-encode each to keep the signature unambiguous.
+function formatEnumValues(values: unknown[]): string {
+  const shown = values
+    .slice(0, PARAM_ENUM_VALUE_CAP)
+    .map((value) => JSON.stringify(value));
+  const overflow = values.length - PARAM_ENUM_VALUE_CAP;
+  const suffix = overflow > 0 ? `|…(+${overflow} more)` : "";
+  return `enum(${shown.join("|")}${suffix})`;
+}
+
+type RegexRankResult =
+  | { ok: true; matches: SearchCandidate[] }
+  | { ok: false; error: string };
+
+// Regex search mode. Mirrors the ReDoS guard used elsewhere in the codebase
+// (knowledge-base/connectors/web-crawler): compile first, then reject patterns
+// safe-regex2 flags as catastrophic-backtracking risks. Matches name/title/
+// description and ranks by the strongest field hit.
+function rankCandidatesByRegex(
+  candidates: SearchCandidate[],
+  pattern: string,
+): RegexRankResult {
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, "i");
+    if (!safeRegex(regex)) {
+      return {
+        ok: false,
+        error:
+          "The regex query is too complex (possible catastrophic backtracking). Simplify the pattern or use keyword mode.",
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      error: `Invalid regular expression: ${pattern}. Fix the pattern or use keyword mode.`,
+    };
+  }
+
+  return {
+    ok: true,
+    matches: candidates
+      .map((candidate) => ({
+        candidate,
+        rank: regexMatchRank(candidate, regex),
+      }))
+      .filter(({ rank }) => rank > 0)
+      .sort(
+        (left, right) =>
+          right.rank - left.rank ||
+          left.candidate.toolName.localeCompare(right.candidate.toolName),
+      )
+      .map(({ candidate }) => candidate),
+  };
+}
+
+function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
+  const { name, title, description } = candidate.searchText;
+  if (regex.test(name)) {
+    return 3;
+  }
+  if (title && regex.test(title)) {
+    return 2;
+  }
+  if (description && regex.test(description)) {
+    return 1;
+  }
+  return 0;
+}
+
+// Actionable next-step guidance (Anthropic recovery-error practice). Null when
+// results are complete, non-empty, and every query term hit some tool text.
+// Clauses compose: a vocabulary-mismatch note can ride alongside the empty- or
+// truncated-result note so the model learns both what happened and which terms
+// to drop or replace.
+function buildSearchHint(params: {
+  matchCount: number;
+  truncated: boolean;
+  limit: number;
+  searchableTools: SearchCandidate[];
+  unmatchedTerms: string[];
+  sandboxAvailable: boolean;
+}): string | null {
+  const {
+    limit,
+    matchCount,
+    sandboxAvailable,
+    searchableTools,
+    truncated,
+    unmatchedTerms,
+  } = params;
+  const parts: string[] = [];
+
+  if (matchCount === 0) {
+    const servers = availableServerNames(searchableTools);
+    const serverHint =
+      servers.length > 0 ? ` Available servers: ${servers.join(", ")}.` : "";
+    const runCommand = archestraMcpBranding.getToolName(
+      TOOL_RUN_COMMAND_SHORT_NAME,
+    );
+    const sandboxHint = sandboxAvailable
+      ? ` If no tool fits, you can fall back to \`${runCommand}\` to do the work with command line tools.`
+      : "";
+    parts.push(
+      `No tools matched. Try broader or different keywords, or switch mode.${serverHint}${sandboxHint}`,
+    );
+  } else if (truncated) {
+    parts.push(
+      `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`,
+    );
+  }
+
+  if (unmatchedTerms.length > 0) {
+    parts.push(
+      `No tool text matches these query terms: ${unmatchedTerms.join(", ")}.`,
+    );
+  }
+
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+// Query terms the ranker cannot match against any tool. The ranker has exactly
+// two match surfaces: BM25 over indexed tokens across every field, and the
+// whole-query substring boost over name/title. So a term is unmatched only when
+// it is neither an indexed token (any field) nor a substring of any name/title.
+// Both checks are necessary: the token set alone would falsely report "repo"
+// (which matches github__search_repositories via the name substring boost), and
+// the name/title substring check alone would miss a description-only term.
+// One-sided by design — never names a term that contributed to a result; it may
+// stay silent on a term that only appears inside a name/title as a substring.
+function findUnmatchedQueryTerms(
+  candidates: SearchCandidate[],
   query: PreparedSearchQuery,
+): string[] {
+  if (query.tokens.length === 0) {
+    return [];
+  }
+  const corpusTokens = new Set<string>();
+  let nameTitleText = "";
+  for (const candidate of candidates) {
+    const { name, title, description, argNames, argDescriptions } =
+      candidate.searchText;
+    for (const token of tokenize(
+      `${name} ${title} ${description} ${argNames} ${argDescriptions}`,
+    )) {
+      corpusTokens.add(token);
+    }
+    nameTitleText += ` ${name} ${title}`;
+  }
+  return query.tokens.filter(
+    (token) => !corpusTokens.has(token) && !nameTitleText.includes(token),
+  );
+}
+
+const MAX_HINT_SERVERS = 10;
+
+function availableServerNames(candidates: SearchCandidate[]): string[] {
+  const names = new Set<string>();
+  for (const candidate of candidates) {
+    const name = candidate.catalogName ?? candidate.server;
+    if (name) {
+      names.add(name);
+    }
+  }
+  const sorted = Array.from(names).sort();
+  if (sorted.length <= MAX_HINT_SERVERS) {
+    return sorted;
+  }
+  // signal truncation rather than implying the list is exhaustive
+  return [...sorted.slice(0, MAX_HINT_SERVERS), "…"];
+}
+
+// BM25F keyword ranking over the per-field corpus. Field weights make a name
+// hit count for more than a description hit; length normalization is disabled
+// (b=0) for the short name/title fields and kept mild for the free-text fields.
+// IDF uses the log(1 + …) variant so it stays strictly positive — the textbook
+// BM25 IDF can go negative when a term appears in most documents, a real hazard
+// on the tiny per-agent corpora this runs over. Literal whole-query name/title
+// matches get a large additive boost on top so an exact tool name always wins.
+const BM25F_FIELDS = [
+  "name",
+  "title",
+  "description",
+  "argNames",
+  "argDescriptions",
+] as const;
+type Bm25Field = (typeof BM25F_FIELDS)[number];
+
+const BM25F_FIELD_CONFIG: Record<Bm25Field, { weight: number; b: number }> = {
+  name: { weight: 10, b: 0 },
+  title: { weight: 6, b: 0 },
+  description: { weight: 3, b: 0.75 },
+  argNames: { weight: 2, b: 0.5 },
+  argDescriptions: { weight: 1, b: 0.75 },
+};
+const BM25F_K1 = 1.5;
+const EXACT_NAME_BOOST = 1000;
+const NAME_SUBSTRING_BOOST = 100;
+const EXACT_TITLE_BOOST = 600;
+const TITLE_SUBSTRING_BOOST = 60;
+
+type IndexedCandidate = {
+  candidate: SearchCandidate;
+  fieldTokens: Record<Bm25Field, string[]>;
+};
+
+type CorpusStats = {
+  avgFieldLength: Record<Bm25Field, number>;
+  docFrequency: Map<string, number>;
+  docCount: number;
+};
+
+function rankCandidatesByKeyword(
+  candidates: SearchCandidate[],
+  query: PreparedSearchQuery,
+): SearchCandidate[] {
+  if (!query.normalizedQuery) {
+    return [];
+  }
+
+  const indexed: IndexedCandidate[] = candidates.map((candidate) => ({
+    candidate,
+    fieldTokens: {
+      name: tokenize(candidate.searchText.name),
+      title: tokenize(candidate.searchText.title),
+      description: tokenize(candidate.searchText.description),
+      argNames: tokenize(candidate.searchText.argNames),
+      argDescriptions: tokenize(candidate.searchText.argDescriptions),
+    },
+  }));
+
+  const corpus: CorpusStats = {
+    avgFieldLength: computeAvgFieldLength(indexed),
+    docFrequency: computeDocFrequency(indexed),
+    docCount: indexed.length,
+  };
+
+  return indexed
+    .map((entry) => ({
+      candidate: entry.candidate,
+      score: scoreCandidate(entry, query, corpus),
+    }))
+    .filter(({ score }) => score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.candidate.toolName.localeCompare(right.candidate.toolName),
+    )
+    .map(({ candidate }) => candidate);
+}
+
+function computeAvgFieldLength(
+  indexed: IndexedCandidate[],
+): Record<Bm25Field, number> {
+  const totals: Record<Bm25Field, number> = {
+    name: 0,
+    title: 0,
+    description: 0,
+    argNames: 0,
+    argDescriptions: 0,
+  };
+  for (const entry of indexed) {
+    for (const field of BM25F_FIELDS) {
+      totals[field] += entry.fieldTokens[field].length;
+    }
+  }
+  const count = indexed.length || 1;
+  const averages = {} as Record<Bm25Field, number>;
+  for (const field of BM25F_FIELDS) {
+    averages[field] = totals[field] / count;
+  }
+  return averages;
+}
+
+function computeDocFrequency(indexed: IndexedCandidate[]): Map<string, number> {
+  const docFrequency = new Map<string, number>();
+  for (const entry of indexed) {
+    const seen = new Set<string>();
+    for (const field of BM25F_FIELDS) {
+      for (const token of entry.fieldTokens[field]) {
+        seen.add(token);
+      }
+    }
+    for (const token of seen) {
+      docFrequency.set(token, (docFrequency.get(token) ?? 0) + 1);
+    }
+  }
+  return docFrequency;
+}
+
+function scoreCandidate(
+  entry: IndexedCandidate,
+  query: PreparedSearchQuery,
+  corpus: CorpusStats,
 ): number {
-  const { normalizedQuery, tokens } = query;
-  if (!normalizedQuery) {
-    return 0;
+  let score = bm25fScore(entry, query.tokens, corpus);
+
+  const { name, title } = entry.candidate.searchText;
+  const { normalizedQuery } = query;
+  if (name === normalizedQuery) {
+    score += EXACT_NAME_BOOST;
+  } else if (name.includes(normalizedQuery)) {
+    score += NAME_SUBSTRING_BOOST;
   }
-
-  const { name, title, description, argNames, argDescriptions, combined } =
-    candidate.searchText;
-
-  let score = 0;
-  if (name === normalizedQuery) score += 200;
-  if (title === normalizedQuery) score += 140;
-  if (name.includes(normalizedQuery)) score += 100;
-  if (title.includes(normalizedQuery)) score += 80;
-  if (description.includes(normalizedQuery)) score += 50;
-  if (argNames.includes(normalizedQuery)) score += 40;
-  if (argDescriptions.includes(normalizedQuery)) score += 20;
-
-  for (const token of tokens) {
-    if (name.includes(token)) score += 24;
-    if (title.includes(token)) score += 18;
-    if (description.includes(token)) score += 10;
-    if (argNames.includes(token)) score += 8;
-    if (argDescriptions.includes(token)) score += 4;
+  if (title === normalizedQuery) {
+    score += EXACT_TITLE_BOOST;
+  } else if (title?.includes(normalizedQuery)) {
+    score += TITLE_SUBSTRING_BOOST;
   }
-
-  if (tokens.every((token) => combined.includes(token))) {
-    score += 12;
-  }
-
   return score;
+}
+
+function bm25fScore(
+  entry: IndexedCandidate,
+  queryTokens: string[],
+  corpus: CorpusStats,
+): number {
+  let score = 0;
+  for (const term of queryTokens) {
+    const docsWithTerm = corpus.docFrequency.get(term);
+    if (!docsWithTerm) {
+      continue;
+    }
+    const idf = Math.log(
+      1 + (corpus.docCount - docsWithTerm + 0.5) / (docsWithTerm + 0.5),
+    );
+
+    let weightedTf = 0;
+    for (const field of BM25F_FIELDS) {
+      const fieldTokens = entry.fieldTokens[field];
+      const tf = countOccurrences(fieldTokens, term);
+      if (tf === 0) {
+        continue;
+      }
+      const { weight, b } = BM25F_FIELD_CONFIG[field];
+      const avgLength = corpus.avgFieldLength[field] || 1;
+      const normalization = 1 - b + (b * fieldTokens.length) / avgLength;
+      weightedTf += (weight * tf) / normalization;
+    }
+
+    if (weightedTf > 0) {
+      score += (idf * weightedTf) / (BM25F_K1 + weightedTf);
+    }
+  }
+  return score;
+}
+
+function countOccurrences(tokens: string[], term: string): number {
+  let count = 0;
+  for (const token of tokens) {
+    if (token === term) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function flattenSchemaText(schema: Record<string, unknown>): {
@@ -438,9 +1117,30 @@ function visitSchema(
   }
 }
 
-function isExcludedArchestraMetaTool(toolName: string): boolean {
+// search_tools only runs in search_and_run_only mode, where the meta tools and
+// the always-exposed runtime tools (skills + sandbox + apps) are already
+// top-level — returning them as results would be redundant noise. But "always-exposed" only
+// holds once a tool is assigned: an unassigned sandbox tool the user can reach
+// via sandbox:execute is NOT top-level, so surface it here so the model can
+// discover and run it. Meta tools are never useful as results.
+function isExcludedFromSearchResults(
+  toolName: string,
+  assignedNames: Set<string>,
+): boolean {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
-  return shortName != null && EXCLUDED_SHORT_NAMES.has(shortName);
+  if (shortName == null) {
+    return false;
+  }
+  if (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME
+  ) {
+    return true;
+  }
+  if (isAlwaysExposedArchestraToolShortName(shortName)) {
+    return assignedNames.has(toolName);
+  }
+  return false;
 }
 
 function formatArchestraToolTitle(toolName: string): string | null {
@@ -472,8 +1172,10 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
+// splits identifiers into word subtokens: `github__search_repositories` ->
+// ["github", "search", "repositories"]. `_`/`-` are separators (unlike the
+// stored names) so snake/kebab-case tool names rank under their parts. Keeps
+// duplicates — BM25 term frequency depends on them.
 function tokenize(value: string): string[] {
-  return Array.from(
-    new Set(value.split(/[^a-z0-9_-]+/).filter((token) => token.length > 0)),
-  );
+  return value.split(/[^a-z0-9]+/).filter((token) => token.length > 0);
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
 import { useState } from "react";
 import {
   Tool,
@@ -25,21 +25,26 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
-import {
-  type ArtifactRef,
-  isArtifactRef,
-  SandboxArtifactPreview,
-} from "./sandbox-artifact-preview";
+import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
+  kind: "tool";
   key: string;
   toolName: string;
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
 };
+
+type CompactHookEntry = {
+  kind: "hook";
+  key: string;
+  data: HookRunChipData;
+};
+
+type CompactEntry = CompactToolEntry | CompactHookEntry;
 
 function CompactCircle({
   toolName,
@@ -104,6 +109,70 @@ function CompactCircle({
   );
 }
 
+/**
+ * Compact circle for a hook run, visually matching CompactCircle: webhook icon
+ * in a bordered circle with an outcome dot (green proceeded, orange blocked,
+ * red error / timeout). Clicking expands the full HookRunChip card below the
+ * row, exactly like a tool circle expands its tool card.
+ */
+function HookCircle({
+  data,
+  isExpanded,
+  isExpandable = true,
+  onClick,
+}: {
+  data: HookRunChipData;
+  isExpanded: boolean;
+  isExpandable?: boolean;
+  onClick: () => void;
+}) {
+  const outcome = data.outcome ?? "";
+  const tooltip = [
+    data.hookEventName,
+    data.fileName,
+    outcome ? `(${outcome})` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={!isExpandable}
+            className={cn(
+              "relative inline-flex items-center justify-center size-8 rounded-full border transition-all",
+              isExpandable &&
+                "hover:bg-accent hover:border-accent-foreground/20",
+              !isExpandable && "cursor-default",
+              isExpanded
+                ? "bg-accent border-accent-foreground/20 ring-2 ring-primary/20"
+                : "bg-background",
+            )}
+          >
+            <WebhookIcon className="size-3.5 text-muted-foreground" />
+            <span
+              className={cn(
+                "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                outcome === "proceeded" && "bg-green-500",
+                outcome === "blocked" && "bg-orange-500",
+                (outcome === "error" || outcome === "timeout") &&
+                  "bg-destructive",
+              )}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export type ToolIconMap = Map<
   string,
   { icon?: string | null; catalogId?: string }
@@ -115,7 +184,7 @@ export function CompactToolGroup({
   canExpandToolCalls = true,
   onToolApprovalResponse,
 }: {
-  tools: CompactToolEntry[];
+  tools: CompactEntry[];
   toolIconMap?: ToolIconMap;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
@@ -132,39 +201,54 @@ export function CompactToolGroup({
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
-  const expandedTool = tools.find((t) => t.key === expandedKey);
+  const expandedEntry = tools.find((t) => t.key === expandedKey);
 
   return (
     <div className="mb-1">
       <div className="flex flex-wrap gap-1.5 items-center">
-        {tools.map((tool) => {
-          const iconInfo = toolIconMap?.get(tool.toolName);
+        {tools.map((entry) => {
+          if (entry.kind === "hook") {
+            return (
+              <HookCircle
+                key={entry.key}
+                data={entry.data}
+                isExpanded={expandedKey === entry.key}
+                isExpandable={canExpandToolCalls}
+                onClick={() => handleToggle(entry.key)}
+              />
+            );
+          }
+          const iconInfo = toolIconMap?.get(entry.toolName);
           const fallbackCatalogId =
             iconInfo?.catalogId ??
-            (isToolName(tool.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
+            (isToolName(entry.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
           return (
             <CompactCircle
-              key={tool.key}
-              toolName={tool.toolName}
+              key={entry.key}
+              toolName={entry.toolName}
               state={getCompactToolState({
-                part: tool.part,
-                toolResultPart: tool.toolResultPart,
+                part: entry.part,
+                toolResultPart: entry.toolResultPart,
               })}
-              isExpanded={expandedKey === tool.key}
+              isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}
-              onClick={() => handleToggle(tool.key)}
+              onClick={() => handleToggle(entry.key)}
               icon={iconInfo?.icon}
               catalogId={fallbackCatalogId}
             />
           );
         })}
       </div>
-      {expandedTool && (
+      {expandedEntry && (
         <div className="mt-2">
-          <ExpandedToolCard
-            tool={expandedTool}
-            onToolApprovalResponse={onToolApprovalResponse}
-          />
+          {expandedEntry.kind === "hook" ? (
+            <HookRunChip data={expandedEntry.data} defaultOpen />
+          ) : (
+            <ExpandedToolCard
+              tool={expandedEntry}
+              onToolApprovalResponse={onToolApprovalResponse}
+            />
+          )}
         </div>
       )}
     </div>
@@ -183,16 +267,8 @@ function ExpandedToolCard({
   }) => void;
 }) {
   const { part, toolResultPart, toolName, errorText } = tool;
-  const artifact = errorText ? null : extractArtifact(toolResultPart, part);
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
-  const hasContent = Boolean(
-    hasInput ||
-      errorText ||
-      isApprovalRequested ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
-  );
 
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
@@ -204,15 +280,15 @@ function ExpandedToolCard({
   });
 
   return (
-    <Tool defaultOpen={true}>
+    <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
         state={headerState}
-        isCollapsible={hasContent}
+        isCollapsible={false}
         actionButton={logsButton}
       />
       <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
+        {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}
         {isApprovalRequested &&
           onToolApprovalResponse &&
           "approval" in part &&
@@ -262,26 +338,7 @@ function ExpandedToolCard({
             errorText={errorText}
           />
         )}
-        {artifact ? <SandboxArtifactPreview artifact={artifact} /> : null}
       </ToolContent>
     </Tool>
   );
-}
-
-/**
- * Pull an ArtifactRef out of a tool result if the structured content looks
- * like one. Both shapes the SDK can return are covered:
- *   - flattened MCP structuredContent at `output.structuredContent`
- *   - the SDK's normalized object directly on `output`
- */
-function extractArtifact(
-  toolResultPart: ToolUIPart | DynamicToolUIPart | null,
-  part: ToolUIPart | DynamicToolUIPart,
-): ArtifactRef | null {
-  const resultOutput = toolResultPart?.output ?? part.output;
-  if (!resultOutput || typeof resultOutput !== "object") return null;
-  if (isArtifactRef(resultOutput)) return resultOutput;
-  const inner = (resultOutput as { structuredContent?: unknown })
-    .structuredContent;
-  return isArtifactRef(inner) ? inner : null;
 }

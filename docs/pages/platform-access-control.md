@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-03
+lastUpdated: 2026-06-19
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -37,7 +37,9 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
-| Skills | `read`, `create`, `update`, `delete`, `team-admin`, `execute` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin` |
+| Apps | `read`, `create`, `update`, `delete`, `team-admin` |
+| Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -49,14 +51,16 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete` |
+| MCP Registry | `read`, `create`, `update`, `delete`, `team-admin` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `admin` |
-| Knowledge Files | `read`, `create`, `update`, `delete` |
+| GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
@@ -80,21 +84,24 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete`, `execute` |
+| Skills | `read`, `create`, `update`, `delete` |
+| Apps | `read`, `create`, `update`, `delete` |
+| Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
-| LLM Virtual Keys | `read` |
+| LLM Virtual Keys | `read`, `create` |
 | LLM OAuth Clients | `read` |
 | LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete` |
+| MCP OAuth Clients | `read` |
 | Tools & Policies | `read` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Site Notifications | `read` |
@@ -133,6 +140,12 @@ The following table lists all available permissions that can be assigned to cust
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
+| `app:read` | View and run MCP Apps within your scope (org, your teams, your own) |
+| `app:create` | Create new MCP Apps |
+| `app:update` | Modify MCP Apps, their tools, and their team assignments |
+| `app:delete` | Delete MCP Apps |
+| `app:team-admin` | Manage team assignments for MCP Apps |
+| `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
 | `auditLog:read` | View the organization-wide audit log of administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
@@ -143,17 +156,16 @@ The following table lists all available permissions that can be assigned to cust
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
 | `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
+| `githubAppConfig:read` | View GitHub App configurations |
+| `githubAppConfig:create` | Create GitHub App configurations |
+| `githubAppConfig:update` | Modify GitHub App configurations |
+| `githubAppConfig:delete` | Delete GitHub App configurations |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
 | `identityProvider:delete` | Remove identity providers |
 | `invitation:create` | Send invitations to new users |
 | `invitation:cancel` | Cancel pending invitations |
-| `knowledgeFile:read` | View uploaded Knowledge Files |
-| `knowledgeFile:create` | Upload Knowledge Files |
-| `knowledgeFile:update` | Modify Knowledge File visibility and agent access |
-| `knowledgeFile:delete` | Delete Knowledge Files |
-| `knowledgeFile:admin` | View all Knowledge Files, bypassing visibility restrictions |
 | `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
 | `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `knowledgeSource:read` | View Knowledge Bases and Connectors |
@@ -199,10 +211,16 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpGateway:delete` | Delete MCP gateways |
 | `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
 | `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
+| `mcpOauthClient:read` | View MCP OAuth client registrations |
+| `mcpOauthClient:create` | Create MCP OAuth client registrations |
+| `mcpOauthClient:update` | Modify MCP OAuth client registrations |
+| `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
+| `mcpOauthClient:admin` | Manage all MCP OAuth client registrations |
 | `mcpRegistry:read` | Browse the MCP server registry |
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
+| `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
@@ -223,6 +241,11 @@ The following table lists all available permissions that can be assigned to cust
 | `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `project:read` | View projects and the chats inside them |
+| `project:create` | Create projects |
+| `project:update` | Edit project descriptions and sharing |
+| `project:delete` | Delete projects |
+| `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |
@@ -245,12 +268,10 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
-| `skill:execute` | Execute skill scripts |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |
 | `team:delete` | Delete teams |
-| `team:admin` | Manage team membership (add/remove members) |
 | `toolPolicy:read` | View tools, tool invocation policies, and trusted data policies |
 | `toolPolicy:create` | Register tools and create security policies |
 | `toolPolicy:update` | Modify tools, tool configuration, and security policies |
@@ -272,6 +293,17 @@ The most common scopes are:
 
 The elevated actions `:admin` and `:team-admin` are not global shortcuts with identical meaning on every resource. Their effect depends on the resource's runtime authorization rules.
 
+### Team Roles
+
+Team membership has its own role, separate from organization RBAC:
+
+- `member`: belongs to the team and can access resources shared with that team
+- `admin`: can manage membership and team-scoped settings for that team, such as external group sync mappings
+
+Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as `team:update`, `team:create`, or `team:delete`.
+
+Team roles are also separate from resource actions named `:team-admin`. For example, `agent:team-admin` controls team-scoped agent management; it does not make the user an admin member of every team.
+
 ### Agents, MCP Gateways, and LLM Proxies
 
 `agent`, `mcpGateway`, and `llmProxy` share the same scope model:
@@ -291,7 +323,7 @@ Examples:
 `llmProviderApiKey` and `llmVirtualKey` also support `personal`, `team`, and `org` scope, but they use different elevated permissions:
 
 - Personal records are limited to their owner
-- Team records require membership in the selected team, with some routes also allowing `team:admin`
+- Team records require membership in the selected team, with team member admins able to manage their own team
 - Organization-wide records require the resource-specific admin permission such as `llmProviderApiKey:admin` or `llmVirtualKey:admin`
 
 These resources do **not** use `:team-admin`.
@@ -313,7 +345,7 @@ Some MCP-related resources also apply runtime scope checks in addition to RBAC, 
 
 - Internal MCP catalog items can be `personal`, `team`, or `org`
 - Organization-wide catalog items require `mcpServerInstallation:admin`
-- Team MCP server installations depend on team membership, with broader control for users who have `team:admin`
+- Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
 
 When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
 

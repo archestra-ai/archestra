@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
+import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
@@ -3611,6 +3611,16 @@ describe("K8sDeployment.stopDeployment", () => {
 });
 
 describe("K8sDeployment.applyK8sNetworkPolicy", () => {
+  type CustomPolicyObject = {
+    metadata?: {
+      name?: string;
+      labels?: Record<string, string>;
+      annotations?: Record<string, string>;
+      finalizers?: string[];
+    };
+    spec?: Record<string, unknown>;
+  };
+
   function makeNetworkPolicyTestServer(): McpServer {
     return {
       id: "test-server-id",
@@ -3639,6 +3649,218 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         ...overrides,
       },
     };
+  }
+
+  function makeNetworkPolicyDeployment(params: {
+    networkingApi?: Partial<k8s.NetworkingV1Api>;
+    customObjectsApi?: Partial<k8s.CustomObjectsApi>;
+    coreApi?: Partial<k8s.CoreV1Api>;
+    effectiveNetworkPolicy: EffectiveNetworkPolicy;
+    networkPolicyCapabilities: {
+      kubernetesNetworkPolicy: boolean;
+      ciliumNetworkPolicy: boolean;
+      gkeFqdnNetworkPolicy: boolean;
+      awsApplicationNetworkPolicy: boolean;
+      provider:
+        | "kubernetes"
+        | "cilium"
+        | "gke-fqdn"
+        | "aws-application-network-policy";
+      supportsFqdn: boolean;
+      supportsHttpMethods: boolean;
+      message: string | null;
+    };
+  }): K8sDeployment {
+    return new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: (params.coreApi ?? {}) as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: params.networkingApi as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: params.customObjectsApi as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: params.effectiveNetworkPolicy,
+      networkPolicyCapabilities: params.networkPolicyCapabilities,
+    });
+  }
+
+  function makeStatefulNetworkingApi(
+    initialPolicies: k8s.V1NetworkPolicy[] = [],
+  ): {
+    api: Partial<k8s.NetworkingV1Api>;
+    policies: Map<string, k8s.V1NetworkPolicy>;
+  } {
+    const policies = new Map(
+      initialPolicies.map((policy) => [policy.metadata?.name ?? "", policy]),
+    );
+
+    const api = {
+      createNamespacedNetworkPolicy: vi.fn(
+        async ({ body }: { body: k8s.V1NetworkPolicy }) => {
+          const name = body.metadata?.name;
+          if (!name) throw new Error("NetworkPolicy name is required");
+          if (policies.has(name)) throw { statusCode: 409 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      replaceNamespacedNetworkPolicy: vi.fn(
+        async ({ name, body }: { name: string; body: k8s.V1NetworkPolicy }) => {
+          if (!policies.has(name)) throw { statusCode: 404 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      listNamespacedNetworkPolicy: vi.fn(
+        async ({ labelSelector }: { labelSelector?: string }) => ({
+          items: [...policies.values()].filter((policy) =>
+            hasLabels(policy.metadata?.labels, labelSelector),
+          ),
+        }),
+      ),
+      deleteNamespacedNetworkPolicy: vi.fn(
+        async ({ name }: { name: string }) => {
+          if (!policies.delete(name)) throw { statusCode: 404 };
+          return {};
+        },
+      ),
+    };
+
+    return { api, policies };
+  }
+
+  function makeStatefulCustomObjectsApi(params: {
+    resource: {
+      group: string;
+      version: string;
+      plural: string;
+    };
+    initialPolicies?: CustomPolicyObject[];
+  }): {
+    api: Partial<k8s.CustomObjectsApi>;
+    policies: Map<string, CustomPolicyObject>;
+  } {
+    const policies = new Map(
+      (params.initialPolicies ?? []).map((policy) => [
+        policy.metadata?.name ?? "",
+        policy,
+      ]),
+    );
+
+    const api = {
+      createNamespacedCustomObject: vi.fn(
+        async ({ body }: { body: CustomPolicyObject }) => {
+          const name = body.metadata?.name;
+          if (!name) throw new Error("Custom policy name is required");
+          if (policies.has(name)) throw { statusCode: 409 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      patchNamespacedCustomObject: vi.fn(
+        async ({ name, body }: { name: string; body: CustomPolicyObject }) => {
+          const existing = policies.get(name);
+          if (!existing) throw { statusCode: 404 };
+          policies.set(
+            name,
+            applyJsonMergePatch(existing, body) as CustomPolicyObject,
+          );
+          return {};
+        },
+      ),
+      listNamespacedCustomObject: vi.fn(
+        async ({
+          group,
+          version,
+          plural,
+          labelSelector,
+        }: {
+          group: string;
+          version: string;
+          plural: string;
+          labelSelector?: string;
+        }) => {
+          if (
+            group !== params.resource.group ||
+            version !== params.resource.version ||
+            plural !== params.resource.plural
+          ) {
+            return { items: [] };
+          }
+
+          return {
+            items: [...policies.values()].filter((policy) =>
+              hasLabels(policy.metadata?.labels, labelSelector),
+            ),
+          };
+        },
+      ),
+      deleteNamespacedCustomObject: vi.fn(
+        async ({
+          group,
+          version,
+          plural,
+          name,
+        }: {
+          group: string;
+          version: string;
+          plural: string;
+          name: string;
+        }) => {
+          if (
+            group !== params.resource.group ||
+            version !== params.resource.version ||
+            plural !== params.resource.plural
+          ) {
+            throw { statusCode: 404 };
+          }
+          if (!policies.delete(name)) throw { statusCode: 404 };
+          return {};
+        },
+      ),
+    };
+
+    return { api, policies };
+  }
+
+  /** RFC 7386 JSON merge patch: objects merge recursively, everything else replaces. */
+  function applyJsonMergePatch(target: unknown, patch: unknown): unknown {
+    if (
+      patch === null ||
+      typeof patch !== "object" ||
+      Array.isArray(patch) ||
+      target === null ||
+      typeof target !== "object" ||
+      Array.isArray(target)
+    ) {
+      return structuredClone(patch);
+    }
+    const result: Record<string, unknown> = {
+      ...(target as Record<string, unknown>),
+    };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) {
+        delete result[key];
+      } else {
+        result[key] = applyJsonMergePatch(result[key], value);
+      }
+    }
+    return result;
+  }
+
+  function hasLabels(
+    labels: Record<string, string> | undefined,
+    selector: string | undefined,
+  ): boolean {
+    if (!selector) return true;
+    if (!labels) return false;
+    return selector.split(",").every((part) => {
+      const [key, value] = part.split("=");
+      return labels[key] === value;
+    });
   }
 
   test("creates CiliumNetworkPolicy and removes Kubernetes NetworkPolicy when FQDN rules are available", async () => {
@@ -3935,6 +4157,351 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     expect(createNamespacedNetworkPolicy).not.toHaveBeenCalled();
     expect(deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
       name: "mcp-egress-mcp-mcp-test-server",
+      namespace: "default",
+    });
+  });
+
+  test("updates an existing Kubernetes NetworkPolicy and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api, policies } = makeStatefulNetworkingApi();
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes" as const,
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["198.51.100.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(api.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(1);
+    expect(api.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale",
+      namespace: "default",
+    });
+    expect(
+      policies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-cidrs"
+      ],
+    ).toBe("198.51.100.0/24");
+  });
+
+  test("updates an existing AWS ApplicationNetworkPolicy in place and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+    });
+    const coreApi = {
+      readNamespacedService: vi.fn(async () => ({
+        spec: { clusterIP: "172.20.0.10", clusterIPs: ["172.20.0.10"] },
+      })),
+    };
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: true,
+      provider: "aws-application-network-policy" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      coreApi: coreApi as unknown as Partial<k8s.CoreV1Api>,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    // Simulate a policy generated by an older release (no DNS bootstrap rule,
+    // one domainNames entry per rule, plus a controller-owned finalizer).
+    const existingPolicy = policies.get(policyName);
+    expect(existingPolicy).toBeDefined();
+    if (!existingPolicy?.metadata) throw new Error("expected policy metadata");
+    existingPolicy.metadata.finalizers = ["networking.k8s.aws/anp-resources"];
+    (existingPolicy as { spec?: Record<string, unknown> }).spec = {
+      podSelector: existingPolicy.spec?.podSelector,
+      policyTypes: ["Egress"],
+      egress: [{ to: [{ domainNames: ["api.example.com"] }] }],
+    };
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      coreApi: coreApi as unknown as Partial<k8s.CoreV1Api>,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "cdn.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "networking.k8s.aws",
+      version: "v1alpha1",
+      namespace: "default",
+      plural: "applicationnetworkpolicies",
+      name: "mcp-egress-generated-stale",
+    });
+
+    const updatedPolicy = policies.get(policyName);
+    expect(updatedPolicy?.metadata?.annotations).toMatchObject({
+      "archestra.io/network-policy-allowed-domains":
+        "api.example.com,cdn.example.com",
+      "archestra.io/network-policy-cluster-dns": "172.20.0.10",
+    });
+    // The improper egress rules are rewritten with the DNS bootstrap rule and
+    // a single consolidated domainNames list, without touching the finalizer.
+    expect(
+      (updatedPolicy as { spec?: { egress?: unknown } }).spec?.egress,
+    ).toEqual([
+      {
+        to: [{ ipBlock: { cidr: "172.20.0.10/32" } }],
+        ports: [
+          { protocol: "UDP", port: 53 },
+          { protocol: "TCP", port: 53 },
+        ],
+      },
+      { to: [{ domainNames: ["api.example.com", "cdn.example.com"] }] },
+    ]);
+    expect(updatedPolicy?.metadata?.finalizers).toEqual([
+      "networking.k8s.aws/anp-resources",
+    ]);
+  });
+
+  test("updates an existing CiliumNetworkPolicy and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "cilium.io",
+        version: "v2",
+        plural: "ciliumnetworkpolicies",
+      },
+    });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: true,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "cilium" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "*.example.org"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "cilium.io",
+      version: "v2",
+      namespace: "default",
+      plural: "ciliumnetworkpolicies",
+      name: "mcp-egress-generated-stale",
+    });
+    expect(
+      policies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,*.example.org");
+  });
+
+  test("updates GKE FQDNNetworkPolicy while keeping the desired Kubernetes NetworkPolicy and cleaning stale duplicates", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies: kubernetesPolicies } =
+      makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: gkePolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.gke.io",
+          version: "v1alpha1",
+          plural: "fqdnnetworkpolicies",
+        },
+      });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: true,
+      awsApplicationNetworkPolicy: false,
+      provider: "gke-fqdn" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const staleKubernetesPolicy = structuredClone(
+      kubernetesPolicies.get(policyName),
+    );
+    expect(staleKubernetesPolicy).toBeDefined();
+    if (!staleKubernetesPolicy?.metadata) {
+      throw new Error("expected Kubernetes policy metadata");
+    }
+    staleKubernetesPolicy.metadata.name = "mcp-egress-generated-stale-k8s";
+    kubernetesPolicies.set(
+      staleKubernetesPolicy.metadata.name,
+      staleKubernetesPolicy,
+    );
+
+    const staleGkePolicy = structuredClone(gkePolicies.get(policyName));
+    expect(staleGkePolicy).toBeDefined();
+    if (!staleGkePolicy?.metadata) {
+      throw new Error("expected GKE policy metadata");
+    }
+    staleGkePolicy.metadata.name = "mcp-egress-generated-stale-gke";
+    gkePolicies.set(staleGkePolicy.metadata.name, staleGkePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "cdn.example.com"],
+        allowedCidrs: ["198.51.100.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...kubernetesPolicies.keys()]).toEqual([policyName]);
+    expect([...gkePolicies.keys()]).toEqual([policyName]);
+    expect(networkingApi.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale-k8s",
+      namespace: "default",
+    });
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "networking.gke.io",
+      version: "v1alpha1",
+      namespace: "default",
+      plural: "fqdnnetworkpolicies",
+      name: "mcp-egress-generated-stale-gke",
+    });
+    expect(
+      gkePolicies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,cdn.example.com");
+  });
+
+  test("deleting managed network policy also cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies } = makeStatefulNetworkingApi();
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes" as const,
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    const deployment = makeNetworkPolicyDeployment({
+      networkingApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    });
+    await deployment.applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await deployment.deleteK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([]);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: policyName,
+      namespace: "default",
+    });
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale",
       namespace: "default",
     });
   });
@@ -5383,5 +5950,225 @@ describe("K8sDeployment.streamLogs", () => {
     }
 
     expect(k8sLogMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("K8sDeployment image pull failure handling", () => {
+  function makeDeploymentWithMockedApis(params: {
+    listNamespacedPod: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        listNamespacedPod: params.listNamespacedPod,
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment ?? vi.fn(),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  function makeWaitingPod(reason: string, message: string): k8s.V1Pod {
+    return {
+      metadata: {
+        name: "test-server-abc123",
+        creationTimestamp: new Date(),
+      },
+      status: {
+        phase: "Pending",
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            ready: false,
+            restartCount: 0,
+            state: { waiting: { reason, message } },
+          },
+        ],
+      },
+    } as k8s.V1Pod;
+  }
+
+  const runningPod = {
+    metadata: {
+      name: "test-server-abc123",
+      creationTimestamp: new Date(),
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          ready: true,
+          restartCount: 0,
+          state: { running: {} },
+        },
+      ],
+    },
+  } as k8s.V1Pod;
+
+  const imagePullPod = makeWaitingPod(
+    "ImagePullBackOff",
+    'Back-off pulling image "ghcr.io/example/mcp:latest"',
+  );
+
+  describe("refreshState", () => {
+    test("keeps state pending on transient image pull errors", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+      expect(deployment.statusSummary.error).toContain(
+        "Back-off pulling image",
+      );
+    });
+
+    test("recovers to running once the kubelet pull succeeds", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // first refresh: findAnyPodForDeployment + failure check see the pull error
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // second refresh: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("pending");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("still marks terminal container failures as failed", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "running";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("failed");
+      expect(deployment.statusSummary.error).toContain(
+        "restarting failed container",
+      );
+    });
+  });
+
+  describe("waitForDeploymentReady", () => {
+    test("keeps waiting through image pull errors and succeeds once the pull completes", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // attempt 1: failure scan sees the pull error (must not fail fast)
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // attempt 2: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(
+        deployment.waitForDeploymentReady(5, 1),
+      ).resolves.toBeUndefined();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("fails fast on terminal container states", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(5, 1)).rejects.toThrow(
+        /CrashLoopBackOff/,
+      );
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+
+    test("includes the last image pull error when timing out", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(2, 1)).rejects.toThrow(
+        /did not become ready after 2 attempts.*ImagePullBackOff/,
+      );
+    });
   });
 });

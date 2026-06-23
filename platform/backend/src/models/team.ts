@@ -1,8 +1,9 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
+  AgentLabelWithDetails,
   InsertTeam,
   Team,
   TeamExternalGroup,
@@ -11,6 +12,9 @@ import type {
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { TeamMemberRole } from "@/types/team-role";
+import AgentLabelModel from "./agent-label";
+import TeamLabelModel from "./team-label";
 import TeamTokenModel from "./team-token";
 
 class TeamModel {
@@ -18,7 +22,9 @@ class TeamModel {
    * Create a new team
    */
   static async create(
-    input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt">,
+    input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt"> & {
+      labels?: AgentLabelWithDetails[];
+    },
   ): Promise<Team> {
     logger.debug(
       { name: input.name, organizationId: input.organizationId },
@@ -26,21 +32,35 @@ class TeamModel {
     );
     const teamId = crypto.randomUUID();
     const now = new Date();
+    const { labels } = input;
 
-    const [team] = await db
-      .insert(schema.teamsTable)
-      .values({
-        id: teamId,
-        name: input.name,
-        description: input.description || null,
-        organizationId: input.organizationId,
-        createdBy: input.createdBy,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    // Insert the team row and its labels atomically so a failed label sync
+    // cannot leave a labelless team behind.
+    const team = await withDbTransaction(async (tx) => {
+      const [createdTeam] = await tx
+        .insert(schema.teamsTable)
+        .values({
+          id: teamId,
+          name: input.name,
+          description: input.description || null,
+          organizationId: input.organizationId,
+          createdBy: input.createdBy,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
 
-    // Auto-create a team token
+      if (labels && labels.length > 0) {
+        await TeamLabelModel.syncTeamLabels(teamId, labels, tx);
+      }
+
+      return createdTeam;
+    });
+    // No prune needed here: on create, label sync only creates keys/values and
+    // inserts rows (never deletes), so nothing can be orphaned.
+
+    // Auto-create a team token. Kept outside the transaction (pre-existing
+    // behavior); the atomicity guarantee covers the team row + labels only.
     await TeamTokenModel.createTeamToken(teamId, input.name);
     logger.debug({ teamId }, "TeamModel.create: created team token");
 
@@ -48,6 +68,7 @@ class TeamModel {
     return {
       ...team,
       members: [],
+      labels: await TeamLabelModel.getLabelsForTeam(teamId),
     };
   }
 
@@ -88,16 +109,26 @@ class TeamModel {
     limit: number;
     offset: number;
     name?: string;
+    labels?: Record<string, string[]>;
   }): Promise<{ data: Team[]; total: number }> {
-    const { organizationId, limit, offset, name } = params;
+    const { organizationId, limit, offset, name, labels } = params;
     logger.debug(
-      { organizationId, limit, offset, name },
+      { organizationId, limit, offset, name, labels },
       "TeamModel.findByOrganizationPaginated: fetching teams",
     );
+
+    const labelFilteredIds =
+      await TeamModel.resolveLabelFilteredTeamIds(labels);
+    if (labelFilteredIds?.length === 0) {
+      return { data: [], total: 0 };
+    }
 
     const filters = [
       eq(schema.teamsTable.organizationId, organizationId),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(labelFilteredIds
+        ? [inArray(schema.teamsTable.id, labelFilteredIds)]
+        : []),
     ];
 
     const [teams, totalResult] = await Promise.all([
@@ -114,21 +145,15 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamIds = teams.map((t) => t.id);
-    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
-
-    const teamsWithMembers = teams.map((team) => ({
-      ...team,
-      members: membersByTeam.get(team.id) || [],
-    }));
+    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(
-      { organizationId, count: teamsWithMembers.length, total },
+      { organizationId, count: teamsWithRelations.length, total },
       "TeamModel.findByOrganizationPaginated: completed",
     );
 
-    return { data: teamsWithMembers, total };
+    return { data: teamsWithRelations, total };
   }
 
   /**
@@ -219,26 +244,55 @@ class TeamModel {
   /**
    * Update a team
    */
-  static async update(id: string, input: UpdateTeam): Promise<Team | null> {
+  static async update(
+    id: string,
+    input: UpdateTeam & { labels?: AgentLabelWithDetails[] },
+  ): Promise<Team | null> {
     logger.debug({ id, input }, "TeamModel.update: updating team");
-    const [updatedTeam] = await db
-      .update(schema.teamsTable)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.teamsTable.id, id))
-      .returning();
+    const { labels, ...columns } = input;
+
+    const updatedTeam = await withDbTransaction(async (tx) => {
+      const [team] = await tx
+        .update(schema.teamsTable)
+        .set({
+          ...columns,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.teamsTable.id, id))
+        .returning();
+
+      if (!team) {
+        return null;
+      }
+
+      // Only touch labels when the caller explicitly provided them, so a PUT
+      // that omits labels leaves existing labels untouched.
+      if (labels !== undefined) {
+        await TeamLabelModel.syncTeamLabels(id, labels, tx);
+      }
+
+      return team;
+    });
 
     if (!updatedTeam) {
       logger.debug({ id }, "TeamModel.update: team not found");
       return null;
     }
 
+    // Prune orphaned keys/values after the transaction commits (label sync ran
+    // inside the transaction, so its own fire-and-forget prune was skipped).
+    if (labels !== undefined) {
+      AgentLabelModel.pruneKeysAndValues().catch(() => {});
+    }
+
     const members = await TeamModel.getTeamMembers(id);
 
     logger.debug({ id }, "TeamModel.update: completed");
-    return { ...updatedTeam, members };
+    return {
+      ...updatedTeam,
+      members,
+      labels: await TeamLabelModel.getLabelsForTeam(id),
+    };
   }
 
   /**
@@ -333,7 +387,7 @@ class TeamModel {
   static async addMember(
     teamId: string,
     userId: string,
-    role: string = MEMBER_ROLE_NAME,
+    role: TeamMemberRole = MEMBER_ROLE_NAME,
     syncedFromSso = false,
   ): Promise<TeamMember> {
     logger.debug(
@@ -360,6 +414,35 @@ class TeamModel {
       "TeamModel.addMember: completed",
     );
     return member;
+  }
+
+  static async updateMemberRole(params: {
+    teamId: string;
+    userId: string;
+    role: TeamMemberRole;
+  }): Promise<TeamMember | null> {
+    const { teamId, userId, role } = params;
+    logger.debug(
+      { teamId, userId, role },
+      "TeamModel.updateMemberRole: updating member role",
+    );
+
+    const [member] = await db
+      .update(schema.teamMembersTable)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .returning();
+
+    logger.debug(
+      { teamId, userId, updated: !!member },
+      "TeamModel.updateMemberRole: completed",
+    );
+    return member ?? null;
   }
 
   /**
@@ -451,6 +534,33 @@ class TeamModel {
   }
 
   /**
+   * Get the teams a user belongs to within an organization, with labels, shaped
+   * for trace span attributes. Org-scoped so spans never leak team metadata from
+   * the user's other organizations.
+   */
+  static async getTeamLabelInfoForUser(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<
+    Array<{ id: string; name: string; labels: AgentLabelWithDetails[] }>
+  > {
+    const teams = await TeamModel.getUserTeamsForOrganization(params);
+    if (teams.length === 0) {
+      return [];
+    }
+
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      teams.map((team) => team.id),
+    );
+
+    return teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      labels: labelsByTeam.get(team.id) ?? [],
+    }));
+  }
+
+  /**
    * Get paginated teams a user belongs to with optional name filter
    */
   static async getUserTeamsPaginated(params: {
@@ -458,16 +568,26 @@ class TeamModel {
     limit: number;
     offset: number;
     name?: string;
+    labels?: Record<string, string[]>;
   }): Promise<{ data: Team[]; total: number }> {
-    const { userId, limit, offset, name } = params;
+    const { userId, limit, offset, name, labels } = params;
     logger.debug(
-      { userId, limit, offset, name },
+      { userId, limit, offset, name, labels },
       "TeamModel.getUserTeamsPaginated: fetching user teams",
     );
+
+    const labelFilteredIds =
+      await TeamModel.resolveLabelFilteredTeamIds(labels);
+    if (labelFilteredIds?.length === 0) {
+      return { data: [], total: 0 };
+    }
 
     const filters = [
       eq(schema.teamMembersTable.userId, userId),
       ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(labelFilteredIds
+        ? [inArray(schema.teamsTable.id, labelFilteredIds)]
+        : []),
     ];
 
     const [teams, totalResult] = await Promise.all([
@@ -492,21 +612,15 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamIds = teams.map((t) => t.id);
-    const membersByTeam = await TeamModel.getTeamMembersBatch(teamIds);
-
-    const teamsWithMembers = teams.map((team) => ({
-      ...team,
-      members: membersByTeam.get(team.id) || [],
-    }));
+    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(
-      { userId, count: teamsWithMembers.length, total },
+      { userId, count: teamsWithRelations.length, total },
       "TeamModel.getUserTeamsPaginated: completed",
     );
 
-    return { data: teamsWithMembers, total };
+    return { data: teamsWithRelations, total };
   }
 
   /**
@@ -534,6 +648,34 @@ class TeamModel {
       "TeamModel.isUserInTeam: completed",
     );
     return isMember;
+  }
+
+  static async isUserTeamAdmin(
+    teamId: string,
+    userId: string,
+  ): Promise<boolean> {
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserTeamAdmin: checking admin role",
+    );
+    const [membership] = await db
+      .select({ id: schema.teamMembersTable.id })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      )
+      .limit(1);
+
+    const isAdmin = !!membership;
+    logger.debug(
+      { teamId, userId, isAdmin },
+      "TeamModel.isUserTeamAdmin: completed",
+    );
+    return isAdmin;
   }
 
   /**
@@ -614,6 +756,29 @@ class TeamModel {
     logger.debug(
       { userId, count: teamIds.length },
       "TeamModel.getUserTeamIds: completed",
+    );
+    return teamIds;
+  }
+
+  static async getUserAdminTeamIds(userId: string): Promise<string[]> {
+    logger.debug(
+      { userId },
+      "TeamModel.getUserAdminTeamIds: fetching admin team IDs",
+    );
+    const teamMemberships = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      );
+
+    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    logger.debug(
+      { userId, count: teamIds.length },
+      "TeamModel.getUserAdminTeamIds: completed",
     );
     return teamIds;
   }
@@ -1038,23 +1203,22 @@ class TeamModel {
 
   /**
    * Check if a user has access to a team.
-   * - Team admins have full access to all teams
-   * - Non-admins must be a member of the team
+   * - Organization-level team managers have full access to all teams
+   * - Other users must be a member of the team
    */
   static async checkTeamAccess({
     userId,
     teamId,
-    isTeamAdmin,
+    canManageAllTeams,
   }: {
     userId: string;
     teamId: string;
-    isTeamAdmin: boolean;
+    canManageAllTeams: boolean;
   }): Promise<void> {
-    // Admin has full access to all teams
-    if (isTeamAdmin) {
+    if (canManageAllTeams) {
       return;
     }
-    // Non-admins must be a member of the team
+
     const isMember = await TeamModel.isUserInTeam(teamId, userId);
     if (!isMember) {
       throw new ApiError(403, "Not authorized to access this team");
@@ -1078,11 +1242,13 @@ class TeamModel {
 
     if (!team) return null;
 
-    // Fetch relational data (members and external groups) to provide a complete
-    // picture in the audit log diff.
-    const [members, externalGroups] = await Promise.all([
+    // Fetch relational data (members, external groups, labels) to provide a
+    // complete picture in the audit log diff — without labels here, a
+    // labels-only update would produce an identical before/after snapshot.
+    const [members, externalGroups, labels] = await Promise.all([
       TeamModel.getTeamMembersWithUsers(id),
       TeamModel.getExternalGroups(id),
+      TeamLabelModel.getLabelsForTeam(id),
     ]);
 
     return {
@@ -1092,10 +1258,47 @@ class TeamModel {
       organizationId: team.organizationId,
       members: members.map((m) => `${m.name} (${m.email})`).sort(),
       externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
+      labels: labels.map((l) => `${l.key}:${l.value}`).sort(),
       createdBy: team.createdBy,
       createdAt: team.createdAt.toISOString(),
       updatedAt: team.updatedAt.toISOString(),
     };
+  }
+
+  // ===========================================================================
+  // Private helpers
+  // ===========================================================================
+
+  /**
+   * Resolve the set of team IDs matching a parsed labels filter, or null when
+   * no labels filter is active. An empty array means the filter matched nothing.
+   */
+  private static async resolveLabelFilteredTeamIds(
+    labels: Record<string, string[]> | undefined,
+  ): Promise<string[] | null> {
+    if (!labels || Object.keys(labels).length === 0) {
+      return null;
+    }
+    return TeamLabelModel.getTeamIdsMatchingLabels(labels);
+  }
+
+  /**
+   * Batch-attach members and labels to a page of team rows (avoids N+1).
+   */
+  private static async attachMembersAndLabels(
+    teams: (typeof schema.teamsTable.$inferSelect)[],
+  ): Promise<Team[]> {
+    const teamIds = teams.map((t) => t.id);
+    const [membersByTeam, labelsByTeam] = await Promise.all([
+      TeamModel.getTeamMembersBatch(teamIds),
+      TeamLabelModel.getLabelsForTeams(teamIds),
+    ]);
+
+    return teams.map((team) => ({
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+      labels: labelsByTeam.get(team.id) || [],
+    }));
   }
 }
 

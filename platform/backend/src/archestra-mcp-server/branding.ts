@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   type ArchestraMcpIdentityOptions,
@@ -7,7 +8,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
-} from "@shared";
+} from "@archestra/shared";
 import config from "@/config";
 import type { Organization } from "@/types";
 
@@ -36,11 +37,15 @@ class ArchestraMcpBranding {
     return getArchestraToolPrefix(this.identity);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   get iconLogo(): string | null {
     return config.enterpriseFeatures.fullWhiteLabeling
       ? this.state.iconLogo
       : null;
   }
+  // SPDX-SnippetEnd
 
   get allowedServerNames(): string[] {
     return Array.from(

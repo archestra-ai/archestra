@@ -1,7 +1,7 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { callApi } from "@/lib/chat/api-call";
 
 const {
   getConversationShare,
@@ -19,18 +19,13 @@ type ShareConversationMutationInput = {
 export function useConversationShare(conversationId: string | undefined) {
   return useQuery({
     queryKey: ["conversation-share", conversationId],
-    queryFn: async () => {
+    queryFn: () => {
       if (!conversationId) return null;
-      const response = await getConversationShare({
-        path: { id: conversationId },
-      });
-      if (response.error) {
-        if (response.response.status !== 404) {
-          handleApiError(response.error);
-        }
-        return null;
-      }
-      return response.data;
+      return callApi(
+        () => getConversationShare({ path: { id: conversationId } }),
+        null,
+        { silentStatuses: [404] },
+      );
     },
     enabled: !!conversationId,
     staleTime: 30 * 1000,
@@ -48,17 +43,15 @@ export function useShareConversation() {
       teamIds,
       userIds,
       suppressSuccessToast: _suppressSuccessToast,
-    }: ShareConversationMutationInput) => {
-      const { data, error } = await shareConversation({
-        path: { id: conversationId },
-        body: { visibility, teamIds, userIds },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
+    }: ShareConversationMutationInput) =>
+      callApi(
+        () =>
+          shareConversation({
+            path: { id: conversationId },
+            body: { visibility, teamIds, userIds },
+          }),
+        null,
+      ),
     onSuccess: (data, { conversationId, suppressSuccessToast }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
@@ -77,16 +70,11 @@ export function useUnshareConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (conversationId: string) => {
-      const { data, error } = await unshareConversation({
-        path: { id: conversationId },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
+    mutationFn: (conversationId: string) =>
+      callApi(
+        () => unshareConversation({ path: { id: conversationId } }),
+        null,
+      ),
     onSuccess: (_data, conversationId) => {
       queryClient.setQueryData(["conversation-share", conversationId], null);
       queryClient.invalidateQueries({
@@ -108,17 +96,11 @@ export function useForkSharedConversation() {
     }: {
       shareId: string;
       agentId: string;
-    }) => {
-      const { data, error } = await forkSharedConversation({
-        path: { shareId },
-        body: { agentId },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
+    }) =>
+      callApi(
+        () => forkSharedConversation({ path: { shareId }, body: { agentId } }),
+        null,
+      ),
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -136,17 +118,15 @@ export function useForkConversation() {
     }: {
       conversationId: string;
       agentId: string;
-    }) => {
-      const { data, error } = await forkChatConversation({
-        path: { id: conversationId },
-        body: { agentId },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
+    }) =>
+      callApi(
+        () =>
+          forkChatConversation({
+            path: { id: conversationId },
+            body: { agentId },
+          }),
+        null,
+      ),
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });

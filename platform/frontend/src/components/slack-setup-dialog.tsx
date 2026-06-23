@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -310,11 +310,15 @@ function StepInstall({
               </code>
               )
               <Input
-                type="password"
+                type="text"
                 value={botToken}
                 onChange={(e) => onBotTokenChange(e.target.value)}
                 placeholder="Paste your Bot User OAuth Token"
                 className="mt-1.5"
+                autoComplete="off"
+                data-bwignore
+                data-1p-ignore
+                data-lpignore="true"
               />
             </span>
           </li>
@@ -391,11 +395,15 @@ function StepAppLevelToken({
               </code>
               )
               <Input
-                type="password"
+                type="text"
                 value={appLevelToken}
                 onChange={(e) => onAppLevelTokenChange(e.target.value)}
                 placeholder="Paste your App-Level Token"
                 className="mt-1.5"
+                autoComplete="off"
+                data-bwignore
+                data-1p-ignore
+                data-lpignore="true"
               />
             </span>
           </li>
@@ -516,11 +524,15 @@ function StepManifestWebhook({
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>Signing Secret</strong>
               <Input
-                type="password"
+                type="text"
                 value={signingSecret}
                 onChange={(e) => onSigningSecretChange(e.target.value)}
                 placeholder="Paste your Signing Secret"
                 className="mt-1.5"
+                autoComplete="off"
+                data-bwignore
+                data-1p-ignore
+                data-lpignore="true"
               />
             </span>
           </li>

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { AnthropicTokenizer } from "./anthropic";
 import type { Tokenizer } from "./base";
 import { TiktokenTokenizer } from "./tiktoken";
@@ -26,6 +26,7 @@ const tokenizerFactories: Record<SupportedProvider, () => Tokenizer> = {
   ollama: () => new TiktokenTokenizer(),
   zhipuai: () => new TiktokenTokenizer(),
   deepseek: () => new TiktokenTokenizer(),
+  "github-copilot": () => new TiktokenTokenizer(),
   gemini: () => new TiktokenTokenizer(),
   bedrock: () => new TiktokenTokenizer(),
   minimax: () => new TiktokenTokenizer(),

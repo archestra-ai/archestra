@@ -4,7 +4,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_TEAM_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";
 import dotenv from "dotenv";
 
 // Load .env from platform root - this runs once when the module is imported
@@ -117,7 +117,7 @@ export {
   getIdentityProviderDialogNavButtonTestId,
   getIdpRoleMappingRuleRowTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";
 
 export const TEST_CATALOG_ITEM_NAME = "internal-dev-test-server";
 export const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
@@ -176,6 +176,10 @@ export const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
 // =============================================================================
 // MCP Server JWKS (example server for JWT propagation testing)
+//
+// The fixture MCP servers behind these images live in the examples repo
+// (archestra-ai/examples, test-fixtures/). Images are built/pushed manually
+// from there; the e2e suite only pulls the pinned tags below.
 // =============================================================================
 
 export const MCP_EXAMPLE_OAUTH_EXTERNAL_URL = "http://localhost:30083";

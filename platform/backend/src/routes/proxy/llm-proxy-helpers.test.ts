@@ -33,6 +33,18 @@ const mockCalculateCost =
       provider: string,
     ) => Promise<number | undefined>
   >();
+const mockCalculateCacheCost =
+  vi.fn<
+    (
+      model: string,
+      provider: string,
+      readTokens: number,
+      writeTokens: number,
+    ) => Promise<
+      | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
+      | undefined
+    >
+  >();
 vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
   const original =
     await importOriginal<
@@ -42,6 +54,8 @@ vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
     ...original,
     calculateCost: (...args: Parameters<typeof mockCalculateCost>) =>
       mockCalculateCost(...args),
+    calculateCacheCost: (...args: Parameters<typeof mockCalculateCacheCost>) =>
+      mockCalculateCacheCost(...args),
   };
 });
 
@@ -80,6 +94,7 @@ import {
   calculateInteractionCosts,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
+  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -97,12 +112,8 @@ describe("toSpanUserInfo", () => {
     });
   });
 
-  test("returns null for null input", () => {
-    expect(toSpanUserInfo(null)).toBeNull();
-  });
-
-  test("returns null for undefined input", () => {
-    expect(toSpanUserInfo(undefined)).toBeNull();
+  test.each([null, undefined])("returns null for %s input", (input) => {
+    expect(toSpanUserInfo(input)).toBeNull();
   });
 });
 
@@ -169,6 +180,11 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCost
       .mockResolvedValueOnce(0.001) // baseline
       .mockResolvedValueOnce(0.0005); // actual
+    mockCalculateCacheCost.mockResolvedValue({
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
+    });
 
     const result = await calculateInteractionCosts({
       baselineModel: "gpt-4",
@@ -177,14 +193,28 @@ describe("calculateInteractionCosts", () => {
       providerName: "openai",
     });
 
-    expect(result).toEqual({ baselineCost: 0.001, actualCost: 0.0005 });
+    expect(result).toEqual({
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
+    });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    expect(mockCalculateCost).toHaveBeenCalledWith("gpt-4", 100, 50, "openai");
+    const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
+    expect(mockCalculateCost).toHaveBeenCalledWith(
+      "gpt-4",
+      100,
+      50,
+      "openai",
+      cacheTokens,
+    );
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-3.5-turbo",
       100,
       50,
       "openai",
+      cacheTokens,
     );
   });
 
@@ -204,6 +234,7 @@ describe("calculateInteractionCosts", () => {
 
   test("handles undefined costs (model not found)", async () => {
     mockCalculateCost.mockResolvedValue(undefined);
+    mockCalculateCacheCost.mockResolvedValue(undefined);
 
     const result = await calculateInteractionCosts({
       baselineModel: "unknown-model",
@@ -215,6 +246,9 @@ describe("calculateInteractionCosts", () => {
     expect(result).toEqual({
       baselineCost: undefined,
       actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
     });
   });
 });
@@ -236,8 +270,18 @@ describe("buildInteractionRecord", () => {
     response: { id: "resp-1" },
     actualModel: "gpt-3.5-turbo",
     baselineModel: "gpt-4",
-    usage: { inputTokens: 100, outputTokens: 50 },
-    costs: { baselineCost: 0.001, actualCost: 0.0005 },
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 20,
+    },
+    costs: {
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0002,
+      cacheSavings: 0.0018,
+    },
     toonStats: {
       tokensBefore: 500,
       tokensAfter: 300,
@@ -290,16 +334,27 @@ describe("buildInteractionRecord", () => {
 
     expect(record.cost).toBe("0.0005000000");
     expect(record.baselineCost).toBe("0.0010000000");
+    expect(record.cacheCost).toBe("0.0002000000");
+    expect(record.cacheSavings).toBe("0.0018000000");
+    expect(record.cacheReadTokens).toBe(80);
+    expect(record.cacheWriteTokens).toBe(20);
   });
 
   test("handles null costs → null strings", () => {
     const record = buildInteractionRecord({
       ...baseParams,
-      costs: { baselineCost: undefined, actualCost: undefined },
+      costs: {
+        baselineCost: undefined,
+        actualCost: undefined,
+        cacheCost: undefined,
+        cacheSavings: undefined,
+      },
     });
 
     expect(record.cost).toBeNull();
     expect(record.baselineCost).toBeNull();
+    expect(record.cacheCost).toBeNull();
+    expect(record.cacheSavings).toBeNull();
   });
 
   test("handles null toonCostSavings", () => {
@@ -320,17 +375,11 @@ describe("buildInteractionRecord", () => {
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
-  test("includes source when provided", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      source: "chatops:slack",
-    });
-    expect(record.source).toBe("chatops:slack");
-  });
-
-  test("source is undefined when not provided", () => {
-    const record = buildInteractionRecord(baseParams);
-    expect(record.source).toBeUndefined();
+  test("passes source through when provided, undefined otherwise", () => {
+    expect(
+      buildInteractionRecord({ ...baseParams, source: "chatops:slack" }).source,
+    ).toBe("chatops:slack");
+    expect(buildInteractionRecord(baseParams).source).toBeUndefined();
   });
 });
 
@@ -452,5 +501,23 @@ describe("withSessionContext", () => {
     expect(withSpy).not.toHaveBeenCalled();
 
     withSpy.mockRestore();
+  });
+});
+
+describe("shouldForwardAnthropicBeta", () => {
+  test("forwards to real Anthropic (no base-URL override)", () => {
+    expect(shouldForwardAnthropicBeta("claude-opus-4-8", false)).toBe(true);
+  });
+
+  test("forwards to Claude proxied behind a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("claude-3-5-sonnet", true)).toBe(true);
+  });
+
+  test("strips for a non-Claude model on a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", true)).toBe(false);
+  });
+
+  test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
   });
 });

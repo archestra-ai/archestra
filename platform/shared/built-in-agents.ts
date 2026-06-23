@@ -11,6 +11,7 @@ export const BUILT_IN_AGENT_NAMES = {
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
+  APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -20,6 +21,7 @@ export const BUILT_IN_AGENT_IDS = {
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
   CONTEXT_COMPACTION: "context-compaction-subagent",
   CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
+  APP_RUNTIME: "app-runtime-llm-agent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -56,21 +58,12 @@ CRITICAL RULES:
 - Internal self-hosted READ tools (Jira reads, GitHub reads, GitLab reads, Confluence reads, database reads, internal wikis) → allow_when_context_is_sensitive (safe to call) + mark_as_sensitive (results contain org data that must not leak).
 - External-facing tools (browsers, Playwright, web search, email, external APIs) → block_when_context_is_sensitive (could leak context) + mark_as_safe (their results are controlled by us, not sensitive org data).
 
-Examples:
-- jira__get_issue: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- github__list_pull_requests: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- database__query: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- confluence__get_page: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- playwright__navigate: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing tool)
-- playwright__screenshot: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing tool)
+Examples — one per outcome; apply the rules above to classify any tool, not just these:
+- jira__get_issue: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal)
+- playwright__navigate: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing)
 - jira__create_issue: invocation="require_approval", result="mark_as_sensitive" (mutating internal write, not destructive)
-- github__merge_pull_request: invocation="require_approval", result="mark_as_sensitive" (mutating internal write, not destructive)
 - email__send: invocation="require_approval", result="mark_as_safe" (sends data outward, needs human confirmation)
-- payment__charge: invocation="require_approval", result="mark_as_safe" (consequential write, needs human confirmation)
-- jira__delete_issue: invocation="block_always", result="mark_as_safe" (destructive: delete)
-- github__delete_repo: invocation="block_always", result="mark_as_safe" (destructive: delete)
-- database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: drop)
-- file_delete: invocation="block_always", result="mark_as_safe" (destructive: delete)`;
+- database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: name dedicated to deletion)`;
 
 export const DUAL_LLM_MAIN_SYSTEM_PROMPT = `You are the privileged side of the Dual LLM security workflow.
 
@@ -193,6 +186,12 @@ export const CHAT_TITLE_GENERATION_SYSTEM_PROMPT = `You generate short chat titl
 
 Return only a concise 3-6 word title. Do not wrap the title in quotes. Do not include explanations, markdown, or punctuation unless it is part of the topic.`;
 
+// Identity for the LLM completions an MCP App requests through
+// `archestra.llm.complete()`. Each call supplies its own instruction (the SDK's
+// `system` option), so this prompt is only the fallback when the app provides
+// none; it is intentionally minimal.
+export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestra MCP App. Follow the app's instructions for the request and reply with only the requested content.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
@@ -201,4 +200,5 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION]: CONTEXT_COMPACTION_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION]:
     CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.APP_RUNTIME]: APP_RUNTIME_SYSTEM_PROMPT,
 };

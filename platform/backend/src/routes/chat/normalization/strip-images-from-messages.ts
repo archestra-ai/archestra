@@ -15,7 +15,7 @@
 import {
   isLargeResultBrowserMcpTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
@@ -207,6 +207,26 @@ function stripImagesFromParts(
       }
 
       // Strip images from tool output
+      return {
+        ...part,
+        output: convertImageBlocksToText(part.output),
+      };
+    }
+
+    // MCP/Archestra tools deserialize to `dynamic-tool` parts (not `tool-<name>`),
+    // so strip images from their output too — otherwise a get_app_diagnostics
+    // render screenshot stays base64 in history and reloads into context.
+    if (partType === "dynamic-tool" && part.output !== undefined) {
+      const toolName = typeof part.toolName === "string" ? part.toolName : "";
+      if (isBrowserToolToStrip(toolName)) {
+        const outputSize = getBrowserResultSize(part.output);
+        if (outputSize.isLarge) {
+          return {
+            ...part,
+            output: createBrowserToolPlaceholder(toolName, part.output),
+          };
+        }
+      }
       return {
         ...part,
         output: convertImageBlocksToText(part.output),

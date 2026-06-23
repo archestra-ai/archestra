@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import { sanitizeMetadataLabels } from "@/k8s/shared";
+import { networkPolicyDomains } from "@/services/environments/network-policy-domains";
 import type {
   EffectiveNetworkPolicy,
   K8sNetworkPolicyCapabilities,
@@ -156,6 +157,13 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
   name: string;
   podSelectorLabels: Record<string, string>;
   effectivePolicy: EffectiveNetworkPolicy;
+  /**
+   * ClusterIP(s) of the cluster DNS service. ApplicationNetworkPolicy only
+   * supports ipBlock and domainNames egress peers (no pod/namespace
+   * selectors), so DNS must be allowlisted by IP or the policy blocks all
+   * lookups and every domainNames rule becomes unreachable.
+   */
+  clusterDnsIps: string[];
 }): Record<string, unknown> {
   const policy = params.effectivePolicy.policy;
   if (!policy) {
@@ -177,14 +185,18 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
     metadata: {
       name: params.name,
       labels,
-      annotations: buildPolicyAnnotations(params.effectivePolicy, "active"),
+      annotations: {
+        ...buildPolicyAnnotations(params.effectivePolicy, "active"),
+        "archestra.io/network-policy-cluster-dns":
+          params.clusterDnsIps.join(",") || "any",
+      },
     },
     spec: {
       podSelector: {
         matchLabels: params.podSelectorLabels,
       },
       policyTypes: ["Egress"],
-      egress: buildAwsApplicationEgressRules(policy),
+      egress: buildAwsApplicationEgressRules(policy, params.clusterDnsIps),
     },
   };
 }
@@ -278,6 +290,7 @@ function buildCiliumEgressRules(
 
 function buildAwsApplicationEgressRules(
   policy: NonNullable<EffectiveNetworkPolicy["policy"]>,
+  clusterDnsIps: string[],
 ): Array<Record<string, unknown>> {
   if (policy.egressMode === "off") {
     return [];
@@ -287,15 +300,41 @@ function buildAwsApplicationEgressRules(
     return [];
   }
 
+  const domains = networkPolicyDomains(policy);
+
   return [
-    buildAwsDnsEgressRule(),
+    buildAwsDnsBootstrapEgressRule(clusterDnsIps),
     ...policy.allowedCidrs.map((cidr) => ({
       to: [{ ipBlock: { cidr } }],
     })),
-    ...networkPolicyDomains(policy).map((domain) => ({
-      to: [{ domainNames: [domain] }],
-    })),
+    // All domains go in a single domainNames list: one rule per domain
+    // bloats the generated PolicyEndpoints on EKS Auto Mode.
+    ...(domains.length > 0 ? [{ to: [{ domainNames: domains }] }] : []),
   ];
+}
+
+/**
+ * DNS bootstrap rule for EKS Auto Mode. When the cluster DNS ClusterIP could
+ * not be resolved, fall back to allowing port 53 anywhere — restricting DNS
+ * to an unknown IP would break every domainNames rule in the policy.
+ */
+function buildAwsDnsBootstrapEgressRule(
+  clusterDnsIps: string[],
+): Record<string, unknown> {
+  const to =
+    clusterDnsIps.length > 0
+      ? clusterDnsIps.map((ip) => ({
+          ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+        }))
+      : [{ ipBlock: { cidr: "0.0.0.0/0" } }];
+
+  return {
+    to,
+    ports: [
+      { protocol: "UDP", port: 53 },
+      { protocol: "TCP", port: 53 },
+    ],
+  };
 }
 
 function buildCiliumDnsEgressRule(): Record<string, unknown> {
@@ -315,29 +354,6 @@ function buildCiliumDnsEgressRule(): Record<string, unknown> {
           dns: [{ matchPattern: "*" }],
         },
       },
-    ],
-  };
-}
-
-function buildAwsDnsEgressRule(): Record<string, unknown> {
-  return {
-    to: [
-      {
-        namespaceSelector: {
-          matchLabels: {
-            "kubernetes.io/metadata.name": "kube-system",
-          },
-        },
-        podSelector: {
-          matchLabels: {
-            "k8s-app": "kube-dns",
-          },
-        },
-      },
-    ],
-    ports: [
-      { protocol: "UDP", port: 53 },
-      { protocol: "TCP", port: 53 },
     ],
   };
 }
@@ -406,108 +422,4 @@ function ciliumDomainRules(
   return networkPolicyDomains(policy).map((domain) =>
     domain.startsWith("*.") ? { matchPattern: domain } : { matchName: domain },
   );
-}
-
-function networkPolicyDomains(
-  policy: NonNullable<EffectiveNetworkPolicy["policy"]>,
-): string[] {
-  return [...presetDomains(policy.domainPreset), ...policy.allowedDomains];
-}
-
-/**
- * Preset allowlists are inspired by OpenAI Codex cloud internet access
- * presets and Claude Code web's trusted network access defaults.
- */
-const COMMON_DEPENDENCY_DOMAINS = Object.freeze([
-  "alpinelinux.org",
-  "archlinux.org",
-  "bitbucket.org",
-  "centos.org",
-  "crates.io",
-  "debian.org",
-  "docker.com",
-  "docker.io",
-  "*.docker.io",
-  "fedoraproject.org",
-  "files.pythonhosted.org",
-  "gcr.io",
-  "ghcr.io",
-  "github.com",
-  "*.github.com",
-  "githubusercontent.com",
-  "*.githubusercontent.com",
-  "gitlab.com",
-  "golang.org",
-  "goproxy.io",
-  "gradle.org",
-  "hex.pm",
-  "maven.org",
-  "mcr.microsoft.com",
-  "nodejs.org",
-  "npmjs.com",
-  "npmjs.org",
-  "nuget.org",
-  "packagecloud.io",
-  "packages.microsoft.com",
-  "packagist.org",
-  "pkg.go.dev",
-  "production.cloudflare.docker.com",
-  "pub.dev",
-  "pypa.io",
-  "pypi.org",
-  "pypi.python.org",
-  "raw.githubusercontent.com",
-  "objects.githubusercontent.com",
-  "quay.io",
-  "registry-1.docker.io",
-  "registry.npmjs.org",
-  "ruby-lang.org",
-  "rubygems.org",
-  "rustup.rs",
-  "ubuntu.com",
-  "yarnpkg.com",
-]);
-
-const PACKAGE_MANAGER_DOMAINS = Object.freeze([
-  "crates.io",
-  "files.pythonhosted.org",
-  "gcr.io",
-  "ghcr.io",
-  "golang.org",
-  "goproxy.io",
-  "gradle.org",
-  "hex.pm",
-  "maven.org",
-  "mcr.microsoft.com",
-  "npmjs.com",
-  "npmjs.org",
-  "nuget.org",
-  "packagist.org",
-  "pkg.go.dev",
-  "registry-1.docker.io",
-  "registry.npmjs.org",
-  "rubygems.org",
-  "rustup.rs",
-  "pub.dev",
-  "pypi.org",
-  "pypi.python.org",
-  "pythonhosted.org",
-  "quay.io",
-  "docker.io",
-  "*.docker.io",
-  "production.cloudflare.docker.com",
-  "yarnpkg.com",
-]);
-
-function presetDomains(
-  preset: NonNullable<EffectiveNetworkPolicy["policy"]>["domainPreset"],
-): readonly string[] {
-  switch (preset) {
-    case "common_dependencies":
-      return COMMON_DEPENDENCY_DOMAINS;
-    case "package_managers":
-      return PACKAGE_MANAGER_DOMAINS;
-    case "none":
-      return [];
-  }
 }

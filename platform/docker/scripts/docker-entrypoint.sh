@@ -171,7 +171,10 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # 2. Traffic never leaves the host machine (container-to-container communication)
         # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
         # 4. Production deployments use external K8s clusters with proper TLS certificates
-        # Use targeted approach to avoid duplicates and only modify KinD cluster entries
+        # Use targeted approach to avoid duplicates and only modify KinD cluster entries.
+        # certificate-authority-data is dropped alongside enabling insecure-skip-tls-verify:
+        # strict clients (kubectl, and the Dagger kube-pod:// transport) reject a kubeconfig
+        # that sets both, so keeping the CA would break the bundled Dagger Engine connection.
         cat "${KUBECONFIG_PATH}" | \
             sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
             awk '
@@ -184,6 +187,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
                     next
                 }
                 /^    insecure-skip-tls-verify:/ { next }
+                /^    certificate-authority-data:/ { next }
                 { print }
             ' > "${KUBECONFIG_PATH}.tmp"
         mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
@@ -214,6 +218,45 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_IP}"
         echo "Kubernetes orchestrator configured with embedded KinD cluster"
+    fi
+
+    # Bundle the Dagger Engine that backs the skill sandbox / code runtime
+    # (archestra__run_command and friends). It runs as a privileged pod in the embedded KinD
+    # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
+    # dial-stdio), so no Service or TCP port is needed. The manifest is the
+    # helm/dagger-runtime chart rendered with laptop-sized resources.
+    # Opt out with ARCHESTRA_CODE_RUNTIME_ENABLED=false.
+    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
+        echo "Deploying embedded Dagger Engine for code runtime..."
+        echo "NOTE: the engine is privileged and memory-hungry; ensure Docker has at least 6 GB."
+
+        # Pre-load the engine image straight into the node's containerd. KinD is
+        # recreated each run and its containerd cannot see the host Docker image
+        # cache, so without this every boot would pull ~352MB from the registry.
+        # The image is baked into this image as a docker-archive at build time, so
+        # the engine starts offline (manifest uses imagePullPolicy: IfNotPresent).
+        echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
+        kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
+            || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+
+        # Gate the runtime on the engine actually being Ready: kubectl apply only
+        # proves the API accepted the manifest, not that the pod scheduled and
+        # passed its probe. With the image pre-loaded, 60s is ample on the happy
+        # path; on timeout we leave the feature off rather than advertise a pod
+        # that never came up.
+        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+                statefulset/dagger-runtime-engine -n default --timeout=60s; then
+            # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
+            # the engine pod for the kube-pod:// transport.
+            export KUBECONFIG="${KUBECONFIG_PATH}"
+            export ARCHESTRA_CODE_RUNTIME_ENABLED="true"
+            export ARCHESTRA_AGENTS_SKILLS_ENABLED="${ARCHESTRA_AGENTS_SKILLS_ENABLED:-true}"
+            export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
+            echo "Dagger Engine ready - code runtime enabled"
+        else
+            echo "WARNING: Dagger Engine did not become ready; code runtime stays disabled"
+        fi
     fi
 fi
 
@@ -288,97 +331,9 @@ fi
 ESCAPED_DATABASE_URL=$(echo "$EFFECTIVE_DATABASE_URL" | sed 's/%/%%/g')
 awk -v url="$ESCAPED_DATABASE_URL" '{gsub(/DATABASE_URL="[^"]*"/, "DATABASE_URL=\"" url "\""); print}' /etc/supervisord.conf > /etc/supervisord.conf.tmp && mv /etc/supervisord.conf.tmp /etc/supervisord.conf
 
-# Configure ngrok tunnel if auth token is provided
-# ngrok is downloaded at runtime (not baked into the image) to avoid shipping
-# its Go stdlib CVEs in the Docker image. It's only needed when tunneling is enabled.
-# Pin to specific version with SHA256 verification for reproducibility and security.
-if [ -n "$ARCHESTRA_NGROK_AUTH_TOKEN" ]; then
-    echo "ngrok auth token detected - downloading ngrok and enabling tunnel to port 3000"
-    NGROK_VERSION="3.36.1"
-    ARCH=$(uname -m)
-    if [ "$ARCH" = "x86_64" ]; then
-        NGROK_ARCH="amd64"
-        NGROK_SHA256="4fe9d21be38fe8d4360b692543a2cc7345fc291b54a82ea99e7d33e46cadb765"
-    elif [ "$ARCH" = "aarch64" ]; then
-        NGROK_ARCH="arm64"
-        NGROK_SHA256="d04cc4650896e4f324e624247669f7b0d45ba28a19535fc3615d11c7b726a97e"
-    else
-        echo "ERROR: Unsupported architecture for ngrok: $ARCH"
-        exit 1
-    fi
-    NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v${NGROK_VERSION}-linux-${NGROK_ARCH}.tgz"
-    if ! wget -qO /tmp/ngrok.tgz "${NGROK_URL}"; then
-        echo "ERROR: Failed to download ngrok from ${NGROK_URL}"
-        exit 1
-    fi
-    echo "${NGROK_SHA256}  /tmp/ngrok.tgz" | sha256sum -c - || { echo "ERROR: ngrok checksum mismatch"; rm -f /tmp/ngrok.tgz; exit 1; }
-    tar -xzf /tmp/ngrok.tgz -C /usr/local/bin && \
-        chmod +x /usr/local/bin/ngrok && \
-        rm -f /tmp/ngrok.tgz
-    echo "ngrok $(ngrok version) installed"
-    ngrok config add-authtoken "$ARCHESTRA_NGROK_AUTH_TOKEN"
-
-    # Build ngrok command with optional static domain
-    if [ -n "$ARCHESTRA_NGROK_DOMAIN" ]; then
-        NGROK_CMD="ngrok http 3000 --log=stdout --log-format=term --domain=${ARCHESTRA_NGROK_DOMAIN}"
-        echo "Using custom ngrok domain: ${ARCHESTRA_NGROK_DOMAIN}"
-    else
-        NGROK_CMD="ngrok http 3000 --log=stdout --log-format=term"
-    fi
-
-    # Append ngrok program to supervisord config
-    cat >> /etc/supervisord.conf <<NGROK_CONF
-
-[program:ngrok]
-command=/bin/sh -c "sleep 10 && ${NGROK_CMD}"
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-priority=25
-NGROK_CONF
-
-    # If no explicit domain, detect the dynamically assigned ngrok domain
-    # after ngrok starts. Write it to a file so the backend can read it.
-    if [ -z "$ARCHESTRA_NGROK_DOMAIN" ]; then
-        cat > /app/detect-ngrok-domain.sh <<'DETECT_SCRIPT'
-#!/bin/sh
-# Poll ngrok API to discover the dynamically assigned tunnel URL
-for i in $(seq 1 30); do
-    NGROK_RESPONSE=$(wget -qO- http://localhost:4040/api/tunnels 2>/dev/null || true)
-    if [ -n "$NGROK_RESPONSE" ]; then
-        TUNNEL_URL=$(echo "$NGROK_RESPONSE" | sed -n 's/.*"public_url":"\([^"]*\)".*/\1/p' | head -1)
-        if [ -n "$TUNNEL_URL" ]; then
-            # Extract domain from URL (remove https:// prefix)
-            NGROK_DOMAIN=$(echo "$TUNNEL_URL" | sed 's|https://||')
-            echo "Detected ngrok domain: ${NGROK_DOMAIN}"
-            echo "$NGROK_DOMAIN" > /app/data/.ngrok_domain
-            exit 0
-        fi
-    fi
-    sleep 1
-done
-echo "Warning: Could not detect ngrok domain after 30 seconds"
-DETECT_SCRIPT
-        chmod +x /app/detect-ngrok-domain.sh
-
-        cat >> /etc/supervisord.conf <<DETECT_CONF
-
-[program:detect-ngrok-domain]
-command=/bin/sh -c "sleep 15 && /app/detect-ngrok-domain.sh"
-autostart=true
-autorestart=false
-startsecs=0
-priority=26
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-DETECT_CONF
-    fi
-fi
+# ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
+# handled in-process by the backend via the ngrok agent SDK — no binary download
+# or supervisord program is needed. See backend/src/ngrok-tunnel-manager.ts.
 
 # Set up signal handlers now that all initialization is complete
 trap cleanup SIGTERM SIGINT

@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type Organization = archestraApiTypes.GetOrganizationResponses["200"];
 
@@ -23,6 +23,7 @@ export function makeOrganization(
     compressionScope: "organization",
     globalToolPolicy: "permissive",
     allowChatFileUploads: false,
+    allowToolAutoAssignment: true,
     embeddingModel: null,
     embeddingDimensions: null,
     embeddingChatApiKeyId: null,
@@ -56,15 +57,13 @@ export function makeOrganization(
     connectionShownClientIds: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
-    presetEntityName: null,
-    presetEntityNamePlural: null,
-    presetEntityDefaultLabel: null,
-    presetEntityDefaultValidationRegex: null,
+    connectionDefaultProviderKeys: null,
     defaultEnvironmentName: null,
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,
     defaultNetworkPolicy: null,
     defaultEnvironmentRestricted: false,
+    defaultEnvironmentValidationRegex: null,
     ...overrides,
   };
 }

@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { VirtualApiKeyModel } from "@/models";
@@ -146,6 +146,67 @@ describe("validateVirtualApiKey", () => {
     const result = await validateVirtualApiKey(value, "openai");
     expect(result.apiKey).toBe("sk-real-provider-key");
     expect(result.baseUrl).toBeUndefined();
+  });
+
+  test("per-user provider: allows a personal virtual key self-mapped to the owner's own key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "my-copilot-vk",
+      scope: "personal",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    const result = await validateVirtualApiKey(value, "github-copilot");
+    expect(result.apiKey).toBe("gho_owner");
+  });
+
+  test("per-user provider: rejects an org-scoped (legacy/shared) virtual key at runtime", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    // Simulate a virtual key created before enforcement: org scope wrapping a
+    // per-user key. The runtime guard must refuse to hand out the token.
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "legacy-shared-copilot-vk",
+      scope: "org",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    await expect(
+      validateVirtualApiKey(value, "github-copilot"),
+    ).rejects.toThrow(/per-user/);
   });
 
   test("returns baseUrl when chat API key has one configured", async ({

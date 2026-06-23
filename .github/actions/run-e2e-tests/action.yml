@@ -114,7 +114,10 @@ runs:
           KUBE_ARGS+=("-e" "KUBECONFIG=/root/.kube/config")
         fi
 
-        docker run --rm \
+        # Bound the Playwright run itself so a hung test can't hold the runner
+        # until the job-level timeout. `timeout` exits 124 on expiry, which
+        # pipefail turns into a step failure handled by the caller.
+        timeout "${TIMEOUT_MINUTES}m" docker run --rm \
           --network host \
           --ipc=host \
           -v "$GITHUB_WORKSPACE:/work" \
@@ -124,7 +127,7 @@ runs:
           "${KUBE_ARGS[@]}" \
           "${ENV_ARGS[@]}" \
           "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-          /bin/bash -c "corepack enable && corepack prepare pnpm@11.4.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
+          /bin/bash -c "corepack enable && corepack prepare pnpm@11.5.2 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
           2>&1 | tee "${WORKING_DIRECTORY}/playwright-output.txt"
 
     - name: Check for flaky tests

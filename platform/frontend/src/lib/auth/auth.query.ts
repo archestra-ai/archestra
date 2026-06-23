@@ -1,4 +1,4 @@
-import { archestraApiSdk, type Permissions } from "@shared";
+import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -7,6 +7,7 @@ export const authQueryKeys = {
   all: ["auth"] as const,
   session: () => [...authQueryKeys.all, "session"] as const,
   orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
+  sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,

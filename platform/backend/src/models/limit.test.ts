@@ -4,9 +4,9 @@ import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
 import ModelModel from "./model";
-import OrganizationModel from "./organization";
 
 describe("CreateLimitSchema", () => {
   test("normalizes empty array to null for token_cost", () => {
@@ -2241,28 +2241,18 @@ describe("cleanupLimitsIfNeeded", () => {
       cleanupInterval: "1m",
     });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 100,
-      defaultUserLimitModel: ["gpt-4o"],
-      defaultUserLimitCleanupInterval: "12h",
+    // The org-wide default lives in the unified default_user_limits store
+    // (NULL environment), never as a concrete per-user `limits` row.
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 100,
+      model: ["gpt-4o"],
+      cleanupInterval: "12h",
     });
 
-    let firstUserLimits = await LimitModel.findAll("user", firstUser.id);
-    let secondUserLimits = await LimitModel.findAll("user", secondUser.id);
-    expect(firstUserLimits).toHaveLength(1);
-    expect(secondUserLimits).toHaveLength(0);
-    expect(
-      firstUserLimits.find((limit) => limit.id === manualLimit.id),
-    ).toBeDefined();
-
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 200,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
-    });
-
-    firstUserLimits = await LimitModel.findAll("user", firstUser.id);
-    secondUserLimits = await LimitModel.findAll("user", secondUser.id);
+    const firstUserLimits = await LimitModel.findAll("user", firstUser.id);
+    const secondUserLimits = await LimitModel.findAll("user", secondUser.id);
     expect(firstUserLimits).toHaveLength(1);
     expect(secondUserLimits).toHaveLength(0);
     expect(
@@ -2282,10 +2272,12 @@ describe("cleanupLimitsIfNeeded", () => {
     await makeMember(user.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: ["gpt-4o"],
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
     });
     const interaction = await makeInteraction(agent.id, {
       model: "gpt-4o",
@@ -2323,10 +2315,12 @@ describe("cleanupLimitsIfNeeded", () => {
     await makeMember(user.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: null,
+      cleanupInterval: "1w",
     });
     await LimitModel.create({
       entityType: "user",
@@ -2831,9 +2825,11 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       300,
     );
 
-    // Set old lastCleanup (far in the past)
+    // First day of the previous calendar month, so the default calendar_month
+    // cleanup fires regardless of today's day-of-month.
     const oldDate = new Date();
-    oldDate.setDate(oldDate.getDate() - 7);
+    oldDate.setDate(1);
+    oldDate.setMonth(oldDate.getMonth() - 1);
     await LimitModel.patch(oldLimit.id, { lastCleanup: oldDate });
 
     // Set recent lastCleanup (just now)

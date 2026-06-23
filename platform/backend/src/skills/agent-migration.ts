@@ -1,10 +1,13 @@
-import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
+import {
+  parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
 import { promptNeedsRendering } from "@/templating";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
- * Short names of the Archestra skill-runtime/plumbing tools (activate, read,
- * list, create, update). Every skill-enabled agent carries the whole set once
+ * Short names of the Archestra skill-runtime/plumbing tools (list, load,
+ * create, update). Every skill-enabled agent carries the whole set once
  * its org opts in, so recommending them inside a generated skill is circular
  * noise — the activating agent already has them. Matched by short name (prefix
  * stripped) so white-labeled tool prefixes are caught too.

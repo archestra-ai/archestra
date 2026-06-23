@@ -12,6 +12,7 @@ import type {
 } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import ModelModel from "./model";
 
 type LimitsCleanupOptionsEntities = {
@@ -596,13 +597,34 @@ class LimitModel {
     };
   }
 
+  // Org-scoped fetch for PATCH/DELETE authorization.  limitsTable has no
+  // organizationId column, so tenancy is resolved through the entity that owns
+  // the limit.  Returns null when the limit does not belong to the caller's
+  // organization (treated as 404 by routes).
+  static async findByIdInOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<Limit | null> {
+    const limit = await LimitModel.findById(id);
+    if (!limit) return null;
+
+    const inOrg = await LimitModel.isEntityInOrganization(
+      limit.entityType,
+      limit.entityId,
+      organizationId,
+    );
+    return inOrg ? limit : null;
+  }
+
   /**
    * Verify that a limit's entity (the row identified by `entityType` and
    * `entityId`) belongs to `organizationId`.  Each entity type lives in a
    * different table, so the FK path differs per branch.  Used by the
-   * snapshot-before-authz scope predicate in `findByIdForAudit`.
+   * snapshot-before-authz scope predicate in `findByIdForAudit`, by the
+   * org-scoping guards on create/update/delete routes, and by
+   * `findByIdInOrganization`.
    */
-  private static async isEntityInOrganization(
+  static async isEntityInOrganization(
     entityType: LimitEntityType,
     entityId: string,
     organizationId: string,
@@ -655,6 +677,19 @@ class LimitModel {
           .limit(1);
         return Boolean(hit);
       }
+      case "environment": {
+        const [hit] = await db
+          .select({ id: schema.environmentsTable.id })
+          .from(schema.environmentsTable)
+          .where(
+            and(
+              eq(schema.environmentsTable.id, entityId),
+              eq(schema.environmentsTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
     }
   }
 }
@@ -701,6 +736,10 @@ export class LimitValidationService {
         organizationId = await AgentModel.findOrganizationId(agentId);
       }
 
+      // Resolve the agent's environment (nullable). Used for environment-scoped
+      // limits and per-environment default-user limits.
+      const environmentId = await AgentModel.findEnvironmentId(agentId);
+
       const entities: LimitsCleanupOptionsEntities = {
         agent: agentId,
       };
@@ -715,6 +754,9 @@ export class LimitValidationService {
       }
       if (organizationId) {
         entities.organization = organizationId;
+      }
+      if (environmentId) {
+        entities.environment = environmentId;
       }
 
       logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
@@ -756,6 +798,7 @@ export class LimitValidationService {
             await LimitValidationService.checkDefaultUserLimit({
               organizationId,
               userId,
+              environmentId,
             });
           if (defaultUserLimitViolation) {
             logger.info(
@@ -779,6 +822,28 @@ export class LimitValidationService {
         return agentLimitViolation;
       }
       logger.debug(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
+
+      // Check environment-level limits (total usage across all users in the
+      // agent's environment).
+      if (environmentId) {
+        logger.debug(
+          `[LimitValidation] Checking environment-level limits for: ${environmentId}`,
+        );
+        const environmentLimitViolation =
+          await LimitValidationService.checkEntityLimits(
+            "environment",
+            environmentId,
+          );
+        if (environmentLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by environment-level limit for: ${environmentId}`,
+          );
+          return environmentLimitViolation;
+        }
+        logger.debug(
+          `[LimitValidation] Environment-level limits OK for: ${environmentId}`,
+        );
+      }
 
       // Check team-level limits
       if (agentTeamIds.length > 0) {
@@ -953,25 +1018,11 @@ export class LimitValidationService {
   private static async checkDefaultUserLimit(params: {
     organizationId: string;
     userId: string;
+    environmentId?: string | null;
   }): Promise<null | LimitViolationResponse> {
     try {
-      const [organization] = await db
-        .select({
-          defaultUserLimitValue:
-            schema.organizationsTable.defaultUserLimitValue,
-          defaultUserLimitModel:
-            schema.organizationsTable.defaultUserLimitModel,
-          defaultUserLimitCleanupInterval:
-            schema.organizationsTable.defaultUserLimitCleanupInterval,
-        })
-        .from(schema.organizationsTable)
-        .where(eq(schema.organizationsTable.id, params.organizationId))
-        .limit(1);
-
-      if (!organization?.defaultUserLimitValue) {
-        return null;
-      }
-
+      // A custom per-user limit always wins and disables every default
+      // (org-wide and per-environment) for that user.
       const customUserLimits = await LimitModel.findLimitsForValidation(
         "user",
         params.userId,
@@ -984,23 +1035,64 @@ export class LimitValidationService {
         return null;
       }
 
+      // A per-environment default overrides the org-wide default for requests in
+      // that environment; environments without one fall back to the org-wide
+      // default below.
+      if (params.environmentId) {
+        const envDefault =
+          await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
+            params.environmentId,
+          );
+        if (envDefault) {
+          const usage = await getDefaultUserLimitUsage({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            environmentId: params.environmentId,
+            models: normalizeLimitModels(envDefault.model),
+            cleanupInterval: envDefault.cleanupInterval,
+          });
+
+          if (usage.cost < envDefault.limitValue) {
+            return null;
+          }
+
+          return buildLimitViolationResponse({
+            entityType: "environment",
+            entityId: params.environmentId,
+            limitValue: envDefault.limitValue,
+            comparisonValue: usage.cost,
+            limitDescription: "cost_dollars",
+            totalTokensIn: usage.tokensIn,
+            totalTokensOut: usage.tokensOut,
+          });
+        }
+      }
+
+      // The organization-wide default is the NULL-environment row in the
+      // unified default-user-limits store. Its usage spans the user's whole org
+      // (no environment filter).
+      const globalDefault = await EnvironmentDefaultUserLimitModel.findGlobal(
+        params.organizationId,
+      );
+      if (!globalDefault) {
+        return null;
+      }
+
       const usage = await getDefaultUserLimitUsage({
         organizationId: params.organizationId,
         userId: params.userId,
-        models: normalizeLimitModels(organization.defaultUserLimitModel),
-        cleanupInterval:
-          organization.defaultUserLimitCleanupInterval ??
-          DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        models: normalizeLimitModels(globalDefault.model),
+        cleanupInterval: globalDefault.cleanupInterval,
       });
 
-      if (usage.cost < organization.defaultUserLimitValue) {
+      if (usage.cost < globalDefault.limitValue) {
         return null;
       }
 
       return buildLimitViolationResponse({
         entityType: "user",
         entityId: params.userId,
-        limitValue: organization.defaultUserLimitValue,
+        limitValue: globalDefault.limitValue,
         comparisonValue: usage.cost,
         limitDescription: "cost_dollars",
         totalTokensIn: usage.tokensIn,
@@ -1062,6 +1154,14 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.virtualApiKeysTable}
         WHERE ${schema.virtualApiKeysTable.id}::text = ${schema.limitsTable.entityId}
           AND ${schema.virtualApiKeysTable.organizationId} = ${organizationId}
+      )`,
+    ),
+    and(
+      eq(schema.limitsTable.entityType, "environment"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.environmentsTable}
+        WHERE ${schema.environmentsTable.id}::text = ${schema.limitsTable.entityId}
+          AND ${schema.environmentsTable.organizationId} = ${organizationId}
       )`,
     ),
   ) as SQL;
@@ -1174,11 +1274,10 @@ async function getDefaultUserLimitUsage(params: {
   userId: string;
   models: string[] | null;
   cleanupInterval: LimitCleanupInterval;
+  environmentId?: string | null;
 }) {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
-    eq(schema.agentsTable.organizationId, params.organizationId),
-    notDeleted(schema.agentsTable),
     buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 
@@ -1188,19 +1287,42 @@ async function getDefaultUserLimitUsage(params: {
     );
   }
 
-  const interactions = await db
-    .select({
-      model: schema.interactionsTable.model,
-      cost: schema.interactionsTable.cost,
-      inputTokens: schema.interactionsTable.inputTokens,
-      outputTokens: schema.interactionsTable.outputTokens,
-    })
-    .from(schema.interactionsTable)
-    .innerJoin(
-      schema.agentsTable,
-      eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-    )
-    .where(and(...conditions));
+  const selection = {
+    model: schema.interactionsTable.model,
+    cost: schema.interactionsTable.cost,
+    inputTokens: schema.interactionsTable.inputTokens,
+    outputTokens: schema.interactionsTable.outputTokens,
+  };
+
+  // Environment-scoped usage filters on the environment snapshotted on the
+  // interaction at request time. An environment belongs to exactly one org, so
+  // this already scopes to the org without joining the agent — and, like the
+  // incremental environment counter, it must count usage even after the
+  // originating agent is deleted (no `notDeleted(agent)` join).
+  const interactions = params.environmentId
+    ? await db
+        .select(selection)
+        .from(schema.interactionsTable)
+        .where(
+          and(
+            ...conditions,
+            eq(schema.interactionsTable.environmentId, params.environmentId),
+          ),
+        )
+    : await db
+        .select(selection)
+        .from(schema.interactionsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        )
+        .where(
+          and(
+            ...conditions,
+            eq(schema.agentsTable.organizationId, params.organizationId),
+            notDeleted(schema.agentsTable),
+          ),
+        );
 
   const modelsMissingCost = Array.from(
     new Set(

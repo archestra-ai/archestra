@@ -9,8 +9,9 @@ import {
 import skillSandboxesTable from "./skill-sandbox";
 
 /**
- * Ordered command log for a sandbox. Reading this in `createdAt` order
- * reproduces the sandbox state via Dagger replay; rows are append-only.
+ * Executed commands for a sandbox; rows are append-only. Replay order is NOT
+ * this table's `createdAt` — it is `skill_sandbox_replay_events.sequence`,
+ * which interleaves commands with uploads and skill mounts.
  */
 const skillSandboxCommandsTable = pgTable(
   "skill_sandbox_commands",

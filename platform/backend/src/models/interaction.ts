@@ -1,4 +1,4 @@
-import type { InteractionSource, PaginationQuery } from "@shared";
+import type { InteractionSource, PaginationQuery } from "@archestra/shared";
 import {
   and,
   asc,
@@ -267,9 +267,19 @@ class InteractionModel {
   }
 
   static async create(data: InsertInteraction) {
+    // Snapshot the environment from the agent at creation time (single funnel
+    // for all interaction writes) so per-environment cost-limit usage stays
+    // stable under later agent reassignment. The agent is authoritative: when a
+    // profile is present its current environment wins over any caller-supplied
+    // value. Only profile-less system interactions may set it explicitly.
+    const environmentId = data.profileId
+      ? await AgentModel.findEnvironmentId(data.profileId)
+      : (data.environmentId ?? null);
+
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
       ...data,
+      environmentId,
       request: stripNullBytes(data.request),
       response: stripNullBytes(data.response),
     };
@@ -804,6 +814,20 @@ class InteractionModel {
         );
       }
 
+      // Update environment-level token cost limits using the environment
+      // snapshotted on the interaction at creation time.
+      if (interaction.environmentId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "environment",
+            interaction.environmentId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
       // Execute all updates in parallel
       await Promise.all(updatePromises);
     } catch (error) {
@@ -936,9 +960,12 @@ class InteractionModel {
           requestCount: count(),
           totalInputTokens: sum(schema.interactionsTable.inputTokens),
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
+          totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
           totalCost: sum(schema.interactionsTable.cost),
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
+          totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
           // Count interactions where TOON was applied (has savings)
           toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
           // Count interactions by skip reason
@@ -1037,9 +1064,12 @@ class InteractionModel {
         requestCount: Number(s.requestCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
+        totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
+        totalCacheWriteTokens: Number(s.totalCacheWriteTokens) || 0,
         totalCost: s.totalCost,
         totalBaselineCost: s.totalBaselineCost,
         totalToonCostSavings: s.totalToonCostSavings,
+        totalCacheSavings: s.totalCacheSavings,
         toonSkipReasonCounts: {
           applied: Number(s.toonAppliedCount) || 0,
           notEnabled: Number(s.toonNotEnabledCount) || 0,

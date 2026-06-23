@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getApiErrorMessage, handleApiError } from "@/lib/utils";
@@ -276,6 +276,15 @@ export function useImportGithubSkills() {
         `Imported ${created} skill${created === 1 ? "" : "s"}` +
           (skipped > 0 ? ` — skipped ${skipped} already in the org` : ""),
       );
+      const droppedFiles = data.skippedFiles.reduce(
+        (sum, entry) => sum + entry.files.length,
+        0,
+      );
+      if (droppedFiles > 0) {
+        toast.warning(
+          `${droppedFiles} resource file${droppedFiles === 1 ? " was" : "s were"} not imported (oversized or unfetchable)`,
+        );
+      }
     },
   });
 }

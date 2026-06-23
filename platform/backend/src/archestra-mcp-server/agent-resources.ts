@@ -1,3 +1,4 @@
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -22,6 +23,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -98,8 +100,14 @@ export const CreateBaseToolArgsSchema = z
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_result, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes.",
     ),
+    accessAllTools: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings.",
+      ),
   })
   .strict();
 
@@ -147,6 +155,11 @@ export const AgentDetailOutputSchema = z.object({
   toolExposureMode: ToolExposureModeSchema.describe(
     "How tools are loaded for MCP clients and models.",
   ),
+  accessAllTools: z
+    .boolean()
+    .describe(
+      "Whether search_tools/run_tool may dynamically access every tool the calling user can access.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -193,6 +206,7 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    accessAllTools?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -268,6 +282,9 @@ export async function handleCreateResource<
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.accessAllTools !== undefined) {
+      createParams.accessAllTools = args.accessAllTools;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -407,7 +424,12 @@ export async function handleGetResource<
     }
 
     if (!record) {
-      return errorResult(`${getLabel} not found`);
+      // only agents have a discovery tool; proxies/gateways have no list tool.
+      const steer =
+        expectedType === "agent"
+          ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
+          : "";
+      return errorResult(`${getLabel} not found.${steer}`);
     }
 
     if (record.agentType !== expectedType) {
@@ -438,6 +460,7 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
+    accessAllTools?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -494,6 +517,9 @@ export async function handleEditResource<
     if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
+    }
+    if (args.accessAllTools !== undefined) {
+      updateData.accessAllTools = args.accessAllTools;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

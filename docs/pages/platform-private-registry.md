@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-06-01
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -78,112 +78,9 @@ Registry entries can carry labels — key-value pairs set under **Labels** in th
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Admins manage environments in **Settings > Environments**. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
+A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `environment:deploy-to-restricted` permission.
 
-An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
-
-### Network Egress Policies
-
-Network egress policies are configured directly on environments. They can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
-
-When an MCP server runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
-
-| Cluster provider        | IP/CIDR rules                                                         | Domain rules                                                                               |
-| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| EKS Auto Mode           | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | AWS `ApplicationNetworkPolicy` when the EKS Auto Mode Network Policy Controller is enabled |
-| EKS with AWS VPC CNI    | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Not supported outside EKS Auto Mode DNS-based policies                                     |
-| AKS                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Cilium `CiliumNetworkPolicy` when the cluster exposes the Cilium CRD                       |
-| GKE                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | GKE `FQDNNetworkPolicy` when GKE Dataplane V2 and FQDN network policy are enabled          |
-| Cilium-enabled clusters | Kubernetes `NetworkPolicy` or Cilium policy                           | Cilium `CiliumNetworkPolicy`                                                               |
-
-See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
-
-#### Domain Presets
-
-##### Common Dependencies
-
-```text
-alpinelinux.org
-archlinux.org
-bitbucket.org
-centos.org
-crates.io
-debian.org
-docker.com
-docker.io
-*.docker.io
-fedoraproject.org
-files.pythonhosted.org
-gcr.io
-ghcr.io
-github.com
-*.github.com
-githubusercontent.com
-*.githubusercontent.com
-gitlab.com
-golang.org
-goproxy.io
-gradle.org
-hex.pm
-maven.org
-mcr.microsoft.com
-nodejs.org
-npmjs.com
-npmjs.org
-nuget.org
-packagecloud.io
-packages.microsoft.com
-packagist.org
-pkg.go.dev
-production.cloudflare.docker.com
-pub.dev
-pypa.io
-pypi.org
-pypi.python.org
-raw.githubusercontent.com
-objects.githubusercontent.com
-quay.io
-registry-1.docker.io
-registry.npmjs.org
-ruby-lang.org
-rubygems.org
-rustup.rs
-ubuntu.com
-yarnpkg.com
-```
-
-##### Package Managers
-
-```text
-crates.io
-files.pythonhosted.org
-gcr.io
-ghcr.io
-golang.org
-goproxy.io
-gradle.org
-hex.pm
-maven.org
-mcr.microsoft.com
-npmjs.com
-npmjs.org
-nuget.org
-packagist.org
-pkg.go.dev
-registry-1.docker.io
-registry.npmjs.org
-rubygems.org
-rustup.rs
-pub.dev
-pypi.org
-pypi.python.org
-pythonhosted.org
-quay.io
-docker.io
-*.docker.io
-production.cloudflare.docker.com
-yarnpkg.com
-```
+See [Environments](/docs/platform-environments) for the full isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) (including the provider support matrix and domain presets).
 
 ## From Registry To Gateway
 

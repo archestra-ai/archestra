@@ -30,8 +30,19 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
-export const EMAIL_PLACEHOLDER = "admin@example.com";
-export const PASSWORD_PLACEHOLDER = "password";
+/**
+ * Max length (characters) of a project's display name. Kept short so project
+ * lists, headers, and dialogs stay readable. Enforced by the projects API and
+ * the create/edit forms.
+ */
+export const PROJECT_NAME_MAX_LENGTH = 64;
+
+/**
+ * Max length (characters) of a project's description. Kept to roughly a
+ * sentence or two so it stays a short blurb in project cards/headers rather
+ * than a wall of text. Enforced by the projects API and the create/edit forms.
+ */
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 200;
 
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
@@ -41,6 +52,7 @@ export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
 export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 export const LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
+export const MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 
 /**
  * Separator used to construct fully-qualified MCP tool names

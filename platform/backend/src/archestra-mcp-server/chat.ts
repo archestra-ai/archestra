@@ -1,4 +1,3 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -6,7 +5,8 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
   type ToolStateMcpToolError,
   ToolStateMcpToolErrorSchema,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
@@ -157,7 +157,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_ARTIFACT_WRITE_SHORT_NAME,
     title: "Write Artifact",
     description:
-      "Write or update a markdown artifact for the current conversation. Use this tool to maintain a persistent document that evolves throughout the conversation. The artifact should contain well-structured markdown content that can be referenced and updated as the conversation progresses. Each call to this tool completely replaces the existing artifact content. " +
+      "Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. Markdown only: never write HTML pages or interactive apps here; when the user asks for an app, tool, or interactive UI and a scaffold_app tool is available, use that instead. Each call completely replaces the existing artifact content. " +
       "Mermaid diagrams: Use ```mermaid blocks. " +
       "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
     schema: z
@@ -189,8 +189,8 @@ const registry = defineArchestraTools([
       try {
         let successMessage = `Successfully updated artifact (${args.content.length} characters)`;
 
-        // Scheduled run context — write to the run (conversationId is a
-        // synthetic isolation key, not a real DB conversation)
+        // Scheduled run context — write to the run (there is no conversation
+        // to attach the artifact to)
         if (context.scheduleTriggerRunId) {
           const updated = await ScheduleTriggerRunModel.setArtifact(
             context.scheduleTriggerRunId,

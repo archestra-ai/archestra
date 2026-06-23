@@ -1,6 +1,7 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "@/lib/utils";
 
 const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
   archestraApiSdk;
@@ -47,17 +48,18 @@ export function useLimit(id: string) {
 export function useCreateLimit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: archestraApiTypes.CreateLimitData["body"]) => {
-      const response = await createLimit({ body: data });
-      return response.data;
+    mutationFn: async (body: archestraApiTypes.CreateLimitData["body"]) => {
+      const { data, error } = await createLimit({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (!result) return;
       await queryClient.invalidateQueries({ queryKey: ["limits"] });
       toast.success("Limit created successfully");
-    },
-    onError: (error) => {
-      console.error("Create limit error:", error);
-      toast.error("Failed to create limit");
     },
   });
 }
@@ -65,23 +67,21 @@ export function useCreateLimit() {
 export function useUpdateLimit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: UpdateLimitParams) => {
-      const response = await updateLimit({
-        path: { id },
-        body: data,
-      });
-      return response.data;
+    mutationFn: async ({ id, ...body }: UpdateLimitParams) => {
+      const { data, error } = await updateLimit({ path: { id }, body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
-    onSuccess: async (_, variables) => {
+    onSuccess: async (result, variables) => {
+      if (!result) return;
       await queryClient.invalidateQueries({ queryKey: ["limits"] });
       await queryClient.invalidateQueries({
         queryKey: ["limits", variables.id],
       });
       toast.success("Limit updated successfully");
-    },
-    onError: (error) => {
-      console.error("Update limit error:", error);
-      toast.error("Failed to update limit");
     },
   });
 }
@@ -90,17 +90,18 @@ export function useDeleteLimit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id }: DeleteLimitParams) => {
-      const response = await deleteLimit({ path: { id } });
-      return response.data;
+      const { data, error } = await deleteLimit({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? { success: true };
     },
-    onSuccess: async (_, variables) => {
+    onSuccess: async (result, variables) => {
+      if (!result) return;
       await queryClient.invalidateQueries({ queryKey: ["limits"] });
       queryClient.removeQueries({ queryKey: ["limits", variables.id] });
       toast.success("Limit deleted successfully");
-    },
-    onError: (error) => {
-      console.error("Delete limit error:", error);
-      toast.error("Failed to delete limit");
     },
   });
 }

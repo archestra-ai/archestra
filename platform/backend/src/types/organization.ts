@@ -5,12 +5,16 @@ import {
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
-import { NetworkPolicyInputSchema, NetworkPolicySchema } from "./environment";
+import {
+  NetworkPolicyInputSchema,
+  NetworkPolicySchema,
+  ValidationRegexSchema,
+} from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
@@ -241,6 +245,15 @@ export const ConnectionBaseUrlSchema = z.object({
   visible: z.boolean().default(true),
 });
 
+/** provider → llm_provider_api_keys.id for auto-provisioned connection virtual keys. */
+export const ConnectionDefaultProviderKeysSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.string().uuid(),
+);
+export type ConnectionDefaultProviderKeys = z.infer<
+  typeof ConnectionDefaultProviderKeysSchema
+>;
+
 export const OnboardingWizardPageSchema = z.object({
   image: Base64ImageSchema.optional(),
   content: z.string(),
@@ -316,10 +329,7 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
-  presetEntityName: z.string().nullable(),
-  presetEntityNamePlural: z.string().nullable(),
-  presetEntityDefaultLabel: z.string().nullable(),
-  presetEntityDefaultValidationRegex: z.string().nullable(),
+  connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
 };
 
@@ -330,11 +340,24 @@ const InternalSelectOrganizationSchema = createSelectSchema(
 export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   analyticsInstanceStartedAt: true,
   analyticsInstanceLastHeartbeatAt: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer exposed via the API.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
-);
+).omit({
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer accepted by the API, mirroring SelectOrganizationSchema.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
@@ -357,15 +380,13 @@ export const UpdateAppearanceSettingsSchema = z.object({
 export const UpdateSecuritySettingsSchema = z.object({
   globalToolPolicy: GlobalToolPolicySchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
+  allowToolAutoAssignment: z.boolean().optional(),
 });
 
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
-  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
-  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
-  defaultUserLimitCleanupInterval:
-    LimitCleanupIntervalSchema.nullable().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({
@@ -390,6 +411,8 @@ export const UpdateAuthSettingsSchema = z.object({
 
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionDefaultProviderKeys:
+    ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionShownClientIds: z
@@ -432,8 +455,9 @@ export const UpdateConnectionSettingsSchema = z.object({
 /**
  * Clean API shape for configuring the implicit "default" environment. The
  * handler maps these to the org columns (`defaultEnvironmentName`,
- * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`). Omitting a
- * field leaves it unchanged; an explicit null clears the nullable ones.
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`,
+ * `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
+ * an explicit null clears the nullable ones.
  */
 export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
@@ -441,6 +465,7 @@ export const UpdateDefaultEnvironmentSchema = z.object({
   namespace: z.string().trim().max(253).nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
 });
 
 export type UpdateDefaultEnvironment = z.infer<

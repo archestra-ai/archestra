@@ -28,7 +28,13 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
+    ARCHESTRA_BETA: "true"
     ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
+    ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED: "true"
+    ARCHESTRA_AGENT_HOOKS_ENABLED: "true"
+    ARCHESTRA_APPS_ENABLED: "true"
+    ARCHESTRA_PROJECTS_ENABLED: "true"
+    ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
@@ -47,6 +53,7 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
+    ARCHESTRA_DATABASE_POOL_MAX: "8"
 
   diagnostics:
     enabled: true
@@ -93,6 +100,7 @@ archestra:
       # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
       # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
       cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
+      cloud.google.com/neg: '{"ingress": true}'
 
   ingress:
     enabled: true
@@ -112,10 +120,40 @@ archestra:
             pathType: Prefix
       - host: backend.archestra.dev
         paths:
-          # Block public access to metrics endpoint
-          - path: /metrics
-            port: 1
-            pathType: Exact
           - path: /
             port: 9000
             pathType: Prefix
+
+postgresql:
+  # Staging still uses the bundled PostgreSQL chart. This is not HA, but these
+  # settings keep routine app deploys and voluntary node disruptions from
+  # bouncing the only database pod.
+  primary:
+    priorityClassName: platform-default
+    terminationGracePeriodSeconds: 120
+    pdb:
+      create: true
+      maxUnavailable: 0
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 12
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 12
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"

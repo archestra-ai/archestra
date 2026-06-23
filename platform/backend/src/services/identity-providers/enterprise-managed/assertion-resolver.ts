@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
+import type { ToolOwner } from "@/types";
 
 interface EnterpriseAssertionResolution {
   assertion: string;
@@ -11,17 +13,26 @@ interface EnterpriseAssertionResolution {
 }
 
 export async function resolveEnterpriseAssertion(params: {
-  agentId: string;
+  owner: ToolOwner;
   identityProviderId?: string;
   tokenAuth?: TokenAuthContext;
 }): Promise<EnterpriseAssertionResolution | null> {
-  const agent = await AgentModel.findById(params.agentId);
-  if (!agent) {
-    return null;
+  // The IdP the owner is bound to. Agents may bind one (and an unknown agent
+  // yields no assertion, as before); apps are never bound and rely entirely on
+  // the config-provided identityProviderId.
+  let ownerBoundIdentityProviderId: string | null;
+  if (params.owner.type === "agent") {
+    const agent = await AgentModel.findById(params.owner.id);
+    if (!agent) {
+      return null;
+    }
+    ownerBoundIdentityProviderId = agent.identityProviderId;
+  } else {
+    ownerBoundIdentityProviderId = null;
   }
 
   const effectiveIdentityProviderId =
-    params.identityProviderId ?? agent.identityProviderId;
+    params.identityProviderId ?? ownerBoundIdentityProviderId;
   if (!effectiveIdentityProviderId) {
     return null;
   }
@@ -33,11 +44,13 @@ export async function resolveEnterpriseAssertion(params: {
     return null;
   }
 
+  // Raw-token passthrough only when the owner is bound to the same IdP the
+  // caller authenticated with. Apps (no bound IdP) always take the session path.
   if (
     params.tokenAuth?.isExternalIdp &&
     params.tokenAuth.rawToken &&
-    agent.identityProviderId &&
-    effectiveIdentityProviderId === agent.identityProviderId
+    ownerBoundIdentityProviderId &&
+    effectiveIdentityProviderId === ownerBoundIdentityProviderId
   ) {
     return {
       assertion: params.tokenAuth.rawToken,
@@ -51,7 +64,7 @@ export async function resolveEnterpriseAssertion(params: {
   }
 
   const sessionToken = await resolveSessionExternalIdpToken({
-    agentId: params.agentId,
+    agentId: params.owner.type === "agent" ? params.owner.id : undefined,
     identityProviderId: effectiveIdentityProviderId,
     userId: params.tokenAuth.userId,
   });
@@ -62,7 +75,8 @@ export async function resolveEnterpriseAssertion(params: {
   if (sessionToken.identityProviderId !== effectiveIdentityProviderId) {
     logger.warn(
       {
-        agentId: params.agentId,
+        ownerType: params.owner.type,
+        ownerId: params.owner.id,
         userId: params.tokenAuth.userId,
         requestedIdentityProviderId: effectiveIdentityProviderId,
         sessionIdentityProviderId: sessionToken.identityProviderId,

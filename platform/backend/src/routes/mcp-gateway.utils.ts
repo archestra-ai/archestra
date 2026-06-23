@@ -1,8 +1,26 @@
 import { createHash } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  hasArchestraTokenPrefix,
+  isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
+  OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -11,18 +29,6 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  hasArchestraTokenPrefix,
-  isAgentTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  OAUTH_TOKEN_ID_PREFIX,
-  parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -44,9 +50,11 @@ import {
   InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  McpOauthClientModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -58,19 +66,21 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import type {
-  AgentAccessContext,
-  AgentType,
-  CommonToolCall,
-  SelectTeamToken,
-  SelectUserToken,
-  ToolExposureMode,
+import {
+  type AgentAccessContext,
+  type AgentType,
+  agentOwner,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  type ToolExposureMode,
 } from "@/types";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
@@ -143,6 +153,7 @@ export async function createAgentServer(
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   } as const;
 
   const mcpServer = new McpServer(
@@ -166,6 +177,17 @@ export async function createAgentServer(
 
   const agent = await AgentModel.findById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -300,7 +322,7 @@ export async function createAgentServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -360,6 +382,8 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            teams,
+            userTeams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -457,15 +481,38 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          teams,
+          userTeams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCall(
+            const r = await mcpClient.executeToolCallForOwner(
               toolCall,
-              agentId,
+              agentOwner(agentId),
               tokenAuth,
+              {
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
@@ -561,6 +608,33 @@ export function createStatelessTransport(
 
   logger.info({ agentId }, "Stateless transport instance created");
   return transport;
+}
+
+/**
+ * Hono's Node adapter drains unread request bodies by calling
+ * `request.socket.destroySoon()`. Fastify inject uses a socket-like test object
+ * without that legacy method, so provide the method only when the socket lacks it.
+ */
+export function ensureRequestSocketDestroySoon(request: IncomingMessage): void {
+  const socket = request.socket as
+    | (IncomingMessage["socket"] & {
+        destroySoon?: () => void;
+        end?: () => void;
+      })
+    | undefined;
+
+  if (!socket || typeof socket.destroySoon === "function") {
+    return;
+  }
+
+  socket.destroySoon = () => {
+    if (typeof socket.destroy === "function") {
+      socket.destroy();
+      return;
+    }
+
+    socket.end?.();
+  };
 }
 
 /**
@@ -864,6 +938,30 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    // A token audience-bound to a shareable-App connector is valid only at that
+    // connector, never at the MCP gateway — reject it before the user-access
+    // branch would otherwise accept it on team membership alone.
+    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+      logger.warn(
+        { profileId: params.profileId },
+        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
+      );
+      return null;
+    }
+
+    // Application (client_credentials) tokens minted for an MCP OAuth client
+    // carry no acting user. Authorize them against the client's allowed gateways
+    // instead of a user's team membership.
+    if (
+      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
+    ) {
+      return validateMcpOauthClientToken({
+        accessToken,
+        profileId: params.profileId,
+        organizationId: agent.organizationId,
+      });
+    }
+
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -889,18 +987,31 @@ async function validateOAuthTokenByHash(params: {
       };
     }
 
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (
-      !(await AgentTeamModel.userHasAgentAccess(
-        userId,
-        params.profileId,
-        false,
-        agent,
-      ))
-    ) {
+    // Non-admin access has two additive sources:
+    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+    //      that minted this token — its allowedGatewayIds may grant access to
+    //      gateways the user could not otherwise reach (e.g. a gateway reachable
+    //      only through a specific pre-registered app).
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+      userId,
+      params.profileId,
+      false,
+      agent,
+    );
+    const hasClientGrant =
+      hasRbacAccess || !accessToken.clientId
+        ? false
+        : await mcpOauthClientGrantsGatewayAccess({
+            clientId: accessToken.clientId,
+            profileId: params.profileId,
+            organizationId,
+          });
+
+    if (!hasRbacAccess && !hasClientGrant) {
       logger.warn(
         { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
+        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
       return null;
     }
@@ -923,6 +1034,102 @@ async function validateOAuthTokenByHash(params: {
     );
     return null;
   }
+}
+
+/**
+ * Authorize a client_credentials access token minted for an MCP OAuth client.
+ *
+ * These are application tokens (machine-to-machine): there is no acting user,
+ * so authorization is the client's explicit `allowedGatewayIds` list rather
+ * than team membership. The per-gateway check here is the real authorization
+ * gate — a successful result grants access to exactly the requested gateway and
+ * nothing broader (teamId/isOrganizationToken stay null/false, so no downstream
+ * code re-broadens access).
+ *
+ * Note: an MCP OAuth client is a shared application credential with no acting
+ * user, so gateway tools that resolve per-user/dynamic upstream credentials at
+ * call time are not supported — assign shared/org-scoped credentials to those
+ * tools.
+ */
+async function validateMcpOauthClientToken(params: {
+  accessToken: {
+    id: string;
+    clientId: string | null;
+    referenceId: string | null;
+    scopes: string[] | null;
+  };
+  profileId: string;
+  organizationId: string;
+}): Promise<TokenAuthResult | null> {
+  const { accessToken, profileId, organizationId } = params;
+
+  // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
+  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
+    return null;
+  }
+  if (!accessToken.clientId) {
+    return null;
+  }
+
+  // findByClientId returns null when the client was deleted or disabled.
+  const oauthClient = await McpOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (!oauthClient) {
+    return null;
+  }
+
+  // Defense in depth: the token's referenceId must point at this exact client.
+  if (
+    accessToken.referenceId !==
+    `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
+  ) {
+    return null;
+  }
+
+  // Cross-org tokens are never valid for this gateway.
+  if (oauthClient.organizationId !== organizationId) {
+    return null;
+  }
+
+  // The client must be explicitly scoped to the requested gateway.
+  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
+    logger.warn(
+      { profileId, clientId: oauthClient.clientId },
+      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId,
+  };
+}
+
+/**
+ * Whether the authorization_code MCP OAuth client that minted a user-bound token
+ * grants access to a gateway beyond the user's own RBAC. This is an additive,
+ * admin-controlled access grant: only client_credentials clients use
+ * allowedGatewayIds as a sole authority, whereas an authorization_code client's
+ * list confers extra access to anyone who authenticates through it. Disabled or
+ * deleted clients (findByClientId returns null) grant nothing.
+ */
+async function mcpOauthClientGrantsGatewayAccess(params: {
+  clientId: string;
+  profileId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedGatewayIds.includes(params.profileId);
 }
 
 /**
@@ -1381,10 +1588,12 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
-    const isMetaTool = isArchestraMetaTool(tool.name);
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isMetaTool
-      : !isMetaTool;
+      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      : !isArchestraMetaTool(tool.name);
   });
 }
 
@@ -1491,7 +1700,10 @@ async function buildSearchToolsDescription(
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }
@@ -1509,4 +1721,9 @@ function isArchestraMetaTool(toolName: string) {
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
   );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
 }

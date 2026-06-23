@@ -1,10 +1,16 @@
+import config from "@/config";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
+
+type Attachment = Awaited<
+  ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
+>[number];
 
 /**
  * Returns a deep copy of `messages` where any file part whose `url` is a
@@ -24,6 +30,7 @@ import {
 export async function materializeAttachments(
   messages: ChatMessage[],
   conversationId: string,
+  ingestibleMimeTypes?: Set<string>,
 ): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -50,7 +57,9 @@ export async function materializeAttachments(
     }
     return {
       ...message,
-      parts: message.parts.map((part) => materializePart(part, byId)),
+      parts: message.parts.map((part) =>
+        materializePart(part, byId, ingestibleMimeTypes),
+      ),
     };
   });
 }
@@ -71,12 +80,8 @@ function collectRefIds(messages: ChatMessage[]): string[] {
 
 function materializePart(
   part: ChatMessagePart,
-  byId: Map<
-    string,
-    Awaited<
-      ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
-    >[number]
-  >,
+  byId: Map<string, Attachment>,
+  ingestibleMimeTypes?: Set<string>,
 ): ChatMessagePart {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
@@ -112,14 +117,15 @@ function materializePart(
     return { ...part };
   }
 
-  // PGlite (used by tests) returns bytea as a Uint8Array; node-postgres
-  // returns a Buffer. Normalize before encoding so .toString("base64") is the
-  // real Node Buffer method, not Array.prototype.toString (which gives a
-  // comma-separated decimal list).
-  const buffer = Buffer.isBuffer(attachment.fileData)
-    ? attachment.fileData
-    : Buffer.from(attachment.fileData as Uint8Array);
-  const dataUrl = `data:${attachment.mimeType};base64,${buffer.toString("base64")}`;
+  // A file type the selected model can't read must not be inlined as a
+  // document the provider would reject (which hard-errors the whole turn).
+  // It has already auto-staged into the sandbox, so reference it there instead.
+  if (ingestibleMimeTypes && !ingestibleMimeTypes.has(attachment.mimeType)) {
+    return referenceSandboxFilePart(attachment);
+  }
+
+  // findByIdsWithData normalizes bytea to Buffer at the model boundary
+  const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
   return {
     ...part,
     url: dataUrl,
@@ -138,6 +144,37 @@ function materializePart(
         cacheControl: { type: "ephemeral" },
       },
     },
+  };
+}
+
+/**
+ * Replace a non-ingestible attachment file part with a text part that points
+ * the model at the file in its sandbox. Within the auto-staging size limit the
+ * file lives under {@link SKILL_SANDBOX_ATTACHMENTS_DIR} — we name the directory
+ * (not an exact path, since the staged filename is sanitized and deduplicated
+ * by the runtime) and tell the model to list it. Over the limit the file is not
+ * staged at all, so the model is told it is unavailable this turn rather than
+ * pointed at a session-authed URL it cannot fetch from the sandbox.
+ *
+ * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
+ * filename from breaking out of this platform-generated notice.
+ */
+function referenceSandboxFilePart(attachment: Attachment): ChatMessagePart {
+  const sizeBytes = attachment.fileData.byteLength;
+  const name = JSON.stringify(attachment.originalName ?? "attachment");
+  const label = `${name} (${attachment.mimeType}, ${sizeBytes} bytes)`;
+  const limit = config.skillsSandbox.artifactBytesLimit;
+
+  if (sizeBytes > limit) {
+    return {
+      type: "text",
+      text: `[Attachment ${label} can't be shown to this model and is too large (limit ${limit} bytes) to use in your sandbox this turn.]`,
+    };
+  }
+
+  return {
+    type: "text",
+    text: `[Attachment ${label} can't be shown to this model inline. It has been placed in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then read it with run_command.]`,
   };
 }
 

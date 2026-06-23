@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE, type OAuthTokenType } from "@shared";
+import { OAUTH_TOKEN_TYPE, type OAuthTokenType } from "@archestra/shared";
 import { jwtDecode } from "jwt-decode";
 import logger from "@/logging";
 import { AccountModel, AgentModel } from "@/models";

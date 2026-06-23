@@ -1,16 +1,154 @@
 import { describe, expect, test } from "vitest";
 import {
+  CONTEXT_WINDOW_BREAKDOWN_EVENT,
+  CONTEXT_WINDOW_CATEGORIES,
+  ContextWindowBreakdownSchema,
   getAcceptedFileTypes,
   getMediaType,
   getSupportedFileTypesDescription,
   hasPersistableAssistantContent,
+  hasRenderableAssistantContent,
   INPUT_MODALITY_OPTIONS,
   OUTPUT_MODALITY_OPTIONS,
   supportsFileUploads,
 } from "./chat";
 
+const VALID_BREAKDOWN = {
+  provider: "anthropic",
+  model: "claude-sonnet-4-6",
+  contextLength: 200_000,
+  usedTokens: 84_200,
+  freeTokens: 115_800,
+  usedPercent: 42.1,
+  estimatedInputCostUsd: 0.04,
+  segments: [
+    { category: "system_prompt", tokens: 2100, items: [] },
+    { category: "tools", tokens: 31_400 },
+    { category: "messages", tokens: 18_700 },
+    { category: "tool_results", tokens: 30_000 },
+    { category: "files", tokens: 2000 },
+  ],
+} as const;
+
+describe("ContextWindowBreakdownSchema", () => {
+  test("parses a valid breakdown", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse(VALID_BREAKDOWN).success,
+    ).toBe(true);
+  });
+
+  test("allows null contextLength, freeTokens, usedPercent, and estimatedInputCostUsd", () => {
+    const result = ContextWindowBreakdownSchema.safeParse({
+      ...VALID_BREAKDOWN,
+      contextLength: null,
+      freeTokens: null,
+      usedPercent: null,
+      estimatedInputCostUsd: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects negative usedTokens", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        usedTokens: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects missing required fields", () => {
+    const { provider: _omit, ...withoutProvider } = VALID_BREAKDOWN;
+    expect(
+      ContextWindowBreakdownSchema.safeParse(withoutProvider).success,
+    ).toBe(false);
+  });
+
+  test("rejects unknown category in a segment", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        segments: [{ category: "unknown_category", tokens: 100 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects usedPercent below 0", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        usedPercent: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects usedPercent above 100", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        usedPercent: 101,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("accepts usedPercent at boundary values 0 and 100", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        usedPercent: 0,
+      }).success,
+    ).toBe(true);
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        usedPercent: 100,
+      }).success,
+    ).toBe(true);
+  });
+
+  test("rejects negative segment token counts", () => {
+    expect(
+      ContextWindowBreakdownSchema.safeParse({
+        ...VALID_BREAKDOWN,
+        segments: [{ category: "messages", tokens: -5 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("allows segments with no items array", () => {
+    const result = ContextWindowBreakdownSchema.safeParse({
+      ...VALID_BREAKDOWN,
+      segments: [{ category: "messages", tokens: 100 }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.segments[0].items).toBeUndefined();
+    }
+  });
+});
+
+describe("CONTEXT_WINDOW_BREAKDOWN_EVENT", () => {
+  test("is the canonical event name string", () => {
+    expect(CONTEXT_WINDOW_BREAKDOWN_EVENT).toBe(
+      "data-context-window-breakdown",
+    );
+  });
+});
+
+describe("CONTEXT_WINDOW_CATEGORIES", () => {
+  test("is in canonical stack order", () => {
+    expect(CONTEXT_WINDOW_CATEGORIES).toEqual([
+      "system_prompt",
+      "tools",
+      "messages",
+      "tool_results",
+      "files",
+    ]);
+  });
+});
+
 describe("chat file upload helpers", () => {
-  test("treats text modality as supporting txt, md, and csv uploads", () => {
+  test("treats text modality as supporting txt, md, csv, and json uploads", () => {
     expect(getAcceptedFileTypes(["text"])).toBe(
       [
         "text/plain",
@@ -18,11 +156,12 @@ describe("chat file upload helpers", () => {
         "text/csv",
         "application/csv",
         "application/vnd.ms-excel",
+        "application/json",
       ].join(","),
     );
     expect(supportsFileUploads(["text"])).toBe(true);
     expect(getSupportedFileTypesDescription(["text"])).toBe(
-      "chat prompts, .txt, .csv, and .md uploads",
+      "chat prompts, .txt, .csv, .md, and .json uploads",
     );
   });
 
@@ -34,6 +173,7 @@ describe("chat file upload helpers", () => {
         "text/csv",
         "application/csv",
         "application/vnd.ms-excel",
+        "application/json",
         "application/pdf",
       ].join(","),
     );
@@ -50,7 +190,9 @@ describe("chat file upload helpers", () => {
   test("builds a readable description for multiple upload modalities", () => {
     expect(
       getSupportedFileTypesDescription(["text", "image", "pdf", "audio"]),
-    ).toBe("chat prompts, .txt, .csv, and .md uploads, images, PDFs, audio");
+    ).toBe(
+      "chat prompts, .txt, .csv, .md, and .json uploads, images, PDFs, audio",
+    );
   });
 
   test("uses explicit file media types when present", () => {
@@ -127,5 +269,58 @@ describe("hasPersistableAssistantContent", () => {
         ),
       ).toBe(false);
     }
+  });
+});
+
+describe("hasRenderableAssistantContent", () => {
+  test("returns true when a non-empty text part is present", () => {
+    expect(
+      hasRenderableAssistantContent({ parts: [{ type: "text", text: "hi" }] }),
+    ).toBe(true);
+  });
+
+  test("returns false for an empty text part alone", () => {
+    expect(
+      hasRenderableAssistantContent({ parts: [{ type: "text", text: "" }] }),
+    ).toBe(false);
+  });
+
+  test("returns false for a breakdown-only assistant turn", () => {
+    // data-context-window-breakdown must be in NON_RENDERABLE so a turn that
+    // contains only that telemetry part does not produce an empty assistant bubble.
+    expect(
+      hasRenderableAssistantContent({
+        parts: [{ type: "data-context-window-breakdown" }],
+      }),
+    ).toBe(false);
+  });
+
+  test("returns false when all parts are non-renderable telemetry", () => {
+    expect(
+      hasRenderableAssistantContent({
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage" },
+          { type: "data-context-window-breakdown" },
+          { type: "data-context-window-estimate" },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  test("returns true when a renderable part accompanies telemetry parts", () => {
+    expect(
+      hasRenderableAssistantContent({
+        parts: [
+          { type: "data-context-window-breakdown" },
+          { type: "text", text: "Here is the answer." },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test("returns false for no parts", () => {
+    expect(hasRenderableAssistantContent({ parts: [] })).toBe(false);
+    expect(hasRenderableAssistantContent({})).toBe(false);
   });
 });

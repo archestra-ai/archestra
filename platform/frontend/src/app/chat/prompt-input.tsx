@@ -2,10 +2,11 @@
 
 import {
   type ChatSkillMetadata,
+  type ContextWindowBreakdown,
   E2eTestId,
   getAcceptedFileTypes,
   supportsFileUploads,
-} from "@shared";
+} from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,8 +31,13 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
-import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import {
+  chatDraftStorageKey,
+  migrateLegacyNewChatDraft,
+} from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -43,6 +49,8 @@ import {
 } from "./prompt-input-tools";
 import {
   buildSkillCommands,
+  DEBUG_COMMAND_VALUE,
+  isDebugCommand,
   parseSkillCommand,
   type SkillCommand,
 } from "./skill-commands";
@@ -52,16 +60,29 @@ const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 
 export interface ArchestraPromptInputProps
   extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
+  /**
+   * Handle a submit. The textarea and the saved draft are cleared only when
+   * this resolves/returns without throwing. Throw (or reject) to reject the
+   * submit and keep both the typed text and its draft.
+   */
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
     options?: { skill?: ChatSkillMetadata },
-  ) => void;
+  ) => void | Promise<void>;
   status: ChatStatus;
   // Tools integration props
   agentId: string;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /** Per-category breakdown of the assembled request (for context usage panel) */
+  contextWindow?: ContextWindowBreakdown | null;
+  /** Most recent compaction result, surfaced as a marker in the context panel */
+  lastCompaction?: {
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+    trigger?: "auto" | "manual";
+  } | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
   /** Disable chat input while context compaction is running */
@@ -103,7 +124,10 @@ const PromptInputContent = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
@@ -115,6 +139,8 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -152,18 +178,53 @@ const PromptInputContent = ({
     return buildSkillCommands(skillsData.data);
   }, [skillSlashCommandsEnabled, skillsData]);
 
-  // /compact only applies to an existing conversation; skill commands work anywhere.
+  // /debug toggles per-conversation hook debug chips; admin-only, existing
+  // conversation only. Mirrors the server gate (agent-type admin) loosely — the
+  // toggle endpoint enforces it for real.
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: conversation } = useConversation(conversationId);
+  const toggleHooksDebug = useToggleHooksDebug();
+  const agentHooksEnabled = useFeature("agentHooksEnabled") ?? false;
+  const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;
+  const canDebug = Boolean(conversationId && isAgentAdmin && agentHooksEnabled);
+
+  // /compact and /debug apply to an existing conversation; skill commands work anywhere.
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const compact =
       conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
-    return [...compact, ...skillCommands];
-  }, [conversationId, onCompactConversation, skillCommands]);
+    const debug: SlashCommand[] = canDebug
+      ? [
+          {
+            value: DEBUG_COMMAND_VALUE,
+            name: "debug",
+            description: hooksDebugEnabled
+              ? "hide inline hook debug chips"
+              : "show inline hook debug chips",
+          },
+        ]
+      : [];
+    return [...compact, ...debug, ...skillCommands];
+  }, [
+    conversationId,
+    onCompactConversation,
+    canDebug,
+    hooksDebugEnabled,
+    skillCommands,
+  ]);
 
-  const storageKey = conversationId
-    ? conversationStorageKeys(conversationId).draft
-    : `archestra_chat_draft_new_${agentId}`;
+  // Keyed by conversation only — NOT by agentId. Keying the new-chat draft by
+  // agent made the restore effect below re-run on every agent switch and clear
+  // the input, dropping the user's in-progress prompt.
+  const storageKey = chatDraftStorageKey(conversationId);
 
   const isRestored = useRef(false);
+
+  // One-time migration of pre-upgrade per-agent new-chat drafts to the shared
+  // key, so an unsent draft written before this change is not dropped. Runs
+  // before the restore effect below so the restore reads the migrated value.
+  useEffect(() => {
+    migrateLegacyNewChatDraft(localStorage);
+  }, []);
 
   // Restore draft on mount or conversation change
   useEffect(() => {
@@ -259,6 +320,22 @@ const PromptInputContent = ({
     void onCompactConversation?.();
   }, [controller.textInput, onCompactConversation, storageKey]);
 
+  const runDebugCommand = useCallback(() => {
+    controller.textInput.clear();
+    localStorage.removeItem(storageKey);
+    if (!conversationId) return;
+    toggleHooksDebug.mutate({
+      id: conversationId,
+      enabled: !hooksDebugEnabled,
+    });
+  }, [
+    controller.textInput,
+    storageKey,
+    conversationId,
+    hooksDebugEnabled,
+    toggleHooksDebug,
+  ]);
+
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
       if (command.skill) {
@@ -271,8 +348,11 @@ const PromptInputContent = ({
       if (command.value === "/compact") {
         runCompactCommand();
       }
+      if (command.value === DEBUG_COMMAND_VALUE) {
+        runDebugCommand();
+      }
     },
-    [controller.textInput, runCompactCommand, textareaRef],
+    [controller.textInput, runCompactCommand, runDebugCommand, textareaRef],
   );
 
   const handleTextareaKeyDown = useCallback(
@@ -333,14 +413,24 @@ const PromptInputContent = ({
     reject: (reason?: unknown) => void;
   } | null>(null);
 
+  // The draft is cleared only once the consumer accepts the submit (a
+  // non-throwing, non-rejecting return). A rejecting consumer (e.g. the
+  // new-chat composer refusing a text+attachment submit) keeps the draft and,
+  // because the throw/rejection propagates, ai-elements also keeps the textarea
+  // — so the typed prompt survives. Mirrors the textarea-clear timing.
   const dispatchSubmit = useCallback(
     (
       outgoing: PromptInputMessage,
       e: FormEvent<HTMLFormElement>,
       options?: { skill: ChatSkillMetadata },
-    ) => {
+    ): void | Promise<void> => {
+      const result = onSubmit(outgoing, e, options);
+      if (result instanceof Promise) {
+        return result.then(() => {
+          localStorage.removeItem(storageKey);
+        });
+      }
       localStorage.removeItem(storageKey);
-      onSubmit(outgoing, e, options);
     },
     [onSubmit, storageKey],
   );
@@ -352,6 +442,12 @@ const PromptInputContent = ({
       if (trimmed === "/compact" && onCompactConversation) {
         e.preventDefault();
         runCompactCommand();
+        return;
+      }
+
+      if (isDebugCommand(trimmed) && canDebug) {
+        e.preventDefault();
+        runDebugCommand();
         return;
       }
 
@@ -385,12 +481,14 @@ const PromptInputContent = ({
         }
       }
 
-      dispatchSubmit(outgoing, e, options);
+      return dispatchSubmit(outgoing, e, options);
     },
     [
+      canDebug,
       dispatchSubmit,
       onCompactConversation,
       runCompactCommand,
+      runDebugCommand,
       sensitiveDataDetectionEnabled,
       skillCommands,
     ],
@@ -400,9 +498,20 @@ const PromptInputContent = ({
     const pending = pendingSubmissionRef.current;
     pendingSubmissionRef.current = null;
     setSensitiveDataDialogOpen(false);
-    if (pending) {
-      dispatchSubmit(pending.outgoing, pending.e, pending.options);
-      pending.resolve();
+    if (!pending) return;
+    try {
+      const result = dispatchSubmit(
+        pending.outgoing,
+        pending.e,
+        pending.options,
+      );
+      if (result instanceof Promise) {
+        result.then(pending.resolve, pending.reject);
+      } else {
+        pending.resolve();
+      }
+    } catch (err) {
+      pending.reject(err);
     }
   }, [dispatchSubmit]);
 
@@ -539,6 +648,7 @@ const PromptInputContent = ({
             allowFileUploads={allowFileUploads}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
+            cachedTokens={cachedTokens}
             maxContextLength={maxContextLength}
             inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
@@ -547,7 +657,11 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             onResetModelOverride={onResetModelOverride}
+            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            agentModelDisplayName={agentModelDisplayName}
             textareaRef={textareaRef}
+            contextWindow={contextWindow}
+            lastCompaction={lastCompaction}
           />
           <div className="flex items-center gap-2">
             <PromptInputSpeechButton
@@ -587,7 +701,10 @@ const ArchestraPromptInput = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
@@ -599,6 +716,8 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: ArchestraPromptInputProps) => {
   const handleProviderFileError = useCallback(
     (err: {
@@ -638,7 +757,10 @@ const ArchestraPromptInput = ({
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
           tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
           maxContextLength={maxContextLength}
+          contextWindow={contextWindow}
+          lastCompaction={lastCompaction}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
@@ -650,6 +772,8 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          agentModelDisplayName={agentModelDisplayName}
         />
       </PromptInputProvider>
     </div>

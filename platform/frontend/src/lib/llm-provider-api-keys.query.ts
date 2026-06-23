@@ -3,9 +3,10 @@ import {
   type archestraApiTypes,
   type ResourceVisibilityScope,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { handleApiError, toApiError } from "@/lib/utils";
 
 export type { SupportedProvider };
@@ -57,6 +58,31 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
     },
     enabled: params?.enabled,
   });
+}
+
+/**
+ * Whether the user has any usable LLM provider key — the same check the new
+ * chat screen uses to choose between the composer and the "Add an LLM Provider
+ * Key" prompt. System keys for keyless providers (Vertex AI Gemini, vLLM,
+ * Ollama) count, since they surface as keys here. Gated on the read permissions
+ * the underlying query needs, so a user lacking them doesn't trigger a 403.
+ */
+export function useHasAnyApiKey(): {
+  hasAnyApiKey: boolean;
+  isLoading: boolean;
+} {
+  const { data: canReadKeys } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
+  const { data: canReadModels } = useHasPermissions({ llmModel: ["read"] });
+  const enabled = canReadKeys === true && canReadModels === true;
+  const { data: keys = [], isLoading } = useLlmProviderApiKeys({ enabled });
+  const permissionsResolving =
+    canReadKeys === undefined || canReadModels === undefined;
+  return {
+    hasAnyApiKey: keys.length > 0,
+    isLoading: permissionsResolving || (enabled && isLoading),
+  };
 }
 
 export function useAvailableLlmProviderApiKeys(

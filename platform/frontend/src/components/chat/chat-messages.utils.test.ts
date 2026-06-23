@@ -1,13 +1,22 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
+import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
-  deriveCanvasesFromMessages,
+  deriveAppsFromMessages,
   extractFileAttachments,
+  extractOwnedAppRender,
   filterOptimisticToolCalls,
+  getAppRenderVerb,
   hasTextPart,
+  humanizeToolLabel,
   identifyCompactToolGroups,
+  isSupersededOwnedRender,
 } from "./chat-messages.utils";
+
+const getToolShortName = (toolName: string) =>
+  getArchestraToolShortName(toolName, { includeDefaultPrefix: true });
 
 describe("extractFileAttachments", () => {
   it("should return undefined for undefined parts", () => {
@@ -234,8 +243,30 @@ describe("collectBrowserToolCallIds", () => {
   });
 });
 
-describe("deriveCanvasesFromMessages", () => {
-  it("returns a canvas for a tool call whose output carries _meta.ui.resourceUri", () => {
+describe("humanizeToolLabel", () => {
+  it("humanizes server and tool from a prefixed name", () => {
+    expect(humanizeToolLabel("system__get-system-stats")).toBe(
+      "System / Get System Stats",
+    );
+  });
+
+  it("handles underscore-separated tool names", () => {
+    expect(humanizeToolLabel("weather__get_forecast")).toBe(
+      "Weather / Get Forecast",
+    );
+  });
+
+  it("splits camelCase tool names", () => {
+    expect(humanizeToolLabel("fs__listFiles")).toBe("Fs / List Files");
+  });
+
+  it("humanizes a bare tool name with no server prefix", () => {
+    expect(humanizeToolLabel("render_app")).toBe("Render App");
+  });
+});
+
+describe("deriveAppsFromMessages", () => {
+  it("returns an app for a tool call whose output carries _meta.ui.resourceUri", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -253,17 +284,18 @@ describe("deriveCanvasesFromMessages", () => {
       },
     ] as never;
 
-    expect(deriveCanvasesFromMessages(messages, {})).toEqual([
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
-        serverName: "pm",
+        label: "Pm / Show Board",
+        appId: null,
+        version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
       },
     ]);
   });
 
-  it("returns a canvas from early UI-start data before the result arrives", () => {
+  it("returns an app from early UI-start data before the result arrives", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -281,14 +313,22 @@ describe("deriveCanvasesFromMessages", () => {
     ] as never;
 
     expect(
-      deriveCanvasesFromMessages(messages, {
-        call_1: { uiResourceUri: "ui://pm/board", toolName: "pm__show_board" },
-      }),
+      deriveAppsFromMessages(
+        messages,
+        {
+          call_1: {
+            uiResourceUri: "ui://pm/board",
+            toolName: "pm__show_board",
+          },
+        },
+        getToolShortName,
+      ),
     ).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
-        serverName: "pm",
+        label: "Pm / Show Board",
+        appId: null,
+        version: null,
         createdAt: 0,
       },
     ]);
@@ -322,12 +362,227 @@ describe("deriveCanvasesFromMessages", () => {
       },
     ] as never;
 
-    const canvases = deriveCanvasesFromMessages(messages, {});
-    expect(canvases).toHaveLength(1);
-    expect(canvases[0]).toMatchObject({
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps).toHaveLength(1);
+    expect(apps[0]).toMatchObject({
       toolCallId: "call_1",
-      label: "show_board",
+      label: "Pm / Show Board",
     });
+  });
+
+  it("returns an app labeled with the app name for an owned-app scaffold_app result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__scaffold_app",
+            toolCallId: "call_app",
+            state: "output-available",
+            output: {
+              content: "Created app",
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+                name: "To Do App",
+                latestVersion: 1,
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_app",
+        label: "To Do App",
+        appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+        version: 1,
+        createdAt: 0,
+      },
+    ]);
+  });
+
+  it("de-dupes owned-app renders by appId, keeping the latest render and version", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:00:00.000Z" },
+        parts: [
+          {
+            type: "tool-archestra__scaffold_app",
+            toolCallId: "call_v1",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+                name: "To Do App",
+                latestVersion: 1,
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:05:00.000Z" },
+        parts: [
+          {
+            type: "tool-archestra__edit_app",
+            toolCallId: "call_v3",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+                name: "To Do App",
+                latestVersion: 3,
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_v3",
+        label: "To Do App",
+        appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+        version: 3,
+        createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
+      },
+    ]);
+  });
+
+  it("keeps distinct owned apps as separate entries", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-archestra__scaffold_app",
+            toolCallId: "call_a",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+                name: "App A",
+                latestVersion: 1,
+              },
+            },
+          },
+          {
+            type: "tool-archestra__scaffold_app",
+            toolCallId: "call_b",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "11111111-ea8e-48ed-8077-a3cc904d9d61",
+                name: "App B",
+                latestVersion: 1,
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps.map((a) => a.toolCallId)).toEqual(["call_a", "call_b"]);
+  });
+
+  it("ignores a foreign server's scaffold_app result", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-other__scaffold_app",
+            toolCallId: "call_foreign",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+              },
+            },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([]);
+  });
+});
+
+describe("extractOwnedAppRender", () => {
+  const output = {
+    structuredContent: {
+      id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      name: "To Do App",
+      latestVersion: 3,
+    },
+  };
+
+  it.each([
+    "scaffold_app",
+    "edit_app",
+    "render_app",
+  ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
+    expect(
+      extractOwnedAppRender({
+        toolName: `archestra__${shortName}`,
+        output,
+        getToolShortName,
+      }),
+    ).toEqual({
+      appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      appName: "To Do App",
+      latestVersion: 3,
+    });
+  });
+
+  it.each([
+    "scaffold_app",
+    "edit_app",
+  ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
+    expect(
+      extractOwnedAppRender({
+        toolName: shortName,
+        output,
+        getToolShortName,
+      }),
+    ).toEqual({
+      appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
+      appName: "To Do App",
+      latestVersion: 3,
+    });
+  });
+
+  it.each([
+    ["foreign server prefix", "other__scaffold_app", output],
+    ["non-rendering app tool", "archestra__list_apps", output],
+    ["non-rendering delete tool", "archestra__delete_app", output],
+    ["non-rendering read tool", "archestra__read_app", output],
+    [
+      "non-UUID id",
+      "archestra__scaffold_app",
+      { structuredContent: { id: "not-a-uuid" } },
+    ],
+    ["missing structuredContent", "archestra__scaffold_app", { content: "ok" }],
+    ["plain string output", "archestra__scaffold_app", "Created app"],
+  ])("returns null for %s", (_label, toolName, toolOutput) => {
+    expect(
+      extractOwnedAppRender({
+        toolName,
+        output: toolOutput,
+        getToolShortName,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -372,10 +627,59 @@ describe("identifyCompactToolGroups", () => {
 
     expect(groupMap.size).toBe(1);
     expect(group?.entries).toHaveLength(2);
-    expect(group?.entries.map((entry) => entry.toolName)).toEqual([
-      "google__search",
-      "google__maps",
+    expect(
+      group?.entries.map((entry) =>
+        entry.kind === "tool" ? entry.toolName : entry.kind,
+      ),
+    ).toEqual(["google__search", "google__maps"]);
+  });
+
+  it("includes hook-run parts in the row bracketing the tool they apply to", () => {
+    const parts = [
+      {
+        type: "data-hook-run",
+        data: {
+          hookEventName: "PreToolUse",
+          fileName: "guard.py",
+          outcome: "proceeded",
+          exitCode: 0,
+        },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "data-hook-run",
+        data: {
+          hookEventName: "PostToolUse",
+          fileName: "audit.py",
+          outcome: "proceeded",
+          exitCode: 0,
+        },
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+    const group = groupMap.get(0);
+
+    expect(groupMap.size).toBe(1);
+    expect(group?.entries.map((entry) => entry.kind)).toEqual([
+      "hook",
+      "tool",
+      "hook",
     ]);
+    expect(consumedIndices).toEqual(new Set([0, 1, 2, 3]));
   });
 
   it("does not group across a non-compact-eligible tool call", () => {
@@ -430,5 +734,48 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.size).toBe(2);
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
+  });
+});
+
+describe("isSupersededOwnedRender", () => {
+  const app = (toolCallId: string, appId: string): PanelApp => ({
+    toolCallId,
+    label: "Dashboard",
+    appId,
+    version: 1,
+    createdAt: 0,
+  });
+
+  it("returns false for the latest render of an app (registry points at it)", () => {
+    const apps = [app("tc2", "app-1")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc2" }),
+    ).toBe(false);
+  });
+
+  it("returns true for a prior render once a newer render registers", () => {
+    const apps = [app("tc2", "app-1")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc1" }),
+    ).toBe(true);
+  });
+
+  it("returns false when the app has no registry entry yet (mid-stream)", () => {
+    const apps = [app("tc9", "other-app")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc1" }),
+    ).toBe(false);
+  });
+});
+
+describe("getAppRenderVerb", () => {
+  it("maps each app-rendering tool to its past-tense verb", () => {
+    expect(getAppRenderVerb("archestra__scaffold_app")).toBe("Created");
+    expect(getAppRenderVerb("archestra__edit_app")).toBe("Updated");
+    expect(getAppRenderVerb("archestra__render_app")).toBe("Rendered");
+  });
+
+  it("returns null for non-app tools", () => {
+    expect(getAppRenderVerb("google__search")).toBeNull();
   });
 });

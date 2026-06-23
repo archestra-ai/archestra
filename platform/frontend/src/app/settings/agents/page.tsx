@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
@@ -130,7 +130,10 @@ export default function AgentSettingsPage() {
         globalToolPolicy: toolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
       });
-      savedSecurityStateRef.current = { toolPolicy, fileUploads };
+      savedSecurityStateRef.current = {
+        toolPolicy,
+        fileUploads,
+      };
     }
 
     initializedRef.current = false;

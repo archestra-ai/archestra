@@ -1,7 +1,4 @@
-import { apiKey } from "@better-auth/api-key";
-import type { HookEndpointContext } from "@better-auth/core";
-import { oauthProvider } from "@better-auth/oauth-provider";
-import { sso } from "@better-auth/sso";
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
@@ -11,12 +8,16 @@ import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-} from "@shared";
+} from "@archestra/shared";
 import {
   allAvailableActions,
   editorPermissions,
   memberPermissions,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
+import { apiKey } from "@better-auth/api-key";
+import type { HookEndpointContext } from "@better-auth/core";
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { sso } from "@better-auth/sso";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -39,7 +40,11 @@ import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
+import { hashOauthClientSecret } from "./oauth-client-secret";
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
     await import("./idp.ee")
@@ -48,6 +53,7 @@ const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
       syncSsoRole: () => {},
       syncSsoTeams: () => {},
     };
+// SPDX-SnippetEnd
 
 const APP_NAME = DEFAULT_APP_NAME;
 const {
@@ -203,8 +209,17 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,
-      allowDynamicClientRegistration: true,
-      allowUnauthenticatedClientRegistration: true,
+      allowDynamicClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      allowUnauthenticatedClientRegistration:
+        config.auth.dynamicClientRegistrationEnabled,
+      // Confidential MCP OAuth clients (authorization_code grant) are verified by
+      // better-auth at the token endpoint. It hashes the presented secret and
+      // compares it to the stored value, so the value the McpOauthClient model
+      // stores must be exactly this hash.
+      storeClientSecret: {
+        hash: (clientSecret) => hashOauthClientSecret(clientSecret),
+      },
       scopes: [...OAUTH_SCOPES],
       silenceWarnings: {
         oauthAuthServerConfig: true,
@@ -299,6 +314,14 @@ export const auth = betterAuth({
             logger.error(
               { err: error, userId: user.id },
               "[databaseHooks:user] Failed to delete personal MCP gateways",
+            );
+          }
+          try {
+            await AgentModel.deletePersonalLlmProxiesForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to delete personal LLM proxies",
             );
           }
         },
@@ -722,7 +745,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // Block direct sign-up without invitation (invitation-only registration)
   if (path.startsWith("/sign-up/email") && method === "POST") {
     const callbackURL = body.callbackURL as string | undefined;
-    const invitationId = callbackURL?.split("invitationId=")[1]?.split("&")[0];
+    const invitationId = getInvitationIdFromSignUpBody(body, callbackURL);
 
     logger.debug(
       { email: body.email, hasInvitationId: !!invitationId },
@@ -1273,9 +1296,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // Check if this is an invitation sign-up
       const callbackURL = body.callbackURL as string | undefined;
-      const invitationId = callbackURL
-        ?.split("invitationId=")[1]
-        ?.split("&")[0];
+      const invitationId = getInvitationIdFromSignUpBody(body, callbackURL);
 
       if (invitationId) {
         logger.debug(
@@ -1435,8 +1456,22 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             "Failed to ensure personal MCP gateway on sign-in",
           );
         }
+        try {
+          await AgentModel.ensurePersonalLlmProxy({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal LLM proxy on sign-in",
+          );
+        }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
@@ -1451,10 +1486,14 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
       }
+      // SPDX-SnippetEnd
     }
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function getSsoCallbackProviderId(params: {
   path: string;
   requestUrl?: string;
@@ -1572,6 +1611,7 @@ async function cleanupRejectedSsoLogin(params: {
     }
   });
 }
+// SPDX-SnippetEnd
 
 /**
  * Writes a single auth-event row to audit_logs.
@@ -1672,4 +1712,25 @@ function resolveAuthClientIp(request: Request | undefined): string | null {
     if (first) return first;
   }
   return null;
+}
+
+function getInvitationIdFromSignUpBody(
+  body: Record<string, unknown>,
+  callbackURL: string | undefined,
+): string | undefined {
+  const bodyInvitationId = body.invitationId;
+  if (typeof bodyInvitationId === "string" && bodyInvitationId.trim()) {
+    return bodyInvitationId.trim();
+  }
+
+  if (!callbackURL) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(callbackURL, "http://localhost");
+    return url.searchParams.get("invitationId") ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

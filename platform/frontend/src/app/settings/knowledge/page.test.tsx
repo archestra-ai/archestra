@@ -341,7 +341,7 @@ describe("KnowledgeSettingsPage", () => {
         screen.getByRole("link", {
           name: /Sync models and configure embedding dimensions/,
         }),
-      ).toHaveAttribute("href", "/llm/model-providers/models");
+      ).toHaveAttribute("href", "/llm/models");
     });
   });
 
@@ -435,8 +435,8 @@ describe("KnowledgeSettingsPage", () => {
     });
   });
 
-  describe("pulsing animation setup steps", () => {
-    it("pulses Add LLM Provider Key button when no OpenAI keys exist", () => {
+  describe("setup step highlight", () => {
+    it("highlights Add LLM Provider Key button when no OpenAI keys exist", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -450,11 +450,11 @@ describe("KnowledgeSettingsPage", () => {
         name: /Add LLM Provider Key/,
       });
       // First Add button is the embedding one
-      expect(addButtons[0].className).toContain("animate-pulse");
-      expect(addButtons[0].className).toContain("ring-primary/40");
+      expect(addButtons[0].className).toContain("ring-primary/50");
+      expect(addButtons[0].className).not.toContain("animate-pulse");
     });
 
-    it("pulses key selector dropdown when OpenAI keys exist but none selected", () => {
+    it("highlights key selector dropdown when OpenAI keys exist but none selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -474,11 +474,11 @@ describe("KnowledgeSettingsPage", () => {
       const embeddingKeyTrigger = screen.getByRole("button", {
         name: /Select embedding API key/,
       });
-      expect(embeddingKeyTrigger.className).toContain("animate-pulse");
-      expect(embeddingKeyTrigger.className).toContain("ring-primary/40");
+      expect(embeddingKeyTrigger.className).toContain("ring-primary/50");
+      expect(embeddingKeyTrigger.className).not.toContain("animate-pulse");
     });
 
-    it("pulses model dropdown when key selected but model not selected", () => {
+    it("highlights model dropdown when key selected but model not selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: null,
@@ -500,11 +500,11 @@ describe("KnowledgeSettingsPage", () => {
         .getAllByRole("combobox")
         .find((el) => el.textContent?.includes("Select embedding model"));
       expect(modelTrigger).toBeDefined();
-      expect(modelTrigger?.className).toContain("animate-pulse");
-      expect(modelTrigger?.className).toContain("ring-primary/40");
+      expect(modelTrigger?.className).toContain("ring-primary/50");
+      expect(modelTrigger?.className).not.toContain("animate-pulse");
     });
 
-    it("does not pulse anything when embedding is fully configured", () => {
+    it("does not highlight anything when embedding is fully configured", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
@@ -522,9 +522,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      // No element should have animate-pulse
-      const pulsing = document.querySelectorAll(".animate-pulse");
-      expect(pulsing.length).toBe(0);
+      // No element should carry the setup-step highlight ring.
+      const highlighted = document.querySelectorAll(
+        '[class*="ring-primary/50"]',
+      );
+      expect(highlighted.length).toBe(0);
     });
   });
 

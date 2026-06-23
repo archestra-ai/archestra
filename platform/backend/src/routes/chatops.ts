@@ -3,7 +3,7 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
@@ -14,6 +14,10 @@ import {
   buildWelcomeMessage,
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
+import {
+  isChannelThreadActive,
+  markChannelThreadActive,
+} from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -32,6 +36,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -267,6 +272,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!message) {
               // Not a processable message (e.g., system event)
               return;
+            }
+
+            // Team-channel auto-reply gate: in channels the bot stays quiet
+            // until @mentioned, then keeps replying to that thread without
+            // further mentions. Group chats and DMs always reply (no gate).
+            // Runs before sender resolution so we don't do Graph lookups for
+            // the many un-mentioned channel messages the bot now receives.
+            if (context.activity.conversation?.conversationType === "channel") {
+              const activation = {
+                provider: "ms-teams" as const,
+                channelId: message.channelId,
+                threadId: message.threadId ?? message.channelId,
+              };
+              if (provider.wasBotMentioned(context.activity)) {
+                await markChannelThreadActive(activation);
+              } else if (!(await isChannelThreadActive(activation))) {
+                return;
+              }
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -1255,6 +1278,95 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await chatOpsManager.reinitialize();
 
       return reply.send({ success: true });
+    },
+  );
+  /**
+   * Connect an ngrok tunnel so this instance is reachable from the Internet.
+   * Persists the auth token and brings the tunnel up live — no restart needed.
+   */
+  fastify.put(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.ConnectNgrok,
+        description: "Connect an ngrok tunnel for inbound chatops webhooks",
+        tags: ["ChatOps"],
+        body: z.object({
+          // Omitted = reuse the saved token (reconnect after a Stop).
+          authToken: z.string().max(512).optional(),
+          domain: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ success: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { domain } = request.body;
+      const authToken =
+        request.body.authToken ||
+        (await ChatOpsConfigModel.getNgrokConfig())?.authToken;
+      if (!authToken) {
+        throw new ApiError(
+          400,
+          "No ngrok auth token provided and none is saved — enter a token.",
+        );
+      }
+
+      let publicDomain: string;
+      try {
+        publicDomain = await ngrokTunnelManager.start({ authToken, domain });
+      } catch (error) {
+        logger.error({ err: error }, "Failed to start ngrok tunnel");
+        throw new ApiError(
+          400,
+          "Could not start the ngrok tunnel — please check your auth token (and reserved domain, if set).",
+        );
+      }
+
+      return reply.send({ success: true, domain: publicDomain });
+    },
+  );
+  /**
+   * Stop the ngrok tunnel and clear its persisted credentials.
+   */
+  fastify.delete(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.DisconnectNgrok,
+        description: "Stop the ngrok tunnel and clear its credentials",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_request, reply) => {
+      await ngrokTunnelManager.stop();
+      return reply.send({ success: true });
+    },
+  );
+  /**
+   * Read the saved ngrok config for prefilling the connect dialog. The token
+   * itself is never returned — only whether one is saved.
+   */
+  fastify.get(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.GetNgrokConfig,
+        description: "Get saved ngrok configuration (token redacted)",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ hasAuthToken: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      const stored = await ChatOpsConfigModel.getNgrokConfig();
+      return reply.send({
+        hasAuthToken: Boolean(stored?.authToken),
+        domain: stored?.domain ?? "",
+      });
     },
   );
   /**

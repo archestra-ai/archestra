@@ -13,12 +13,16 @@ const config: KnipConfig = {
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
   ],
+  // Browser-side static assets read at runtime via readFileSync (server.ts) —
+  // not part of the backend module graph.
+  ignore: ["src/static/**"],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
-    "@shared",
+    "@archestra/shared",
     // Native CommonJS addon loaded through package exports; knip does not
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",
+    "@archestra/app-runtime-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

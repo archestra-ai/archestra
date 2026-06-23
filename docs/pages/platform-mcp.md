@@ -3,7 +3,7 @@ title: Overview
 category: MCP
 order: -1
 description: How MCP servers, gateways, authentication, and orchestration fit together
-lastUpdated: 2026-05-05
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -48,6 +48,12 @@ Self-hosted MCP servers run inside your Kubernetes cluster through the MCP Orche
 Both types can be assigned to Agents and MCP Gateways. The client does not need to know which runtime backs each tool.
 
 Some MCP servers expose resources through `resources/list` instead of callable tools through `tools/list`. When a remote server has resources but no tools, Archestra creates read-resource tools during installation so agents can access those resources through the normal tool assignment flow.
+
+## Environments
+
+A self-hosted MCP server is deployed into an [environment](/docs/platform-environments) — a deployment target that controls the Kubernetes namespace it runs in and the egress network policy applied to its pod. Use environments to isolate a sandbox server from production resources or to limit what a server can reach on the network.
+
+For self-hosted servers the egress policy is enforced continuously on the pod. Remote servers run outside Archestra and are reached over HTTP, so the policy cannot constrain what they reach; instead Archestra checks a remote server's URL host against the environment's policy when it is added or edited and on every outbound connection, blocking a server the policy forbids. See [network egress policies](/docs/platform-environments#network-egress-policies) for the full model.
 
 ## Authentication Model
 

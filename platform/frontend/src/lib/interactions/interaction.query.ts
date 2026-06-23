@@ -4,7 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type InteractionSource,
-} from "@shared";
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError } from "@/lib/utils";

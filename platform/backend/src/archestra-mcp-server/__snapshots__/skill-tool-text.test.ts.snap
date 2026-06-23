@@ -1,0 +1,567 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
+{
+  "description": "Create a new Agent Skill from a SKILL.md manifest. The skill is created as a personal skill owned by you, available via list_skills and as a chat slash-command. Draft the SKILL.md (and any bundled resource files) with the user, then call this to persist it. To share a skill with a team or the whole organization, change its scope in the Skills UI.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "maxLength": 10485760,
+        "minLength": 1,
+        "type": "string",
+      },
+      "files": {
+        "description": "Optional bundled resource files. Each is \`{ path, content }\` with text content; the path prefix classifies the file — \`references/\` for docs, \`scripts/\` for code, \`assets/\` for other files.",
+        "items": {
+          "properties": {
+            "content": {
+              "description": "Text content of the file",
+              "maxLength": 13981016,
+              "type": "string",
+            },
+            "encoding": {
+              "enum": [
+                "utf8",
+                "base64",
+              ],
+              "type": "string",
+            },
+            "path": {
+              "description": "Resource path, e.g. references/API.md or scripts/run.py",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "path",
+            "content",
+          ],
+          "type": "object",
+        },
+        "maxItems": 500,
+        "type": "array",
+      },
+    },
+    "required": [
+      "content",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__create_skill",
+  "title": "Create Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
+{
+  "description": "Permanently delete a persistent file (My Files), identified by \`id\` (from search_files / save_result) or by \`filename\`. In a project chat only the project's files can be deleted. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Permanently delete a persistent file (My Files). In a project chat only the project's files can be deleted.",
+    "properties": {
+      "filename": {
+        "description": "Filename to delete instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id of the file to delete (from search_files / save_result).",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__delete_file",
+  "title": "Delete File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__download_file 1`] = `
+{
+  "description": "Copy a file out of the conversation's sandbox into durable storage, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Copy a file out of the sandbox into durable storage, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
+    "properties": {
+      "mimeType": {
+        "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Path to the file inside the container — absolute, or relative to the sandbox's working directory.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
+          },
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__download_file",
+  "title": "Download File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
+{
+  "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Edit an existing persistent file (My Files) by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Text files only — to replace a binary file, use save_result with overwrite. In a project chat only the project's files can be edited.",
+    "properties": {
+      "filename": {
+        "description": "Filename to edit instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id of the file to edit (from search_files / save_result).",
+        "minLength": 1,
+        "type": "string",
+      },
+      "new_string": {
+        "description": "The text to insert in place of old_string.",
+        "type": "string",
+      },
+      "old_string": {
+        "description": "The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "replace_all": {
+        "default": false,
+        "description": "Replace every occurrence of old_string. Default false replaces a single occurrence and errors if old_string is not unique.",
+        "type": "boolean",
+      },
+    },
+    "required": [
+      "old_string",
+      "new_string",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__edit_file",
+  "title": "Edit File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
+{
+  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call load_skill with a skill name to load its full instructions.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {},
+    "type": "object",
+  },
+  "name": "archestra__list_skills",
+  "title": "List Skills",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
+{
+  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available. Call load_skill with just a name to load the skill's instructions and its bundled-file list; load it before attempting the task it covers. Call it with a name and a path from that list to read one bundled file. To run a bundled script, use run_command (loaded skills are available under /skills).",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "name": {
+        "description": "The skill to load, as named by list_skills.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Optional. Omit (or pass an empty string) to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__load_skill",
+  "title": "Load Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__read_file 1`] = `
+{
+  "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, copy the file into the sandbox with upload_file and inspect it with run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), copy the file into the sandbox with upload_file + run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
+    "properties": {
+      "filename": {
+        "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "Id or ref of the file to read — the \`id\` or \`ref\` from search_files, or a fileId from save_result.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "limit": {
+        "description": "Maximum number of lines to read. Defaults to 2000.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "offset": {
+        "description": "1-based line number to start reading from. Defaults to 1.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__read_file",
+  "title": "Read File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__run_command 1`] = `
+{
+  "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Loaded skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Run a shell command in the conversation's sandbox. State persists across calls. Returns stdout, stderr, exit code, and timing.",
+    "properties": {
+      "command": {
+        "description": "Shell command to execute (bash). Runs in the sandbox's working directory (or \`cwd\` when provided). Returns text output only — use download_file for generated files.",
+        "maxLength": 16384,
+        "minLength": 1,
+        "type": "string",
+      },
+      "cwd": {
+        "description": "Optional absolute path inside the container. Defaults to the sandbox's working directory (/home/sandbox).",
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
+          },
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "timeoutSeconds": {
+        "description": "Optional wall-clock limit in seconds, capped at the deployment maximum.",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer",
+      },
+    },
+    "required": [
+      "command",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__run_command",
+  "title": "Run Command",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__save_result 1`] = `
+{
+  "description": "Save inline content directly to the user's persistent file storage (My Files) — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file is saved to the project.",
+    "properties": {
+      "content": {
+        "description": "UTF-8 text content of the file.",
+        "type": "string",
+      },
+      "contentBase64": {
+        "description": "Base64-encoded binary content.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "filename": {
+        "description": "Plain filename including extension (e.g. "joke.md"). No paths.",
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string",
+      },
+      "mimeType": {
+        "description": "Optional MIME type. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "overwrite": {
+        "default": false,
+        "description": "Replace an existing file of the same name in place, keeping its id. Default false errors if the name is already taken.",
+        "type": "boolean",
+      },
+    },
+    "required": [
+      "filename",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__save_result",
+  "title": "Save Result",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__search_files 1`] = `
+{
+  "description": "Search the persistent files of THIS conversation: files exported with download_file or written with save_result here. Returns metadata only — each result carries a stable \`ref\`. To work on a found file, pass its \`ref\` to read_file (read its content), or to upload_file's my_file source (copy it into the sandbox). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Search this conversation's persistent files: files exported from its sandbox or written with save_result. In a project chat, searches the project's files instead.",
+    "properties": {
+      "query": {
+        "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__search_files",
+  "title": "Search Files",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
+{
+  "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "maxLength": 10485760,
+        "minLength": 1,
+        "type": "string",
+      },
+      "files": {
+        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with load_skill (with and without a path).",
+        "items": {
+          "properties": {
+            "content": {
+              "description": "Text content of the file",
+              "maxLength": 13981016,
+              "type": "string",
+            },
+            "encoding": {
+              "enum": [
+                "utf8",
+                "base64",
+              ],
+              "type": "string",
+            },
+            "path": {
+              "description": "Resource path, e.g. references/API.md or scripts/run.py",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "path",
+            "content",
+          ],
+          "type": "object",
+        },
+        "maxItems": 500,
+        "type": "array",
+      },
+      "name": {
+        "description": "The current name of the skill to update, as named by list_skills.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "content",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__update_skill",
+  "title": "Update Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
+{
+  "description": "Upload a file into the conversation's sandbox from a chat attachment, inline base64, inline text, or a file from the user's persistent storage (the my_file source). The bytes become part of the sandbox recipe, so the file is present on every later run_command and download_file call. Note: files the user attached to the chat are already auto-staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or upload into a non-default sandbox. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Upload a file into the conversation's sandbox. The bytes become part of the sandbox recipe, so the file is present on every subsequent run_command and download_file call.",
+    "properties": {
+      "path": {
+        "description": "Destination path inside the container — absolute under /skills or /home/sandbox, or relative to the sandbox's working directory.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "source": {
+        "description": "Where the file bytes come from. One of four shapes, each tagged by a \`type\`: a chat attachment (\`{"type":"chat_attachment","attachmentId":...}\`), inline base64 (\`{"type":"base64","dataBase64":...}\`), inline text (\`{"type":"text","text":"print(1)"}\`), or a file from the user's persistent storage (\`{"type":"my_file","filename":...}\`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "Copy bytes from a file the user attached to this conversation.",
+            "properties": {
+              "attachmentId": {
+                "description": "Id of an attachment in the CURRENT conversation. The bytes are read server-side; they never pass through the model context.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "type": {
+                "const": "chat_attachment",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "attachmentId",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Upload raw bytes provided inline as base64.",
+            "properties": {
+              "dataBase64": {
+                "description": "Base64-encoded file bytes.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "mimeType": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "originalName": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "type": {
+                "const": "base64",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "dataBase64",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Upload a UTF-8 text file provided inline.",
+            "properties": {
+              "mimeType": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "originalName": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "text": {
+                "description": "UTF-8 text content of the file.",
+                "type": "string",
+              },
+              "type": {
+                "const": "text",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "text",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Copy a file from the user's persistent storage (My Files) into the sandbox. Find files with search_files first.",
+            "properties": {
+              "filename": {
+                "description": "Exact filename of a persistent file (when you have no id).",
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "description": "Id or ref of a persistent file, as returned by search_files (\`id\` for stored files, \`ref\` for hand-placed ones).",
+                "type": "string",
+              },
+              "type": {
+                "const": "my_file",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "target": {
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
+          },
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "path",
+      "source",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__upload_file",
+  "title": "Upload File",
+}
+`;

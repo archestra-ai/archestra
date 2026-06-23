@@ -5,7 +5,7 @@ import {
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
-} from "@shared";
+} from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
@@ -120,6 +120,9 @@ export function transformFormToApiData(
           ? undefined
           : values.oauthConfig.client_secret || undefined,
       audience: values.oauthConfig.audience || undefined,
+      resource: isClientCredentials
+        ? undefined
+        : values.oauthConfig.resource || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       // default_scopes is the fallback used by the backend's scope resolution:
@@ -314,6 +317,7 @@ export function transformCatalogItemToFormValues(
         client_id: string;
         client_secret: string;
         audience: string;
+        resource: string;
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
@@ -337,6 +341,7 @@ export function transformCatalogItemToFormValues(
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
           : item.oauthConfig.audience || "",
+      resource: item.oauthConfig.resource || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
@@ -454,7 +459,6 @@ export function transformCatalogItemToFormValues(
       fieldName,
       headerName: config.headerName,
       promptOnInstallation: config.promptOnInstallation ?? true,
-      promptOnPreset: config.promptOnPreset ?? false,
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
@@ -573,6 +577,8 @@ export function transformExternalCatalogToFormValues(
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
       audience: "",
+      resource:
+        getOptionalStringProperty(server.oauth_config, "resource") || "",
       redirect_uris:
         redirectUris ||
         (typeof window !== "undefined"
@@ -739,7 +745,6 @@ export function transformExternalCatalogToFormValues(
         fieldName,
         headerName: config.headerName,
         promptOnInstallation: config.promptOnInstallation ?? true,
-        promptOnPreset: config.promptOnPreset ?? false,
         required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
@@ -750,6 +755,7 @@ export function transformExternalCatalogToFormValues(
       client_id: "",
       client_secret: "",
       audience: "",
+      resource: "",
       redirect_uris:
         typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
@@ -814,13 +820,11 @@ function buildStaticHeaderUserConfig(
     // the combination, because `default` lives in plaintext jsonb on the
     // catalog row). Fall back to non-sensitive for static regardless of
     // what the form carries.
-    const isStaticHeader =
-      !header.promptOnInstallation && !header.promptOnPreset;
+    const isStaticHeader = !header.promptOnInstallation;
     userConfig[fieldName] = {
       type: "string",
       title: header.headerName,
       promptOnInstallation: header.promptOnInstallation,
-      promptOnPreset: header.promptOnPreset || undefined,
       required: header.promptOnInstallation ? header.required : false,
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
@@ -875,7 +879,6 @@ function getHeaderMappedUserConfigEntries(
     fieldName: string;
     headerName: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     description?: string;
@@ -895,7 +898,6 @@ function getHeaderMappedUserConfigEntries(
         const userConfigField = config as {
           headerName: string;
           promptOnInstallation?: boolean;
-          promptOnPreset?: boolean;
           required?: boolean;
           default?: string | number | boolean | Array<string>;
           description?: string;
@@ -908,7 +910,6 @@ function getHeaderMappedUserConfigEntries(
             fieldName,
             headerName: userConfigField.headerName,
             promptOnInstallation: userConfigField.promptOnInstallation,
-            promptOnPreset: userConfigField.promptOnPreset,
             required: userConfigField.required,
             default: userConfigField.default,
             description: userConfigField.description,

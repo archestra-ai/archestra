@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import { Globe, Users } from "lucide-react";
@@ -52,12 +53,16 @@ export function KnowledgeSourceVisibilitySelector({
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
   const options = visibilityEntries
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     .filter(
       ([value]) =>
         value !== "team-scoped" ||
         knowledgeBaseEnterprise ||
         visibility === "team-scoped",
     )
+    // SPDX-SnippetEnd
     .map(([value, option]) => ({
       ...option,
       value,

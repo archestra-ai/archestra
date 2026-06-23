@@ -1,4 +1,3 @@
-import { MEMBER_ROLE_NAME } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,6 +5,8 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentLabelWithDetailsSchema } from "./label";
+import { TeamMemberRoleSchema } from "./team-role";
 
 export const SelectTeamMemberSchema = createSelectSchema(
   schema.teamMembersTable,
@@ -17,6 +18,7 @@ export const SelectTeamMemberListItemSchema = SelectTeamMemberSchema.extend({
 });
 export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   members: z.array(SelectTeamMemberSchema).optional(),
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
@@ -25,17 +27,23 @@ export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
 export const CreateTeamBodySchema = z.object({
   name: z.string().min(1, "Team name is required"),
   description: z.string().optional(),
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export const UpdateTeamBodySchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   convertToolResultsToToon: z.boolean().optional(),
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export const AddTeamMemberBodySchema = z.object({
   userId: z.string(),
-  role: z.string().default(MEMBER_ROLE_NAME),
+  role: TeamMemberRoleSchema.default("member"),
+});
+
+export const UpdateTeamMemberBodySchema = z.object({
+  role: TeamMemberRoleSchema,
 });
 
 // Team External Group schemas for SSO team sync
@@ -58,6 +66,7 @@ export type TeamMemberListItem = z.infer<typeof SelectTeamMemberListItemSchema>;
 export type CreateTeamBody = z.infer<typeof CreateTeamBodySchema>;
 export type UpdateTeamBody = z.infer<typeof UpdateTeamBodySchema>;
 export type AddTeamMemberBody = z.infer<typeof AddTeamMemberBodySchema>;
+export type UpdateTeamMemberBody = z.infer<typeof UpdateTeamMemberBodySchema>;
 export type TeamExternalGroup = z.infer<typeof SelectTeamExternalGroupSchema>;
 export type InsertTeamExternalGroup = z.infer<
   typeof InsertTeamExternalGroupSchema

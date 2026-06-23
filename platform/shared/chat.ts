@@ -12,6 +12,8 @@ export interface TokenUsage {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
+  /** Input tokens served from the provider's prompt cache, a subset of inputTokens. */
+  cacheReadTokens?: number;
 }
 
 /**
@@ -23,6 +25,119 @@ export interface TokenUsage {
 export interface ContextWindowEstimate {
   estimatedTokens: number;
 }
+
+/**
+ * Stream event name for the per-category context window breakdown payload.
+ * Used by both the backend emitter and frontend consumer — never use the raw
+ * string literal in either place.
+ */
+export const CONTEXT_WINDOW_BREAKDOWN_EVENT =
+  "data-context-window-breakdown" as const;
+
+/**
+ * Canonical display order of context window categories, matching the
+ * top-to-bottom stack in the assembled request:
+ *   system_prompt → tools → messages → tool_results → files
+ *
+ * The visualizer renders segments in this order; the estimator must produce
+ * segments in this order so the stacked bar reads correctly.
+ */
+export const CONTEXT_WINDOW_CATEGORIES = [
+  "system_prompt",
+  "tools",
+  "messages",
+  "tool_results",
+  "files",
+] as const;
+
+export type ContextWindowCategory = (typeof CONTEXT_WINDOW_CATEGORIES)[number];
+
+/**
+ * A single named contributor within a category (one tool definition, one
+ * conversation turn, one tool-result block, one attached file).
+ * Powers the drill-down list inside each gauge.
+ */
+export const ContextWindowItemSchema = z.object({
+  /** Human-readable name of the contributor (tool name, file name, etc.). */
+  label: z.string(),
+  /** Estimated token count for this contributor. Always ≥ 0. */
+  tokens: z.number().int().nonnegative(),
+});
+
+export type ContextWindowItem = z.infer<typeof ContextWindowItemSchema>;
+
+/**
+ * One category's share of the assembled request.
+ * Only non-empty categories are included in `ContextWindowBreakdown.segments`.
+ */
+export const ContextWindowSegmentSchema = z.object({
+  /** Which part of the request this segment represents. */
+  category: z.enum(CONTEXT_WINDOW_CATEGORIES),
+  /** Estimated tokens this category contributes to the request. Always ≥ 0. */
+  tokens: z.number().int().nonnegative(),
+  /**
+   * Largest individual contributors in this category, sorted descending by
+   * token count. Omitted when no per-item breakdown is available.
+   */
+  items: z.array(ContextWindowItemSchema).optional(),
+});
+
+export type ContextWindowSegment = z.infer<typeof ContextWindowSegmentSchema>;
+
+/**
+ * Per-category breakdown of the request about to be sent, streamed once per
+ * turn at assembly time (event: `CONTEXT_WINDOW_BREAKDOWN_EVENT`).
+ *
+ * Token counts are estimates on the same yardstick that drives auto-compaction
+ * (chars/token, PDF bytes/token). The provider's exact prompt size arrives
+ * afterward via `TokenUsage` and supersedes `usedTokens` for the indicator.
+ *
+ * Invariant: `usedTokens === sum(segments[*].tokens)`.
+ */
+export const ContextWindowBreakdownSchema = z.object({
+  /** LLM provider identifier (e.g. `"anthropic"`, `"openai"`). */
+  provider: z.string(),
+  /** Model ID as sent to the provider (e.g. `"claude-sonnet-4-6"`). */
+  model: z.string(),
+  /**
+   * Provider's advertised maximum context length in tokens, or `null` when the
+   * model's context length is not known. When `null`, `freeTokens` and
+   * `usedPercent` are also `null` and the bar renders relative proportions only.
+   */
+  contextLength: z.number().int().positive().nullable(),
+  /**
+   * Sum of all segment token estimates. Always ≥ 0.
+   * Must equal `sum(segments[*].tokens)`.
+   */
+  usedTokens: z.number().int().nonnegative(),
+  /**
+   * `contextLength - usedTokens`, or `null` when `contextLength` is `null`.
+   * May be negative when the assembled request exceeds the model's limit.
+   */
+  freeTokens: z.number().int().nullable(),
+  /**
+   * Percentage of the context window occupied (0–100, inclusive), or `null`
+   * when `contextLength` is `null`. Clamped to [0, 100] — values > 100 mean
+   * the request is over-limit but are displayed as 100 to avoid breaking the
+   * progress bar.
+   */
+  usedPercent: z.number().min(0).max(100).nullable(),
+  /**
+   * Estimated USD cost of sending this context once (input tokens only), or
+   * `null` when no input price is configured for the model. The cost row in the
+   * UI is hidden when this is `null`.
+   */
+  estimatedInputCostUsd: z.number().nonnegative().nullable(),
+  /**
+   * Non-empty segments in canonical stack order (`CONTEXT_WINDOW_CATEGORIES`).
+   * Categories with zero tokens are omitted.
+   */
+  segments: z.array(ContextWindowSegmentSchema),
+});
+
+export type ContextWindowBreakdown = z.infer<
+  typeof ContextWindowBreakdownSchema
+>;
 
 // ============================================================================
 // Chat Message Part Types
@@ -50,6 +165,15 @@ export type ChatMessage = {
   metadata?: unknown;
 };
 
+/**
+ * Type of the inline hook-run debug part. A `data-*` part: persisted and
+ * rendered in the chat thread, but dropped from the model conversion
+ * (`convertToModelMessages`), so the LLM never sees it — same class as
+ * `data-tool-ui-start`. Shared so the backend (emit) and frontend (render)
+ * agree on the wire string.
+ */
+export const HOOK_RUN_PART_TYPE = "data-hook-run";
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
@@ -59,6 +183,7 @@ const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
   "data-token-usage",
   "data-heartbeat",
   "data-context-window-estimate",
+  "data-context-window-breakdown",
   "data-context-compaction-start",
   "data-context-compaction-finish",
 ]);
@@ -157,6 +282,13 @@ export function hasPersistableAssistantContent(message: {
       return true;
     }
 
+    // a hook-run debug chip is standalone renderable content; unlike a
+    // `data-tool-ui-start` marker it needs no pairing, so a turn carrying only
+    // hook entries is still persistable rather than dropped as an empty bubble.
+    if (part.type === HOOK_RUN_PART_TYPE) {
+      return true;
+    }
+
     if (isTerminalToolPart(part)) {
       return true;
     }
@@ -208,9 +340,39 @@ export const ChatSkillMetadataSchema = z.object({
 
 export type ChatSkillMetadata = z.infer<typeof ChatSkillMetadataSchema>;
 
+/**
+ * Render-loop diagnostics from owned MCP App renders, attached once by the
+ * chat UI to the next outgoing user message. Collected inside an untrusted
+ * sandboxed iframe — the backend re-validates and frames them as data, never
+ * as instructions, when injecting into the prompt.
+ */
+export const ChatAppDiagnosticsMetadataSchema = z
+  .array(
+    z.object({
+      appId: z.string().uuid(),
+      version: z.number().nullable(),
+      entries: z
+        .array(
+          z.object({
+            type: z.string().max(32),
+            message: z.string().max(1000),
+          }),
+        )
+        .max(50),
+    }),
+  )
+  .max(10);
+
+export type ChatAppDiagnosticsMetadata = z.infer<
+  typeof ChatAppDiagnosticsMetadataSchema
+>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
-  .object({ skill: ChatSkillMetadataSchema.optional() })
+  .object({
+    skill: ChatSkillMetadataSchema.optional(),
+    appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+  })
   .passthrough();
 
 // ============================================================================
@@ -287,13 +449,14 @@ const MODALITY_TO_MIME_TYPES: Record<
   ModelInputModality,
   SupportedChatUploadMimeType[] | null
 > = {
-  // Text-capable models can accept plain text and CSV documents.
+  // Text-capable models can accept plain text, CSV, and JSON documents.
   text: [
     "text/plain",
     "text/markdown",
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
+    "application/json",
   ],
   // Image formats commonly supported by vision models
   image: [
@@ -319,7 +482,7 @@ const MODALITY_TO_MIME_TYPES: Record<
 };
 
 const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "chat prompts, .txt, .csv, and .md uploads",
+  text: "chat prompts, .txt, .csv, .md, and .json uploads",
   image: "images",
   audio: "audio",
   video: "video",
@@ -476,6 +639,42 @@ export function getAcceptedFileTypes(
 
   return [...mimeTypes].join(",");
 }
+
+/**
+ * The MIME types a model can ingest directly, derived from its input
+ * modalities. Unlike {@link getAcceptedFileTypes} (a comma-joined string for the
+ * HTML `accept` attribute), this returns a Set for membership checks on the
+ * provider-prep path: a file part whose mediaType is absent is not sent as a
+ * document the provider would reject — it is referenced as a sandbox file
+ * instead. Pass `undefined`/`null` modalities to fall back to a safe readable
+ * default (text + images + PDF).
+ */
+export function getModelReadableMimeTypes(
+  modalities: ModelInputModality[] | null | undefined,
+): Set<string> {
+  // Treat an empty array the same as null — "capabilities unknown" — matching
+  // getAcceptedFileTypes / supportsFileUploads rather than "reads nothing".
+  const source =
+    modalities && modalities.length > 0
+      ? modalities
+      : DEFAULT_READABLE_MODALITIES;
+  const mimeTypes = new Set<string>();
+  for (const modality of source) {
+    const types = MODALITY_TO_MIME_TYPES[modality];
+    if (types) {
+      for (const type of types) {
+        mimeTypes.add(type);
+      }
+    }
+  }
+  return mimeTypes;
+}
+
+const DEFAULT_READABLE_MODALITIES: ModelInputModality[] = [
+  "text",
+  "image",
+  "pdf",
+];
 
 /**
  * Checks if a model supports any file uploads based on its input modalities.

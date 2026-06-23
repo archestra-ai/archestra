@@ -1,9 +1,11 @@
-//! the backend-agnostic actor. owns the process-singleton session handle, the
+//! the backend-agnostic actor. owns a pool of session handles keyed by runtime
+//! target (so per-environment engines each get their own warm session), the
 //! request channel, concurrency back-pressure, and panic recovery. it dispatches
 //! every message to a `Backend` without knowing which runtime backs it; the
 //! Dagger-specific connect/warm/materialise logic lives in `crate::backends`.
 
 use std::any::Any;
+use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
@@ -12,7 +14,7 @@ use futures_util::future::{BoxFuture, Shared};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
 use crate::backend::{ArtifactRequest, Backend, RunRequest};
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, RuntimeTarget, SandboxError};
 
 pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // Rust-side cap on concurrent backend handlers. Defense in depth — the TS
@@ -125,50 +127,56 @@ struct Slot {
     generation: u64,
 }
 
-static HANDLE_SLOT: OnceCell<Mutex<Slot>> = OnceCell::const_new();
+/// pool of session slots keyed by runtime target (`RuntimeTarget::Default` = the
+/// process-default engine). each target gets its own warm session so a
+/// per-environment engine doesn't thrash the default engine's session.
+static HANDLE_SLOTS: OnceCell<Mutex<HashMap<RuntimeTarget, Slot>>> = OnceCell::const_new();
 
-/// returns a live handle, spawning the actor on first call or after a previous
-/// session torn down (engine restart, panic in the connect closure).
-async fn current() -> Result<Arc<SessionHandle>> {
-    let slot = HANDLE_SLOT
-        .get_or_init(|| async {
-            Mutex::new(Slot {
-                handle: None,
-                spawning: None,
-                generation: 0,
-            })
-        })
+/// returns a live handle for `target`, spawning the actor on first call or
+/// after a previous session for that target tore down (engine restart, panic in
+/// the connect closure).
+async fn current(target: &RuntimeTarget) -> Result<Arc<SessionHandle>> {
+    let map = HANDLE_SLOTS
+        .get_or_init(|| async { Mutex::new(HashMap::new()) })
         .await;
 
-    // pick up either the live handle or a shared in-flight spawn; release the
-    // lock before awaiting so concurrent callers don't block on each other.
-    // capture the generation so the post-await install can detect a concurrent
-    // invalidation that retired this spawn's lineage.
+    // pick up either the live handle or a shared in-flight spawn for this target;
+    // release the lock before awaiting so concurrent callers don't block on each
+    // other. capture the generation so the post-await install can detect a
+    // concurrent invalidation that retired this spawn's lineage.
     let (spawn_fut, generation) = {
-        let mut guard = slot.lock().await;
-        if let Some(handle) = guard.handle.as_ref() {
+        let mut guard = map.lock().await;
+        let slot = guard.entry(target.clone()).or_insert_with(|| Slot {
+            handle: None,
+            spawning: None,
+            generation: 0,
+        });
+        if let Some(handle) = slot.handle.as_ref() {
             if handle.is_open() {
                 return Ok(handle.clone());
             }
-            guard.handle = None;
+            slot.handle = None;
         }
-        let fut = if let Some(s) = guard.spawning.clone() {
+        let fut = if let Some(s) = slot.spawning.clone() {
             s
         } else {
             // the one hardcoded backend-selection point.
+            let owned_target = target.clone();
             let fut: BoxFuture<'static, Result<Arc<SessionHandle>>> =
-                crate::backends::dagger::spawn().boxed();
+                crate::backends::dagger::spawn(owned_target).boxed();
             let shared = fut.shared();
-            guard.spawning = Some(shared.clone());
+            slot.spawning = Some(shared.clone());
             shared
         };
-        (fut, guard.generation)
+        (fut, slot.generation)
     };
 
     let result = spawn_fut.await;
 
-    let mut guard = slot.lock().await;
-    finish_spawn(&mut guard, generation, result.as_ref().ok());
+    let mut guard = map.lock().await;
+    if let Some(slot) = guard.get_mut(target) {
+        finish_spawn(slot, generation, result.as_ref().ok());
+    }
     result
 }
 
@@ -186,19 +194,23 @@ fn finish_spawn(slot: &mut Slot, started_generation: u64, handle: Option<&Arc<Se
 }
 
 /// submit a request and await the reply.
-pub(crate) async fn submit<T, F>(build: F) -> Result<T>
+pub(crate) async fn submit<T, F>(target: RuntimeTarget, build: F) -> Result<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
-    submit_with_attempts(build, MAX_SUBMIT_ATTEMPTS).await
+    submit_with_attempts(&target, build, MAX_SUBMIT_ATTEMPTS).await
 }
 
-async fn submit_with_attempts<T, F>(mut build: F, max_attempts: usize) -> Result<T>
+async fn submit_with_attempts<T, F>(
+    target: &RuntimeTarget,
+    mut build: F,
+    max_attempts: usize,
+) -> Result<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     for attempt in 1..=max_attempts {
-        match attempt_once(&mut build).await {
+        match attempt_once(target, &mut build).await {
             Attempt::Done(result) => {
                 if attempt > 1 && result.is_ok() {
                     tracing::info!(attempt, "sandbox request recovered on a fresh session");
@@ -246,12 +258,12 @@ enum Attempt<T> {
 
 /// run one acquire -> send -> await-reply cycle. each failure stage classifies
 /// itself as retryable or terminal; the caller owns the attempt bound and logging.
-async fn attempt_once<T, F>(build: &mut F) -> Attempt<T>
+async fn attempt_once<T, F>(target: &RuntimeTarget, build: &mut F) -> Attempt<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     let (reply_tx, reply_rx) = oneshot::channel();
-    let handle = match current().await {
+    let handle = match current(target).await {
         Ok(handle) => handle,
         // the request never left, so a fresh acquire is always side-effect-free.
         Err(err) if is_engine_unreachable(&err) => {
@@ -268,7 +280,7 @@ where
     let operation = msg.operation();
     if let Err(err) = handle.send(msg).await {
         // the actor closed before accepting the message: drop it and retry fresh.
-        invalidate_current(&handle, &err).await;
+        invalidate_current(target, &handle, &err).await;
         return Attempt::Retry {
             reason: RetryReason::ClosedSession,
             err,
@@ -287,7 +299,7 @@ where
     match result {
         Ok(value) => Attempt::Done(Ok(value)),
         Err(err) => {
-            invalidate_current_on_engine_error(&handle, &err).await;
+            invalidate_current_on_engine_error(target, &handle, &err).await;
             match retry_reason(operation, &err) {
                 Some(reason) => Attempt::Retry {
                     reason,
@@ -336,18 +348,28 @@ fn log_retry(
     );
 }
 
-async fn invalidate_current_on_engine_error(handle: &Arc<SessionHandle>, err: &SandboxError) {
+async fn invalidate_current_on_engine_error(
+    target: &RuntimeTarget,
+    handle: &Arc<SessionHandle>,
+    err: &SandboxError,
+) {
     if let SandboxError::EngineUnreachable { .. } = err {
-        invalidate_current(handle, err).await;
+        invalidate_current(target, handle, err).await;
     }
 }
 
-async fn invalidate_current(handle: &Arc<SessionHandle>, err: &SandboxError) {
-    let Some(slot) = HANDLE_SLOT.get() else {
+async fn invalidate_current(
+    target: &RuntimeTarget,
+    handle: &Arc<SessionHandle>,
+    err: &SandboxError,
+) {
+    let Some(map) = HANDLE_SLOTS.get() else {
         return;
     };
-    let mut guard = slot.lock().await;
-    if clear_if_current(&mut guard, handle) {
+    let mut guard = map.lock().await;
+    if let Some(slot) = guard.get_mut(target)
+        && clear_if_current(slot, handle)
+    {
         tracing::warn!(error_code = err.code(), error = %err, "dropping stale sandbox session");
     }
 }
@@ -425,21 +447,21 @@ pub(crate) async fn run_loop(backend: Arc<Backend>, mut rx: mpsc::Receiver<Sessi
 async fn handle(backend: Arc<Backend>, msg: SessionMsg) {
     match msg {
         SessionMsg::Run { req, reply } => {
-            let result = catch_panic(backend.run(req)).await;
+            let result = catch_panic(&backend, backend.run(req)).await;
             let _ = reply.send(result);
         }
         SessionMsg::ReadArtifact { req, reply } => {
-            let result = catch_panic(backend.read_artifact(req)).await;
+            let result = catch_panic(&backend, backend.read_artifact(req)).await;
             let _ = reply.send(result);
         }
         SessionMsg::CheckSession { traceparent, reply } => {
-            let result = catch_panic(backend.check_session(traceparent)).await;
+            let result = catch_panic(&backend, backend.check_session(traceparent)).await;
             let _ = reply.send(result);
         }
     }
 }
 
-async fn catch_panic<T, Fut>(fut: Fut) -> Result<T>
+async fn catch_panic<T, Fut>(backend: &Backend, fut: Fut) -> Result<T>
 where
     Fut: std::future::Future<Output = Result<T>>,
 {
@@ -448,9 +470,47 @@ where
         .await
         .unwrap_or_else(|payload| {
             let message = panic_message(payload.as_ref());
-            tracing::error!(panic = message, "recovered a panic in a sandbox handler");
-            Err(SandboxError::Internal(format!("rust panic: {message}")))
+            Err(panic_to_error(
+                backend.engine_fault_from_panic(message),
+                message,
+            ))
         })
+}
+
+/// classify a recovered handler panic. a backend that `unwrap()`s a transient
+/// engine fault (e.g. the dagger SDK on a stale-attachables timeout) escapes as
+/// a panic instead of a typed error; re-tag the recognised faults as
+/// `EngineUnreachable` so the respawn/retry path fires, and keep everything else
+/// a fatal `Internal` so genuine bugs aren't silently retried.
+///
+/// both arms carry a low-cardinality `recovered` field so the two outcomes are
+/// queryable without grepping free text: the fault classifier is a substring
+/// match against an upstream message, so if that wording ever drifts a panic
+/// that used to recover silently flips to `recovered = false` here — that shift
+/// is the regression signal to alert on.
+fn panic_to_error(fault: Option<EngineFault>, message: &str) -> SandboxError {
+    match fault {
+        Some(fault) => {
+            tracing::warn!(
+                panic = message,
+                ?fault,
+                recovered = true,
+                "recovered an engine fault from a sandbox handler panic"
+            );
+            SandboxError::EngineUnreachable {
+                fault,
+                message: format!("rust panic: {message}"),
+            }
+        }
+        None => {
+            tracing::error!(
+                panic = message,
+                recovered = false,
+                "recovered a panic in a sandbox handler"
+            );
+            SandboxError::Internal(format!("rust panic: {message}"))
+        }
+    }
 }
 
 fn panic_message(payload: &(dyn Any + Send)) -> &str {
@@ -563,6 +623,29 @@ mod tests {
         // read_artifact replays the command log before exporting, so a generic
         // engine error (which may have run some of that history) is not retried.
         assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+    }
+
+    #[test]
+    fn panic_to_error_retags_recovered_engine_fault_for_retry() {
+        // dagger-sdk panics (instead of returning a typed error) on a
+        // stale-attachables timeout; the recovered fault must re-enter the
+        // respawn/retry path even for command execution.
+        let err = panic_to_error(
+            Some(EngineFault::StaleAttachables),
+            "called `Result::unwrap()` on an `Err` value: waiting for client session attachables",
+        );
+        assert!(is_stale_attachables_error(&err));
+        assert_eq!(
+            retry_reason(SessionOperation::Run, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+    }
+
+    #[test]
+    fn panic_to_error_keeps_unrecognised_panic_fatal() {
+        let err = panic_to_error(None, "index out of bounds: the len is 0 but the index is 1");
+        assert!(matches!(err, SandboxError::Internal(_)));
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
     }
 

@@ -11,12 +11,12 @@
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
 4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
-5. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
-6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
-7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
+5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default
+6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: docs/pages/platform-pricing-model.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
+7. **Commit Freely, Push With Approval** - Committing locally as you land reviewable slices is fine. Never push, open, or update a PR without explicit user approval, and never amend commits
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
-10. **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
+10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
 
 ## Docs
 
@@ -32,6 +32,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-e2e` - use for Playwright e2e tests, API/UI fixtures, WireMock setup, local/CI e2e behavior, and locator guidance.
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
+- `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
 
 ## Key URLs
 
@@ -267,8 +268,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
-- Colocate test files with source (`.test.ts`)
-- Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
@@ -398,16 +397,17 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
-**Skill Sandbox Runtime**:
+**Skill Sandbox Runtime** (gated behind the sandbox feature flag):
 
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
-- MCP tools exposed by `archestra-mcp-server/skill-sandbox.ts`:
-  - `create_skill_sandbox` — snapshots one or more skills into a sandbox recipe; returns a stable sandbox id and per-skill root paths
-  - `run_skill_command` — materializes the recipe in a fresh Dagger container, replays the persisted command log, executes a new command, appends to the log
-  - `get_skill_sandbox_artifact` — exports a file from a materialized sandbox into `skill_sandbox_artifacts` (bytea) and returns a typed `ArtifactRef`
-- All three tools are gated by the `skill:execute` permission (`auth/skill-permissions.ts`). `create_skill_sandbox` also enforces `skill:read` per mounted skill
-- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skills`, `skill_sandbox_commands`, `skill_sandbox_artifacts`); Dagger owns ephemeral filesystem state with no retention guarantee
-- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `read_skill_file` and use the sandbox tools to execute scripts — commands run from the skill root so the Agent Skills spec's relative paths work as-is
+- MCP tools exposed by `archestra-mcp-server/sandbox.ts`, all gated by `sandbox:execute` (`archestra-mcp-server/rbac.ts`). Each accepts a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
+  - `run_command` — materializes the sandbox in a fresh Dagger container, replays the persisted ordered replay log, executes a command, appends it to the log. Python runs in a uv project at `/home/sandbox` (`python3` is the project venv; install packages with `uv add --project /home/sandbox <pkg>`)
+  - `upload_file` — writes an input file (chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs
+  - `download_file` — exports a file from a materialized sandbox into `skill_sandbox_files` (kind `artifact`) and returns a metadata reference (no download link; the file is reached via the chat Files panel, which fetches bytes from the `/api/skill-sandbox/artifacts/:id` route directly)
+- Chat attachments are auto-staged into the conversation's **default** sandbox under `/home/sandbox/attachments/` (idempotent, tracked via `skill_sandbox_files.source_attachment_id`), so the model uses user-attached files without knowing attachment ids. Over-limit attachments are skipped with a model-visible notice. `upload_file` stays the path for inline content, explicit paths, non-default sandboxes, and non-UI gateway clients
+- `load_skill` (and slash-command activation) mounts the skill's pinned version into the conversation's default sandbox when the sandbox is usable, so its scripts are runnable under `/skills/<name>`. This happens for both `load_skill` modes (name only, and name + path), so a file read also mounts the skill. `run_command`/`download_file` re-check that every mounted skill is still readable by the caller before building a container (fail-closed)
+- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skill_mounts`, `skill_sandbox_commands`, `skill_sandbox_files`, `skill_sandbox_replay_events`); skill bytes are versioned immutably in `skill_versions` + `skill_version_files` and mounts pin a `skill_version_id`. Dagger owns ephemeral filesystem state with no retention guarantee. Ordering across commands/uploads/mounts is the `skill_sandbox_replay_events` log, sequenced via `skill_sandboxes.next_replay_sequence`
+- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `load_skill` (passing a path) and use the sandbox tools to execute scripts. Each mounted skill root (`/skills/<name>`) is appended to `PYTHONPATH` (in `archestra-rs/sandbox-core/src/backends/dagger.rs`), so the model imports a skill's modules directly without `sys.path` edits. `run_command`'s cwd defaults to `/home/sandbox`, **not** the skill root, so a bundled script that reads its own files by relative path must be run with `cwd: /skills/<name>`
 
 **Testing**:
 

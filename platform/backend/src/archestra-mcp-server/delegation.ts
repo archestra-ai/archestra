@@ -1,5 +1,5 @@
+import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { AGENT_TOOL_PREFIX, slugify } from "@shared";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { userHasPermission } from "@/auth/utils";
@@ -112,7 +112,9 @@ export async function handleDelegation(
   );
 
   if (!delegation) {
-    return errorResult("Agent not found or not configured for delegation.");
+    return errorResult(
+      `No delegation is configured for "${toolName}". Use an exact agent delegation tool name (${AGENT_TOOL_PREFIX}*) from your tools list. Do not guess delegation names.`,
+    );
   }
 
   // Check user access when a real caller is available. The caller user can be
@@ -134,8 +136,10 @@ export async function handleDelegation(
   }
 
   try {
-    // Use sessionId from context, or fall back to conversationId for chat context
-    const sessionId = context.sessionId || context.conversationId;
+    // Use sessionId from context, or fall back to the conversation/execution
+    // scope so delegated requests still group together in logs
+    const sessionId =
+      context.sessionId || context.conversationId || context.isolationKey;
 
     logger.info(
       {
@@ -157,8 +161,11 @@ export async function handleDelegation(
       sessionId,
       // Pass the current delegation chain so the child can extend it
       parentDelegationChain: context.delegationChain || context.agentId,
-      // Propagate conversationId for browser tab isolation
+      // Propagate the real conversation id (absent in headless executions) and
+      // the isolation scope separately: the child must never mistake an
+      // execution key for a persisted conversation.
       conversationId: context.conversationId,
+      isolationKey: context.isolationKey,
       chatOpsBindingId: context.chatOpsBindingId,
       chatOpsThreadId: context.chatOpsThreadId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,

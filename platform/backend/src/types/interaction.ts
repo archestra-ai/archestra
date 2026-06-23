@@ -1,7 +1,7 @@
 import {
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -16,6 +16,7 @@ import {
   Cohere,
   DeepSeek,
   Gemini,
+  GithubCopilot,
   Groq,
   Minimax,
   Mistral,
@@ -67,6 +68,7 @@ export const InteractionRequestSchema = z.union([
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
+  GithubCopilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
@@ -90,6 +92,7 @@ export const InteractionResponseSchema = z.union([
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
+  GithubCopilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
@@ -285,6 +288,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["github-copilot:chatCompletions"]),
+    request: GithubCopilot.API.ChatCompletionRequestSchema,
+    processedRequest:
+      GithubCopilot.API.ChatCompletionRequestSchema.nullable().optional(),
+    response: GithubCopilot.API.ChatCompletionResponseSchema,
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["minimax:chatCompletions"]),
     request: Minimax.API.ChatCompletionRequestSchema,
     processedRequest:
@@ -361,9 +374,12 @@ export const SessionSummarySchema = z.object({
   requestCount: z.number(),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
+  totalCacheReadTokens: z.number(),
+  totalCacheWriteTokens: z.number(),
   totalCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
   totalToonCostSavings: z.string().nullable(),
+  totalCacheSavings: z.string().nullable(),
   toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),

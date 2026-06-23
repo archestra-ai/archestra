@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type * as originalConfigModule from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -53,6 +54,9 @@ describe("organization routes", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    // appearance-settings updates sync the branding singleton; reset it so an
+    // app name never leaks into a later (shuffled) test.
+    archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });
 
@@ -77,6 +81,40 @@ describe("organization routes", () => {
     });
   });
 
+  test("re-brands the built-in skill rows when appName changes", async () => {
+    vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue();
+    const { syncBuiltInSkillsForOrganization } = await import(
+      "@/database/seed"
+    );
+    const { SkillModel } = await import("@/models");
+    const { BUILT_IN_SKILLS, builtInSkillSourceRef } = await import(
+      "@/skills/built-in-skills"
+    );
+    const [base] = BUILT_IN_SKILLS;
+    const sourceRef = builtInSkillSourceRef(base.builtInSkillId);
+
+    // seed the canonical (un-branded) built-in skill first.
+    await syncBuiltInSkillsForOrganization({
+      id: organizationId,
+      appName: null,
+      iconLogo: null,
+    });
+    const before = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(before?.name).toBe("Archestra Platform Operations");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/appearance-settings",
+      payload: { appName: "Acme Copilot" },
+    });
+    expect(response.statusCode).toBe(200);
+
+    // the stored row re-brands immediately — no backend restart needed.
+    const after = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(after?.name).toBe("Acme Copilot Platform Operations");
+    expect(after?.content).not.toContain("Archestra");
+  });
+
   describe("PATCH /api/organization/agent-settings - model/key pair", () => {
     test("rejects a default model with no API key", async () => {
       const response = await app.inject({
@@ -96,6 +134,53 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("PATCH /api/organization/connection-settings - default provider keys", () => {
+    test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { "github-copilot": key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toMatch(/per-user/);
+    });
+
+    test("accepts a non-per-user provider default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Anthropic",
+        provider: "anthropic",
+        scope: "org",
+        userId: null,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { anthropic: key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
     });
   });
 
@@ -415,13 +500,14 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/security-settings", () => {
-    test("updates global tool policy and chat file upload settings", async () => {
+    test("updates global tool policy, chat file upload, and tool auto-assignment settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
           globalToolPolicy: "restrictive",
           allowChatFileUploads: false,
+          allowToolAutoAssignment: false,
         },
       });
 
@@ -429,6 +515,7 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         globalToolPolicy: "restrictive",
         allowChatFileUploads: false,
+        allowToolAutoAssignment: false,
       });
     });
 
@@ -439,6 +526,7 @@ describe("organization routes", () => {
         payload: {
           globalToolPolicy: "permissive",
           allowChatFileUploads: true,
+          allowToolAutoAssignment: true,
         },
       });
 
@@ -451,6 +539,7 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         globalToolPolicy: "permissive",
         allowChatFileUploads: true,
+        allowToolAutoAssignment: true,
       });
     });
   });
@@ -470,42 +559,6 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         compressionScope: "team",
         convertToolResultsToToon: true,
-      });
-    });
-
-    test("allows clearing the default user limit", async () => {
-      const setResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: 100,
-          defaultUserLimitModel: ["gpt-4o"],
-          defaultUserLimitCleanupInterval: "12h",
-        },
-      });
-
-      expect(setResponse.statusCode).toBe(200);
-      expect(setResponse.json()).toMatchObject({
-        defaultUserLimitValue: 100,
-        defaultUserLimitModel: ["gpt-4o"],
-        defaultUserLimitCleanupInterval: "12h",
-      });
-
-      const clearResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: null,
-          defaultUserLimitModel: null,
-          defaultUserLimitCleanupInterval: null,
-        },
-      });
-
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json()).toMatchObject({
-        defaultUserLimitValue: null,
-        defaultUserLimitModel: null,
-        defaultUserLimitCleanupInterval: null,
       });
     });
   });

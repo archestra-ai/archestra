@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { LimitModel } from "@/models";
+import { EnvironmentModel, LimitModel } from "@/models";
 import AgentModel from "@/models/agent";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -285,8 +285,11 @@ describe("limits routes", () => {
         500,
       );
 
+      // First day of the previous calendar month, so the default
+      // calendar_month cleanup fires regardless of today's day-of-month.
       const oldDate = new Date();
-      oldDate.setDate(oldDate.getDate() - 7);
+      oldDate.setDate(1);
+      oldDate.setMonth(oldDate.getMonth() - 1);
       await LimitModel.patch(limit.id, { lastCleanup: oldDate });
 
       const response = await app.inject({
@@ -469,6 +472,192 @@ describe("limits routes", () => {
       const usage = await LimitModel.getRawModelUsage(limit.id);
       expect(usage[0].currentUsageTokensIn).toBe(500);
       expect(usage[0].currentUsageTokensOut).toBe(700);
+    });
+  });
+
+  describe("environment-scoped limits", () => {
+    test("creates and lists an environment limit for the caller's org", async () => {
+      const environment = await EnvironmentModel.create({
+        organizationId,
+        name: "production",
+      });
+
+      const createResponse = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "environment",
+          entityId: environment.id,
+          limitType: "token_cost",
+          limitValue: 5000,
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(createResponse.statusCode).toBe(200);
+      expect(createResponse.json()).toMatchObject({
+        entityType: "environment",
+        entityId: environment.id,
+        limitValue: 5000,
+      });
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: "/api/limits?entityType=environment",
+      });
+      expect(listResponse.statusCode).toBe(200);
+      const ids = listResponse.json().map((l: { id: string }) => l.id);
+      expect(ids).toContain(createResponse.json().id);
+    });
+
+    test("rejects an environment limit for an environment in another org", async ({
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const foreignEnvironment = await EnvironmentModel.create({
+        organizationId: otherOrg.id,
+        name: "foreign",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "environment",
+          entityId: foreignEnvironment.id,
+          limitType: "token_cost",
+          limitValue: 5000,
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("org-scoping guards", () => {
+    test("rejects creating a limit for an agent in another org", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const foreignAgent = await makeAgent({
+        name: "Foreign Agent",
+        organizationId: otherOrg.id,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "agent",
+          entityId: foreignAgent.id,
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("rejects creating an organization limit for another org", async ({
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "organization",
+          entityId: otherOrg.id,
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("GET/PATCH/DELETE on another org's limit return 404", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const foreignAgent = await makeAgent({
+        name: "Foreign Agent",
+        organizationId: otherOrg.id,
+      });
+      const foreignLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: foreignAgent.id,
+        limitType: "token_cost",
+        limitValue: 1000,
+        model: ["gpt-4o"],
+      });
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/limits/${foreignLimit.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${foreignLimit.id}`,
+        payload: { limitValue: 9999 },
+      });
+      expect(patchResponse.statusCode).toBe(404);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/limits/${foreignLimit.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(404);
+
+      // Untouched in the other org.
+      const stillThere = await LimitModel.findById(foreignLimit.id);
+      expect(stillThere?.limitValue).toBe(1000);
+    });
+
+    test("PATCH ignores attempts to change entityType/entityId", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const agent = await makeAgent({
+        name: "Scoped Agent",
+        organizationId,
+      });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000,
+        model: ["gpt-4o"],
+      });
+
+      const otherOrg = await makeOrganization();
+      const foreignAgent = await makeAgent({
+        name: "Foreign Agent",
+        organizationId: otherOrg.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: {
+          limitValue: 2000,
+          entityType: "agent",
+          entityId: foreignAgent.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updated = await LimitModel.findById(limit.id);
+      expect(updated?.entityId).toBe(agent.id);
+      expect(updated?.limitValue).toBe(2000);
     });
   });
 });

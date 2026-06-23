@@ -1,13 +1,15 @@
 {
-  "name": "@shared",
-  "version": "1.2.56",
+  "name": "@archestra/shared",
+  "version": "1.2.73",
   "description": "",
   "type": "module",
   "private": true,
   "exports": {
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
-    "./e2e-test-ids": "./e2e-test-ids.ts"
+    "./e2e-test-ids": "./e2e-test-ids.ts",
+    "./permission.types": "./permission.types.ts",
+    "./test-mcp-server": "./test-mcp-server.ts"
   },
   "scripts": {
     "lint": "biome check",

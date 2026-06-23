@@ -1,0 +1,50 @@
+# Lanes the benchmark can run. A lane is a named (provider, model) endpoint with its own key/base_url.
+# Select a subset with `--lanes name1,name2`; omit `--lanes` to run every lane defined here.
+#
+# Fields:
+#   name         unique slug, the selection handle and the lane's agent / log / artifact dir
+#   provider     one of: anthropic, openai, gemini, openrouter (what the backend seeds the key as)
+#   model        the model id to resolve on that provider
+#   base_url     optional endpoint override (e.g. an Anthropic-compatible gateway)
+#   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
+
+# [[lane]]
+# name = "or-nex"
+# provider = "openrouter"
+# model = "nex-agi/nex-n2-pro:free"
+
+# [[lane]]
+# name = "or-owl"
+# provider = "openrouter"
+# model = "openrouter/owl-alpha"
+
+[[lane]]
+name = "minimax-3"
+provider = "openrouter"
+model = "minimax/minimax-m3"
+
+[[lane]]
+name = "minimax-27"
+provider = "openrouter"
+model = "minimax/minimax-m2.7"
+
+# [[lane]]
+# name = "kimi"
+# provider = "anthropic"
+# model = "kimi-for-coding"
+# base_url = "https://api.kimi.com/coding/"
+# api_key_env = "KIMI_API_KEY"
+
+[[lane]]
+name = "glm"
+provider = "anthropic"
+model = "glm-5.2"
+base_url = "https://api.z.ai/api/anthropic"
+api_key_env = "ZAI_API_KEY"
+
+[[lane]]
+name = "glm-flash"
+provider = "anthropic"
+model = "glm-4.5-air"
+base_url = "https://api.z.ai/api/anthropic"
+api_key_env = "ZAI_API_KEY"

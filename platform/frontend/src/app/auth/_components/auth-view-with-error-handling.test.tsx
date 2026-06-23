@@ -1,5 +1,5 @@
-import { E2eTestId } from "@shared";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { E2eTestId } from "@archestra/shared";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,20 +10,19 @@ import {
 import { usePublicConfig } from "@/lib/config/config.query";
 import { AuthViewWithErrorHandling } from "./auth-view-with-error-handling";
 
-vi.mock("@daveyplate/better-auth-ui", () => ({
-  AuthView: () => <div data-testid="auth-view" />,
+vi.mock("./two-factor-view", () => ({
+  TwoFactorView: () => <div data-testid="two-factor-view" />,
+}));
+
+vi.mock("./recover-account-view", () => ({
+  RecoverAccountView: () => <div data-testid="recover-account-view" />,
 }));
 
 const mockSignInMutateAsync = vi.fn();
-const mockChangePasswordMutateAsync = vi.fn();
 
 vi.mock("@/lib/auth/account.query", () => ({
   useSignInWithEmailMutation: () => ({
     mutateAsync: mockSignInMutateAsync,
-    isPending: false,
-  }),
-  useChangeAccountPasswordMutation: () => ({
-    mutateAsync: mockChangePasswordMutateAsync,
     isPending: false,
   }),
 }));
@@ -62,10 +61,8 @@ describe("AuthViewWithErrorHandling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSignInMutateAsync.mockResolvedValue({
-      requiresDefaultPasswordChange: false,
       redirectUrl: "/",
     });
-    mockChangePasswordMutateAsync.mockResolvedValue(true);
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/auth/sign-in");
     vi.mocked(useSearchParams).mockReturnValue(
@@ -78,6 +75,22 @@ describe("AuthViewWithErrorHandling", () => {
       },
       isLoading: false,
     } as ReturnType<typeof usePublicConfig>);
+  });
+
+  it("renders the two-factor view for the two-factor path", () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="two-factor" />);
+
+    expect(screen.getByTestId("two-factor-view")).toBeInTheDocument();
+  });
+
+  it("renders the recover-account view for the recover-account path", () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="recover-account" />);
+
+    expect(screen.getByTestId("recover-account-view")).toBeInTheDocument();
   });
 
   it("does not show a failed SSO message on first sign-in page load", () => {
@@ -144,54 +157,6 @@ describe("AuthViewWithErrorHandling", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Sign-In Failed")).toBeInTheDocument();
-    });
-  });
-
-  it("prompts for a new password after default admin sign-in", async () => {
-    mockSearchParams.get.mockReturnValue(null);
-    mockSignInMutateAsync.mockResolvedValue({
-      requiresDefaultPasswordChange: true,
-      redirectUrl: "/chat",
-    });
-
-    render(<AuthViewWithErrorHandling path="sign-in" callbackURL="/chat" />);
-
-    fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "admin@example.com" },
-    });
-    fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: "password" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Change Password")).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText("New password")).toBeInTheDocument();
-    expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("New password"), {
-      target: { value: "new-admin-password" },
-    });
-    fireEvent.change(screen.getByLabelText("Confirm password"), {
-      target: { value: "new-admin-password" },
-    });
-    expect(screen.getByLabelText("New password")).toHaveValue(
-      "new-admin-password",
-    );
-    expect(screen.getByLabelText("Confirm password")).toHaveValue(
-      "new-admin-password",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
-
-    await waitFor(() => {
-      expect(mockChangePasswordMutateAsync).toHaveBeenCalledWith({
-        currentPassword: "password",
-        newPassword: "new-admin-password",
-        revokeOtherSessions: true,
-      });
     });
   });
 });

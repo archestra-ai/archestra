@@ -1,4 +1,4 @@
-import { hasPersistableAssistantContent } from "@shared";
+import { hasPersistableAssistantContent } from "@archestra/shared";
 import {
   and,
   desc,
@@ -20,6 +20,8 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -122,6 +124,8 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -164,6 +168,10 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
@@ -188,6 +196,8 @@ class ConversationModel {
           conversationMap.set(conversationId, {
             ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
+            projectName: row.projectName ?? null,
+            projectIcon: listProjectIcon(row.projectIcon),
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -224,6 +234,8 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -246,12 +258,18 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
+        projectName: row.projectName ?? null,
+        projectIcon: listProjectIcon(row.projectIcon),
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],
@@ -359,12 +377,43 @@ class ConversationModel {
         userId: params.userId,
       });
 
-    if (!accessibleShare) {
-      return null;
+    if (accessibleShare) {
+      // Shared conversations intentionally return another user's conversation
+      // once share access has been validated for this org/user pair.
+      return ConversationModel.findByIdInOrganization({
+        id: params.id,
+        organizationId: params.organizationId,
+      });
     }
 
-    // Shared conversations intentionally return another user's conversation
-    // once share access has been validated for this org/user pair.
+    // Project membership grants the same read-only view: any chat in a
+    // project the caller can read is viewable (writing stays author-only —
+    // every mutating route resolves the conversation by owner).
+    const [bare] = await db
+      .select({
+        projectId: schema.conversationsTable.projectId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, params.id));
+    if (
+      !bare ||
+      !bare.projectId ||
+      bare.organizationId !== params.organizationId
+    ) {
+      return null;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      return null;
+    }
     return ConversationModel.findByIdInOrganization({
       id: params.id,
       organizationId: params.organizationId,
@@ -475,6 +524,35 @@ class ConversationModel {
     })) as Conversation;
 
     return updatedWithAgent;
+  }
+
+  /**
+   * Toggle per-conversation hook debug mode. Kept off the generic
+   * {@link UpdateConversation} path on purpose: that schema backs the
+   * member-accessible update route, whereas this flag is admin-gated at the
+   * route layer. Scoped by user + org. Returns the new value, or null if no
+   * conversation matched.
+   */
+  static async setHooksDebugEnabled(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    enabled: boolean;
+  }): Promise<boolean | null> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ hooksDebugEnabled: params.enabled })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({
+        hooksDebugEnabled: schema.conversationsTable.hooksDebugEnabled,
+      });
+    return updated ? updated.hooksDebugEnabled : null;
   }
 
   static async delete(
@@ -588,6 +666,16 @@ type JoinedConversationAgent = {
   llmApiKeyId: string | null;
   deletedAt: Date | null;
 } | null;
+
+/**
+ * Project icon for a conversation-list row. Only emoji icons are passed through;
+ * base64 image data URLs are dropped (the pill falls back to the folder glyph)
+ * so a large icon isn't duplicated across every conversation in the list.
+ */
+function listProjectIcon(icon: string | null | undefined): string | null {
+  if (!icon || icon.startsWith("data:")) return null;
+  return icon;
+}
 
 function withVisibleAgent(
   conversation: typeof schema.conversationsTable.$inferSelect,

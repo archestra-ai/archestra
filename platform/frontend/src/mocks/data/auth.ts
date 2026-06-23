@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 // Shape derived from what `WithAuthCheck` and downstream hooks read —
 // Better-Auth's session is not part of the Archestra SDK codegen.
@@ -76,6 +76,7 @@ export function makeUserPermissions(
     environment: ["admin", "deploy-to-restricted"],
     agent: [...ALL, "team-admin"],
     agentTrigger: [...ALL],
+    skill: [...ALL, "team-admin"],
     chat: [...ALL],
     team: [...ALL],
     member: [...ALL],

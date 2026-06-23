@@ -1,0 +1,31 @@
+name,department,salary
+Employee 001,Sales,1.023720e+05
+Employee 002,Engineering,142.418k
+Employee 003,,Marketing,96865
+Employee 004,,Marketing,100934
+Employee 005,Marketing,87.176k
+Employee 006,Marketing,"89,587"
+Employee 007,Support,72428
+Employee 008,Marketing,"78,472"
+Employee 009,Marketing,9.340000e+04
+Employee 010,HR,8.535300e+04
+Employee 011,Marketing,"$67,213"
+Employee 012,Sales,72578
+Employee 013,Marketing,80.867k
+Employee 014,Engineering,"117,480"
+Employee 015,HR,"$100,284"
+Employee 016,Marketing,1.037210e+05
+Employee 017,Sales,"$95,103"
+Employee 018,Engineering,128.463k
+Employee 019,HR,104988
+Employee 020,Marketing,"102,850"
+Employee 021,HR,94.265k
+Employee 022,Engineering,"$128,035"
+Employee 023,Engineering,"$140,003"
+Employee 024,Marketing,7.156300e+04
+Employee 025,,Engineering,150584
+Employee 200,Marketing,
+Employee 201,Engineering,N/A
+Employee 202,Sales,TBD
+Employee 203,HR,see HR
+Employee 204,Engineering,—

@@ -13,11 +13,13 @@ const {
   mockUsePathname,
   mockDeleteMutate,
   mockUseConversations,
+  mockUseFeature,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockUsePathname: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUseConversations: vi.fn(),
+  mockUseFeature: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -43,6 +45,10 @@ vi.mock("@/lib/auth/auth.query", () => ({
     isPending: false,
     isLoading: false,
   }),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (flag: string) => mockUseFeature(flag),
 }));
 
 vi.mock("@/lib/chat/chat-utils", () => ({
@@ -145,6 +151,7 @@ describe("ConversationSearchPalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseFeature.mockReturnValue(false);
     mockUsePathname.mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
       data: [
@@ -188,6 +195,49 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("First conversation")).toBeInTheDocument();
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
+  });
+
+  it("routes Connect to the classic connection page when beta is off", () => {
+    // The Pages nav group (incl. Connect) renders when there are no conversations.
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseFeature.mockReturnValue(false);
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("Connect"));
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/connection");
+  });
+
+  it("routes Connect to the new connection page when ARCHESTRA_BETA is on", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseFeature.mockReturnValue(true);
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("Connect"));
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/connection_beta");
+  });
+
+  it("routes MCP Registry to the beta registry when ARCHESTRA_BETA is on", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseFeature.mockReturnValue(true);
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("MCP Registry"));
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/beta");
   });
 
   it("does not show the recent chats empty state in the full search palette", () => {

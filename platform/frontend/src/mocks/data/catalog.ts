@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -20,6 +20,7 @@ export function makeCatalogItem(
     authFields: null,
     serverType: "local",
     multitenant: false,
+    dynamicConnectionMcpServerId: null,
     serverUrl: null,
     docsUrl: null,
     clientSecretId: null,
@@ -34,12 +35,7 @@ export function makeCatalogItem(
     authorId: null,
     scope: "org",
     environmentId: null,
-    parentCatalogItemId: null,
     clonedFrom: null,
-    childName: null,
-    presetEntryId: null,
-    presetFieldValues: {},
-    presetSecretId: null,
     catalogReinstallRequired: false,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

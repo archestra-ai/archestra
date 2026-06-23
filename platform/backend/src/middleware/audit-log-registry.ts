@@ -2,15 +2,19 @@ import config from "@/config";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
@@ -158,6 +162,26 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     },
   },
 
+  // Apps
+  "/api/apps": {
+    resourceType: "app",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  "/api/apps/:appId": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  // Tool assignment changes the app's effective tool surface; appToolsTable is
+  // audited:false ("parent carries the signal"), so record app.updated with the
+  // app snapshot instead of inheriting app.created from the POST walk-up.
+  "/api/apps/:appId/tools/:toolId": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+
   // MCP Servers
   "/api/mcp_server": {
     resourceType: "mcpServer",
@@ -282,6 +306,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
 
+  // GitHub App configs
+  "/api/github-app-configs": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-app-configs/:id": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+
   // Limits
   "/api/limits": {
     resourceType: "limit",
@@ -290,6 +324,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/limits/:id": {
     resourceType: "limit",
     fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+
+  // Default user limits (per-environment + org-wide)
+  "/api/default-user-limits": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
+  },
+  "/api/default-user-limits/:id": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
 
   // Optimization Rules
@@ -399,6 +445,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
 
+  "/api/mcp-oauth-clients": {
+    resourceType: "mcpOauthClient",
+    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/mcp-oauth-clients/:id": {
+    resourceType: "mcpOauthClient",
+    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
+  },
+
   // LLM model catalog (admin) — sync has distinct semantics from a generic update.
   "/api/llm-models/sync": {
     resourceType: "llmModel",
@@ -470,6 +525,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
   "/api/chatops/config/slack": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/ngrok": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
     fetchById: (_id, _orgId) =>

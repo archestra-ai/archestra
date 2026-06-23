@@ -1,6 +1,11 @@
 "use client";
 
 import {
+  E2eTestId,
+  getIdpRoleMappingRuleRowTestId,
+  type IdentityProviderFormValues,
+} from "@archestra/shared";
+import {
   closestCenter,
   DndContext,
   type DragEndEvent,
@@ -16,11 +21,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  E2eTestId,
-  getIdpRoleMappingRuleRowTestId,
-  type IdentityProviderFormValues,
-} from "@shared";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";

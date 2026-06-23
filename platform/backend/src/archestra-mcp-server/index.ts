@@ -1,26 +1,39 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
+  type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-} from "@shared";
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
+import { ToolModel } from "@/models";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
+import {
+  toolEntries as appDataToolEntries,
+  tools as appDataTools,
+} from "./app-data";
+import {
+  toolEntries as appLlmToolEntries,
+  tools as appLlmTools,
+} from "./app-llm";
+import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
-import {
-  toolEntries as codeExecutionToolEntries,
-  tools as codeExecutionTools,
-} from "./code-execution";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
   errorResult,
   formatZodError,
+  formatZodErrorWithSchema,
+  structuredToolErrorResult,
 } from "./helpers";
 import {
   toolEntries as identityToolEntries,
@@ -53,18 +66,19 @@ import {
   tools as runToolTools,
 } from "./run-tool";
 import {
+  toolEntries as sandboxToolEntries,
+  tools as sandboxTools,
+} from "./sandbox";
+import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
-import {
-  toolEntries as skillSandboxToolEntries,
-  tools as skillSandboxTools,
-} from "./skill-sandbox";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
+import { toolDiscoverySteer } from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -87,10 +101,29 @@ const toolEntries: Partial<
   ...chatToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
-  ...codeExecutionToolEntries,
   ...skillToolEntries,
-  ...skillSandboxToolEntries,
+  ...sandboxToolEntries,
+  ...appToolEntries,
+  ...appDataToolEntries,
+  ...appLlmToolEntries,
 };
+
+// App tools are registered above so they remain unit-testable, but when the
+// feature is dark they must not be dispatchable even by exact name.
+const appToolFullNames = new Set<string>([
+  ...Object.keys(appToolEntries),
+  ...Object.keys(appDataToolEntries),
+  ...Object.keys(appLlmToolEntries),
+]);
+
+// search_files / read_file / save_result / edit_file / delete_file are the
+// persistent-files (Projects) surface of the sandbox tool group. Registered above
+// for unit tests, but hidden and non-dispatchable when the projects feature is dark.
+// Derived from the shared subgroup so this gate and the always-exposed /
+// dynamic-access logic stay in lockstep.
+const projectGatedSandboxFullNames = new Set<string>(
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
+);
 
 export function getArchestraMcpTools() {
   const tools = [
@@ -106,9 +139,15 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
-    ...(config.codeRuntime.enabled ? codeExecutionTools : []),
     ...skillTools,
-    ...(config.skillsSandbox.enabled ? skillSandboxTools : []),
+    ...(config.skillsSandbox.enabled
+      ? config.projects.enabled
+        ? sandboxTools
+        : sandboxTools.filter((t) => !projectGatedSandboxFullNames.has(t.name))
+      : []),
+    ...(config.apps.enabled
+      ? [...appTools, ...appDataTools, ...appLlmTools]
+      : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -151,6 +190,14 @@ export async function executeArchestraTool(
   const rbacDenied = await checkToolPermission(toolName, context);
   if (rbacDenied) return rbacDenied;
 
+  // Centralized assignment check — an agent may only execute Archestra tools
+  // that are actually assigned to it (the same set advertised by tools/list and
+  // search_tools). Without this, run_tool or a raw tools/call could invoke any
+  // Archestra tool the user has RBAC for, regardless of assignment. A narrow
+  // set of built-ins is exempt under dynamic tool access (see below).
+  const assignmentDenied = await resolveToolAssignment(toolName, context);
+  if (assignmentDenied) return assignmentDenied;
+
   const resolvedToolName =
     toolEntries[toolName as ArchestraToolFullName] != null
       ? toolName
@@ -161,7 +208,29 @@ export async function executeArchestraTool(
   if (!toolEntry) {
     throw {
       code: -32601,
-      message: `Tool '${toolName}' not found`,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+
+  if (
+    !config.apps.enabled &&
+    resolvedToolName &&
+    appToolFullNames.has(resolvedToolName)
+  ) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
+    };
+  }
+
+  if (
+    !config.projects.enabled &&
+    resolvedToolName &&
+    projectGatedSandboxFullNames.has(resolvedToolName)
+  ) {
+    throw {
+      code: -32601,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
     };
   }
 
@@ -198,6 +267,59 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+// run_tool / search_tools are the dispatch surface (advertised implicitly in
+// search_and_run_only mode), so they bypass the assignment check.
+const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+]);
+
+async function checkToolAssignedToAgent(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
+  if (!context.agentId || !shortName) return null;
+  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+
+  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  const isAssigned = assignedTools.some(
+    (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
+  );
+  if (isAssigned) return null;
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "tool_not_assigned",
+      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
+      toolName,
+    },
+  });
+}
+
+// Assignment gate with the dynamic-access relaxation: an unassigned sandbox
+// built-in (feature on) or query_knowledge_sources (user can access a knowledge
+// connector) executes anyway when the agent's "access all tools" setting and
+// the org kill-switch allow it — nothing is assigned. RBAC already ran before
+// this gate, so e.g. the sandbox tools still require sandbox:execute.
+async function resolveToolAssignment(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const notAssigned = await checkToolAssignedToAgent(toolName, context);
+  if (!notAssigned) return null;
+  if (!context.agentId) return notAssigned;
+
+  const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
+    toolName,
+    agentId: context.agentId,
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
+  return dynamicallyAvailable ? null : notAssigned;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {
@@ -254,7 +376,10 @@ function validateToolArgs(
 
   return {
     error: errorResult(
-      `Validation error in ${toolName}: ${formatZodError(parsed.error)}`,
+      `Validation error in ${toolName}: ${formatZodErrorWithSchema(
+        parsed.error,
+        schema,
+      )}`,
     ),
   };
 }

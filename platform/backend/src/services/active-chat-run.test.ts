@@ -1,5 +1,8 @@
 import type { UIMessageChunk } from "ai";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
+import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   ActiveChatRunService,
@@ -66,6 +69,61 @@ test("drainStreamToEvents compacts adjacent text and reasoning deltas before mar
 
   const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
   expect(terminalRun?.status).toBe("completed");
+});
+
+test("drainStreamToEvents fails the run as soon as an error chunk arrives, even if the stream never closes", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // A provider error surfaced mid-turn while the upstream connection wedges
+  // open: the client already rendered the error, but the stream never ends.
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+      controller.enqueue({ type: "error", errorText: "provider exploded" });
+      // intentionally never closed
+    },
+  });
+
+  activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    stream,
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  // The run must flip to failed without waiting for the stream to close —
+  // otherwise the conversation stays 409-blocked until the stale reaper.
+  await waitForTerminalRun(run?.id ?? "");
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("failed");
+  expect(terminalRun?.error).toBe("provider exploded");
+
+  // The error event is flushed before the status flips, so a replaying
+  // client can never observe the failed run without the error chunk.
+  const events = await ActiveChatRunModel.readEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(events.flatMap((event) => event.payloads)).toContainEqual({
+    type: "error",
+    errorText: "provider exploded",
+  });
 });
 
 test("createReplayStream uses polling fallback when no notification arrives", async ({
@@ -287,6 +345,233 @@ test("createRun throttles terminal cleanup and only checks stale runs after conf
   staleSpy.mockRestore();
 });
 
+test("failInFlightRuns fails this pod's running runs and clears the set", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const runningConversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const completedConversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  const runningRun = await service.createRun({
+    conversationId: runningConversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const completedRun = await service.createRun({
+    conversationId: completedConversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  // A completed run leaves the in-flight set and must not be re-failed.
+  await service.markTerminal({
+    runId: completedRun?.id ?? "",
+    status: "completed",
+  });
+
+  expect(await service.failInFlightRuns()).toBe(1);
+  expect(
+    (await ActiveChatRunModel.findById(runningRun?.id ?? ""))?.status,
+  ).toBe("failed");
+  expect(
+    (await ActiveChatRunModel.findById(completedRun?.id ?? ""))?.status,
+  ).toBe("completed");
+
+  // The set is cleared, so a second shutdown pass fails nothing.
+  expect(await service.failInFlightRuns()).toBe(0);
+});
+
+test("createRun refuses new runs once shutdown has begun", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  service.beginShutdown();
+  expect(service.shuttingDown).toBe(true);
+
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // No run is created after shutdown begins, so there is nothing to orphan.
+  expect(run).toBeNull();
+  expect(
+    await ActiveChatRunModel.findRunningByConversation(conversation.id),
+  ).toBeNull();
+  expect(await service.failInFlightRuns()).toBe(0);
+});
+
+test("reapStaleRuns fails runs past the stale cutoff", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: new Date(Date.now() - 11 * 60 * 1000) })
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
+
+  await service.reapStaleRuns();
+
+  expect((await ActiveChatRunModel.findById(run?.id ?? ""))?.status).toBe(
+    "failed",
+  );
+});
+
+test("startStopPolling aborts when the run row no longer exists", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const notifier = new InMemoryActiveChatRunNotifier();
+  const service = new ActiveChatRunService(notifier, 10_000, 20);
+  const abortController = new AbortController();
+  const stopPolling = service.startStopPolling({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    abortController,
+  });
+
+  // Deleting the conversation cascades the run row away. The stop poll observes
+  // the now-missing row and aborts, the same as DELETE waking it via notify.
+  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  await notifier.notifyStop(run?.id ?? "");
+
+  await waitForAbort(abortController.signal);
+  stopPolling();
+});
+
+test("drainStreamToEvents stops cleanly when the run is deleted before a scheduled flush", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // One chunk then the stream stays open: the batcher schedules a timer flush
+  // rather than an immediate batch flush, so the flush fires only after the
+  // conversation is deleted out from under the drain.
+  let sourceCancelled = false;
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+    },
+    cancel() {
+      sourceCancelled = true;
+    },
+  });
+  const abortController = new AbortController();
+
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => rejections.push(reason);
+  process.on("unhandledRejection", onRejection);
+
+  try {
+    service.drainStreamToEvents({
+      runId: run?.id ?? "",
+      conversationId: conversation.id,
+      stream,
+      abortController,
+      getTerminalStatus: async () => ({ status: "completed" }),
+    });
+
+    await ConversationModel.delete(conversation.id, user.id, organization.id);
+
+    // The scheduled flush sees run_missing, so the drain aborts the chat and
+    // cancels the source instead of leaving a process-level unhandled rejection.
+    // These waits throw if the controlled run-gone path does not run.
+    await waitForCondition(() => abortController.signal.aborted, 3_000);
+    await waitForCondition(() => sourceCancelled, 1_000);
+    // Brief settle so any stray rejection surfaces before we stop listening.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    process.off("unhandledRejection", onRejection);
+  }
+
+  expect(rejections).toEqual([]);
+  expect(await ActiveChatRunModel.findById(run?.id ?? "")).toBeNull();
+});
+
 function createChunkStream(
   payloads: UIMessageChunk[],
 ): ReadableStream<UIMessageChunk> {
@@ -336,4 +621,19 @@ async function waitForAbort(signal: AbortSignal): Promise<void> {
   }
 
   throw new Error("Active chat run was not aborted");
+}
+
+async function waitForCondition(
+  predicate: () => boolean,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Condition was not met within timeout");
 }

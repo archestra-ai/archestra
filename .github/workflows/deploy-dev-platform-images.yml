@@ -41,7 +41,7 @@ jobs:
       previous_image: ${{ steps.previous-platform-image.outputs.previous-image }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -91,6 +91,13 @@ jobs:
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       push_image: true
       auth_provider: gar
+      # amd64-only ONLY for the automated staging deploy (push to main, via
+      # on-commits-to-main): staging runs amd64 nodes, so the arm64 leg (~9-10
+      # min, the long pole) produced an image nothing schedules. The
+      # `deploy-dev-platform-images` label and workflow_dispatch stay multi-arch
+      # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
+      # Release images (build-dockerhub-image.yml) are always multi-arch.
+      amd64_only: ${{ github.event_name == 'push' }}
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:
@@ -106,6 +113,20 @@ jobs:
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable MCP server base image workflow.
+      id-token: write # Required for Workload Identity Federation.
+    with:
+      push_to_gcr: true
+      version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  publish-dev-sandbox-base-image:
+    name: Build Sandbox Base Dev Image
+    if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
+    uses: ./.github/workflows/build-sandbox-base-docker-image.yml
+    permissions:
+      contents: read # Required to invoke the reusable sandbox base image workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
       push_to_gcr: true

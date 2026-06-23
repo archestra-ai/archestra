@@ -30,6 +30,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",
+  // App
+  "app.created": "App created",
+  "app.updated": "App updated",
+  "app.deleted": "App deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -41,10 +45,18 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  // Default user limit
+  "defaultUserLimit.created": "Default user limit created",
+  "defaultUserLimit.updated": "Default user limit updated",
+  "defaultUserLimit.deleted": "Default user limit deleted",
   // Environment
   "environment.created": "Environment created",
   "environment.updated": "Environment updated",
   "environment.deleted": "Environment deleted",
+  // GitHub App configuration
+  "githubAppConfig.created": "GitHub App configuration created",
+  "githubAppConfig.updated": "GitHub App configuration updated",
+  "githubAppConfig.deleted": "GitHub App configuration deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -235,6 +247,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsConfig",
   "connector",
   "environment",
+  "githubAppConfig",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",
@@ -266,6 +279,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   auth: "Auth",
   chatOpsBinding: "ChatOps channel binding",
   chatOpsConfig: "ChatOps configuration",
+  githubAppConfig: "GitHub App configuration",
   internalMcpCatalog: "Internal MCP catalog",
   llmModel: "LLM model",
   llmOauthClient: "LLM OAuth client",

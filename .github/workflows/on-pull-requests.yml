@@ -63,7 +63,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -93,7 +93,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -131,7 +131,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -146,7 +146,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -154,20 +154,37 @@ jobs:
       - name: Enforce docs asset format and size policy
         run: python3 .github/scripts/check-docs-image-policy.py
 
+  migration-kit-checks:
+    name: Migration Kit Checks
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      # the shipped scripts are zero-dependency; this gates the contributor tooling
+      # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
+      - name: Run migration-kit gates
+        run: uv run --python 3.10 --frozen --directory migration-kit --group dev pytest -q
+
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read # Required to checkout the repository and diff dependency manifests.
+      contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
+      # No checkout: dependency-review-action reads the PR diff via the GitHub
+      # API and references no local config file, so the (fetch-depth: 0) checkout
+      # was ~74s of the job's ~89s for nothing.
       - name: Dependency review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
@@ -199,6 +216,11 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Backstop: every check here finishes in well under 10m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
+    # and hold the step's log pipe open, leaving a *finished* job hanging until
+    # GitHub's 6h default. Fail fast instead.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
@@ -224,14 +246,14 @@ jobs:
 
       - name: Checkout project
         if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Checkout project for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -248,7 +270,7 @@ jobs:
 
       - name: Update checkout credentials for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
           ref: ${{ github.head_ref }}
@@ -293,9 +315,20 @@ jobs:
       - name: Type checking, linting, formatting, unit tests
         run: pnpm check:ci
 
+      # Validates the production build (turbo build: next build + backend build +
+      # Rust NAPI) compiles on every push. This replaces the per-push Docker image
+      # build's only unique signal; turbo remote caching makes it seconds on hit.
+      - name: Production build
+        run: pnpm build
+
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
+          # Generate the full Archestra MCP tool catalog and route surface
+          # (incl. flag-gated app tools and the Projects/My Files routes) so
+          # codegen matches the committed docs/spec; mirrors values-ci.yaml.
+          ARCHESTRA_APPS_ENABLED: "true"
+          ARCHESTRA_PROJECTS_ENABLED: "true"
         run: |
           set -e
 
@@ -377,7 +410,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -430,79 +463,6 @@ jobs:
           path: platform/frontend/test-results/
           retention-days: "7"
 
-  docker-image-builds:
-    name: Docker Image Builds (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read # Required to checkout the repository and read Docker build inputs.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            local-tag-prefix: archestra-platform
-            use-build-action: true
-          - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            local-tag-prefix: mcp-server-base
-            use-build-action: false
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          load: "true"
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Build sandbox-rs musl smoke target
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          target: sandbox-rs-musl-smoke
-          # amd64 only: this is a smoke build, and building arm64 here runs under
-          # QEMU emulation, which makes the Rust release compile 2-3x slower.
-          platforms: linux/amd64
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
-      - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/blacksmith-build-push
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -513,7 +473,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1

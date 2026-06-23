@@ -1,6 +1,8 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type ChildProcess, spawn } from "node:child_process";
 import { rmSync } from "node:fs";
+import path from "node:path";
+import { buildSync } from "esbuild";
 import { defineConfig, type UserConfig } from "tsdown";
 
 /** Max time to wait for the server process to exit gracefully before force killing */
@@ -107,6 +109,27 @@ const onSuccessHandler: UserConfig["onSuccess"] = async () => {
 };
 
 export default defineConfig((options: UserConfig) => {
+  // The MCP-App connector inlines a self-contained ext-apps bundle into the
+  // resource for a strict foreign host; generate it into src/static (copied to
+  // dist/static below) on every build/watch so it tracks the installed version.
+  // Inlined here rather than imported because tsdown's native config loader
+  // can't resolve a TS module; the same build runs in vitest global-setup via
+  // src/standalone-scripts/build-ext-apps-inline.ts for `pnpm test`.
+  buildSync({
+    stdin: {
+      contents:
+        'import * as ExtApps from "@modelcontextprotocol/ext-apps/app-with-deps";\nglobalThis.__ARCHESTRA_EXT_APPS__ = ExtApps;',
+      resolveDir: process.cwd(),
+      loader: "js",
+    },
+    bundle: true,
+    format: "iife",
+    minify: true,
+    platform: "browser",
+    legalComments: "eof",
+    outfile: path.join(process.cwd(), "src/static/ext-apps-app.global.js"),
+  });
+
   // Clean dist directory once at startup in watch mode.
   // This runs here (instead of in package.json) to keep the logic self-contained
   // and avoid platform-specific shell commands.
@@ -137,8 +160,8 @@ export default defineConfig((options: UserConfig) => {
     // Generate source maps for better stack traces
     sourcemap: true,
 
-    // Don't bundle dependencies - use them from node_modules, except for @shared (including subpaths)
-    noExternal: [/^@shared/],
+    // Don't bundle dependencies - use them from node_modules, except for @archestra/shared (including subpaths)
+    noExternal: [/^@archestra\/shared/],
     loader: {
       ".py": "text" as const,
     },

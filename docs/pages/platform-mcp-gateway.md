@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-06-03
+lastUpdated: 2026-06-11
 ---
 
 <!--
@@ -113,6 +113,8 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
+With **Access all tools** also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Agent connections** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
+
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 
 ## Custom Headers
@@ -124,3 +126,11 @@ Configure the allowlist in the gateway's **Advanced** section. Only headers on t
 Gateway header passthrough does not override credentials managed by Archestra. If a forwarded header conflicts with an upstream credential header such as `Authorization`, the credential resolved by Archestra takes precedence.
 
 Header passthrough applies to remote MCP servers and local MCP servers using streamable-http transport. Stdio-based servers do not support HTTP headers.
+
+## Elicitation
+
+MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+## Environment
+
+A gateway can be assigned a deployment environment. It then exposes and executes only tools (and knowledge) from the same environment — a "dev" gateway cannot reach "prod" servers. Built-in servers are always available. Unassigned gateways use the Default environment. See [Environments](/docs/platform-environments).

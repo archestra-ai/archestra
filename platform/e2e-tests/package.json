@@ -19,7 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@shared": "workspace:*",
+    "@archestra/shared": "workspace:*",
     "dotenv": "^17.3.1"
   },
   "devDependencies": {

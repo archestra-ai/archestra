@@ -62,11 +62,14 @@ def get_frontend_env():
 frontend_env_vars = get_frontend_env()
 
 code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
+apps_enabled = os.getenv('ARCHESTRA_APPS_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
   backend_resource_deps.append('dagger-runtime-port-forward')
   # build the napi addon before the backend boots, so it never loads a stale .node
   backend_resource_deps.append('sandbox-rs-build')
+if apps_enabled:
+  backend_resource_deps.append('app-runtime-rs-build')
 
 local_resource(
   'pnpm-install',
@@ -78,6 +81,26 @@ local_resource(
   ],
   labels=['dev']
 )
+
+# Rebuild the native app-runtime addon (napi) when its Rust sources change. The
+# compiled .node is gitignored and CI/Docker build it, so without this the
+# backend throws "Unable to load @archestra/app-runtime-rs" the first time an
+# owned app is served. Mirrors sandbox-rs-build; only runs when the apps
+# feature (this addon's sole consumer) is enabled.
+if apps_enabled:
+  local_resource(
+    'app-runtime-rs-build',
+    cmd='pnpm --filter @archestra/app-runtime-rs build',
+    deps=[
+      '../archestra-rs/app-runtime-rs/src',
+      '../archestra-rs/app-runtime-core/src',
+      '../archestra-rs/app-runtime-rs/Cargo.toml',
+      '../archestra-rs/app-runtime-core/Cargo.toml',
+      '../archestra-rs/Cargo.lock',
+    ],
+    resource_deps=['pnpm-install'],
+    labels=['apps'],
+  )
 
 # Main dev/prod bundle
 if is_prod:
@@ -127,11 +150,12 @@ else:
   # silently hitting the real backend.
   local_resource(
     dev_resource_name + '-frontend-int-tests',
-    # --webpack mirrors the main frontend workaround for the next@16.2.6 turbopack
-    # idle-CPU bug (vercel/next.js#92055); see the "//dev" comment in frontend/package.json.
-    # `pnpm exec next dev` bypasses that package.json script, so the flag must be set here too.
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev --webpack -H 127.0.0.1 -p ' + frontend_int_tests_port + ' & wait $!',
-    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev --webpack -H 127.0.0.1 -p ' + frontend_int_tests_port,
+    # Route through scripts/dev.mjs so the int-tests frontend gets the same
+    # platform-aware bundler choice as `pnpm dev`: Turbopack on Linux/CI, webpack
+    # on macOS arm64 (the unfixed @next/swc-darwin-arm64 memory bug, see the
+    # "//dev" comment in frontend/package.json). The script adds `-H 127.0.0.1`.
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],
     serve_env={
@@ -142,8 +166,11 @@ else:
       # If only the server var is overridden, a .env value for the public mirror
       # (e.g. set by `dev:stack:up`) reaches the browser and defeats the
       # fail-loudly behavior for escaped client-side fetches.
-      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
-      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      # Port 65535, not 1: port 1 is on undici's blocked-ports list, so an
+      # escaped fetch throws "bad port" before dialing instead of the intended
+      # ECONNREFUSED, which breaks SSR rendering. Mirrors frontend/playwright.config.ts.
+      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:65535',
+      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:65535',
       'NEXT_PUBLIC_SENTRY_DSN': '',
     }
   )

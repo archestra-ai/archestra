@@ -543,6 +543,7 @@ describe("audit snapshot shape — non-redacted models", () => {
         description: "Does things",
         content: "# My Test Skill\nInstructions here.",
         sourceType: "manual",
+        latestVersion: 1,
       })
       .returning();
 

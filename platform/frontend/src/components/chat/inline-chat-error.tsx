@@ -1,11 +1,13 @@
 "use client";
 
+import { ChatErrorCode } from "@archestra/shared";
 import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Copy,
   Gauge,
+  MessageSquareDashed,
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
@@ -24,6 +26,7 @@ import {
   mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
+import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 interface InlineChatErrorProps {
   error: Error;
@@ -33,6 +36,8 @@ interface InlineChatErrorProps {
   agentName?: string;
   selectedModel?: string;
   modelSource?: ModelSource | null;
+  /** Re-run the original prompt after the user connects a per-user provider. */
+  onProviderConnected?: () => void;
 }
 
 export function InlineChatError({
@@ -43,18 +48,44 @@ export function InlineChatError({
   agentName,
   selectedModel,
   modelSource,
+  onProviderConnected,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+
+  // A per-user provider the user hasn't linked yet → an inline "connect your
+  // account" card instead of a generic error.
+  if (
+    chatError.code === ChatErrorCode.ProviderAuthRequired &&
+    chatError.authAction
+  ) {
+    return (
+      <ProviderAuthRequiredCard
+        provider={chatError.authAction.provider}
+        providerLabel={chatError.authAction.providerLabel}
+        onConnected={onProviderConnected}
+      />
+    );
+  }
+
   const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
-  const StatusIcon = isUsageLimitExceeded ? Gauge : AlertCircle;
-  const containerClassName = isUsageLimitExceeded
+  // An empty turn that survived the backend's auto-retries is the model's
+  // answer for this conversation, not a system failure — render it as a
+  // neutral outcome rather than a destructive error.
+  const isEmptyModelTurn = chatError.code === ChatErrorCode.EmptyResponse;
+  const isNeutralOutcome = isUsageLimitExceeded || isEmptyModelTurn;
+  const StatusIcon = isUsageLimitExceeded
+    ? Gauge
+    : isEmptyModelTurn
+      ? MessageSquareDashed
+      : AlertCircle;
+  const containerClassName = isNeutralOutcome
     ? "bg-muted/30 border border-border rounded-lg"
     : "bg-destructive/10 border border-destructive/20 rounded-lg";
-  const iconClassName = isUsageLimitExceeded
+  const iconClassName = isNeutralOutcome
     ? "text-muted-foreground"
     : "text-destructive";
   const usageLimitMessage =

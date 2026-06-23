@@ -1,4 +1,4 @@
-import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
+import type { EnvironmentTarget, ReplayEntry } from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -54,10 +54,13 @@ interface RunCommandParams extends LimitOverrides {
   command: string;
   cwd: string;
   timeoutSeconds: number;
-  snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
-  /** colon-joined absolute paths added to PYTHONPATH inside the container. */
-  pythonpath?: string;
+  replayEntries?: ReplayEntry[];
+  /**
+   * The environment isolation target. When set, the native session pool runs
+   * this command on that environment's engine; omitted uses the process-default
+   * engine.
+   */
+  environment?: EnvironmentTarget;
 }
 
 interface RunCommandResult {
@@ -77,10 +80,13 @@ interface ReadArtifactParams extends LimitOverrides {
    * directory as the original run.
    */
   defaultCwd: string;
-  snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
-  /** mirrors `RunCommandParams.pythonpath`. */
-  pythonpath?: string;
+  replayEntries?: ReplayEntry[];
+  /**
+   * The environment isolation target. Artifact extraction replays the recorded
+   * commands, so it must run on the same per-environment engine the sandbox ran
+   * on (else the replay bypasses the environment's egress policy).
+   */
+  environment?: EnvironmentTarget;
 }
 
 interface ReadArtifactResult {
@@ -153,13 +159,12 @@ class SandboxRuntimeService {
       return await this.withBackstop(params.timeoutSeconds, () =>
         runSandbox({
           traceparent: getTraceparent(),
-          snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           command: params.command,
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
-          pythonpath: params.pythonpath,
+          environment: params.environment,
         }),
       );
     } catch (error) {
@@ -177,12 +182,11 @@ class SandboxRuntimeService {
       return await this.withBackstop(ARTIFACT_BUDGET_SECONDS, () =>
         readArtifact({
           traceparent: getTraceparent(),
-          snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           path: params.path,
           defaultCwd: params.defaultCwd,
-          pythonpath: params.pythonpath,
+          environment: params.environment,
         }),
       );
     } catch (error) {

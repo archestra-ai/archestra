@@ -7,6 +7,11 @@ export interface ArtifactBytes {
 
 export interface CheckSessionInput {
   traceparent?: string
+  /**
+   * The isolation target for this session; omit (null) for the process-default
+   * engine. The Dagger address is built in the backend from this.
+   */
+  environment?: EnvironmentTarget
 }
 
 export interface CommandExecution {
@@ -18,6 +23,17 @@ export interface CommandExecution {
   truncated: boolean
 }
 
+/**
+ * JS input identifying a per-environment isolation target. Omitting it (null)
+ * runs on the process-default engine. The Dagger transport address (`kube-pod://…`)
+ * is constructed inside the Dagger backend from this — it is never carried
+ * across the public API.
+ */
+export interface EnvironmentTarget {
+  environmentId: string
+  namespace: string
+}
+
 export interface Limits {
   outputBytesLimit: number
   fileSizeLimitBytes: number
@@ -27,8 +43,7 @@ export interface Limits {
 
 export interface ReadArtifactInput {
   traceparent?: string
-  snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   path: string
   /**
@@ -38,10 +53,10 @@ export interface ReadArtifactInput {
    */
   defaultCwd: string
   /**
-   * PYTHONPATH applied during the replay used to read the artifact. Should
-   * match what was set on the original runs so imports resolve identically.
+   * The isolation target the artifact must be read from — the same engine the
+   * sandbox ran on; omit (null) for the process-default engine.
    */
-  pythonpath?: string
+  environment?: EnvironmentTarget
 }
 
 export interface ReplayCommand {
@@ -50,19 +65,55 @@ export interface ReplayCommand {
   timeoutSeconds: number
 }
 
+/**
+ * a single ordered replay step crossing the NAPI boundary. exactly one of
+ * `command` / `file` / `skill_mount` is populated, keyed by `kind`
+ * (`"command"` | `"file"` | `"skill_mount"`); the core converts it into the
+ * internal [`ReplayStep`] enum at the entry point, where invalid combinations
+ * are rejected.
+ */
+export interface ReplayEntry {
+  kind: string
+  command?: ReplayCommand
+  file?: ReplayInputFile
+  skillMount?: ReplaySkillMount
+}
+
+/**
+ * a file written into the sandbox during replay. unlike [`SnapshotFile`]
+ * (relative to a skill root), `path` is absolute and bounded to the sandbox
+ * roots — uploads can target the home dir as well as a skill root.
+ */
+export interface ReplayInputFile {
+  path: string
+  encoding: string
+  content: string
+}
+
+/**
+ * a skill mounted into the sandbox at its replay sequence point. `files` are
+ * the skill's snapshotted files (`path` relative to the skill root); the
+ * materialize layer writes them under `/skills/<skill_name>` and extends
+ * PYTHONPATH at this point. mounts are append-only, so a mount never changes a
+ * prior layer's parent chain (the Dagger layer cache stays warm).
+ */
+export interface ReplaySkillMount {
+  skillName: string
+  files: Array<SnapshotFile>
+}
+
 export interface RunSandboxInput {
   traceparent?: string
-  snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   command: string
   cwd: string
   timeoutSeconds: number
   /**
-   * PYTHONPATH applied to the materialized container. Lets skill modules
-   * (`/skills/<name>`) resolve via `import` from any cwd.
+   * The isolation target for this run; omit (null) for the process-default
+   * engine. The Dagger address is built in the backend from this.
    */
-  pythonpath?: string
+  environment?: EnvironmentTarget
 }
 
 export interface SnapshotFile {

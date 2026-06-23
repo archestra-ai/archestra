@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";
@@ -62,10 +62,10 @@ export function useEnterpriseFeature(feature: EnterpriseFeatureKey): boolean {
   return data.enterpriseFeatures[feature] ?? false;
 }
 
-export function usePublicBaseUrl(): string {
+export function usePublicBaseUrl(options?: { ignoreNgrok?: boolean }): string {
   const { data, isLoading } = useConfig();
   if (isLoading || !data) return "";
-  if (data.features.ngrokDomain) {
+  if (!options?.ignoreNgrok && data.features.ngrokDomain) {
     const domain = data.features.ngrokDomain.replace(/^https?:\/\//, "");
     return `https://${domain}`;
   }

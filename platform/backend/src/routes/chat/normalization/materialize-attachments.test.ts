@@ -1,7 +1,30 @@
+import { getModelReadableMimeTypes } from "@archestra/shared";
+import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { materializeAttachments } from "./materialize-attachments";
+
+const INGESTIBLE = new Set(["text/plain", "application/pdf", "image/png"]);
+
+test("getModelReadableMimeTypes: null/empty fall back to a readable default; explicit modalities are honored", () => {
+  // null/undefined/[] all mean "capabilities unknown" → text+image+pdf default,
+  // so common readable types stay inline rather than getting diverted.
+  for (const unknown of [null, undefined, []]) {
+    const set = getModelReadableMimeTypes(unknown);
+    expect(set.has("application/pdf")).toBe(true);
+    expect(set.has("image/png")).toBe(true);
+    expect(set.has("text/plain")).toBe(true);
+    // A genuinely opaque binary is never "readable".
+    expect(set.has("application/octet-stream")).toBe(false);
+  }
+
+  // A text-only model reads text but not images/pdf → those get referenced.
+  const textOnly = getModelReadableMimeTypes(["text"]);
+  expect(textOnly.has("text/plain")).toBe(true);
+  expect(textOnly.has("image/png")).toBe(false);
+  expect(textOnly.has("application/pdf")).toBe(false);
+});
 
 function expectPresent<T>(value: T | null | undefined): T {
   expect(value).toBeDefined();
@@ -237,6 +260,158 @@ test("batch-loads multiple refs in a single message", async ({
       `data:text/plain;base64,${Buffer.from(`f${i}`, "utf8").toString("base64")}`,
     );
   }
+});
+
+test("references a non-ingestible attachment in the sandbox instead of inlining it", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("SQLite header bytes", "utf8");
+  const originalName = 'my "orders".sqlite';
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    // A client-controlled name with a quote that must be neutralized.
+    originalName,
+    mimeType: "application/octet-stream",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/octet-stream",
+          filename: originalName,
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+  );
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  // Points at the sandbox attachments dir (not an exact path — staging
+  // sanitizes/dedupes the filename) and JSON-encodes the untrusted name.
+  expect(part.text).toContain("/home/sandbox/attachments");
+  expect(part.text).toContain(JSON.stringify(originalName));
+  expect(part.text).toContain("application/octet-stream");
+  // The bytes are NOT inlined into the model payload.
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("keeps an ingestible attachment inlined even when an ingestible set is given", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("%PDF-1.4 body", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "report.pdf",
+    mimeType: "application/pdf",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/pdf",
+          filename: "report.pdf",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+  );
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("file");
+  expect(part.url).toBe(
+    `data:application/pdf;base64,${bytes.toString("base64")}`,
+  );
+});
+
+test("an over-limit non-ingestible attachment is reported as unavailable, not staged or inlined", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // Just over the auto-staging limit, so it is never staged into the sandbox.
+  const bytes = Buffer.alloc(config.skillsSandbox.artifactBytesLimit + 1);
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "huge.bin",
+    mimeType: "application/octet-stream",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/octet-stream",
+          filename: "huge.bin",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+  );
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).toContain("too large");
+  // Not staged (no sandbox path), not inlined, and no session-authed URL the
+  // sandbox couldn't fetch anyway.
+  expect(part.text).not.toContain("/home/sandbox/attachments");
+  expect(part.text).not.toContain("/api/chat/attachments");
+  expect(part.text).not.toContain("data:");
 });
 
 test("no refs in messages returns a clone without DB hits", async () => {

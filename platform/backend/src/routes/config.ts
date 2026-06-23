@@ -1,17 +1,17 @@
-import { readFileSync } from "node:fs";
-import { RouteId, SupportedProvidersSchema } from "@shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
@@ -52,9 +52,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               fullWhiteLabeling: z.boolean(),
             }),
             features: z.strictObject({
+              betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
-              codeRuntime: z.boolean(),
+              sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
+              agentEnvironmentsEnabled: z.boolean(),
+              appsEnabled: z.boolean(),
+              projectsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -76,6 +80,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
+              agentHooksEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -98,9 +103,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
         },
         features: {
+          betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
-          codeRuntime: codeRuntimeService.isEnabled,
+          sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
+          agentEnvironmentsEnabled: config.agents.environmentsEnabled,
+          appsEnabled: config.apps.enabled,
+          projectsEnabled: config.projects.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -113,12 +122,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentNamespaces:
             config.orchestrator.kubernetes.environmentNamespaces,
           isQuickstart: config.isQuickstart,
-          ngrokDomain: getNgrokDomain(),
+          ngrokDomain: ngrokTunnelManager.getPublicDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
+          agentHooksEnabled: config.hooks.enabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -137,6 +147,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          "github-copilot": config.llm["github-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });
@@ -207,18 +218,5 @@ async function loadAnalyticsInstanceId(): Promise<string | null> {
       hasLoggedAnalyticsInstanceIdError = true;
     }
     return null;
-  }
-}
-
-/**
- * Get the ngrok domain from env var or from the file written by the
- * detect-ngrok-domain.sh script (for dynamically assigned domains).
- */
-function getNgrokDomain(): string {
-  if (config.ngrokDomain) return config.ngrokDomain;
-  try {
-    return readFileSync("/app/data/.ngrok_domain", "utf-8").trim();
-  } catch {
-    return "";
   }
 }

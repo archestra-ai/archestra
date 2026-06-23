@@ -1,5 +1,5 @@
-import type { RouteId } from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
+import type { RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { type Mock, vi } from "vitest";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -16,7 +16,17 @@ vi.mock("@/auth", () => ({
   hasPermission: vi.fn(),
 }));
 
+vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
+  default: {
+    isEnabled: true,
+    restartServer: vi.fn().mockResolvedValue(undefined),
+    reinstallSharedDeployment: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { hasPermission } from "@/auth";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { InternalMcpCatalogModel } from "@/models";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -277,6 +287,72 @@ describe("PATCH /api/organization/default-environment", () => {
     });
     expect(clearPolicy.statusCode).toBe(200);
     expect(clearPolicy.json().defaultNetworkPolicy).toBeNull();
+  });
+
+  test("reconciles default-environment MCP deployments when network policy changes", async ({
+    makeUser,
+    makeOrganization,
+    makeMcpServer,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await OrganizationModel.patch(organization.id, {
+      defaultNetworkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "package_managers",
+        allowedDomains: ["registry.npmjs.org"],
+        allowedCidrs: [],
+      },
+    });
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const singleTenantCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "default-single-tenant-browser",
+        serverType: "local",
+        multitenant: false,
+        environmentId: null,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const sharedCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "default-shared-browser",
+        serverType: "local",
+        multitenant: true,
+        environmentId: null,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const server = await makeMcpServer({ catalogId: singleTenantCatalog.id });
+    await makeMcpServer({ catalogId: sharedCatalog.id });
+    const policy = {
+      egressMode: "restricted",
+      domainPreset: "package_managers",
+      allowedDomains: ["registry.npmjs.org", "browser-target.example.com"],
+      allowedCidrs: [],
+    };
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { networkPolicy: policy },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().defaultNetworkPolicy).toEqual(policy);
+    expect(mcpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+      server.id,
+    );
+    expect(
+      mcpServerRuntimeManager.reinstallSharedDeployment,
+    ).toHaveBeenCalledWith(sharedCatalog.id);
   });
 
   test("member without environment:update is forbidden", async ({

@@ -1,0 +1,18 @@
+[[stages]]
+text = """Below is a CSV of employee records with a salary column (alongside name and department). Compute the median salary across all employees. Submit your answer with result = {"median_salary": <integer>}.
+
+```csv
+{{file:inputs/salaries.csv}}
+```"""
+
+[result_schema]
+type = "object"
+required = ["median_salary"]
+additionalProperties = false
+
+  [result_schema.properties.median_salary]
+  type = "integer"
+  exclusiveMinimum = 0
+
+[verifier]
+deps = []

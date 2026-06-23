@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
+import {
+  APP_AUTHORING_CONTRACT,
+  APP_BUILD_LOOP_GUIDANCE,
+} from "@/archestra-mcp-server/app-authoring-guidance";
 import type { SkillFileKind } from "@/types/skill";
+import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
 
 /**
  * Default Agent Skills shipped with Archestra.
@@ -36,6 +41,11 @@ interface BuiltInSkill {
   /** SKILL.md body. */
   content: string;
   files: BuiltInSkillFile[];
+  /**
+   * Seed only when the MCP Apps feature is enabled. Keeps a feature that ships
+   * dark behind ARCHESTRA_APPS_ENABLED out of the skill catalog until release.
+   */
+  requiresAppsFeature?: boolean;
 }
 
 /** `source_ref` value for a built-in skill. */
@@ -69,6 +79,46 @@ export function builtInSkillVersion(params: {
       .map((file) => ({ path: file.path, content: file.content })),
   });
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
+ * Skill row fields and resource files for writing a shipped definition to the
+ * database, shared by startup sync and reset-to-default so the two can never
+ * drift on what a pristine copy looks like.
+ *
+ * The shipped definitions hardcode the "Archestra" brand and `archestra__` tool
+ * prefix; both are rewritten to the target org's white-label app name and tool
+ * prefix here (a no-op unless full white-labeling is active, just like built-in
+ * MCP tool names). Callers MUST have synced `archestraMcpBranding` to the target
+ * organization first. `sourceCommit` is hashed over the *branded* body and files
+ * so a pristine copy's live hash matches — and a later app-name change yields a
+ * new `sourceCommit`, so `syncBuiltInSkills` re-brands the pristine copy on the
+ * next run (an edited copy stays preserved).
+ */
+export function builtInSkillShippedWrite(definition: BuiltInSkill): {
+  skill: {
+    name: string;
+    description: string;
+    content: string;
+    sourceCommit: string;
+  };
+  files: { path: string; content: string; kind: SkillFileKind }[];
+} {
+  const content = applyBuiltInSkillBranding(definition.content);
+  const files = definition.files.map((file) => ({
+    path: file.path,
+    content: applyBuiltInSkillBranding(file.content),
+    kind: file.kind,
+  }));
+  return {
+    skill: {
+      name: applyBuiltInSkillBranding(definition.name),
+      description: applyBuiltInSkillBranding(definition.description),
+      content,
+      sourceCommit: builtInSkillVersion({ content, files }),
+    },
+    files,
+  };
 }
 
 const BUILT_IN_SKILL_SOURCE_REF_PREFIX = "builtin:";
@@ -235,6 +285,27 @@ permission error means the caller's role lacks the required
 retrying.
 `;
 
+// The build-app playbook embeds the SDK/CSP/storage contract and build-loop
+// guidance verbatim from the authoring tools' shared source, so the skill is the
+// single place those conventions live (the tool descriptions stay short).
+const BUILD_APP_SKILL = `# Building Archestra Apps
+
+You build interactive single-file HTML/JS apps for users from chat — dashboards, forms, trackers, games, any custom UI. An app runs in a sandboxed iframe and talks to the platform through the injected window.archestra SDK. Build it up through the staged flow below — each tool's result tells you the next step — never write a whole app in one shot, and never paste app HTML into the chat reply or write it as an artifact.
+
+## Flow
+1. \`archestra__refine_app\` — clarify what the app should be. Ask the user up to 3 questions (features and style only, never the implementation stack), then persist a consolidated spec. It returns the user's real assignable MCP tools and the SDK surface — design the app around those tools, never invent one.
+2. \`archestra__scaffold_app\` — create the app from the single starter template. Returns the seeded HTML.
+3. \`archestra__edit_app\` — build the app up with str_replace edits over the scaffold (a full rewrite is one edit replacing the whole document). Before writing code that parses an assigned tool's result, call \`archestra__preview_app_tool\` to see its real output shape.
+4. \`archestra__validate_app\` — run static structural checks plus the live render diagnostics. Fix any errors with \`archestra__edit_app\` and re-validate until it passes.
+5. \`archestra__publish_app\` — once it validates and renders correctly, promote it to a team or the whole organization so others can run it.
+
+## SDK and authoring conventions
+${APP_AUTHORING_CONTRACT}
+
+## Build loop
+${APP_BUILD_LOOP_GUIDANCE}
+`;
+
 // ============================================================================
 // Catalog (declared last so it can reference the content constants above)
 // ============================================================================
@@ -258,5 +329,14 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
         content: POLICIES_AND_SECURITY_REFERENCE,
       },
     ],
+  },
+  {
+    builtInSkillId: "build-app",
+    name: "Build App",
+    description:
+      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged refine → scaffold → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
+    content: BUILD_APP_SKILL,
+    files: [],
+    requiresAppsFeature: true,
   },
 ];

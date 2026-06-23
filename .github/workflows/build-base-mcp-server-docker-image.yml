@@ -11,6 +11,11 @@ on:
         description: "Version tag for the Docker image"
         required: true
         type: string
+      checkout_ref:
+        description: "Optional ref to checkout when building the image"
+        required: false
+        type: string
+        default: ""
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -34,13 +39,14 @@ jobs:
       contents: read # Required to checkout the repository and verify the lockfile.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           version: "0.9.26"
 
@@ -70,6 +76,7 @@ jobs:
       push_image: ${{ inputs.push_to_gcr }}
       auth_provider: gar
       include_latest_tag: true
+      checkout_ref: ${{ inputs.checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

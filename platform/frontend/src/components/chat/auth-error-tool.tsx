@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface AuthErrorToolProps {
+export interface AuthErrorToolProps {
   title: string;
   description: ReactNode;
   buttonText?: string;

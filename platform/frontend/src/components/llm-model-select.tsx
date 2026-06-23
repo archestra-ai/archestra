@@ -1,13 +1,13 @@
 "use client";
 
-import type { PopoverContentProps } from "@radix-ui/react-popover";
 import {
   compareModelsForDisplay,
   isOpenRouterLatestAlias,
   OPENROUTER_AUTO_MODEL_ID,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
+import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Layers, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -36,6 +36,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  "github-copilot": "github-copilot",
 };
 
 export type LlmModelSelectOption = {

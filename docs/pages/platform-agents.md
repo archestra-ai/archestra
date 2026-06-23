@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-06-03
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -32,6 +32,8 @@ For larger toolsets, enable **Load tools when needed**. This keeps the initial t
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
+With the per-agent **Access all tools** setting on, discovery is not limited to assigned tools. For a signed-in user, `search_tools` also returns third-party tools from MCP catalogs the user can access, plus `query_knowledge_sources` when the user can access at least one knowledge connector. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Agent connections** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills-sharing) reference tools without pre-assigning every tool to every agent. Admins can turn the behavior off org-wide with the **Dynamic Tool Access** security setting on the agent settings page, restricting discovery and dispatch to assigned tools only regardless of the per-agent setting.
+
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
@@ -42,7 +44,6 @@ Agents can be triggered through:
 
 - Archestra Chat UI
 - [Webhook (A2A)](/docs/platform-agent-triggers-webhook-a2a)
-- [Scheduled Tasks](/docs/platform-agent-triggers-schedule)
 - [Incoming Email](/docs/platform-agent-triggers-email)
 - [Slack](/docs/platform-slack)
 - [MS Teams](/docs/platform-ms-teams)
@@ -56,6 +57,12 @@ Agents can be assigned one or more Knowledge Bases or knowledge connectors. This
 When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
 
 See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
+
+## Environments
+
+An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its code sandbox runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools and knowledge it can use are scoped to that environment — the agent only sees tools and knowledge connectors in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
+
+See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
 
 ## Delegation
 

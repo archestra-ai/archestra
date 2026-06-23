@@ -8,9 +8,10 @@
  * rate(llm_request_duration_seconds_count{provider="openai"}[10s])
  */
 
+import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
-import type { InteractionSource, SupportedProvider } from "@shared";
 import client from "prom-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import logger from "@/logging";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
@@ -22,8 +23,14 @@ import type { Agent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
-  // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
-  ((usage: any) => { input?: number; output?: number }) | null;
+  | // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
+  ((usage: any) => {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+    })
+  | null;
 
 /**
  * Maps each provider to its usage token extraction function for fetch-based observability.
@@ -47,6 +54,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
+  "github-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };
@@ -60,8 +68,11 @@ type Fetch = (
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
+let llmCacheTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
 let llmCostTotal: client.Counter<string>;
+let llmCacheCostTotal: client.Counter<string>;
+let llmCacheSavingsTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
 let llmTokensPerSecond: client.Histogram<string>;
 let llmTokenUsage: client.Histogram<string>;
@@ -84,8 +95,11 @@ export function initializeMetrics(labelKeys: string[]): void {
     !labelKeysChanged &&
     llmRequestDuration &&
     llmTokensCounter &&
+    llmCacheTokensCounter &&
     llmBlockedToolCounter &&
     llmCostTotal &&
+    llmCacheCostTotal &&
+    llmCacheSavingsTotal &&
     llmTimeToFirstToken &&
     llmTokensPerSecond &&
     llmTokenUsage
@@ -106,11 +120,20 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
     }
+    if (llmCacheTokensCounter) {
+      client.register.removeSingleMetric("llm_cache_tokens_total");
+    }
     if (llmBlockedToolCounter) {
       client.register.removeSingleMetric("llm_blocked_tools_total");
     }
     if (llmCostTotal) {
       client.register.removeSingleMetric("llm_cost_total");
+    }
+    if (llmCacheCostTotal) {
+      client.register.removeSingleMetric("llm_cache_cost_total");
+    }
+    if (llmCacheSavingsTotal) {
+      client.register.removeSingleMetric("llm_cache_savings_total");
     }
     if (llmTimeToFirstToken) {
       client.register.removeSingleMetric("llm_time_to_first_token_seconds");
@@ -155,6 +178,15 @@ export function initializeMetrics(labelKeys: string[]): void {
     enableExemplars: true,
   });
 
+  // Separate from llm_tokens_total so existing input/output aggregates keep
+  // their meaning; prompt-cache read/write are disjoint from input/output.
+  llmCacheTokensCounter = new client.Counter({
+    name: "llm_cache_tokens_total",
+    help: "Total prompt-cache tokens (read = reused prefix, write = newly cached)",
+    labelNames: [...baseLabelNames, "cache_type", ...nextLabelKeys], // cache_type: read|write
+    enableExemplars: true,
+  });
+
   llmBlockedToolCounter = new client.Counter({
     name: "llm_blocked_tools_total",
     help: "Blocked tool count",
@@ -165,6 +197,27 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmCostTotal = new client.Counter({
     name: "llm_cost_total",
     help: "Total estimated cost in USD",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    enableExemplars: true,
+  });
+
+  // Cost attributable to prompt-cache tokens alone (read + write, TTL-aware).
+  // Separate from llm_cost_total (which is the full request cost) so caching ROI
+  // can be charted on its own.
+  llmCacheCostTotal = new client.Counter({
+    name: "llm_cache_cost_total",
+    help: "Estimated cost in USD attributable to prompt-cache tokens (read + write)",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    enableExemplars: true,
+  });
+
+  // Gross USD saved by cache reads (reads billed at a discount vs full input
+  // price). Read-side only and always >= 0, so it is a valid monotonic counter;
+  // the signed net-of-write-surcharge savings is persisted per interaction
+  // (interactions.cache_savings) since counters cannot decrease.
+  llmCacheSavingsTotal = new client.Counter({
+    name: "llm_cache_savings_total",
+    help: "Gross estimated USD saved by cache reads (discounted vs full input price)",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
     enableExemplars: true,
   });
@@ -253,7 +306,12 @@ function buildMetricLabels(
 export function reportLLMTokens(
   provider: SupportedProvider,
   profile: Agent,
-  usage: { input?: number; output?: number },
+  usage: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  },
   model: string,
   source: InteractionSource,
   externalAgentId?: string,
@@ -288,6 +346,33 @@ export function reportLLMTokens(
         externalAgentId,
       ),
       value: usage.output,
+      exemplarLabels,
+    });
+  }
+
+  if (usage.cacheRead && usage.cacheRead > 0) {
+    llmCacheTokensCounter.inc({
+      labels: buildMetricLabels(
+        profile,
+        { provider, cache_type: "read" },
+        model,
+        source,
+        externalAgentId,
+      ),
+      value: usage.cacheRead,
+      exemplarLabels,
+    });
+  }
+  if (usage.cacheWrite && usage.cacheWrite > 0) {
+    llmCacheTokensCounter.inc({
+      labels: buildMetricLabels(
+        profile,
+        { provider, cache_type: "write" },
+        model,
+        source,
+        externalAgentId,
+      ),
+      value: usage.cacheWrite,
       exemplarLabels,
     });
   }
@@ -381,6 +466,52 @@ export function reportLLMCost(
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });
+}
+
+/**
+ * Reports prompt-cache cost and savings for an LLM request in USD.
+ * `cacheCost` is the spend attributable to cache tokens; `cacheReadSavings` is
+ * the gross (always >= 0) amount saved by cache reads being discounted. Both are
+ * no-ops when undefined or non-positive, so requests without caching emit nothing.
+ * @param provider The LLM provider
+ * @param profile The Archestra profile
+ * @param model The model name
+ * @param cache Cache cost breakdown in USD
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
+ * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
+ */
+export function reportLLMCacheCost(
+  provider: SupportedProvider,
+  profile: Agent,
+  model: string,
+  cache: { cacheCost?: number | null; cacheReadSavings?: number | null },
+  source: InteractionSource,
+  externalAgentId?: string,
+): void {
+  if (!llmCacheCostTotal || !llmCacheSavingsTotal) {
+    logger.warn("LLM metrics not initialized, skipping cache cost reporting");
+    return;
+  }
+
+  const labels = buildMetricLabels(
+    profile,
+    { provider },
+    model,
+    source,
+    externalAgentId,
+  );
+  const exemplarLabels = getExemplarLabels();
+
+  if (cache.cacheCost && cache.cacheCost > 0) {
+    llmCacheCostTotal.inc({ labels, value: cache.cacheCost, exemplarLabels });
+  }
+  if (cache.cacheReadSavings && cache.cacheReadSavings > 0) {
+    llmCacheSavingsTotal.inc({
+      labels,
+      value: cache.cacheReadSavings,
+      exemplarLabels,
+    });
+  }
 }
 
 /**
@@ -483,6 +614,12 @@ export function getObservableFetch(
     url: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults (and
+    // `init`) untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+    const dispatchedInit = dispatcher
+      ? ({ ...init, dispatcher } as RequestInit)
+      : init;
     logger.info(
       {
         url: typeof url === "string" ? url : url.toString(),
@@ -492,7 +629,7 @@ export function getObservableFetch(
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return fetch(url, init);
+      return fetch(url, dispatchedInit);
     }
 
     // Extract model from request body if available
@@ -511,7 +648,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await fetch(url, init);
+      response = await fetch(url, dispatchedInit);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 
@@ -586,11 +723,13 @@ export function getObservableFetch(
         }
         const extractor = fetchUsageExtractors[provider];
         if (extractor) {
-          const { input, output } = extractor(data.usage);
+          const { input, output, cacheRead, cacheWrite } = extractor(
+            data.usage,
+          );
           reportLLMTokens(
             provider,
             profile,
-            { input, output },
+            { input, output, cacheRead, cacheWrite },
             model ?? "unknown",
             source,
             externalAgentId,
@@ -651,11 +790,11 @@ export function getObservableGenAI(
       // Record token metrics
       const usage = result.usageMetadata;
       if (usage) {
-        const { input, output } = getGeminiUsage(usage);
+        const { input, output, cacheRead, cacheWrite } = getGeminiUsage(usage);
         reportLLMTokens(
           provider,
           profile,
-          { input, output },
+          { input, output, cacheRead, cacheWrite },
           model ?? "unknown",
           source,
           externalAgentId,

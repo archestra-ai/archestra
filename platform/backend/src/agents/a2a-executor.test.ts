@@ -1,21 +1,27 @@
-import { describe, expect, test, vi } from "vitest";
+import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
+import { NoSuchToolError } from "ai";
+import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { expect, test } from "@/test";
 import {
   type A2AAttachment,
   buildUserContent,
   executeA2AMessage,
 } from "./a2a-executor";
+import { TOOL_DENIAL_INSTRUCTION } from "./agent-system-prompt";
 
 const {
   mockStreamText,
   mockGetChatMcpTools,
   mockCreateLLMModelForAgent,
   mockResolveConversationLlmSelectionForAgent,
+  mockBuildSkillCatalogPrompt,
 } = vi.hoisted(() => ({
   mockStreamText: vi.fn(),
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
   mockResolveConversationLlmSelectionForAgent: vi.fn(),
+  mockBuildSkillCatalogPrompt: vi.fn(),
 }));
 
 vi.mock("ai", async () => {
@@ -61,40 +67,25 @@ vi.mock("@/clients/mcp-client", () => ({
   },
 }));
 
-vi.mock("@/models", async () => {
-  const actual = await vi.importActual<typeof import("@/models")>("@/models");
-  return {
-    ...actual,
-    AgentModel: {
-      findById: vi.fn(),
-    },
-    McpServerModel: {
-      getUserPersonalServerForCatalog: vi.fn(),
-    },
-    TeamModel: {
-      getUserTeams: vi.fn(),
-    },
-    UserModel: {
-      getById: vi.fn(),
-    },
-  };
-});
-
-vi.mock("@/templating", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/templating")>("@/templating");
-  return {
-    ...actual,
-    promptNeedsRendering: vi.fn(() => false),
-    renderSystemPrompt: vi.fn((prompt: string) => prompt),
-  };
-});
-
-import { AgentModel, McpServerModel } from "@/models";
+vi.mock("@/skills/skill-catalog-prompt", () => ({
+  buildSkillCatalogPrompt: (...args: unknown[]) =>
+    mockBuildSkillCatalogPrompt(...args),
+}));
 
 // Base64 string large enough to pass the MIN_IMAGE_ATTACHMENT_SIZE (2KB) filter.
 // 2732 base64 chars → ~2048 decoded bytes.
 const VALID_IMAGE_BASE64 = "A".repeat(2732);
+
+// runAgentStream probes `fullStream` before committing the attempt; yield a
+// renderable event so a mocked streamText result commits on the first attempt.
+function renderableFullStream(): AsyncIterable<{ type: string }> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield { type: "text-delta" };
+      yield { type: "finish", finishReason: "stop" };
+    },
+  };
+}
 
 describe("buildUserContent", () => {
   test("returns null content when no attachments are provided", () => {
@@ -366,18 +357,21 @@ describe("buildUserContent", () => {
 });
 
 describe("executeA2AMessage model selection", () => {
-  test("uses the shared conversation selection so delegated agents inherit the organization default model", async () => {
-    vi.mocked(AgentModel.findById).mockResolvedValue({
-      id: "agent-child",
-      name: "Child Agent",
+  test("uses the shared conversation selection so delegated agents inherit the organization default model", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
       agentType: "agent",
       systemPrompt: "Handle the task.",
-      llmApiKeyId: null,
-      modelId: null,
-    } as never);
-    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-      null,
-    );
+    });
+
     mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
@@ -411,16 +405,17 @@ describe("executeA2AMessage model selection", () => {
           },
         });
       }),
+      fullStream: renderableFullStream(),
       text: Promise.resolve("Delegated response"),
       usage: Promise.resolve(undefined),
       finishReason: Promise.resolve("stop"),
     });
 
-    const result = await executeA2AMessage({
-      agentId: "agent-child",
+    await executeA2AMessage({
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
       parentDelegationChain: "agent-parent",
     });
@@ -430,24 +425,333 @@ describe("executeA2AMessage model selection", () => {
         llmApiKeyId: null,
         modelId: null,
       },
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "org-1",
-        userId: "user-1",
-        agentId: "agent-child",
+        organizationId: org.id,
+        userId: user.id,
+        agentId: agent.id,
         model: "gemini-2.5-pro",
         provider: "gemini",
-        externalAgentId: "agent-parent:agent-child",
+        externalAgentId: `agent-parent:${agent.id}`,
       }),
     );
-    expect(result.text).toBe("Delegated response");
-    expect(result.responseUiMessage).toEqual({
-      id: "msg-1",
-      role: "assistant",
-      parts: [{ type: "text", text: "Delegated response" }],
+  });
+});
+
+describe("executeA2AMessage isolation scope", () => {
+  function primeExecutionMocks() {
+    mockGetChatMcpTools.mockClear();
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
     });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve("ok"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  function toolWiring(): { conversationId?: string; isolationKey?: string } {
+    return mockGetChatMcpTools.mock.calls[0][0] as {
+      conversationId?: string;
+      isolationKey?: string;
+    };
+  }
+
+  test("headless executions never fabricate a conversation id for tools", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: "user-1",
+    });
+
+    const wiring = toolWiring();
+    // tools may persist conversationId as a foreign key, so it must stay
+    // absent; the generated execution key travels only as isolationKey.
+    expect(wiring.conversationId).toBeUndefined();
+    expect(wiring.isolationKey).toEqual(expect.any(String));
+  });
+
+  test("chat-delegated executions scope isolation by the real conversation id", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const wiring = toolWiring();
+    expect(wiring.conversationId).toBe("conv-1");
+    expect(wiring.isolationKey).toBe("conv-1");
+  });
+
+  test("headless delegation inherits the parent's isolation key", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: "user-1",
+      isolationKey: "parent-execution-key",
+    });
+
+    const wiring = toolWiring();
+    expect(wiring.conversationId).toBeUndefined();
+    expect(wiring.isolationKey).toBe("parent-execution-key");
+  });
+});
+
+describe("executeA2AMessage unavailable tool errors", () => {
+  test("recovers unavailable-tool stream errors instead of failing the run", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "claude-sonnet-4-6",
+      selectedProvider: "anthropic",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "anthropic",
+      apiKeySource: "org",
+    });
+
+    let capturedOnError: ((error: unknown) => string) | undefined;
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        capturedOnError = options?.onError;
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Recovered response" }],
+        };
+
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve("Recovered response"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(capturedOnError).toBeDefined();
+
+    const fromInstance = capturedOnError?.(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool"],
+      }),
+    );
+    expect(fromInstance).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(fromInstance).toContain('"requestedToolName": "ghost_tool"');
+
+    // the SDK's duplicate tool-error part arrives pre-stringified; it must be
+    // recognized the same way, not escalated into a failed run
+    const fromString = capturedOnError?.(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+    );
+    expect(fromString).toBe(fromInstance);
+
+    // unrelated stream errors keep failing the run
+    expect(() => capturedOnError?.(new Error("boom"))).toThrow("boom");
+  });
+});
+
+describe("executeA2AMessage skill catalog", () => {
+  function primeMocks(tools: Record<string, unknown>) {
+    mockStreamText.mockClear();
+    mockBuildSkillCatalogPrompt.mockClear();
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockGetChatMcpTools.mockResolvedValue(tools);
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      fullStream: renderableFullStream(),
+      text: Promise.resolve("done"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  test("appends the skill catalog to the system prompt when the agent can load skills", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeMocks({
+      [TOOL_LOAD_SKILL_FULL_NAME]: { description: "Load" },
+    });
+    mockBuildSkillCatalogPrompt.mockResolvedValue(
+      '<available_skills>\n<skill name="pdf">x</skill>\n</available_skills>',
+    );
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "do it",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({
+      organizationId: org.id,
+      userId: "user-1",
+      agentId: agent.id,
+    });
+    const system = mockStreamText.mock.calls[0]?.[0].system;
+    expect(system).toContain("Handle the task.");
+    expect(system).toContain("<available_skills>");
+  });
+
+  test("omits the skill catalog but keeps the shared tool instructions when no skill tools are available", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeMocks({});
+    mockBuildSkillCatalogPrompt.mockResolvedValue("<available_skills>...");
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "do it",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(mockBuildSkillCatalogPrompt).not.toHaveBeenCalled();
+    const system = mockStreamText.mock.calls[0]?.[0].system;
+    expect(system).toContain("Handle the task.");
+    expect(system).not.toContain("<available_skills>");
+    expect(system).toContain(TOOL_DENIAL_INSTRUCTION);
   });
 });

@@ -5,7 +5,7 @@ import {
   type archestraApiTypes,
   isAgentTool,
   parseFullToolName,
-} from "@shared";
+} from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,

@@ -348,6 +348,13 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
+   * Clear a transient "thinking" indicator without posting a message.
+   * Needed when the agent deliberately stays silent: providers like Slack
+   * only auto-clear the status once a message is posted to the thread.
+   */
+  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
@@ -530,4 +537,17 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/** ngrok tunnel config stored as a DB secret */
+export interface NgrokDbConfig {
+  authToken: string;
+  /** Optional reserved domain for a stable public URL across restarts. */
+  domain: string;
+  /**
+   * False when the user explicitly stopped the tunnel — credentials are kept
+   * for reconnecting, but the tunnel must not come back up on restart.
+   * Missing (older rows) means enabled.
+   */
+  enabled?: boolean;
 }

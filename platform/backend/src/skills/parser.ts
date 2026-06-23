@@ -88,6 +88,20 @@ export function parseSkillManifest(raw: string): ParsedSkill {
 }
 
 /**
+ * Normalize an `allowed-tools` list into the stored space-separated string.
+ * The spec defines the field as space-separated, but YAML authors often write
+ * a sequence and API callers send arrays; accept any mix of space-separated
+ * strings. Returns `null` when nothing usable remains.
+ */
+export function normalizeAllowedTools(tools: string[]): string | null {
+  const normalized = tools
+    .flatMap((tool) => tool.split(/\s+/))
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized.join(" ") : null;
+}
+
+/**
  * Classify a resource file by its path prefix. Files that are not clearly
  * scripts or assets default to `reference`.
  */
@@ -105,19 +119,13 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/**
- * Normalize the `allowed-tools` field into a single space-separated string. The
- * spec defines it as space-separated, but YAML authors often write a sequence;
- * accept both. Returns `null` when nothing usable remains.
- */
 function readAllowedTools(value: unknown): string | null {
   const tools = Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
     : typeof value === "string"
-      ? value.split(/\s+/)
+      ? [value]
       : [];
-  const normalized = tools.map((tool) => tool.trim()).filter(Boolean);
-  return normalized.length > 0 ? normalized.join(" ") : null;
+  return normalizeAllowedTools(tools);
 }
 
 /** Coerce a YAML scalar into a boolean, accepting `true` or the string "true". */

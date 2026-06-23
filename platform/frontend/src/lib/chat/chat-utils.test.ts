@@ -1,12 +1,37 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  applyTextEditToMessages,
+  chatDraftStorageKey,
+  conversationStorageKeys,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
+  migrateLegacyNewChatDraft,
+  NEW_CHAT_DRAFT_STORAGE_KEY,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
+  resolveCanonicalMessageId,
 } from "./chat-utils";
+
+/** Minimal in-memory localStorage stand-in for the draft migration tests. */
+function makeStorage(initial: Record<string, string> = {}) {
+  const map = new Map(Object.entries(initial));
+  return {
+    get length() {
+      return map.size;
+    },
+    key: (index: number) => Array.from(map.keys())[index] ?? null,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      map.set(key, value);
+    },
+    removeItem: (key: string) => {
+      map.delete(key);
+    },
+    snapshot: () => Object.fromEntries(map),
+  };
+}
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
@@ -355,5 +380,339 @@ describe("mergePersistedMessageMetadata", () => {
 
     expect(mergedMessages).not.toBe(liveMessages);
     expect(mergedMessages[0]?.parts).toBe(persistedMessages[0]?.parts);
+  });
+
+  const hookRunPart = (fileName: string) => ({
+    type: "data-hook-run",
+    data: {
+      hookEventName: "PreToolUse",
+      fileName,
+      outcome: "proceed",
+      exitCode: 0,
+    },
+  });
+
+  it("splices persisted hook-run parts into the live message at their persisted slot", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "running the tool" },
+          {
+            type: "tool-run_command",
+            toolCallId: "tc-1",
+            state: "output-available",
+          },
+        ],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "running the tool" },
+          hookRunPart("guard.py"),
+          {
+            type: "tool-run_command",
+            toolCallId: "tc-1",
+            state: "output-available",
+          },
+          hookRunPart("audit.py"),
+        ],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts.map((part) => part.type)).toEqual([
+      "text",
+      "data-hook-run",
+      "tool-run_command",
+      "data-hook-run",
+    ]);
+  });
+
+  it("strips live hook-run parts the server no longer returns", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts: [
+          hookRunPart("guard.py"),
+          { type: "text", text: "already saved" },
+        ],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "already saved" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts.map((part) => part.type)).toEqual(["text"]);
+  });
+
+  it("returns the original array when live hook-run parts already match", () => {
+    const parts = [
+      hookRunPart("guard.py"),
+      { type: "text", text: "already saved" },
+    ];
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts,
+      },
+    ] as UIMessage[];
+    // structurally equal but different object identities, like a refetch
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: structuredClone(parts),
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages).toBe(liveMessages);
+  });
+
+  it("keeps live hook-run parts when stripping would leave nothing renderable", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts: [{ type: "step-start" }, hookRunPart("guard.py")],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts).toBe(liveMessages[0]?.parts);
+  });
+});
+
+describe("resolveCanonicalMessageId", () => {
+  const liveMessages = [
+    {
+      id: "nanoid-user-1",
+      role: "user",
+      metadata: { [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-user-1" },
+      parts: [{ type: "text", text: "edited prompt" }],
+    },
+  ] as UIMessage[];
+
+  it("returns the message id when the saved thread already contains it", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "db-user-1",
+        liveMessages: [],
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("maps an in-session nanoid to its DB id via persisted metadata", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("returns null when the live message has no mapping into the saved thread", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages: [
+          { id: "nanoid-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+        canonicalMessages: [
+          { id: "db-user-other", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the saved thread is missing", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: undefined,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("applyTextEditToMessages", () => {
+  it("replaces only the targeted text part and keeps other messages untouched", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [
+          { type: "file", url: "blob:a", mediaType: "image/png" },
+          { type: "text", text: "old text" },
+        ],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "answer" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 1,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[1]).toMatchObject({
+      type: "text",
+      text: "new text",
+    });
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+    expect(updated[1]).toBe(messages[1]);
+  });
+
+  it("does not touch a part whose index matches but is not text", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "file", url: "blob:a", mediaType: "image/png" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 0,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+  });
+});
+
+describe("chatDraftStorageKey", () => {
+  it("returns the conversation-scoped draft key for an existing conversation", () => {
+    expect(chatDraftStorageKey("conv-123")).toBe(
+      conversationStorageKeys("conv-123").draft,
+    );
+  });
+
+  it("returns the shared new-chat key when there is no conversation", () => {
+    expect(chatDraftStorageKey(undefined)).toBe(NEW_CHAT_DRAFT_STORAGE_KEY);
+    expect(chatDraftStorageKey(null)).toBe(NEW_CHAT_DRAFT_STORAGE_KEY);
+  });
+
+  it("does not vary the new-chat key by agent so a typed prompt survives an agent switch", () => {
+    // Regression guard: the draft key must be agent-independent. Previously it
+    // embedded the agentId, so switching agents re-keyed the draft and the
+    // restore effect cleared the user's in-progress prompt.
+    const keyForAgentA = chatDraftStorageKey(undefined);
+    const keyForAgentB = chatDraftStorageKey(undefined);
+    expect(keyForAgentA).toBe(keyForAgentB);
+  });
+});
+
+describe("migrateLegacyNewChatDraft", () => {
+  it("adopts a pre-upgrade per-agent draft into the shared key, then clears legacy keys", () => {
+    const storage = makeStorage({
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "draft I was typing",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "draft I was typing",
+    });
+  });
+
+  it("does not overwrite an existing shared draft, but still cleans up legacy keys", () => {
+    const storage = makeStorage({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "current draft",
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "stale legacy draft",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "current draft",
+    });
+  });
+
+  it("leaves unrelated keys untouched and is a no-op without legacy keys", () => {
+    const storage = makeStorage({
+      [conversationStorageKeys("conv-1").draft]: "a saved conversation draft",
+      "some-other-key": "value",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [conversationStorageKeys("conv-1").draft]: "a saved conversation draft",
+      "some-other-key": "value",
+    });
+  });
+
+  it("is idempotent: a second run finds nothing left to migrate", () => {
+    const storage = makeStorage({
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "draft",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+    const afterFirst = storage.snapshot();
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual(afterFirst);
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "draft",
+    });
   });
 });

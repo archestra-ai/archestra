@@ -28,6 +28,12 @@ function createMockResponse(
       completion_tokens: usage?.completion_tokens ?? 50,
       total_tokens:
         (usage?.prompt_tokens ?? 100) + (usage?.completion_tokens ?? 50),
+      ...(usage?.prompt_tokens_details
+        ? { prompt_tokens_details: usage.prompt_tokens_details }
+        : {}),
+      ...(usage?.completion_tokens_details
+        ? { completion_tokens_details: usage.completion_tokens_details }
+        : {}),
     },
   };
 }
@@ -220,6 +226,27 @@ describe("OpenAIResponseAdapter", () => {
     });
   });
 
+  describe("getFinishReasons", () => {
+    test("extracts the finish reason from the first choice", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "Hello",
+      });
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      expect(adapter.getFinishReasons()).toEqual(["stop"]);
+    });
+
+    test("returns empty array when choices is missing (e.g. upstream error body)", () => {
+      const response = {
+        error: { message: "upstream failure" },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      expect(adapter.getFinishReasons()).toEqual([]);
+    });
+  });
+
   describe("getUsage", () => {
     test("extracts usage tokens from response", () => {
       const response = createMockResponse(
@@ -233,7 +260,48 @@ describe("OpenAIResponseAdapter", () => {
       expect(usage).toEqual({
         inputTokens: 150,
         outputTokens: 75,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
       });
+    });
+
+    test("subtracts cached tokens from prompt to avoid double-counting", () => {
+      const response = createMockResponse(
+        { role: "assistant", content: "Test" },
+        {
+          prompt_tokens: 150,
+          completion_tokens: 75,
+          prompt_tokens_details: { cached_tokens: 120 },
+        },
+      );
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+
+      // OpenAI's cached_tokens are a SUBSET of prompt_tokens: uncached = 150-120.
+      expect(adapter.getUsage()).toEqual({
+        inputTokens: 30,
+        outputTokens: 75,
+        cacheReadTokens: 120,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+      });
+    });
+
+    test("extracts reasoning_tokens from completion_tokens_details", () => {
+      const response = createMockResponse(
+        { role: "assistant", content: "Test" },
+        {
+          prompt_tokens: 150,
+          completion_tokens: 75,
+          completion_tokens_details: { reasoning_tokens: 40 },
+        },
+      );
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+
+      // reasoning_tokens are a subset already inside completion_tokens.
+      expect(adapter.getUsage().reasoningTokens).toBe(40);
     });
   });
 

@@ -1,4 +1,7 @@
-import { OPENROUTER_FREE_MODEL_ID, type SupportedProvider } from "@shared";
+import {
+  OPENROUTER_FREE_MODEL_ID,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -293,6 +296,8 @@ describe("ModelSyncService", () => {
         supportsToolCalling: true,
         promptPricePerToken: null,
         completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
       },
     });
 
@@ -313,6 +318,8 @@ describe("ModelSyncService", () => {
         supportsToolCalling: false,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
       },
       fetched: {
         contextLength: 64000,

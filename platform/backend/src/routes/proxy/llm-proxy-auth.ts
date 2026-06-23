@@ -9,7 +9,8 @@ import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
-} from "@shared";
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -25,6 +26,7 @@ import {
 } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { type Agent, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
@@ -112,6 +114,32 @@ export async function validateVirtualApiKey(
     );
   }
 
+  // Per-user providers (GitHub Copilot) hold an individual's token, so it may
+  // only be served through the owner's OWN personal virtual key mapping to
+  // their OWN personal provider key. Re-checked here at runtime (not just at
+  // create/update) so a virtual key mapped before this rule existed, or one
+  // whose scope/mapping changed, can never hand the token to another user.
+  if (
+    isSupportedProvider(expectedProvider) &&
+    providerRequiresPerUserCredential(expectedProvider)
+  ) {
+    const parentKey = await LlmProviderApiKeyModel.findById(
+      mappedProviderKey.providerApiKeyId,
+    );
+    if (
+      resolved.virtualKey.scope !== "personal" ||
+      !parentKey ||
+      parentKey.scope !== "personal" ||
+      parentKey.userId == null ||
+      parentKey.userId !== resolved.virtualKey.authorId
+    ) {
+      throw new ApiError(
+        403,
+        `${expectedProvider} is per-user: it can only be used through your own personal virtual key linked to your own ${expectedProvider} account.`,
+      );
+    }
+  }
+
   // Resolve the real provider API key from the secret.
   // If the parent key's secret was removed (orphaned row), apiKey will be
   // undefined. For providers that require keys, the upstream call will fail
@@ -177,6 +205,9 @@ export async function validateLlmOAuthAccessToken(params: {
   }
   if (accessToken.refreshTokenRevoked) {
     throw new ApiError(401, "Invalid LLM OAuth access token.");
+  }
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");
@@ -422,6 +453,20 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
+  // OAuth client credentials are a service-to-service credential with no acting
+  // user. Per-user providers (GitHub Copilot) are an individual's token, so
+  // they can never be served this way — there's no user to attribute, and the
+  // mapped key would be one person's token for every caller.
+  if (
+    isSupportedProvider(params.expectedProvider) &&
+    providerRequiresPerUserCredential(params.expectedProvider)
+  ) {
+    throw new ApiError(
+      400,
+      `${params.expectedProvider} is per-user and cannot be used via OAuth client credentials; each user must connect their own account.`,
+    );
+  }
+
   const providerApiKey = await LlmProviderApiKeyModel.findById(
     mappedProviderKey.providerApiKeyId,
   );
@@ -457,12 +502,23 @@ async function validateUserLlmOAuthAccessToken(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
+  // Access has two additive sources: the user's own RBAC, or an admin-controlled
+  // grant on the authorization_code LLM OAuth client that minted this token — its
+  // allowedLlmProxyIds may grant access to proxies the user could not otherwise
+  // reach (e.g. a proxy reachable only through a specific pre-registered app).
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
     params.userId,
     params.agent.id,
     false,
   );
-  if (!hasAgentAccess) {
+  const hasClientGrant = hasAgentAccess
+    ? false
+    : await llmOauthClientGrantsProxyAccess({
+        clientId: params.clientId,
+        proxyId: params.agent.id,
+        organizationId: member.organizationId,
+      });
+  if (!hasAgentAccess && !hasClientGrant) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }
   if (!isSupportedProvider(params.expectedProvider)) {
@@ -493,6 +549,30 @@ async function validateUserLlmOAuthAccessToken(params: {
       : undefined,
     userId: params.userId,
   };
+}
+
+/**
+ * Whether the authorization_code LLM OAuth client that minted a user-bound token
+ * grants access to an LLM proxy beyond the user's own RBAC. Additive,
+ * admin-controlled grant (see the MCP gateway equivalent). Disabled or deleted
+ * clients grant nothing.
+ */
+async function llmOauthClientGrantsProxyAccess(params: {
+  clientId: string;
+  proxyId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.disabled) {
+    return false;
+  }
+  if (oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedLlmProxyIds.includes(params.proxyId);
 }
 
 async function resolveOAuthProviderApiKey(params: {

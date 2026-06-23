@@ -3,11 +3,18 @@ import {
   isMetadataOnlyEdit,
   isPlaywrightCatalogItem,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import {
+  assertMcpCatalogTeams,
+  authorizeMcpCatalogScope,
+  getMcpCatalogPermissionChecker,
+  requireMcpCatalogModifyPermission,
+  withCatalogTeamFkErrorMapped,
+} from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import {
   generateDeploymentYamlTemplate,
@@ -20,14 +27,16 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
-  McpPresetEntryModel,
   McpServerModel,
-  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  assertRemoteServerUrlAllowedByNetworkPolicy,
+  assertValuesMatchEnvironmentRegex,
+} from "@/services/environments/environment";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -37,56 +46,18 @@ import {
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
-  CreateChildCatalogSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
+  type LocalConfig,
   PartialUpdateInternalMcpCatalogSchema,
-  type PresetFieldValues,
   SelectInternalMcpCatalogSchema,
-  UpdateChildCatalogSchema,
-  type UserConfigFieldDefault,
   UuidIdSchema,
 } from "@/types";
-import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
-
-/**
- * Columns propagated from a parent catalog item to its children — both at
- * child creation and on parent-edit cascade. Children inherit the parent's
- * template and overlay only their `presetFieldValues` / identity columns.
- *
- * Note: `multitenant` is included so newly-created children match the parent.
- * On parent PUT cascade, the schema-level "locked after creation" rule on
- * Update silently no-ops it, which is what we want — children's tenancy was
- * fixed at creation time.
- */
-type SyncableCatalogFields = Pick<
-  InternalMcpCatalog,
-  | "version"
-  | "description"
-  | "instructions"
-  | "repository"
-  | "installationCommand"
-  | "requiresAuth"
-  | "authDescription"
-  | "authFields"
-  | "serverType"
-  | "multitenant"
-  | "serverUrl"
-  | "docsUrl"
-  | "clientSecretId"
-  | "localConfigSecretId"
-  | "localConfig"
-  | "deploymentSpecYaml"
-  | "userConfig"
-  | "oauthConfig"
-  | "enterpriseManagedConfig"
-  | "icon"
->;
 
 // Match the schema from getMcpServerTools endpoint
 const ToolWithAssignedAgentCountSchema = z.object({
@@ -111,12 +82,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
-        querystring: z.object({
-          includeChildren: z
-            .union([z.boolean(), z.enum(["true", "false"])])
-            .optional()
-            .transform((v) => v === true || v === "true"),
-        }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
         ),
@@ -134,7 +99,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
-          includeChildren: request.query.includeChildren,
         }),
       );
     },
@@ -178,24 +142,39 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // org's secret (which create()'s clone-secret merge would then read/write).
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
-      restBody.presetSecretId = undefined;
 
-      // Enforce scope restrictions
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      // Enforce scope restrictions (3-tier model shared with agents/skills):
+      // org → admin only; team → mcpRegistry:team-admin + membership in the
+      // assigned teams; personal → the author.
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       restBody.scope = restBody.scope ?? "personal";
-      if (!isAdmin && restBody.scope === "org") {
-        throw new ApiError(
-          403,
-          "Only admins can create org-scoped catalog items",
-        );
-      }
+      const requestedTeamIds =
+        restBody.scope === "team" ? dedupeTeamIds(restBody.teams ?? []) : [];
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(request.user.id);
+      authorizeMcpCatalogScope({
+        checker,
+        scope: restBody.scope,
+        authorId: request.user.id,
+        requestedTeamIds,
+        userTeamIds,
+        userId: request.user.id,
+      });
       if (restBody.scope !== "team") {
         delete restBody.teams;
+      } else {
+        restBody.teams = requestedTeamIds;
       }
+      await assertMcpCatalogTeams({
+        scope: restBody.scope,
+        teamIds: requestedTeamIds,
+        organizationId: request.organizationId,
+      });
 
       // Gate assigning a restricted environment. Requires
       // environment:deploy-to-restricted (environment:admin implies it).
@@ -362,47 +341,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Default-preset values supplied alongside the create payload need the
-      // same secret-partitioning treatment as PUT and child routes — keys
-      // flagged sensitive on a `promptOnPreset` userConfig field land in
-      // `preset_secret_id`'s bag rather than plaintext `preset_field_values`
-      // jsonb. Skipping this here would let a single root POST persist a
-      // sensitive preset value in plaintext.
-      if (restBody.presetFieldValues !== undefined) {
-        let parentForPartition: InternalMcpCatalog;
-        if (restBody.parentCatalogItemId) {
-          // Root POST creating a child (rare — children are normally created
-          // via POST /:id/children). Partition against the actual parent's
-          // userConfig, not the incoming row.
-          const realParent = await InternalMcpCatalogModel.findById(
-            restBody.parentCatalogItemId,
-            {
-              expandSecrets: false,
-              userId: request.user.id,
-              isAdmin: true,
-              organizationId: request.organizationId,
-            },
-          );
-          if (!realParent) {
-            throw new ApiError(400, "Parent catalog item not found");
-          }
-          parentForPartition = realParent;
-        } else {
-          // Root POST creating a parent — this row IS the parent-to-be.
-          parentForPartition = restBody as unknown as InternalMcpCatalog;
-        }
-        const { nonSecretFieldValues, presetSecretId } =
-          await partitionPresetFieldValuesAndUpsertSecrets({
-            parent: parentForPartition,
-            catalogRow: { name: restBody.name, presetSecretId: null },
-            incoming: restBody.presetFieldValues,
-          });
-        restBody.presetFieldValues = nonSecretFieldValues;
-        if (presetSecretId) {
-          (restBody as Record<string, unknown>).presetSecretId = presetSecretId;
-        }
-      }
-
       if (restBody.environmentId != null) {
         const targetEnv = await EnvironmentModel.findByIdForOrganization(
           restBody.environmentId,
@@ -412,6 +350,27 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Environment not found");
         }
       }
+      // Enforce the governing environment's allowlist regex against the
+      // admin-entered config values being persisted: static (non-prompted) env
+      // var values and non-secret userConfig defaults (the value a static header
+      // persists, and the suggested value a prompted field shows). Secrets are
+      // exempt; secret env values are extracted above.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: restBody.environmentId ?? null,
+        organizationId: request.organizationId,
+        valueSets: [
+          collectStaticEnvValues(restBody.localConfig?.environment),
+          collectStaticUserConfigValues(restBody.userConfig),
+        ],
+      });
+      // A remote server is reached over HTTP from the backend; block creating it
+      // in an environment whose egress policy would forbid that outbound hop.
+      await assertRemoteServerUrlAllowedByNetworkPolicy({
+        serverType: restBody.serverType,
+        serverUrl: restBody.serverUrl ?? null,
+        environmentId: restBody.environmentId ?? null,
+        organizationId: request.organizationId,
+      });
       // Clone source must resolve within the caller's org — `create` copies
       // the source's tools + guardrail policies, so an unscoped `clonedFrom`
       // would let a caller pull another org's catalog config into their own.
@@ -430,10 +389,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const catalogItem = await InternalMcpCatalogModel.create(restBody, {
-        organizationId: request.organizationId,
-        authorId: request.user.id,
-      });
+      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
+        InternalMcpCatalogModel.create(restBody, {
+          organizationId: request.organizationId,
+          authorId: request.user.id,
+        }),
+      );
       return reply.send(catalogItem);
     },
   );
@@ -563,12 +524,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // org's secret. Secret handling below sets them from the existing row.
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
-      restBody.presetSecretId = undefined;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const isAdmin = checker.isAdmin;
 
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
@@ -604,29 +565,58 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      if (!isAdmin) {
-        // Non-admins can only edit their own personal items
-        if (
-          originalCatalogItem.scope !== "personal" ||
-          originalCatalogItem.authorId !== request.user.id
-        ) {
-          throw new ApiError(
-            403,
-            "You can only edit your own personal catalog items",
-          );
-        }
-        // Non-admins cannot set scope to "org"
-        if (restBody.scope === "org") {
-          throw new ApiError(
-            403,
-            "Only admins can set catalog items to org scope",
-          );
-        }
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(request.user.id);
+      const existingTeamIds = originalCatalogItem.teams.map((t) => t.id);
+
+      // Gate the right to modify this item at its CURRENT scope. This both lets
+      // a team-admin member edit a team-scoped item and still blocks editing
+      // someone else's personal item.
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: originalCatalogItem.scope,
+        authorId: originalCatalogItem.authorId,
+        catalogTeamIds: existingTeamIds,
+        userTeamIds,
+        userId: request.user.id,
+      });
+
+      // Re-authorize and re-sync teams only when scope or team assignments
+      // actually change. A content-only edit that echoes the existing teams
+      // must not 403 a non-admin author/team-admin or needlessly rewrite rows.
+      const newScope = restBody.scope ?? originalCatalogItem.scope;
+      // Shared items are one-way: demoting team/org back to personal would yank
+      // the item from everyone it was shared with. Mirrors the agent route.
+      if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
+        throw new ApiError(400, "Shared catalog items cannot be made personal");
+      }
+      const newTeamIds =
+        newScope === "team"
+          ? dedupeTeamIds(restBody.teams ?? existingTeamIds)
+          : [];
+      const scopeChanged = newScope !== originalCatalogItem.scope;
+      const teamsChanged =
+        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+      if (scopeChanged || teamsChanged) {
+        authorizeMcpCatalogScope({
+          checker,
+          scope: newScope,
+          authorId: originalCatalogItem.authorId,
+          requestedTeamIds: newTeamIds,
+          userTeamIds,
+          userId: request.user.id,
+        });
+        await assertMcpCatalogTeams({
+          scope: newScope,
+          teamIds: newTeamIds,
+          organizationId: request.organizationId,
+        });
       }
 
-      if (restBody.scope && restBody.scope !== "team") {
-        delete restBody.teams;
-      }
+      // Only rewrite team assignments when scope/teams actually change;
+      // undefined leaves the existing rows untouched.
+      restBody.teams = scopeChanged || teamsChanged ? newTeamIds : undefined;
 
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
@@ -886,118 +876,68 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Children are edited via PATCH /:parentId/children/:childId — the
-      // catalog template fields cascade from parent only.
-      if (originalCatalogItem.parentCatalogItemId !== null) {
-        throw new ApiError(
-          400,
-          "Child catalog items (presets) cannot be edited via this endpoint. " +
-            "Use PATCH /api/internal_mcp_catalog/:parentId/children/:childId.",
-        );
-      }
-
-      // Default-preset values land on the parent row. Route them through
-      // the secret partitioner so secret-flagged keys end up in a secret
-      // bundle rather than the plaintext preset_field_values jsonb.
-      //
-      // Partition fires whenever EITHER (a) the request supplies new
-      // presetFieldValues, OR (b) the request changes userConfig in a way
-      // that flips a preset field's `sensitive` flag — a schema-only flip
-      // would otherwise leave already-stored values in the wrong storage
-      // (plaintext jsonb instead of the bag, or stale bag still merged
-      // over jsonb by the read path).
-      //
-      // The partition runs against the *effective* parent — the incoming
-      // userConfig / localConfig when the request supplies them,
-      // otherwise the row's current values. Reading only
-      // originalCatalogItem would misroute values for fields newly
-      // flipped to sensitive (userConfig) or newly flipped to
-      // `type: "secret"` on a prompted-on-preset env var.
-      const parentForPartition: InternalMcpCatalog = {
-        ...originalCatalogItem,
-        userConfig: restBody.userConfig ?? originalCatalogItem.userConfig,
-        localConfig: restBody.localConfig
-          ? {
-              ...(originalCatalogItem.localConfig ?? {}),
-              ...restBody.localConfig,
-            }
-          : originalCatalogItem.localConfig,
-      };
-      // True when the set of preset-scoped *secret* keys differs between
-      // the old and new effective parent — covers both surfaces:
-      //   • userConfig: a field flipped `sensitive` true/false (or a
-      //     promptOnPreset sensitive field was added/removed)
-      //   • localConfig.environment: a `promptOnPreset` env var's
-      //     `type` flipped between "secret" and anything else (or
-      //     such an env var was added/removed)
-      // Either kind of flip means children's already-stored preset
-      // values need to be repartitioned between plaintext jsonb and
-      // the secret bag, otherwise the read path returns stale data
-      // from the wrong storage.
-      const secretKeysChanged =
-        (restBody.userConfig !== undefined ||
-          restBody.localConfig !== undefined) &&
-        !setsEqual(
-          collectSecretPresetKeys(originalCatalogItem),
-          collectSecretPresetKeys(parentForPartition),
-        );
-      // Enforce the org-wide default validation regex against incoming
-      // default-scoped values. Symmetric to the entry-regex check on the
-      // child PATCH route — without it, hitting this endpoint directly (curl,
-      // stale frontend, scripts) bypasses the inline UI guard and persists
-      // forbidden values into the parent's `presetFieldValues`.
-      if (restBody.presetFieldValues !== undefined) {
-        const org = await OrganizationModel.getById(request.organizationId);
-        const defaultRegex = org?.presetEntityDefaultValidationRegex ?? null;
-        if (defaultRegex) {
-          const defaultLabel = org?.presetEntityDefaultLabel ?? "Default";
-          try {
-            validateValuesAgainstRegex(
-              restBody.presetFieldValues,
-              defaultRegex,
-              defaultLabel,
-            );
-          } catch (e) {
-            throw new ApiError(400, (e as Error).message);
-          }
-        }
-      }
-
-      let parentPresetBagRotated = false;
-      if (restBody.presetFieldValues !== undefined || secretKeysChanged) {
-        const repartitioned = await repartitionStoredPresetValues({
-          row: {
-            name: restBody.name ?? originalCatalogItem.name,
-            presetFieldValues: originalCatalogItem.presetFieldValues ?? {},
-            presetSecretId: originalCatalogItem.presetSecretId,
-          },
-          parent: parentForPartition,
-          additionalIncoming: restBody.presetFieldValues,
-        });
-        restBody.presetFieldValues = repartitioned.presetFieldValues;
-        if (
-          repartitioned.presetSecretId !== originalCatalogItem.presetSecretId
-        ) {
-          (restBody as Record<string, unknown>).presetSecretId =
-            repartitioned.presetSecretId;
-        }
-        if (repartitioned.bagValuesRotated) parentPresetBagRotated = true;
-      }
-
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
       // (or restricted default) requires environment:deploy-to-restricted
       // (environment:admin implies it).
-      if (
+      const environmentChanged =
         "environmentId" in restBody &&
-        restBody.environmentId !== originalCatalogItem.environmentId
-      ) {
+        restBody.environmentId !== originalCatalogItem.environmentId;
+      if (environmentChanged) {
         await assertCanAssignEnvironment({
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
           canDeployToRestricted: await callerCanDeployToRestricted(
             request.headers,
           ),
+        });
+      }
+
+      // Enforce the governing environment's allowlist regex. Validate when the
+      // local config / userConfig changes (incoming values) or the environment
+      // changes (re-check the EFFECTIVE persisted values against the new env, so
+      // moving an item into a stricter env catches values stored under the old
+      // one).
+      if (
+        environmentChanged ||
+        restBody.localConfig !== undefined ||
+        restBody.userConfig !== undefined
+      ) {
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: ("environmentId" in restBody
+            ? restBody.environmentId
+            : originalCatalogItem.environmentId) as string | null,
+          organizationId: request.organizationId,
+          valueSets: [
+            collectStaticEnvValues(
+              restBody.localConfig?.environment ??
+                originalCatalogItem.localConfig?.environment,
+            ),
+            collectStaticUserConfigValues(
+              restBody.userConfig ?? originalCatalogItem.userConfig,
+            ),
+          ],
+        });
+      }
+
+      // Re-validate a remote server's URL against its environment's egress
+      // policy when the URL, server type, or environment changes. Unchanged
+      // existing servers are grandfathered (no retroactive block).
+      if (
+        environmentChanged ||
+        restBody.serverUrl !== undefined ||
+        restBody.serverType !== undefined
+      ) {
+        await assertRemoteServerUrlAllowedByNetworkPolicy({
+          serverType: restBody.serverType ?? originalCatalogItem.serverType,
+          serverUrl:
+            (restBody.serverUrl !== undefined
+              ? restBody.serverUrl
+              : originalCatalogItem.serverUrl) ?? null,
+          environmentId: ("environmentId" in restBody
+            ? restBody.environmentId
+            : originalCatalogItem.environmentId) as string | null,
+          organizationId: request.organizationId,
         });
       }
 
@@ -1010,7 +950,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServerRuntimeManager.isEnabled;
 
       // Update the catalog item
-      const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
+      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
+        InternalMcpCatalogModel.update(id, restBody),
+      );
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -1070,55 +1012,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         originalCatalogItemForGate,
         catalogItem,
         {
-          forceAutoRestart:
-            catalogSharedSecretValuesRotated || parentPresetBagRotated,
+          forceAutoRestart: catalogSharedSecretValuesRotated,
         },
       );
-
-      // Cascade syncable fields to children, then trigger reinstall for each
-      // child's installs. Note: this snapshots children BEFORE updating them
-      // so the original-vs-new comparison passed to the cascade helper still
-      // reflects what changed.
-      //
-      // When the parent's userConfig change flipped a preset field's
-      // sensitive flag, each child row's already-stored preset values must
-      // also be re-partitioned (jsonb ↔ secret bag) against the new
-      // schema. Without this, declassifying a parent field would leave
-      // every child's secret bag carrying the stale value, and the
-      // catalog read path would keep merging it over the children's
-      // plaintext jsonb on every request.
-      const children = await InternalMcpCatalogModel.findChildren(id);
-      const syncableValues = pickSyncableFields(catalogItem);
-      for (const originalChild of children) {
-        const childUpdates: Record<string, unknown> = { ...syncableValues };
-        let childBagRotated = false;
-        if (secretKeysChanged) {
-          const repartitioned = await repartitionStoredPresetValues({
-            row: {
-              name: originalChild.name,
-              presetFieldValues: originalChild.presetFieldValues ?? {},
-              presetSecretId: originalChild.presetSecretId,
-            },
-            parent: catalogItem,
-          });
-          childUpdates.presetFieldValues = repartitioned.presetFieldValues;
-          if (repartitioned.presetSecretId !== originalChild.presetSecretId) {
-            childUpdates.presetSecretId = repartitioned.presetSecretId;
-          }
-          if (repartitioned.bagValuesRotated) childBagRotated = true;
-        }
-        const updatedChild = await InternalMcpCatalogModel.update(
-          originalChild.id,
-          childUpdates as typeof syncableValues,
-        );
-        if (!updatedChild) continue;
-        // Children inherit `clientSecretId` and `localConfigSecretId`
-        // from the parent (see `SyncableCatalogFields`), so any rotation
-        // to the parent's shared bag also affects every child install.
-        await cascadeReinstallForCatalog(originalChild, updatedChild, {
-          forceAutoRestart: catalogSharedSecretValuesRotated || childBagRotated,
-        });
-      }
 
       // Note: Tools are NOT deleted - they are synced during reinstall to preserve
       // policies and profile assignments
@@ -1144,14 +1040,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
-        isAdmin,
+        isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
         expandSecrets: false,
       });
@@ -1175,18 +1071,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Mirror the catalog-edit ownership check: only users who could have
-      // edited the catalog (admins, or the personal-scope owner) can
-      // trigger the reinstall.
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "Only catalog editors can reinstall this catalog",
-        );
-      }
+      // edited the catalog (admins, the personal-scope owner, or a team-admin
+      // member of the item's teams) can trigger the reinstall.
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        catalogTeamIds: catalogItem.teams.map((t) => t.id),
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(request.user.id),
+        userId: request.user.id,
+      });
 
       try {
         await reinstallMultitenantCatalog(catalogItem);
@@ -1217,14 +1113,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
-        isAdmin,
+        isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
         expandSecrets: false,
       });
@@ -1232,22 +1128,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "Only catalog editors can restart this catalog's pods",
-        );
-      }
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        catalogTeamIds: catalogItem.teams.map((t) => t.id),
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(request.user.id),
+        userId: request.user.id,
+      });
 
-      const children =
-        catalogItem.parentCatalogItemId === null
-          ? await InternalMcpCatalogModel.findChildren(id)
-          : [];
-      const targetCatalogItems = [catalogItem, ...children].filter(
+      const targetCatalogItems = [catalogItem].filter(
         (item) => item.serverType === "local",
       );
 
@@ -1565,7 +1457,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "List Kubernetes docker-registry secrets available for imagePullSecrets",
         tags: ["MCP Catalog"],
         response: constructResponseSchema(
-          z.array(z.object({ name: z.string() })),
+          z.array(
+            z.object({
+              name: z.string(),
+              registryServers: z.array(z.string()),
+            }),
+          ),
         ),
       },
     },
@@ -1603,261 +1500,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/internal_mcp_catalog/:catalogId/children",
-    {
-      schema: {
-        operationId: RouteId.GetCatalogChildren,
-        description:
-          'List child catalog items ("presets" in UI) for a parent catalog item',
-        tags: ["MCP Catalog"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        response: constructResponseSchema(
-          z.array(SelectInternalMcpCatalogSchema),
-        ),
-      },
-    },
-    async ({ params: { catalogId } }, reply) => {
-      const parent = await InternalMcpCatalogModel.findById(catalogId, {
-        expandSecrets: false,
-      });
-      if (!parent) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-      if (parent.parentCatalogItemId !== null) {
-        throw new ApiError(
-          400,
-          "Children can only be listed under root catalog items",
-        );
-      }
-      return reply.send(await InternalMcpCatalogModel.findChildren(catalogId));
-    },
-  );
-
-  fastify.post(
-    "/api/internal_mcp_catalog/:catalogId/children",
-    {
-      schema: {
-        operationId: RouteId.CreateCatalogChild,
-        description:
-          'Create a child catalog item ("preset" in UI) under a parent. ' +
-          "Inherits all template columns from parent.",
-        tags: ["MCP Catalog"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        body: CreateChildCatalogSchema,
-        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
-      },
-    },
-    async (request, reply) => {
-      const { catalogId } = request.params;
-      const { presetEntryId, presetFieldValues } = request.body;
-
-      const parent = await InternalMcpCatalogModel.findById(catalogId, {
-        expandSecrets: false,
-      });
-      if (!parent) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-      if (parent.parentCatalogItemId !== null) {
-        throw new ApiError(
-          400,
-          "Children can only be created under root catalog items",
-        );
-      }
-
-      await assertCanEditCatalogPresets(parent, request);
-
-      const entry = await McpPresetEntryModel.findByIdForOrganization(
-        presetEntryId,
-        request.organizationId,
-      );
-      if (!entry) {
-        throw new ApiError(404, "Preset entry not found");
-      }
-
-      const existingChildren = await InternalMcpCatalogModel.findChildren(
-        parent.id,
-      );
-      if (existingChildren.some((c) => c.presetEntryId === entry.id)) {
-        throw new ApiError(409, `${entry.name} is already configured.`);
-      }
-
-      try {
-        InternalMcpCatalogModel.validateFieldValuesAgainstCatalog(
-          parent,
-          presetFieldValues,
-        );
-        validateValuesAgainstRegex(
-          presetFieldValues,
-          entry.validationRegex,
-          entry.name,
-        );
-      } catch (e) {
-        throw new ApiError(400, (e as Error).message);
-      }
-
-      const childName = toDns1123Label(entry.name);
-      const composedName = `${parent.name}-${childName}`;
-      const { nonSecretFieldValues, presetSecretId } =
-        await partitionPresetFieldValuesAndUpsertSecrets({
-          parent,
-          catalogRow: { name: composedName, presetSecretId: null },
-          incoming: presetFieldValues ?? {},
-        });
-
-      const childInsert = {
-        ...pickSyncableFields(parent),
-        // Model.create will overwrite `name` with the composed value; we set it
-        // here only so the InsertInternalMcpCatalog schema's notNull constraint
-        // is satisfied at the type level.
-        name: composedName,
-        childName,
-        presetEntryId: entry.id,
-        presetFieldValues: nonSecretFieldValues,
-        presetSecretId,
-        parentCatalogItemId: parent.id,
-        scope: parent.scope,
-      };
-
-      const child = await InternalMcpCatalogModel.create(childInsert, {
-        organizationId: parent.organizationId ?? request.organizationId,
-        authorId: request.user.id,
-      });
-
-      return reply.send(child);
-    },
-  );
-
-  fastify.patch(
-    "/api/internal_mcp_catalog/:catalogId/children/:childId",
-    {
-      schema: {
-        operationId: RouteId.UpdateCatalogChild,
-        description:
-          'Update a child catalog item ("preset" in UI). Only ' +
-          "`presetFieldValues` may be edited; template fields cascade from parent " +
-          "and the name is immutable after creation.",
-        tags: ["MCP Catalog"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-          childId: UuidIdSchema,
-        }),
-        body: UpdateChildCatalogSchema,
-        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
-      },
-    },
-    async (request, reply) => {
-      const { catalogId, childId } = request.params;
-      const { presetFieldValues } = request.body;
-
-      const parent = await InternalMcpCatalogModel.findById(catalogId, {
-        expandSecrets: false,
-      });
-      if (!parent || parent.parentCatalogItemId !== null) {
-        throw new ApiError(404, "Parent catalog item not found");
-      }
-
-      await assertCanEditCatalogPresets(parent, request);
-
-      // Unexpanded snapshot — same reason as `originalCatalogItemForGate`
-      // in the parent PUT route: comparing an `expandSecrets: true`
-      // snapshot against `Model.update`'s raw return would diff on
-      // expanded secret values and cascade-reinstall on edits that
-      // didn't touch any runtime field.
-      const originalChild = await InternalMcpCatalogModel.findById(childId, {
-        expandSecrets: false,
-      });
-      if (!originalChild || originalChild.parentCatalogItemId !== parent.id) {
-        throw new ApiError(404, "Child catalog item not found");
-      }
-
-      const updates: Record<string, unknown> = {};
-      // Preset secret bag value rotations are invisible to the
-      // unexpanded gate snapshot (same `presetSecretId`, different
-      // content). Track here so the cascade can force the auto-restart
-      // path.
-      let presetBagRotated = false;
-      if (presetFieldValues !== undefined) {
-        // Lenient filter (not the strict validator used on create / install):
-        // when a parent edit flips a field's scope from `promptOnPreset:
-        // true` to non-preset, the cascade syncs the parent's localConfig
-        // template down to children but does NOT scrub their existing
-        // `preset_field_values` jsonb. The frontend's preset editor copies
-        // the row's full presetFieldValues into local state and re-sends
-        // them on save, so without this filter every PATCH after a parent
-        // scope flip would 400 ("Fields not configured for preset
-        // overrides: …") and silently drop the user's new value.
-        //
-        // As a beneficial side effect, every successful PATCH garbage-
-        // collects the orphan keys from the row's jsonb (see Model.update
-        // call below — `presetFieldValues` is replaced wholesale with the
-        // filtered set).
-        const sanitized =
-          InternalMcpCatalogModel.filterFieldValuesToPresetScope(
-            parent,
-            presetFieldValues,
-          );
-
-        if (originalChild.presetEntryId) {
-          const entry = await McpPresetEntryModel.findByIdForOrganization(
-            originalChild.presetEntryId,
-            request.organizationId,
-          );
-          if (entry?.validationRegex) {
-            try {
-              validateValuesAgainstRegex(
-                sanitized,
-                entry.validationRegex,
-                entry.name,
-              );
-            } catch (e) {
-              throw new ApiError(400, (e as Error).message);
-            }
-          }
-        }
-
-        const { nonSecretFieldValues, presetSecretId, bagValuesRotated } =
-          await partitionPresetFieldValuesAndUpsertSecrets({
-            parent,
-            catalogRow: {
-              name: originalChild.name,
-              presetSecretId: originalChild.presetSecretId,
-            },
-            incoming: sanitized,
-          });
-        updates.presetFieldValues = nonSecretFieldValues;
-        if (presetSecretId !== originalChild.presetSecretId) {
-          updates.presetSecretId = presetSecretId;
-        }
-        if (bagValuesRotated) presetBagRotated = true;
-      }
-
-      const updatedChild = await InternalMcpCatalogModel.update(
-        childId,
-        updates,
-      );
-      if (!updatedChild) {
-        throw new ApiError(404, "Child catalog item not found");
-      }
-
-      // Reinstall installs that point at this child if preset values changed.
-      // Force the auto-restart path when the preset secret bag's content
-      // rotated — that write happens against the same `presetSecretId`,
-      // so the gate's row-diff can't see it and would otherwise skip
-      // the cascade. Pods would keep injecting the old secret value
-      // until something else triggered a restart.
-      await cascadeReinstallForCatalog(originalChild, updatedChild, {
-        forceAutoRestart: presetBagRotated,
-      });
-
-      return reply.send(updatedChild);
-    },
-  );
-
-  fastify.get(
     "/api/internal_mcp_catalog/labels/values",
     {
       schema: {
@@ -1881,10 +1523,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 /**
- * Mirror catalog item permissions - preset scoped fields could be added or
- * edited by same person who can edit catalog item.
- */
-/**
  * Whether the caller may deploy catalog items to restricted environments.
  * Holding `environment:admin` (full environment management) implies the
  * `environment:deploy-to-restricted` capability.
@@ -1897,23 +1535,6 @@ async function callerCanDeployToRestricted(
     hasPermission({ environment: ["deploy-to-restricted"] }, headers),
   ]);
   return hasAdmin || hasDeploy;
-}
-
-async function assertCanEditCatalogPresets(
-  parent: InternalMcpCatalog,
-  request: FastifyRequest,
-): Promise<void> {
-  const { success: isAdmin } = await hasPermission(
-    { mcpServerInstallation: ["admin"] },
-    request.headers,
-  );
-  if (isAdmin) return;
-  if (parent.scope !== "personal" || parent.authorId !== request.user.id) {
-    throw new ApiError(
-      403,
-      "You can only edit presets on your own personal catalog items",
-    );
-  }
 }
 
 async function upsertCatalogClientSecretValue(params: {
@@ -1970,216 +1591,62 @@ async function getCatalogClientSecretValues(
   );
 }
 
-/**
- * Returns true when the preset-secret-keys set differs between two
- * userConfig snapshots — i.e. some `promptOnPreset` field's `sensitive`
- * flag has been added, removed, or flipped. A change here invalidates the
- * routing of any preset values already stored on the row: previously-
- * plaintext keys now want the secret bag, and previously-secret keys now
- * want plaintext jsonb.
- */
-function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
-  if (a.size !== b.size) return false;
-  for (const v of a) if (!b.has(v)) return false;
-  return true;
+function dedupeTeamIds(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+/** Whether two team-id lists contain the same set of ids. */
+function sameTeamSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
 }
 
 /**
- * Repartition a catalog row's currently-stored preset values against a
- * (possibly updated) parent userConfig schema. Reads both jsonb and the
- * secret bag, merges them into a single effective map (the bag wins on
- * key conflicts, matching the catalog read path's merge order), layers
- * any caller-supplied new values on top, and re-runs the standard
- * partition helper.
- *
- * Used when a userConfig schema-only PUT flips a preset field's
- * `sensitive` flag — the value already stored is now in the wrong storage
- * and would either leak via plaintext jsonb (non-sensitive → sensitive
- * flip) or surface stale via a stale `preset_secret_id` pointer
- * (sensitive → non-sensitive flip).
+ * Collect the admin-set static config values an environment's validation regex
+ * governs: plain-text, non-prompted env vars with a stored value. Secret,
+ * prompted, boolean, and number entries are excluded — secrets aren't policy
+ * targets, prompted values are validated at install, and the rule is meant for
+ * free-text values.
  */
-async function repartitionStoredPresetValues(params: {
-  row: {
-    name: string;
-    presetFieldValues: PresetFieldValues;
-    presetSecretId: string | null;
-  };
-  parent: InternalMcpCatalog;
-  additionalIncoming?: PresetFieldValues;
-}): Promise<{
-  presetFieldValues: PresetFieldValues;
-  presetSecretId: string | null;
-  bagValuesRotated: boolean;
-}> {
-  const rawEffective: PresetFieldValues = {
-    ...(params.row.presetFieldValues ?? {}),
-  };
-  if (params.row.presetSecretId) {
-    const bag = await secretManager().getSecret(params.row.presetSecretId);
-    if (bag?.secret) {
-      Object.assign(
-        rawEffective,
-        bag.secret as Record<string, UserConfigFieldDefault>,
-      );
+function collectStaticEnvValues(
+  environment: LocalConfig["environment"],
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const envVar of environment ?? []) {
+    if (
+      envVar.type === "plain_text" &&
+      !envVar.promptOnInstallation &&
+      typeof envVar.value === "string"
+    ) {
+      values[envVar.key] = envVar.value;
     }
   }
-  if (params.additionalIncoming) {
-    Object.assign(rawEffective, params.additionalIncoming);
-  }
-  // Drop values for keys that are no longer in preset scope on the
-  // *current* parent userConfig. Without this, a sensitive preset field
-  // that was DELETED (or moved to installation / static scope) would
-  // have its stored credential value flow through partition as
-  // "nonSecret" (because today's secretKeys set no longer contains it)
-  // and land in plaintext `preset_field_values` jsonb — leaking the
-  // credential through the very migration meant to clean it up.
-  const effective = InternalMcpCatalogModel.filterFieldValuesToPresetScope(
-    params.parent,
-    rawEffective,
-  );
-  const { nonSecretFieldValues, presetSecretId, bagValuesRotated } =
-    await partitionPresetFieldValuesAndUpsertSecrets({
-      parent: params.parent,
-      catalogRow: {
-        name: params.row.name,
-        presetSecretId: params.row.presetSecretId,
-      },
-      incoming: effective,
-    });
-  return {
-    presetFieldValues: nonSecretFieldValues,
-    presetSecretId,
-    bagValuesRotated,
-  };
+  return values;
 }
 
 /**
- * Identify which preset-scoped fields on a parent catalog are secret-typed
- * (userConfig.sensitive=true OR localConfig env type=secret).
+ * Collect the non-secret, free-text userConfig default values an environment's
+ * allowlist regex governs — the value a static header persists and the
+ * suggested value a prompted field carries (both stored in `default`). Secret
+ * and number/boolean fields are excluded; the rule targets free-text values.
  */
-function collectSecretPresetKeys(parent: InternalMcpCatalog): Set<string> {
-  const keys = new Set<string>();
-  for (const [key, field] of Object.entries(parent.userConfig ?? {})) {
-    if (field.promptOnPreset && field.sensitive) keys.add(key);
-  }
-  for (const env of parent.localConfig?.environment ?? []) {
-    if (env.promptOnPreset && env.type === "secret") keys.add(env.key);
-  }
-  return keys;
-}
-
-/**
- * Split an incoming `presetFieldValues` payload into a non-secret subset
- * (persisted on the catalog row as plain JSONB) and a secret bundle
- * (persisted via secretManager and referenced by `presetSecretId`).
- *
- * Semantics for secret fields:
- *   - non-empty incoming value → write to secret bag (replace existing key)
- *   - empty / missing incoming value → preserve existing stored secret
- *     (this mirrors how the install dialog handles already-stored secrets)
- *
- * Returns the values to persist on the row.
- */
-async function partitionPresetFieldValuesAndUpsertSecrets(params: {
-  parent: InternalMcpCatalog;
-  catalogRow: { name: string; presetSecretId: string | null };
-  incoming: PresetFieldValues;
-}): Promise<{
-  nonSecretFieldValues: PresetFieldValues;
-  presetSecretId: string | null;
-  /**
-   * True when (and only when) this call WROTE a different value set to
-   * an EXISTING preset secret bag (same `presetSecretId`, changed
-   * content). Used
-   * by the cascade gate to force the auto-restart path — a same-id-
-   * different-content update is invisible to the row-diff gate. New
-   * bags (`presetSecretId` flips from null to a new id) and bag
-   * deletions both move the row's pointer, so the gate detects them
-   * naturally without this signal.
-   */
-  bagValuesRotated: boolean;
-}> {
-  const { parent, catalogRow, incoming } = params;
-  const secretKeys = collectSecretPresetKeys(parent);
-
-  const nonSecretFieldValues: PresetFieldValues = {};
-  const incomingSecretValues: Record<string, string> = {};
-  for (const [key, value] of Object.entries(incoming)) {
-    if (secretKeys.has(key)) {
-      if (value !== undefined && value !== null && value !== "") {
-        incomingSecretValues[key] = String(value);
-      }
-    } else {
-      nonSecretFieldValues[key] = value;
+function collectStaticUserConfigValues(
+  userConfig:
+    | Record<string, { type?: string; sensitive?: boolean; default?: unknown }>
+    | null
+    | undefined,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, def] of Object.entries(userConfig ?? {})) {
+    if (def.sensitive || def.type === "number" || def.type === "boolean") {
+      continue;
+    }
+    if (typeof def.default === "string" && def.default !== "") {
+      values[key] = def.default;
     }
   }
-
-  let existingBag: Record<string, unknown> = {};
-  if (catalogRow.presetSecretId) {
-    const existing = await secretManager().getSecret(catalogRow.presetSecretId);
-    if (existing?.secret) existingBag = existing.secret;
-  }
-
-  // Drop any key in the existing bag that's no longer flagged sensitive in
-  // the current parent userConfig — declassifying a field must clear its
-  // stored secret value, otherwise the catalog read path's "merge secret
-  // bag over preset_field_values" step would keep surfacing the stale
-  // secret on top of the new plaintext value.
-  const cleanedExistingBag: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(existingBag)) {
-    if (secretKeys.has(key)) {
-      cleanedExistingBag[key] = value;
-    }
-  }
-
-  const mergedBag = { ...cleanedExistingBag, ...incomingSecretValues };
-  const existingHadKeys = Object.keys(existingBag).length > 0;
-  const mergedHasKeys = Object.keys(mergedBag).length > 0;
-
-  let presetSecretId = catalogRow.presetSecretId;
-  let bagValuesRotated = false;
-  if (mergedHasKeys) {
-    if (presetSecretId) {
-      // Same-id update — detect if content actually changed before
-      // signalling rotation. Compares against the *uncleaned*
-      // existing bag so the "declassified key was dropped" case
-      // (mergedBag missing a key the old bag had) also counts as
-      // rotation.
-      bagValuesRotated = !shallowEqualStringMap(existingBag, mergedBag);
-      await secretManager().updateSecret(presetSecretId, mergedBag);
-    } else {
-      const secret = await secretManager().createSecret(
-        mergedBag,
-        `${catalogRow.name}-preset-secrets`,
-      );
-      presetSecretId = secret.id;
-    }
-  } else if (presetSecretId && existingHadKeys) {
-    // Every key that used to live in the bag has been declassified, so the
-    // bag would be empty. Delete the secret row AND clear the catalog
-    // row's pointer — the preset list / install dialog UI keys on
-    // `presetSecretId != null` to render "<set>" badges and to skip
-    // required-prompts for preset-scoped secret fields, so leaving a
-    // non-null pointer here would make the UI lie about secret values
-    // still being set.
-    await secretManager().deleteSecret(presetSecretId);
-    presetSecretId = null;
-  }
-
-  return { nonSecretFieldValues, presetSecretId, bagValuesRotated };
-}
-
-function shallowEqualStringMap(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): boolean {
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  if (ak.length !== bk.length) return false;
-  for (const k of ak) {
-    if (String(a[k] ?? "") !== String(b[k] ?? "")) return false;
-  }
-  return true;
+  return values;
 }
 
 async function cascadeReinstallForCatalog(
@@ -2191,9 +1658,8 @@ async function cascadeReinstallForCatalog(
    * out-of-band knowledge that pods need to restart even though the
    * row looks unchanged (primarily catalog secret-bag value rotation:
    * non-prompted secret env vars, OAuth client_secret, image-pull-
-   * secret passwords, default-preset sensitive values). The bag
-   * content lives outside the catalog row, so the unexpanded gate
-   * snapshot cannot see a value change.
+   * secret passwords). The bag content lives outside the catalog row,
+   * so the unexpanded gate snapshot cannot see a value change.
    *
    * Does NOT override `requiresNewUserInputForReinstall`. If the same
    * PUT both rotates a secret AND adds a re-prompt-requiring change
@@ -2408,17 +1874,12 @@ function getSettledErrorMessage(result: PromiseRejectedResult): string {
 }
 
 /**
- * Coerce an org-level preset entry name (e.g. "Production EU") into a DNS-1123
- * label suitable for use as a K8s resource name component. The display name on
- * the org-structure page still uses the original entry value.
- */
-/**
  * Non-prompted env entries land directly in the shared K8s pod's env on a
- * multi-tenant local catalog (as plain values or via the preset secret), so
- * any change to one of them requires a pod recreate. Prompted entries are
- * per-install secrets surfaced at request time — they don't live on the
- * shared pod and are tracked separately by `promptedEnvVarsChanged`, so we
- * exclude them here. Compared fields are `key + type + value` only;
+ * multi-tenant local catalog, so any change to one of them requires a pod
+ * recreate. Prompted entries are per-install secrets surfaced at request
+ * time — they don't live on the shared pod and are tracked separately by
+ * `promptedEnvVarsChanged`, so we exclude them here. Compared fields are
+ * `key + type + value` only;
  * `description`, `required`, and other metadata don't reach the pod env.
  */
 function multitenantSharedEnvChanged(
@@ -2432,39 +1893,6 @@ function multitenantSharedEnvChanged(
   return (
     JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
   );
-}
-
-function toDns1123Label(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50);
-}
-
-function pickSyncableFields(parent: InternalMcpCatalog): SyncableCatalogFields {
-  return {
-    version: parent.version,
-    description: parent.description,
-    instructions: parent.instructions,
-    repository: parent.repository,
-    installationCommand: parent.installationCommand,
-    requiresAuth: parent.requiresAuth,
-    authDescription: parent.authDescription,
-    authFields: parent.authFields,
-    serverType: parent.serverType,
-    multitenant: parent.multitenant,
-    serverUrl: parent.serverUrl,
-    docsUrl: parent.docsUrl,
-    clientSecretId: parent.clientSecretId,
-    localConfigSecretId: parent.localConfigSecretId,
-    localConfig: parent.localConfig,
-    deploymentSpecYaml: parent.deploymentSpecYaml,
-    userConfig: parent.userConfig,
-    oauthConfig: parent.oauthConfig,
-    enterpriseManagedConfig: parent.enterpriseManagedConfig,
-    icon: parent.icon,
-  };
 }
 
 export default internalMcpCatalogRoutes;

@@ -31,6 +31,15 @@ Validation: Ensure diagnostics storage supports concurrent pod mounts
 {{- if and $usesChartManagedDiagnosticsClaim (not $supportsConcurrentDiagnosticsMounts) (or (gt $totalDiagnosticsPods 1) $rolloutCanOverlapDiagnosticsPods) }}
 {{- fail "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments." }}
 {{- end }}
+{{/*
+Validation: Ensure filesystem file storage supports concurrent pod mounts
+*/}}
+{{- $usesChartManagedFileStorageClaim := and (eq .Values.archestra.fileStorage.provider "filesystem") (not .Values.archestra.fileStorage.filesystem.existingClaim) }}
+{{- $fileStorageAccessModes := .Values.archestra.fileStorage.filesystem.accessModes | default (list) }}
+{{- $supportsConcurrentFileStorageMounts := has "ReadWriteMany" $fileStorageAccessModes }}
+{{- if and $usesChartManagedFileStorageClaim (not $supportsConcurrentFileStorageMounts) (or (gt $totalDiagnosticsPods 1) $rolloutCanOverlapDiagnosticsPods) }}
+{{- fail "Configuration error: archestra.fileStorage.provider=filesystem with a chart-managed claim requires ReadWriteMany access when more than one file-storage-writing pod can run concurrently. Use archestra.fileStorage.filesystem.accessModes=[ReadWriteMany] with a compatible storage class, or run a single replica (and no surge/worker) for filesystem storage." }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service

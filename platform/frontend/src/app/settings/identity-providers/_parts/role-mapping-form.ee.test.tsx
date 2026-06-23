@@ -1,9 +1,9 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   E2eTestId,
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
-} from "@shared";
+} from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
@@ -116,20 +116,12 @@ function getDeleteButtons() {
 }
 
 describe("RoleMappingForm", () => {
-  it("shows latest ID token claims when editing an existing provider", async () => {
+  it("shows the template debugger without token claims", async () => {
     render(<TestWrapper identityProviderId="idp-1" />);
-    expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
-    expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/raw signed token is never shown/i),
-    ).toBeInTheDocument();
-  });
-
-  it("hides latest ID token claims when creating a provider", async () => {
-    render(<TestWrapper />);
-    expect(
-      screen.queryByText("Latest ID token claims"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("Template Debugger")).toBeInTheDocument();
+    expect(screen.queryByText(/admin@example.com/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/app-admin/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw signed tokens/i)).not.toBeInTheDocument();
   });
 
   it("shows a live template test result for the selected role mapping rule", async () => {

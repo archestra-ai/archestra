@@ -1,19 +1,21 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
@@ -21,8 +23,7 @@ import {
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
-type BlobStorageProviderType = "db" | "s3";
-type S3BlobStorageAuthMethod = "irsa" | "static";
+type FileStorageProviderType = "db" | "filesystem";
 
 /**
  * Load .env from platform root
@@ -129,8 +130,8 @@ const getPortFromUrl = (): number => {
  *
  * Quickstart mode (Docker):
  *   - Inside the container the app binds to 0.0.0.0.
- *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
- *     making the app accessible from LAN IPs.
+ *   - Quickstart examples bind host ports to 127.0.0.1 by default.
+ *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
  *   - Quickstart is designed for quick evaluation, so all origins are
  *     accepted without checks. It's ok if someone will decide to
  *     access Archestra from the mobile phone.
@@ -512,6 +513,59 @@ export function parseActiveChatRunPollIntervalMs(params: {
  * stripped — i.e. matching what `new URL(...).host` produces).
  * @public — exported for testability
  */
+/**
+ * Raw URL sources a /connection setup baseUrl may come from: the frontend
+ * origin plus every URL in `ARCHESTRA_API_BASE_URL` (the same list the
+ * frontend's connection page derives its endpoint candidates from). Returned
+ * unparsed; callers normalize and compare full URLs, not just hosts.
+ * @public — exported for testability
+ */
+export const getConnectionBaseUrlSources = (): string[] => {
+  const sources = [frontendBaseUrl];
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) sources.push(trimmed);
+    }
+  }
+  return sources;
+};
+
+/**
+ * Absolute origin the backend serves its `/_sandbox/*` assets on. Used to build
+ * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
+ * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
+ * base there). This URL is handed to the browser as a script source and CSP
+ * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
+ * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ * so a public `https://` entry is preferred over a cluster-internal one. Each
+ * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
+ * falling back to the local API origin. Never derived from request headers —
+ * those are spoofable (see request-origin.ts).
+ * @public — consumed by the owned-app SDK injection
+ */
+export const getAppAssetBaseOrigin = (): string => {
+  const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
+  const entries =
+    process.env.ARCHESTRA_API_BASE_URL?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean) ?? [];
+  const candidates = [
+    ...entries.filter((entry) => entry.startsWith("https://")),
+    ...entries,
+    localFallback,
+  ];
+  for (const candidate of candidates) {
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      // skip a malformed entry and try the next candidate
+    }
+  }
+  return new URL(localFallback).origin;
+};
+
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 
@@ -524,6 +578,17 @@ export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   };
 
   addHostFromUrl(frontendBaseUrl);
+
+  // In local development the Next.js dev server always serves on
+  // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
+  // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
+  // client connecting to the local origin can still complete the gateway OAuth
+  // handshake without extra config. Never enabled in production, where the
+  // allowlist must stay restricted to the configured public hosts.
+  if (isDevelopment) {
+    addHostFromUrl("http://localhost:3000");
+    addHostFromUrl("http://127.0.0.1:3000");
+  }
 
   const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {
@@ -565,33 +630,31 @@ export const parseTrustProxy = (
 };
 
 /** @public — exported for testability */
-export function parseBlobStorageProvider(
+export function parseFileStorageProvider(
   value: string | undefined,
-): BlobStorageProviderType {
+): FileStorageProviderType {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "s3" ? "s3" : "db";
+  return normalized === "filesystem" ? "filesystem" : "db";
 }
 
 /** @public — exported for testability */
-export function parseS3BlobStorageAuthMethod(
-  value: string | undefined,
-): S3BlobStorageAuthMethod {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "static" ? "static" : "irsa";
-}
-
-/** @public — exported for testability */
-export function parseS3BlobStorageBucket(params: {
-  provider: BlobStorageProviderType;
+export function parseFileStorageFilesystemRoot(params: {
+  provider: FileStorageProviderType;
   value: string | undefined;
 }): string {
-  const bucket = params.value?.trim() ?? "";
-  if (params.provider === "s3" && !bucket) {
+  const root = params.value?.trim() ?? "";
+  if (params.provider !== "filesystem") return root;
+  if (!root) {
     throw new Error(
-      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
     );
   }
-  return bucket;
+  if (!path.isAbsolute(root)) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
+    );
+  }
+  return root;
 }
 
 /** @public — exported for testability */
@@ -658,10 +721,6 @@ const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
 
-const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
-  process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
-);
-
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
  * (and logs) rather than throwing — config is built at module import, so a
@@ -699,47 +758,59 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
 const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
-const codeRuntimeRequested =
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
-const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: codeRuntimeRequested,
+/**
+ * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
+ * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
+ * always wins (`"true"`/`"false"`); a blank or unset value falls back to
+ * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
+ * ships-dark/preview feature at once while keeping per-feature opt-out intact
+ * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ *
+ * This backs ships-dark *product* features only. It deliberately does NOT touch
+ * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
+ * deployment configuration rather than preview features. Beta only flips the
+ * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
+ * host present to actually run.
+ *
+ * @public — exported for testability
+ */
+export function betaFeatureEnabled(envValue: string | undefined): boolean {
+  if (envValue === undefined || envValue === "") {
+    return process.env.ARCHESTRA_BETA === "true";
+  }
+  return envValue === "true";
+}
+
+// the code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) needs a Dagger runner host. it is independent of the
+// skills *read* feature — skills can be listed/activated/read with the sandbox
+// off.
+const skillsSandboxRequested = betaFeatureEnabled(
+  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+);
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
+  enabled: skillsSandboxRequested,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
 // a missing/invalid runner host disables the feature instead of crashing boot.
-const codeRuntimeEnabled =
-  codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
-
-// skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
-const skillsSandboxRequested =
-  process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
-const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: skillsSandboxRequested,
-  envValue:
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST ||
-    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
-});
 const skillsSandboxEnabled =
   skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
 
-// the unified Dagger runtime fronts both code-runtime and skills sandbox; either
-// feature flag turning on lights up the shared session + warm base.
-// when operators explicitly scope the two features to different hosts the
-// runtime can only honour one — warn loudly so this isn't silently lost.
-if (
-  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST &&
-  process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST &&
-  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST !==
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST
-) {
-  logger.warn(
-    `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST}) and ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST}) differ — both features share one Dagger session, so the code-runtime host wins and the skill-sandbox value is ignored`,
-  );
-}
-const daggerRuntimeRunnerHost =
-  codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
+// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
+// the shared session + warm base.
+const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
-  (codeRuntimeEnabled || skillsSandboxEnabled) &&
-  daggerRuntimeRunnerHost !== undefined;
+  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+
+// persistent "My Files" byte storage backend; the root is validated (required +
+// absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
+const fileStorageProvider = parseFileStorageProvider(
+  process.env.ARCHESTRA_FILE_STORAGE_PROVIDER,
+);
+const fileStorageFilesystemRoot = parseFileStorageFilesystemRoot({
+  provider: fileStorageProvider,
+  value: process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT,
+});
 
 const config = {
   frontendBaseUrl,
@@ -769,7 +840,7 @@ const config = {
     endpoint: "/v1/mcp",
   },
   skillMarketplace: {
-    endpoint: "/skills/m",
+    endpoint: SKILL_MARKETPLACE_PREFIX,
     /**
      * Cache directory for materialized share-link git repos. The cache is a
      * derived view of the `skill_share_link_revision` history — wiping it is
@@ -790,7 +861,12 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
+    skillsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
+    ),
+    environmentsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
+    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -825,6 +901,15 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    /**
+     * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+     * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
+     * pre-registered OAuth clients (e.g. manually registered MCP OAuth clients) to
+     * run OAuth flows — runtime self-registration is then rejected. Instance-level
+     * because unauthenticated DCR has no org to scope a per-org toggle to.
+     */
+    dynamicClientRegistrationEnabled:
+      process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
   },
   analytics: getAnalyticsConfig(),
   database: {
@@ -917,6 +1002,34 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     },
+    "github-copilot": {
+      baseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
+        "https://api.githubcopilot.com",
+      /**
+       * Endpoint exchanging a long-lived GitHub OAuth token for a short-lived
+       * Copilot API bearer. Overridable for GitHub Enterprise
+       * (https://copilot-api.<ghe-domain>/copilot_internal/v2/token) and e2e tests.
+       */
+      tokenExchangeUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL ||
+        "https://api.github.com/copilot_internal/v2/token",
+      /**
+       * Host serving the GitHub OAuth device-flow endpoints
+       * (/login/device/code and /login/oauth/access_token).
+       */
+      deviceAuthBaseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL ||
+        "https://github.com",
+      /**
+       * GitHub App client id used for the device flow. Defaults to the
+       * community-standard VS Code client id accepted by the Copilot token
+       * exchange; organizations with their own GitHub App can override it.
+       */
+      clientId:
+        process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
+        "Iv1.b507a08c87ecfe98",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -991,6 +1104,9 @@ const config = {
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
+    "github-copilot": {
+      apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
+    },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
@@ -1001,7 +1117,7 @@ const config = {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
     defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
     defaultProvider: ((): SupportedProvider => {
       const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
       if (
@@ -1073,29 +1189,9 @@ const config = {
     },
   },
   /**
-   * sandboxed code-execution runtime — lets agents run Python through the
-   * `archestra__run_python` tool. backed by a Dagger Engine; disabled by default.
-   */
-  codeRuntime: {
-    enabled: codeRuntimeEnabled,
-    /** hard wall-clock cap per run, and the default when the caller omits one. */
-    timeoutSeconds: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS,
-      60,
-    ),
-    maxConcurrent: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT,
-      10,
-    ),
-    maxOutputBytes: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
-      65536,
-    ),
-  },
-  /**
-   * sandboxed skill-execution runtime — lets agents materialize a skill into a
-   * Dagger container and run arbitrary shell commands against the snapshot.
-   * shares the Dagger engine with `codeRuntime` but is gated on its own flag.
+   * code execution sandbox runtime — the per-conversation Dagger container that
+   * runs commands, holds uploaded files, and materializes activated skills.
+   * gated by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host.
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
@@ -1121,17 +1217,28 @@ const config = {
     ),
   },
   /**
+   * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by
+   * `ARCHESTRA_AGENT_HOOKS_ENABLED`, but only effective when the agent runtime
+   * (the code execution sandbox) is also on, since hooks execute in the
+   * conversation sandbox. This `enabled` is the fully-resolved flag — the
+   * dispatcher, the `/debug` toggle, and the chip read-gate all key off it.
+   */
+  hooks: {
+    enabled:
+      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
+      skillsSandboxEnabled,
+  },
+  /**
    * unified Dagger runtime — one shared session with a pre-warmed base
-   * container that hosts both `archestra__run_python` and skill-sandbox
-   * commands. The Rust crate (`@archestra/sandbox-rs`) owns the session;
-   * this block only carries enable + connection knobs.
+   * container that hosts the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the session; this block only carries
+   * enable + connection knobs.
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
     runnerHost: daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
-      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
       undefined,
     maxConcurrent: parsePositiveInt(
@@ -1160,6 +1267,35 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
+  },
+  /**
+   * user-authored MCP Apps — first-class apps created inside Archestra (from
+   * chat or the /apps page), backed by a per-app data store and assignable
+   * tools. Ships dark: off by default until the feature is ready to surface.
+   */
+  apps: {
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
+  },
+  /**
+   * Projects + the persistent "My Files" file system on top of the skill
+   * sandbox. Ships dark: off by default until ready to surface. Gates the
+   * project APIs, the My Files endpoints, the persistent-file MCP tools
+   * (search_files, read_file, save_result, edit_file, delete_file), and the
+   * my_file upload source.
+   */
+  projects: {
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
+  },
+  /**
+   * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
+   * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
+   * provider is used for new writes while reads dispatch per row, so a
+   * deployment can hold a mix. `filesystemRoot` is the absolute mount path,
+   * required + validated when `provider === "filesystem"`.
+   */
+  fileStorage: {
+    provider: fileStorageProvider,
+    filesystemRoot: fileStorageFilesystemRoot,
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -1238,40 +1374,16 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
+      ? parsePositiveInt(
+          process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
+          300000,
+        )
+      : undefined,
   },
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
-    fileUpload: {
-      blobStorage: {
-        provider: knowledgeFileBlobStorageProvider,
-        s3: {
-          bucket: parseS3BlobStorageBucket({
-            provider: knowledgeFileBlobStorageProvider,
-            value: process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET,
-          }),
-          region:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION || "",
-          prefix:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX || "",
-          endpoint:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT || "",
-          forcePathStyle:
-            process.env
-              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE ===
-            "true",
-          authMethod: parseS3BlobStorageAuthMethod(
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD,
-          ),
-          accessKeyId:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID ||
-            "",
-          secretAccessKey:
-            process.env
-              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY || "",
-        },
-      },
-    },
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
@@ -1302,7 +1414,21 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
-  ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  /**
+   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
+   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
+   * the new connection page the default Connect destination — can key off it.
+   */
+  beta: process.env.ARCHESTRA_BETA === "true",
+  ngrok: {
+    // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
+    // agent SDK) so the instance is reachable from the Internet for inbound
+    // chatops webhooks (MS Teams, Slack).
+    authToken: process.env.ARCHESTRA_NGROK_AUTH_TOKEN || "",
+    // Optional reserved domain for a stable public URL across restarts. Without
+    // it ngrok assigns an ephemeral domain that rotates on each restart.
+    domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   auditLog: {
@@ -1329,6 +1455,21 @@ export function getProviderEnvApiKey(
   const entry = config.chat[provider as keyof typeof config.chat];
   if (typeof entry === "object" && entry !== null && "apiKey" in entry) {
     return entry.apiKey || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Get the configured base URL for a provider, normalized to undefined when empty.
+ * Centralizes the config.llm[provider].baseUrl lookup; mirrors getProviderEnvApiKey.
+ */
+export function getProviderConfiguredBaseUrl(
+  provider: SupportedProvider,
+): string | undefined {
+  const entry = config.llm[provider as keyof typeof config.llm];
+  if (typeof entry === "object" && entry !== null && "baseUrl" in entry) {
+    const baseUrl = entry.baseUrl?.trim();
+    return baseUrl || undefined;
   }
   return undefined;
 }

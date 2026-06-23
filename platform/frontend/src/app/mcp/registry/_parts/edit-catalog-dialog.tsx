@@ -1,5 +1,6 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2, ShieldX } from "lucide-react";
+import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,14 +9,15 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import {
-  useCatalogPresets,
+  getCatalogMutationErrorCode,
+  REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
-import { useCanEditCatalogPresets } from "./preset-helpers";
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
@@ -78,30 +80,53 @@ export function EditCatalogContent({
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
   // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
-  // or the legacy EditCatalogDialog). Mirrors the backend
-  // `assertCanEditCatalogPresets`: an admin, or the author of a personal item.
-  const { canEdit, isLoading: canEditLoading } = useCanEditCatalogPresets(item);
+  // or the legacy EditCatalogDialog). Mirrors the backend item-modify rule: an
+  // admin, a team-admin member of the item's teams, or the author of a personal
+  // item.
+  const { canModify: canEdit, isLoading: canEditLoading } =
+    useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
-  const { data: presets = [] } = useCatalogPresets(item.id);
   const { data: servers = [] } = useMcpServers();
-  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
-  const affectedServerCount = servers.filter((s) =>
-    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
+  const affectedServerCount = servers.filter(
+    (s) => s.catalogId === item.id,
   ).length;
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => {
     const { multitenant: _multitenant, ...updateData } =
       transformFormToApiData(values);
 
-    await updateMutation.mutateAsync({
-      id: item.id,
-      data: updateData,
-    });
-
-    if (!keepOpenOnSave) {
-      onClose();
-    }
+    // Callback form so the dialog only closes on success; on a validation
+    // error it stays open for correction.
+    updateMutation.mutate(
+      { id: item.id, data: updateData },
+      {
+        onSuccess: () => {
+          if (!keepOpenOnSave) {
+            onClose();
+          }
+        },
+        onError: (error) => {
+          // Network-policy rejections point at the Server URL — show them
+          // inline on that field rather than as a toast.
+          if (
+            getCatalogMutationErrorCode(error) ===
+            REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+          ) {
+            form.setError("serverUrl", {
+              type: "server",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Server URL is not allowed by the environment's network policy.",
+            });
+          }
+        },
+      },
+    );
   };
 
   if (canEditLoading) {
@@ -121,7 +146,7 @@ export function EditCatalogContent({
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       affectedServerCount={affectedServerCount}
-      footer={({ isDirty, onReset }) => {
+      footer={({ isDirty, onReset, hasBlockingErrors }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
         return (
@@ -137,7 +162,9 @@ export function EditCatalogContent({
             )}
             <Button
               type="submit"
-              disabled={updateMutation.isPending || !isDirty}
+              disabled={
+                updateMutation.isPending || !isDirty || hasBlockingErrors
+              }
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

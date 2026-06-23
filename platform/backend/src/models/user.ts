@@ -3,7 +3,7 @@ import {
   DEFAULT_ADMIN_EMAIL,
   type Permissions,
   type PredefinedRoleName,
-} from "@shared";
+} from "@archestra/shared";
 import { eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
@@ -91,6 +91,19 @@ class UserModel {
       .limit(1);
     logger.trace({ found: !!user }, "UserModel.getById: completed");
     return user;
+  }
+
+  /**
+   * Email only, with no membership requirement (unlike getById's join) —
+   * used to label per-user storage folders.
+   */
+  static async getEmailById(id: string): Promise<string | null> {
+    const [row] = await db
+      .select({ email: schema.usersTable.email })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, id))
+      .limit(1);
+    return row?.email ?? null;
   }
 
   /** Display names for several users in one query, keyed by user id. */

@@ -1,4 +1,4 @@
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -394,6 +394,12 @@ class AzureResponsesResponseAdapter
     return {
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
+      reasoningTokens:
+        (
+          this.response.usage?.output_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0,
     };
   }
 
@@ -466,6 +472,12 @@ class AzureResponsesStreamAdapter
         this.state.usage = {
           inputTokens: chunk.response.usage.input_tokens ?? 0,
           outputTokens: chunk.response.usage.output_tokens ?? 0,
+          reasoningTokens:
+            (
+              chunk.response.usage.output_tokens_details as
+                | { reasoning_tokens?: number }
+                | undefined
+            )?.reasoning_tokens ?? 0,
         };
       }
     }

@@ -53,6 +53,20 @@ const internalMcpCatalogTable = pgTable(
      * one deployment per caller (default).
      */
     multitenant: boolean("multitenant").notNull().default(false),
+    /**
+     * Agent connections policy for call-time ("dynamic") credential
+     * resolution. NULL (default) = resolve at call time: each caller uses its
+     * own connection (user token → that user's install, team token → that
+     * team's install) and gets an actionable connect prompt when none exists.
+     * Set to an mcp_servers.id to pin a service account: every
+     * runtime-resolved agent call connects through that installation,
+     * regardless of the caller. Intentionally NOT a DB-level FK — mcp_servers
+     * already references this table, so the FK would create a schema import
+     * cycle; the resolver re-validates the id against the catalog's installs
+     * on every call, so a revoked connection degrades to resolve-at-call-time
+     * instead of dangling.
+     */
+    dynamicConnectionMcpServerId: uuid("dynamic_connection_mcp_server_id"),
     serverUrl: text("server_url"), // For remote servers
     docsUrl: text("docs_url"), // Documentation URL for remote servers
     clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {
@@ -82,54 +96,54 @@ const internalMcpCatalogTable = pgTable(
     }),
     scope: mcpCatalogScopeEnum("scope").notNull().default("org"),
     /**
-     * Self-FK. NULL = root catalog item (parent / default preset).
-     * Non-NULL = child catalog item (UI-named "preset"); inherits all template
-     * columns from parent, overlays its own preset_field_values at runtime.
+     * Legacy preset column — the "preset" (child catalog item) feature was
+     * removed; retained inert (non-destructive, no migration). Self-FK:
+     * NULL = root catalog item, non-NULL = a legacy child row ("preset").
+     * Application code no longer creates children; the only live uses are an
+     * `IS NULL` filter that hides any pre-existing legacy child rows and the
+     * parent-delete cascade that tears down their servers/secrets.
      */
     parentCatalogItemId: uuid("parent_catalog_item_id").references(
       (): AnyPgColumn => internalMcpCatalogTable.id,
       { onDelete: "cascade" },
     ),
     /**
-     * For child catalog items (presets): the bare submitted name before
-     * composition. The `name` column on a child stores `${parent.name}-${childName}`.
-     * NULL for root catalog items.
+     * Legacy preset column (feature removed) — retained inert. Held a child
+     * row's bare name; the composed `name` was `${parent.name}-${childName}`.
+     * NULL for root rows; no longer read or written.
      */
     childName: text("child_name"),
     /**
      * Self-FK lineage pointer: the catalog item this one was cloned from.
      * NULL for non-clones. ON DELETE SET NULL so deleting the source leaves
-     * the clone intact (just untracked), unlike the cascade on parent presets.
+     * the clone intact (just untracked), unlike the legacy parent-catalog cascade.
      */
     clonedFrom: uuid("cloned_from").references(
       (): AnyPgColumn => internalMcpCatalogTable.id,
       { onDelete: "set null" },
     ),
     /**
-     * For child catalog items only: FK to the org-level preset entry this
-     * child configures (e.g. "Production", "Staging"). Cascade-deleted when
-     * the entry is removed at /mcp/registry/org-structure. NULL for root rows.
-     * Canonical link — `child_name` is just a denormalized display copy.
+     * Legacy preset column (feature removed) — retained inert. FK to the
+     * org-level preset-entry table a child row configured. NULL for root
+     * rows; no longer read or written.
      */
     presetEntryId: uuid("preset_entry_id").references(
       () => mcpPresetEntriesTable.id,
       { onDelete: "cascade" },
     ),
     /**
-     * Values for fields the parent declared with promptOnPreset: true.
-     * Meaningful on parent (= default preset values) AND child (= preset overlay).
-     * Stores only non-secret values; secret-typed preset values live in the
-     * secret bundle referenced by presetSecretId.
+     * Legacy preset column (feature removed) — retained inert. Held the
+     * non-secret preset field values for a row (secret-typed ones lived in
+     * the bundle referenced by presetSecretId). No longer read or written.
      */
     presetFieldValues: jsonb("preset_field_values")
       .$type<Record<string, UserConfigFieldDefault>>()
       .notNull()
       .default({}),
     /**
-     * Bundle of secret-typed preset values (userConfig.sensitive=true or env
-     * type=secret) for this catalog row. Same `{ <field_key>: <value> }`
-     * shape as clientSecretId / localConfigSecretId — one row per catalog
-     * row (parent or child).
+     * Legacy preset column (feature removed) — retained inert. Referenced a
+     * secret bundle of secret-typed preset values for the row. No longer read
+     * or written.
      */
     presetSecretId: uuid("preset_secret_id").references(() => secretTable.id, {
       onDelete: "set null",

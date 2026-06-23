@@ -5,19 +5,19 @@
  * duplication between streaming and non-streaming code paths.
  */
 
-import { context as otelContext } from "@opentelemetry/api";
 import {
   ApiError,
   type ArchestraInternalErrorCode,
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
+import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import type { SpanUserInfo } from "@/observability/tracing";
+import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import type {
   Agent,
   DualLlmAnalysis,
@@ -28,6 +28,7 @@ import type {
   ToolCompressionStats,
   ToonSkipReason,
   UnsafeContextBoundary,
+  UsageView,
 } from "@/types";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -40,6 +41,22 @@ export function toSpanUserInfo(
   user: { id: string; email: string; name: string } | null | undefined,
 ): SpanUserInfo | null {
   return user ? { id: user.id, email: user.email, name: user.name } : null;
+}
+
+/**
+ * Whether to forward the inbound `anthropic-beta` header to the upstream.
+ *
+ * The Anthropic SDK auto-adds beta flags (e.g. `pdfs-2024-09-25`) that are
+ * proprietary to genuine Anthropic. An Anthropic-compatible endpoint (a custom
+ * base URL serving a non-Claude model) rejects them with a turn-0 400. Forward
+ * for real Anthropic (no base-URL override) and for Claude proxied behind a
+ * custom URL (model name still reads `claude`); strip otherwise.
+ */
+export function shouldForwardAnthropicBeta(
+  model: string,
+  baseUrlOverridden: boolean,
+): boolean {
+  return !baseUrlOverridden || /claude/i.test(model);
 }
 
 /**
@@ -74,25 +91,48 @@ export function normalizeToolCallsForPolicy(
 export async function calculateInteractionCosts(params: {
   baselineModel: string;
   actualModel: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: UsageView;
   providerName: SupportedProvider;
 }): Promise<{
   baselineCost: number | undefined;
   actualCost: number | undefined;
+  cacheCost: number | undefined;
+  cacheSavings: number | undefined;
+  cacheReadSavings: number | undefined;
 }> {
+  const cacheTokens = {
+    readTokens: params.usage.cacheReadTokens ?? 0,
+    writeTokens: params.usage.cacheWriteTokens ?? 0,
+    write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
+  };
   const baselineCost = await utils.costOptimization.calculateCost(
     params.baselineModel,
     params.usage.inputTokens,
     params.usage.outputTokens,
     params.providerName,
+    cacheTokens,
   );
   const actualCost = await utils.costOptimization.calculateCost(
     params.actualModel,
     params.usage.inputTokens,
     params.usage.outputTokens,
     params.providerName,
+    cacheTokens,
   );
-  return { baselineCost, actualCost };
+  const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
+    params.actualModel,
+    params.providerName,
+    cacheTokens.readTokens,
+    cacheTokens.writeTokens,
+    params.usage.cacheWrite1hTokens ?? 0,
+  );
+  return {
+    baselineCost,
+    actualCost,
+    cacheCost: cacheBreakdown?.cacheCost,
+    cacheSavings: cacheBreakdown?.cacheSavings,
+    cacheReadSavings: cacheBreakdown?.cacheReadSavings,
+  };
 }
 
 /**
@@ -120,8 +160,13 @@ export function buildInteractionRecord(params: {
   response: unknown;
   actualModel: string;
   baselineModel: string;
-  usage: { inputTokens: number; outputTokens: number };
-  costs: { baselineCost: number | undefined; actualCost: number | undefined };
+  usage: UsageView;
+  costs: {
+    baselineCost: number | undefined;
+    actualCost: number | undefined;
+    cacheCost: number | undefined;
+    cacheSavings: number | undefined;
+  };
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -149,8 +194,13 @@ export function buildInteractionRecord(params: {
     baselineModel: params.baselineModel,
     inputTokens: params.usage.inputTokens,
     outputTokens: params.usage.outputTokens,
+    cacheReadTokens: params.usage.cacheReadTokens ?? null,
+    cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
+    cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
     baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
+    cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
+    cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
     toonTokensBefore: params.toonStats.tokensBefore,
     toonTokensAfter: params.toonStats.tokensAfter,
     toonCostSavings: params.toonStats.costSavings?.toFixed(10) ?? null,
@@ -167,6 +217,8 @@ export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;
   agent: Agent;
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   resolvedUser?: { id: string; email: string; name: string } | null;
   providerName: SupportedProvider;
@@ -179,6 +231,8 @@ export function recordBlockedToolCallMetrics(params: {
     toolCallNames: params.allToolCallNames,
     blockedReason: params.reason,
     agent: params.agent,
+    teams: params.teams,
+    userTeams: params.userTeams,
     sessionId: params.sessionId,
     agentType: params.agent.agentType ?? undefined,
     user: toSpanUserInfo(params.resolvedUser),

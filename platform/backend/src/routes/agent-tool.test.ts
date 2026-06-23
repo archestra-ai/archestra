@@ -1,4 +1,6 @@
-import { ADMIN_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -6,12 +8,7 @@ import {
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type {
-  EnterpriseManagedCredentialConfig,
-  InternalMcpCatalog,
-  Tool,
-  User,
-} from "@/types";
+import type { InternalMcpCatalog, Tool, User } from "@/types";
 
 /**
  * Build a minimal Tool object for test maps.
@@ -56,13 +53,6 @@ function emptyPreFetchedData() {
     toolsMap: new Map<string, Tool>(),
     catalogItemsMap: new Map<string, InternalMcpCatalog>(),
     mcpServersBasicMap: new Map<string, PrefetchedMcpServer>(),
-  };
-}
-
-function _fakeEnterpriseManagedConfig(): EnterpriseManagedCredentialConfig {
-  return {
-    resourceIdentifier: "github-managed-connection",
-    requestedCredentialType: "bearer_token",
   };
 }
 
@@ -791,6 +781,92 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
+  });
+});
+
+describe("POST /api/agents/tools/bulk-assign", () => {
+  let app: FastifyInstanceWithZod;
+  let adminUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    adminUser = await makeUser();
+    const org = await makeOrganization();
+    organizationId = org.id;
+
+    await makeMember(adminUser.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = adminUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: agentToolRoutes } = await import("./agent-tool");
+    await app.register(agentToolRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("infers enterprise-managed credential resolution for legacy late-bound assignments", async ({
+    makeAgent,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const identityProvider = await makeIdentityProvider(adminUser.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-assign",
+      payload: {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            resolveAtCallTime: true,
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      succeeded: [{ agentId: agent.id, toolId: tool.id }],
+      failed: [],
+    });
+
+    const [assignment] = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+
+    expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
   });
 });
 

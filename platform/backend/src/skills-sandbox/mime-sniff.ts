@@ -47,7 +47,7 @@ function sniffImageMime(buffer: Buffer): string | null {
 
 /**
  * Reconcile a caller-claimed mime with sniffed bytes. The result is what
- * actually gets persisted in `skill_sandbox_artifacts.mime_type`.
+ * actually gets persisted in `skill_sandbox_files.mime_type`.
  *
  * Rules:
  *   - if bytes match a known image signature, the sniffed mime always wins
@@ -68,6 +68,35 @@ export function resolveArtifactMime(params: {
 export function isInlineSafeImageMime(mime: string): boolean {
   return INLINE_SAFE_MIMES.has(mime);
 }
+
+/**
+ * Cheap, display-only mime from a filename extension — used for disk-only file
+ * LISTINGS, where reading every file to byte-sniff would be wasteful. The actual
+ * download path still byte-sniffs and serves with `nosniff`, so this is never a
+ * security control. Unknown extensions fall back to `application/octet-stream`.
+ */
+export function mimeFromExtension(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
+  return EXTENSION_MIMES[ext] ?? "application/octet-stream";
+}
+
+const EXTENSION_MIMES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  html: "text/html",
+  xml: "application/xml",
+  zip: "application/zip",
+};
 
 function hasMagic(buffer: Buffer, offset: number, magic: number[]): boolean {
   for (let i = 0; i < magic.length; i++) {

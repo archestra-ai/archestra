@@ -40,6 +40,10 @@ type NetworkPolicyResolutionCache = {
   environmentsById: Map<string, EnvironmentRow>;
   organizationsById: Map<string, OrganizationRow>;
 };
+type DockerRegistrySecretSummary = {
+  name: string;
+  registryServers: string[];
+};
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
@@ -253,16 +257,16 @@ export class McpServerRuntimeManager {
     const organizationId =
       params.catalogItem?.organizationId ?? environment?.organizationId ?? null;
 
-    if (!organizationId) {
-      return { source: "built_in", policy: null };
-    }
+    const organization = organizationId
+      ? params.cache
+        ? params.cache.organizationsById.get(organizationId)
+        : await OrganizationModel.getById(organizationId)
+      : await OrganizationModel.getFirst();
 
-    const organization = params.cache
-      ? params.cache.organizationsById.get(organizationId)
-      : await OrganizationModel.getById(organizationId);
+    if (!organization) return { source: "built_in", policy: null };
 
     return resolveEffectiveNetworkPolicy({
-      organizationId,
+      organizationId: organization.id,
       environmentId: params.catalogItem?.environmentId,
       environmentNetworkPolicy: environment?.networkPolicy,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
@@ -356,26 +360,11 @@ export class McpServerRuntimeManager {
 
     try {
       // Fetch catalog item (needed for conditional env var logic).
-      // Child catalog items (preset rows) carry no localConfig of their own —
-      // they inherit it from the parent. Resolve the parent here so the
-      // K8sDeployment constructor receives a fully-populated catalogItem.
       let catalogItem = null;
       if (mcpServer.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
-        if (
-          catalogItem &&
-          !catalogItem.localConfig &&
-          catalogItem.parentCatalogItemId
-        ) {
-          const parent = await InternalMcpCatalogModel.findById(
-            catalogItem.parentCatalogItemId,
-          );
-          if (parent?.localConfig) {
-            catalogItem = { ...catalogItem, localConfig: parent.localConfig };
-          }
-        }
       }
 
       if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
@@ -442,38 +431,6 @@ export class McpServerRuntimeManager {
               effectiveEnvironmentValues = {};
             }
             effectiveEnvironmentValues[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Plain (non-secret) preset env values live on the catalog row's
-      // `presetFieldValues` jsonb — they have no per-install persistence
-      // layer because they're authoritative on the catalog itself. The
-      // install route reads them at install time and merges into
-      // `environmentValues`, but on restart that map is undefined; without
-      // overlaying them here the deployment env builder would emit no value
-      // for these env vars (only the secret-typed ones survive via the
-      // install Secret bag). Result: every cascade reinstall (admin edit
-      // OR child preset PATCH) silently drops plain preset env values
-      // from the rebuilt pod spec.
-      //
-      // Re-overlaying from the catalog row on every restart also means
-      // edits to the preset (or admin edits to default-preset values on
-      // the parent) propagate naturally on the next restart — no manual
-      // reinstall needed.
-      if (
-        catalogItem?.localConfig?.environment &&
-        catalogItem.presetFieldValues
-      ) {
-        for (const envDef of catalogItem.localConfig.environment) {
-          if (envDef.promptOnPreset && envDef.type !== "secret") {
-            const presetValue = catalogItem.presetFieldValues[envDef.key];
-            if (presetValue != null) {
-              if (!effectiveEnvironmentValues) {
-                effectiveEnvironmentValues = {};
-              }
-              effectiveEnvironmentValues[envDef.key] = String(presetValue);
-            }
           }
         }
       }
@@ -1212,7 +1169,7 @@ export class McpServerRuntimeManager {
   async listDockerRegistrySecrets(options?: {
     isAdmin?: boolean;
     teamIds?: string[];
-  }): Promise<Array<{ name: string }>> {
+  }): Promise<DockerRegistrySecretSummary[]> {
     if (!this.k8sApi) {
       return [];
     }
@@ -1241,7 +1198,10 @@ export class McpServerRuntimeManager {
       }
 
       return filtered
-        .map((s) => ({ name: s.metadata?.name ?? "" }))
+        .map((s) => ({
+          name: s.metadata?.name ?? "",
+          registryServers: getDockerConfigRegistryServers(s),
+        }))
         .filter((s) => s.name.length > 0);
     } catch (error) {
       logger.warn(
@@ -1436,6 +1396,34 @@ export class McpServerRuntimeManager {
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
+  const encodedDockerConfig = secret.data?.[".dockerconfigjson"];
+  if (!encodedDockerConfig) {
+    return [];
+  }
+
+  try {
+    const dockerConfig = JSON.parse(
+      Buffer.from(encodedDockerConfig, "base64").toString("utf8"),
+    );
+    if (
+      !dockerConfig ||
+      typeof dockerConfig !== "object" ||
+      !("auths" in dockerConfig) ||
+      !dockerConfig.auths ||
+      typeof dockerConfig.auths !== "object" ||
+      Array.isArray(dockerConfig.auths)
+    ) {
+      return [];
+    }
+
+    return Object.keys(dockerConfig.auths).sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    logger.warn({ err: error }, "Failed to parse docker-registry secret data");
+    return [];
+  }
 }
 
 export default new McpServerRuntimeManager();

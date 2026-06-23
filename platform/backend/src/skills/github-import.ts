@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import { TimeInMs } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
-import { TimeInMs } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
@@ -36,6 +36,13 @@ export const MAX_SKILL_FILE_CONTENT_CHARS =
   Math.ceil(MAX_SKILL_FILE_BYTES / 3) * 4;
 /** Cap on resource files copied per skill. */
 export const MAX_FILES_PER_SKILL = 500;
+/**
+ * How many `raw.githubusercontent.com` fetches run at once when discovering or
+ * importing a whole library. Conservative: enough to turn a serial whole-repo
+ * import from minutes into seconds, low enough to stay well under raw-content
+ * rate limits without any retry. Lower this if 429s ever appear in practice.
+ */
+const SKILL_IMPORT_FETCH_CONCURRENCY = 8;
 /** Number of distinct repo snapshots to keep cached across requests. */
 const REPO_CACHE_MAX_ENTRIES = 50;
 /**
@@ -62,12 +69,14 @@ interface DiscoveredSkill {
   compatibility: string | null;
   allowedTools: string | null;
   templated: boolean;
-  /** Number of bundled resource files (excludes SKILL.md). */
+  /** Total files the skill ships, including its own SKILL.md. */
   fileCount: number;
 }
 
 /** A fully fetched skill ready to be persisted. */
 interface ImportedSkill {
+  /** Directory path of the skill, relative to the repo root. */
+  skillPath: string;
   parsed: ParsedSkill;
   files: {
     path: string;
@@ -75,6 +84,12 @@ interface ImportedSkill {
     encoding: SkillFileEncoding;
     kind: SkillFileKind;
   }[];
+  /**
+   * Resource paths (relative to the skill dir) that were not imported:
+   * oversized files, files beyond the per-skill cap, and files whose fetch
+   * failed. Surfaced to the caller so drops are never silent.
+   */
+  skippedFiles: string[];
   /** Provenance string, e.g. `owner/repo@main:skills/pdf`. */
   sourceRef: string;
   /** Commit SHA the snapshot was taken at. */
@@ -130,17 +145,31 @@ export async function discoverSkills(params: {
     )
     .map((item) => item.path as string);
 
+  // Fetch every uncached manifest concurrently; an already-cached manifest
+  // (e.g. from an earlier discover within the snapshot TTL) skips the fetch.
+  const fetchedManifests = await mapWithConcurrency({
+    items: manifestPaths,
+    limit: SKILL_IMPORT_FETCH_CONCURRENCY,
+    fn: (manifestPath) =>
+      snapshot.manifests.has(manifestPath)
+        ? Promise.resolve(null)
+        : fetchRawFile(
+            location,
+            snapshot.commitSha,
+            manifestPath,
+            params.githubToken,
+          ),
+  });
+
+  // Parse + cache + assemble sequentially in tree order so the manifest map is
+  // written without a race and the output order is deterministic.
   const skills: DiscoveredSkill[] = [];
-  for (const manifestPath of manifestPaths) {
+  for (let i = 0; i < manifestPaths.length; i += 1) {
+    const manifestPath = manifestPaths[i];
     const skillPath = dirname(manifestPath);
     let parsed = snapshot.manifests.get(manifestPath);
     if (!parsed) {
-      const raw = await fetchRawFile(
-        location,
-        snapshot.commitSha,
-        manifestPath,
-        params.githubToken,
-      );
+      const raw = fetchedManifests[i];
       if (raw === null || raw.encoding !== "utf8") continue;
 
       try {
@@ -155,12 +184,13 @@ export async function discoverSkills(params: {
       snapshot.manifests.set(manifestPath, parsed);
     }
 
+    // count every file the skill ships, including its own SKILL.md, so an
+    // instruction-only skill reads "1 file" rather than "0".
     const fileCount = snapshot.tree.filter(
       (item) =>
         item.type === "blob" &&
         !!item.path &&
-        isUnderSkillDir(item.path, skillPath) &&
-        basename(item.path) !== SKILL_MANIFEST_FILENAME,
+        isUnderSkillDir(item.path, skillPath),
     ).length;
 
     skills.push({
@@ -183,7 +213,7 @@ export async function discoverSkills(params: {
 
 /**
  * Fetch the full contents of the selected skill directories. Binary files are
- * skipped — only text resources are imported.
+ * imported base64-encoded (`encoding: "base64"`); text resources stay utf8.
  */
 export async function importSkills(params: {
   repoUrl: string;
@@ -200,7 +230,16 @@ export async function importSkills(params: {
   );
   const ref = location.ref ?? snapshot.commitSha;
 
-  const imported: ImportedSkill[] = [];
+  // First pass (no resource I/O beyond a rare manifest cache-miss): resolve each
+  // skill's manifest and the resource paths to fetch, so the fetches can then run
+  // as one concurrent batch across all skills.
+  const plans: {
+    skillPath: string;
+    parsed: ParsedSkill;
+    toRelative: (absolutePath: string) => string;
+    resourcePaths: string[];
+    skippedFiles: string[];
+  }[] = [];
   for (const skillPath of params.skillPaths) {
     const manifestPath = skillPath ? `${skillPath}/SKILL.md` : "SKILL.md";
     let parsed = snapshot.manifests.get(manifestPath);
@@ -218,32 +257,65 @@ export async function importSkills(params: {
       snapshot.manifests.set(manifestPath, parsed);
     }
 
+    const toRelative = (absolutePath: string) =>
+      skillPath ? absolutePath.slice(skillPath.length + 1) : absolutePath;
+    const skippedFiles: string[] = [];
+
     // Pre-filter using the tree's `size` field so we don't issue HTTP requests
     // for files we'd immediately drop on the response side.
-    const resourcePaths = snapshot.tree
-      .filter(
-        (item) =>
-          item.type === "blob" &&
-          !!item.path &&
-          isUnderSkillDir(item.path, skillPath) &&
-          basename(item.path) !== SKILL_MANIFEST_FILENAME &&
-          (typeof item.size !== "number" || item.size <= MAX_SKILL_FILE_BYTES),
-      )
-      .map((item) => item.path as string)
-      .slice(0, MAX_FILES_PER_SKILL);
+    const candidatePaths: string[] = [];
+    for (const item of snapshot.tree) {
+      if (
+        item.type !== "blob" ||
+        !item.path ||
+        !isUnderSkillDir(item.path, skillPath) ||
+        basename(item.path) === SKILL_MANIFEST_FILENAME
+      ) {
+        continue;
+      }
+      if (typeof item.size === "number" && item.size > MAX_SKILL_FILE_BYTES) {
+        skippedFiles.push(toRelative(item.path));
+        continue;
+      }
+      candidatePaths.push(item.path);
+    }
+    const resourcePaths = candidatePaths.slice(0, MAX_FILES_PER_SKILL);
+    skippedFiles.push(
+      ...candidatePaths.slice(MAX_FILES_PER_SKILL).map(toRelative),
+    );
 
-    const files: ImportedSkill["files"] = [];
-    for (const absolutePath of resourcePaths) {
-      const fetched = await fetchRawFile(
+    plans.push({ skillPath, parsed, toRelative, resourcePaths, skippedFiles });
+  }
+
+  // Fetch every resource file across all skills concurrently. The flat job list
+  // and order-preserving map let each skill reassemble its files in tree order.
+  const jobs = plans.flatMap((plan, skillIdx) =>
+    plan.resourcePaths.map((absolutePath) => ({ skillIdx, absolutePath })),
+  );
+  const fetchedFiles = await mapWithConcurrency({
+    items: jobs,
+    limit: SKILL_IMPORT_FETCH_CONCURRENCY,
+    fn: (job) =>
+      fetchRawFile(
         location,
         snapshot.commitSha,
-        absolutePath,
+        job.absolutePath,
         params.githubToken,
-      );
-      if (fetched === null) continue;
-      const relativePath = skillPath
-        ? absolutePath.slice(skillPath.length + 1)
-        : absolutePath;
+      ),
+  });
+
+  const imported: ImportedSkill[] = [];
+  let cursor = 0;
+  for (const plan of plans) {
+    const files: ImportedSkill["files"] = [];
+    for (const absolutePath of plan.resourcePaths) {
+      const fetched = fetchedFiles[cursor];
+      cursor += 1;
+      const relativePath = plan.toRelative(absolutePath);
+      if (fetched === null) {
+        plan.skippedFiles.push(relativePath);
+        continue;
+      }
       files.push({
         path: relativePath,
         content: fetched.content,
@@ -253,9 +325,11 @@ export async function importSkills(params: {
     }
 
     imported.push({
-      parsed,
+      skillPath: plan.skillPath,
+      parsed: plan.parsed,
       files,
-      sourceRef: `${location.owner}/${location.repo}@${ref}:${skillPath}`,
+      skippedFiles: plan.skippedFiles,
+      sourceRef: `${location.owner}/${location.repo}@${ref}:${plan.skillPath}`,
       sourceCommit: snapshot.commitSha,
     });
   }
@@ -292,8 +366,8 @@ function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
   }
 
   const withoutProtocol = trimmed
-    .replace(/^https?:\/\//, "")
-    .replace(/^github\.com\//, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^github\.com\//i, "")
     .replace(/\.git$/, "");
   const segments = withoutProtocol.split("/").filter(Boolean);
 
@@ -304,6 +378,14 @@ function parseRepoUrl(repoUrl: string, pathOverride?: string): RepoLocation {
   }
 
   const [owner, repo, ...rest] = segments;
+  // GitHub owner names cannot contain dots, so a dotted first segment is a
+  // foreign host (gitlab.com/…, www.github.com/…) that would otherwise be
+  // misread as an owner and fail later with a confusing GitHub 404.
+  if (owner.includes(".")) {
+    throw new SkillImportError(
+      "Only github.com repositories are supported, e.g. owner/repo or https://github.com/owner/repo",
+    );
+  }
   let ref: string | null = null;
   let urlSubpath = "";
 
@@ -442,12 +524,25 @@ async function fetchRawFile(
     );
     return null;
   }
-  // Null byte → binary. Preserve raw bytes by base64-encoding so we can
-  // redistribute the asset verbatim later.
+  // Binary detection: a null byte (valid UTF-8, but unstorable in Postgres
+  // `text`) or any invalid UTF-8 sequence means the bytes must be preserved
+  // verbatim via base64 so the asset can be redistributed unchanged.
   if (buffer.includes(0)) {
     return { content: buffer.toString("base64"), encoding: "base64" };
   }
-  return { content: buffer.toString("utf-8"), encoding: "utf8" };
+  try {
+    return {
+      // ignoreBOM keeps a leading BOM in the text so the stored bytes stay
+      // faithful to the source file
+      content: new TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: true,
+      }).decode(buffer),
+      encoding: "utf8",
+    };
+  } catch {
+    return { content: buffer.toString("base64"), encoding: "base64" };
+  }
 }
 
 function normalizeSubpath(path: string): string {
@@ -478,4 +573,30 @@ function dirname(path: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Map `items` through `fn` with at most `limit` calls in flight. Results stay in
+ * input order regardless of completion order, so callers can rely on positional
+ * alignment with `items`.
+ */
+async function mapWithConcurrency<T, R>(params: {
+  items: T[];
+  limit: number;
+  fn: (item: T, index: number) => Promise<R>;
+}): Promise<R[]> {
+  const { items, limit, fn } = params;
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+  return results;
 }

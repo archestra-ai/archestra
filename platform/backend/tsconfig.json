@@ -20,7 +20,8 @@
     "strict": true,
     "types": ["node"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"]
     }
   },
   "include": [

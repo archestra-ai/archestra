@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
-import { AGENT_TOOL_PREFIX, slugify } from "@shared";
+import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
 import { ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -76,9 +76,10 @@ describe("delegation tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "not found or not configured for delegation",
-    );
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("No delegation is configured");
+    expect(text).toContain(`${AGENT_TOOL_PREFIX}*`);
+    expect(text).toContain("Do not guess delegation names");
   });
 
   test("propagates the current trust state to delegated subagents", async ({

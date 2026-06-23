@@ -3,8 +3,11 @@ import type { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -84,6 +87,11 @@ export const AUDIT_DECISIONS = {
     model: ChatOpsChannelBindingModel,
   },
   environmentsTable: { audited: true, model: EnvironmentModel },
+  environmentDefaultUserLimitsTable: {
+    audited: true,
+    model: EnvironmentDefaultUserLimitModel,
+  },
+  githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
@@ -99,7 +107,9 @@ export const AUDIT_DECISIONS = {
   },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
-  // oauthClientsTable stores LLM OAuth clients managed via /api/llm-oauth-clients
+  // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
+  // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
+  // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
   optimizationRulesTable: { audited: true, model: OptimizationRuleModel },
   organizationsTable: { audited: true, model: OrganizationModel },
@@ -166,6 +176,23 @@ export const AUDIT_DECISIONS = {
   conversationSharesTable: {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
+  },
+  projectsTable: {
+    audited: false,
+    reason: "user's chat-project grouping; same family as conversations",
+  },
+  projectSharesTable: {
+    audited: false,
+    reason: "project share metadata; same family as conversation shares",
+  },
+  projectShareTeamsTable: {
+    audited: false,
+    reason: "join: project share × team",
+  },
+  projectPinsTable: {
+    audited: false,
+    reason:
+      "per-user pin on a project; personal preference, not an access change",
   },
   conversationShareTeamsTable: {
     audited: false,
@@ -278,6 +305,35 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  // Apps are a resource-shaped table with admin-facing CRUD via /api/apps.
+  appsTable: { audited: true, model: AppModel },
+  appVersionsTable: {
+    audited: false,
+    reason: "child of app; immutable version snapshot, parent audited",
+  },
+  appTeamTable: {
+    audited: false,
+    reason: "join: app × team; parent (app) audited",
+  },
+  appToolsTable: {
+    audited: false,
+    reason: "tools attached to an app; parent (app) carries the signal",
+  },
+  appDataTable: {
+    audited: false,
+    reason:
+      "app-scoped runtime data store; written by app HTML, no admin signal",
+  },
+  appRenderDiagnosticsTable: {
+    audited: false,
+    reason:
+      "ephemeral per-viewer render diagnostics; best-effort, not admin state",
+  },
+  appRenderScreenshotTable: {
+    audited: false,
+    reason:
+      "ephemeral per-viewer render screenshot; best-effort, not admin state",
+  },
   labelKeysTable: { audited: false, reason: "label taxonomy; low-value churn" },
   labelValuesTable: {
     audited: false,
@@ -291,6 +347,10 @@ export const AUDIT_DECISIONS = {
   mcpCatalogLabelsTable: {
     audited: false,
     reason: "join: catalog × label; parent (catalog) audited",
+  },
+  teamLabelsTable: {
+    audited: false,
+    reason: "join: team × label; parent (team) audited",
   },
   mcpCatalogTeamsTable: {
     audited: false,
@@ -326,6 +386,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
+  hookFilesTable: {
+    audited: false,
+    reason: "agent-scoped hook script config; child of agent (audited)",
+  },
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",
@@ -333,6 +397,16 @@ export const AUDIT_DECISIONS = {
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",
+  },
+  connectionSetupsTable: {
+    audited: false,
+    reason:
+      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+  },
+  connectionSetupSkillsTable: {
+    audited: false,
+    reason:
+      "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
   skillShareLinksTable: {
     audited: false,
@@ -352,31 +426,40 @@ export const AUDIT_DECISIONS = {
     reason:
       "ephemeral execution sandbox state; runtime artifact, no admin signal",
   },
-  skillSandboxSkillsTable: {
+  skillSandboxSkillMountsTable: {
     audited: false,
-    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
-  },
-  skillSandboxFileSnapshotsTable: {
-    audited: false,
-    reason: "child of sandbox; per-sandbox file snapshot",
+    reason: "child of sandbox; ordered skill mount, parent is ephemeral",
   },
   skillSandboxCommandsTable: {
     audited: false,
     reason: "child of sandbox; append-only command replay log",
   },
-  skillSandboxArtifactsTable: {
+  skillSandboxFilesTable: {
     audited: false,
-    reason: "child of sandbox; exported file bytes",
+    reason: "child of sandbox; uploaded input + exported artifact file bytes",
+  },
+  filesTable: {
+    audited: false,
+    reason:
+      "user's own PFS files; download_file/save_result outputs, no admin signal",
+  },
+  skillSandboxReplayEventsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only ordered replay log",
+  },
+  skillVersionsTable: {
+    audited: false,
+    reason: "child of skill; immutable version snapshot, parent audited",
+  },
+  skillVersionFilesTable: {
+    audited: false,
+    reason: "child of skill version; immutable file snapshot",
   },
   kbChunksTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
   kbDocumentsTable: {
-    audited: false,
-    reason: "child of knowledge base; parent audited",
-  },
-  kbUploadedFilesTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },

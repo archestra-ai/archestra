@@ -8,7 +8,7 @@ import {
   type PolicyDeniedPart,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
   Check,

@@ -4,7 +4,7 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -13,7 +13,7 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import { InternalMcpCatalogModel } from "@/models";
+import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -175,6 +175,159 @@ describe("internal MCP catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().clonedFrom).toBe(source.id);
+  });
+
+  describe("network egress policy enforcement (remote servers)", () => {
+    async function makeRestrictedEnv(allowedDomains: string[]) {
+      return EnvironmentModel.create({
+        organizationId,
+        name: `restricted-${crypto.randomUUID().slice(0, 8)}`,
+        networkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "none",
+          allowedDomains,
+          allowedCidrs: [],
+        },
+      });
+    }
+
+    test("POST blocks a remote server whose URL host is not allowed by its environment", async () => {
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "blocked-remote",
+          serverType: "remote",
+          serverUrl: "https://evil.example.com/mcp",
+          environmentId: env.id,
+          scope: "org",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("not permitted");
+    });
+
+    test("POST allows a remote server whose URL host is in the environment allowlist", async () => {
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "allowed-remote",
+          serverType: "remote",
+          serverUrl: "https://allowed.example.com/mcp",
+          environmentId: env.id,
+          scope: "org",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("POST does not apply the egress policy to self-hosted servers", async () => {
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "self-hosted-in-restricted-env",
+          serverType: "local",
+          environmentId: env.id,
+          scope: "org",
+          localConfig: { command: "node", arguments: ["server.js"] },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("POST allows a remote server with no environment (built-in default)", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "no-env-remote",
+          serverType: "remote",
+          serverUrl: "https://anything.example.com/mcp",
+          scope: "org",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("PUT grandfathers an existing remote server when an unrelated field changes", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+      // Seeded via the model, bypassing route validation — simulates a server
+      // that predates the policy (or the feature).
+      const item = await makeInternalMcpCatalog({
+        organizationId,
+        environmentId: env.id,
+        serverType: "remote",
+        serverUrl: "https://legacy.example.com/mcp",
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${item.id}`,
+        payload: { description: "updated description" },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("PUT re-validates the URL against the policy when the URL changes", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+      const item = await makeInternalMcpCatalog({
+        organizationId,
+        environmentId: env.id,
+        serverType: "remote",
+        serverUrl: "https://allowed.example.com/mcp",
+      });
+
+      const blocked = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${item.id}`,
+        payload: { serverUrl: "https://other.example.com/mcp" },
+      });
+      expect(blocked.statusCode).toBe(400);
+
+      const allowed = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${item.id}`,
+        payload: { serverUrl: "https://allowed.example.com/v2/mcp" },
+      });
+      expect(allowed.statusCode).toBe(200);
+    });
+
+    test("PUT re-validates the URL when moving the server into a stricter environment", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      // No environment initially → built-in default allows everything.
+      const item = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "https://legacy.example.com/mcp",
+      });
+      const env = await makeRestrictedEnv(["allowed.example.com"]);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${item.id}`,
+        payload: { environmentId: env.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   test("POST clone carries over the source's local-config secret as an independent copy", async () => {

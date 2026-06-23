@@ -3,8 +3,14 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
+# Merge-queue / label runs cover chromium only; firefox + webkit run nightly on
+# the schedule trigger to keep the queue fast (those projects only carry the 8
+# @firefox/@webkit-tagged tests).
 on:
   workflow_dispatch:
+  schedule:
+    # Nightly full cross-browser run (includes firefox + webkit).
+    - cron: "0 3 * * *"
   pull_request:
     types:
       - opened
@@ -48,7 +54,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -74,7 +80,7 @@ jobs:
             use-build-action: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -165,18 +171,26 @@ jobs:
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
-  platform-e2e-tests:
-    name: Platform E2E Tests
+  platform-e2e-tests-shards:
+    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 180
+    # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
+    # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
+    timeout-minutes: 30
+    strategy:
+      # A failing shard must not cancel its siblings: a cancelled leg would
+      # collapse the matrix result to "cancelled" and produce a partial report.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -226,15 +240,19 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s
+          # Merge queue / on-demand label runs cover chromium only. The nightly
+          # schedule (and manual workflow_dispatch) add firefox + webkit, which
+          # only carry the @firefox/@webkit-tagged tests.
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
+          shard: "--shard=${{ matrix.shard }}/2"
           extra_args: "--grep-invert '@quickstart'"
-          timeout: "120"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-main
+          name: blob-report-shard-${{ matrix.shard }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -304,9 +322,33 @@ jobs:
 
       - name: Fail if non-quickstart E2E tests failed
         if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run failed."
+          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
           exit 1
+
+  # Fan-in gate that carries the "Platform E2E Tests" required status check.
+  # The sharded matrix above emits per-shard check names, which never match the
+  # required context, so this job reproduces the exact name and is green only
+  # when every shard succeeded. !cancelled() keeps it from being skipped — a
+  # skipped required check stalls the merge queue just like a missing one.
+  platform-e2e-tests:
+    name: Platform E2E Tests
+    needs: [platform-e2e-tests-shards]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check shard results
+        env:
+          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
+        run: |
+          echo "Aggregated shard result: ${SHARDS_RESULT}"
+          if [ "${SHARDS_RESULT}" != "success" ]; then
+            echo "One or more non-quickstart E2E shards did not succeed."
+            exit 1
+          fi
+          echo "All non-quickstart E2E shards passed."
 
   platform-readonly-vault-e2e-tests-placeholder:
     name: Platform E2E Tests (Readonly Vault)
@@ -321,15 +363,15 @@ jobs:
   platform-readonly-vault-e2e-tests:
     name: Platform E2E Tests (Readonly Vault)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -376,7 +418,7 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: credentials-with-vault
-          timeout: "90"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -469,14 +511,15 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -547,8 +590,8 @@ jobs:
           docker run -d \
             --name archestra-quickstart \
             --network archestra-quickstart-net \
-            -p 9000:9000 \
-            -p 3000:3000 \
+            -p 127.0.0.1:9000:9000 \
+            -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
@@ -603,6 +646,48 @@ jobs:
           fi
 
           echo "All services are ready!"
+
+      # Assert the embedded Dagger Engine (skill sandbox / code runtime) actually
+      # came up. The entrypoint deploys it and gates on readiness, but that gate
+      # is non-fatal: on timeout it disables the runtime and the container still
+      # boots healthy — so the rest of the quickstart suite would pass even with a
+      # broken sandbox. This step makes a dead engine a hard failure.
+      - name: Assert embedded Dagger Engine is live
+        run: |
+          KUBECONFIG_PATH=/app/data/.kubeconfig
+
+          echo "Waiting for the Dagger Engine statefulset to be Ready..."
+          if ! docker exec archestra-quickstart \
+              kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+              statefulset/dagger-runtime-engine -n default --timeout=120s; then
+            echo "FAILED: Dagger Engine statefulset did not become Ready"
+            docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n default -o wide || true
+            docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" describe statefulset/dagger-runtime-engine -n default || true
+            docker exec archestra-quickstart kubectl --kubeconfig "${KUBECONFIG_PATH}" get events -n default --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
+            docker logs archestra-quickstart --tail=200 2>&1 || true
+            exit 1
+          fi
+
+          # rollout status only proves the pod is Ready. The entrypoint's own gate
+          # is 60s; if it timed out there but the pod became Ready a few seconds
+          # later, the backend env exports never ran and the runtime stays OFF for
+          # users even though the pod is up. The success log line is the authoritative
+          # signal that the feature actually flipped on.
+          # Match against the captured logs with shell pattern matching rather
+          # than `docker logs | grep -q`: under Actions' default `bash -o pipefail`
+          # a `grep -q` that exits early can SIGPIPE the producer and fail the
+          # whole pipeline, spuriously reporting the confirmation as missing.
+          echo "Verifying the entrypoint enabled the code runtime..."
+          LOGS=$(docker logs archestra-quickstart 2>&1)
+          if [[ "${LOGS}" == *"code runtime stays disabled"* ]]; then
+            echo "FAILED: entrypoint reported the Dagger Engine did not become ready in time"
+            exit 1
+          fi
+          if [[ "${LOGS}" != *"Dagger Engine ready - code runtime enabled"* ]]; then
+            echo "FAILED: did not find the code-runtime-enabled confirmation in container logs"
+            exit 1
+          fi
+          echo "Dagger Engine is live and the code runtime is enabled."
 
       - name: Create e2e test env file
         run: |
@@ -664,15 +749,16 @@ jobs:
 
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-tests, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    needs: [platform-e2e-tests-shards, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.
       pull-requests: write # Required for playwright-report-summary to comment on PRs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -709,11 +795,11 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
-          retention-days: ${{ (needs.platform-e2e-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success') && 7 || 30 }}
+          retention-days: ${{ (needs.platform-e2e-tests-shards.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success') && 7 || 30 }}
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@1229105480a2a4bdd91598d8a146fbab41343fce # v3.11.0
+        uses: daun/playwright-report-summary@8bb85779022480a59ed8d33d9a4b8bda1c67666b # v4.0.0
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true

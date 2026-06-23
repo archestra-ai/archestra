@@ -1,0 +1,9 @@
+[package]
+name = "app_runtime_core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+regex = "1"
+tl = "0.7"

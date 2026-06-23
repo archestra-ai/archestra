@@ -1,5 +1,5 @@
-import type { RouteId } from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
+import type { RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { type Mock, vi } from "vitest";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
@@ -33,6 +33,8 @@ vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
 }));
 
 import { hasPermission } from "@/auth";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { InternalMcpCatalogModel } from "@/models";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -171,6 +173,42 @@ describe("environment routes", () => {
     expect(auditRows[2].after).toBeNull();
   });
 
+  test("persists, updates, and clears a validation regex; rejects an invalid one", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Staging", validationRegex: "^(?!.*prod).*$" },
+    });
+    expect(created.statusCode).toBe(200);
+    const env = created.json();
+    expect(env.validationRegex).toBe("^(?!.*prod).*$");
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/environments/${env.id}`,
+      payload: { validationRegex: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().validationRegex).toBeNull();
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Broken", validationRegex: "([unclosed" },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   test("can create and update an environment network egress policy", async ({
     makeUser,
     makeOrganization,
@@ -203,6 +241,75 @@ describe("environment routes", () => {
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().networkPolicy).toBeNull();
+  });
+
+  test("reconciles assigned MCP deployments when network policy changes", async ({
+    makeUser,
+    makeOrganization,
+    makeMcpServer,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const initialPolicy = {
+      egressMode: "restricted",
+      domainPreset: "package_managers",
+      allowedDomains: ["registry.npmjs.org"],
+      allowedCidrs: [],
+    };
+    const updatedPolicy = {
+      ...initialPolicy,
+      allowedDomains: ["registry.npmjs.org", "browser-target.example.com"],
+    };
+    const environment = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Browser", networkPolicy: initialPolicy },
+    });
+    expect(environment.statusCode).toBe(200);
+    const singleTenantCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "single-tenant-browser",
+        serverType: "local",
+        multitenant: false,
+        environmentId: environment.json().id,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const sharedCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "shared-browser",
+        serverType: "local",
+        multitenant: true,
+        environmentId: environment.json().id,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const server = await makeMcpServer({ catalogId: singleTenantCatalog.id });
+    await makeMcpServer({ catalogId: sharedCatalog.id });
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/environments/${environment.json().id}`,
+      payload: { networkPolicy: updatedPolicy },
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().networkPolicy).toEqual(updatedPolicy);
+    expect(mcpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+      server.id,
+    );
+    expect(
+      mcpServerRuntimeManager.reinstallSharedDeployment,
+    ).toHaveBeenCalledWith(sharedCatalog.id);
+    expect(mcpServerRuntimeManager.getOrLoadDeployment).not.toHaveBeenCalled();
   });
 
   test("member without environment:admin is forbidden from creating", async ({

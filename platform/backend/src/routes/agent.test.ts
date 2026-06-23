@@ -3,7 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -471,6 +471,36 @@ describe("agent routes", () => {
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
     });
+
+    test("should update and persist accessAllTools", async ({ makeAgent }) => {
+      const created = await makeAgent({
+        name: `Agent Access All Test ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+        agentType: "agent",
+      });
+      expect(created.accessAllTools).toBe(false); // off by default
+
+      const updateResponse = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          accessAllTools: true,
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.json().accessAllTools).toBe(true);
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents/${created.id}`,
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json().accessAllTools).toBe(true);
+    });
   });
 
   describe("DELETE /api/agents/:id", () => {
@@ -781,12 +811,10 @@ describe("agent routes", () => {
         await AgentModel.getLLMProxyOrCreateDefault(organizationId);
       await AgentModel.delete(original.id);
 
-      const replacementResponse = await app.inject({
-        method: "GET",
-        url: "/api/llm-proxy/default",
-      });
-      expect(replacementResponse.statusCode).toBe(200);
-      expect(replacementResponse.json().id).not.toBe(original.id);
+      // Recreate the org default proxy so a restore would collide with it.
+      const replacement =
+        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
+      expect(replacement.id).not.toBe(original.id);
 
       const restoreResponse = await app.inject({
         method: "POST",
@@ -1149,11 +1177,8 @@ describe("agent routes", () => {
   });
 
   describe("GET /api/llm-proxy/default", () => {
-    test("creates a new default LLM proxy when the previous default is soft-deleted", async () => {
+    test("returns the caller's personal LLM proxy, creating it on first call", async () => {
       const { default: AgentModel } = await import("@/models/agent");
-      const original =
-        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
-      await AgentModel.delete(original.id);
 
       const response = await app.inject({
         method: "GET",
@@ -1161,10 +1186,24 @@ describe("agent routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const replacement = response.json();
-      expect(replacement.agentType).toBe("llm_proxy");
-      expect(replacement.isDefault).toBe(true);
-      expect(replacement.id).not.toBe(original.id);
+      const proxy = response.json();
+      expect(proxy.agentType).toBe("llm_proxy");
+      expect(proxy.isPersonalProxy).toBe(true);
+      expect(proxy.scope).toBe("personal");
+      expect(proxy.authorId).toBe(user.id);
+
+      // idempotent: a second call returns the same personal proxy
+      const again = await app.inject({
+        method: "GET",
+        url: "/api/llm-proxy/default",
+      });
+      expect(again.json().id).toBe(proxy.id);
+
+      const personal = await AgentModel.getPersonalLlmProxy(
+        user.id,
+        organizationId,
+      );
+      expect(personal?.id).toBe(proxy.id);
     });
   });
 

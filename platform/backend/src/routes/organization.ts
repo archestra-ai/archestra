@@ -1,20 +1,26 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   addNomicTaskPrefix,
   isModelSelectionComplete,
+  providerRequiresPerUserCredential,
   RouteId,
-} from "@shared";
+  type SupportedProvider,
+} from "@archestra/shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { syncBuiltInSkillsForOrganization } from "@/database/seed";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
+  InternalMcpCatalogModel,
   InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
@@ -27,11 +33,13 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import {
   ApiError,
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  type NetworkPolicy,
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
@@ -89,6 +97,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         config.enterpriseFeatures.fullWhiteLabeling &&
         (body.appName !== undefined || body.iconLogo !== undefined)
@@ -105,7 +116,16 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organization: organization,
           });
         }
+
+        // appName is baked into the built-in skills' stored rows (name, body,
+        // tool-prefix references), so re-brand them now — without this the
+        // catalog/load_skill output only updates after a backend restart. A
+        // pristine copy auto-rebrands; an admin-edited copy is preserved.
+        if (appNameChanged) {
+          await syncBuiltInSkillsForOrganization(organization);
+        }
       }
+      // SPDX-SnippetEnd
 
       return reply.send(organization);
     },
@@ -117,7 +137,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (global tool policy, chat file uploads)",
+          "Update security settings (global tool policy, chat file uploads, tool auto-assignment)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -140,31 +160,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateLlmSettings,
         description:
-          "Update LLM settings (TOON compression, compression scope, default user limit)",
+          "Update LLM settings (TOON compression, compression scope)",
         tags: ["Organization"],
         body: UpdateLlmSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const normalizedBody =
-        body.defaultUserLimitValue === null
-          ? {
-              ...body,
-              defaultUserLimitModel: null,
-              defaultUserLimitCleanupInterval: null,
-            }
-          : {
-              ...body,
-              ...(body.defaultUserLimitModel?.length === 0
-                ? { defaultUserLimitModel: null }
-                : {}),
-            };
-
-      const organization = await OrganizationModel.patch(
-        organizationId,
-        normalizedBody,
-      );
+      const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -231,7 +234,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Skill slash commands inject skill content that points at read_skill_file,
+      // Skill slash commands inject skill content that points at load_skill,
       // so they require the skill tools to be enabled for the organization.
       if (body.skillSlashCommandsEnabled === true) {
         const currentOrg = await OrganizationModel.getById(organizationId);
@@ -293,6 +296,38 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.connectionDefaultProviderKeys) {
+        const keyIds = Object.values(body.connectionDefaultProviderKeys);
+        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
+        const keysById = new Map(keys.map((k) => [k.id, k]));
+        for (const [provider, keyId] of Object.entries(
+          body.connectionDefaultProviderKeys,
+        )) {
+          const key = keysById.get(keyId);
+          if (!key || key.organizationId !== organizationId) {
+            throw new ApiError(404, "Provider API key not found");
+          }
+          if (key.provider !== provider) {
+            throw new ApiError(
+              400,
+              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+            );
+          }
+          // Per-user providers (GitHub Copilot) can't back a shared default:
+          // each user connects their own account at setup time, so an admin
+          // default would be meaningless (and the connection flow would refuse
+          // to wrap someone else's personal key).
+          if (
+            providerRequiresPerUserCredential(provider as SupportedProvider)
+          ) {
+            throw new ApiError(
+              400,
+              `${provider} is per-user — each user connects their own account, so it can't be set as a default provider key for setup commands.`,
+            );
+          }
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
@@ -316,6 +351,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      const currentOrganization =
+        "networkPolicy" in body
+          ? await OrganizationModel.getById(organizationId)
+          : null;
+      const networkPolicyActuallyChanging =
+        "networkPolicy" in body &&
+        currentOrganization !== null &&
+        !sameNetworkPolicy(
+          body.networkPolicy ?? null,
+          currentOrganization?.defaultNetworkPolicy ?? null,
+        );
+
       // Map the clean API shape to DB columns, including only keys that are
       // present in the body so omitting a field leaves it unchanged (an
       // explicit null clears the column).
@@ -325,6 +372,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentNamespace: string | null;
         defaultNetworkPolicy: typeof body.networkPolicy;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
       }> = {};
       if ("name" in body) {
         data.defaultEnvironmentName = body.name ?? null;
@@ -341,11 +389,25 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if ("restricted" in body) {
         data.defaultEnvironmentRestricted = body.restricted ?? false;
       }
+      if ("validationRegex" in body) {
+        data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;
+      }
 
       const organization = await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      if (networkPolicyActuallyChanging && mcpServerRuntimeManager.isEnabled) {
+        const catalogs =
+          await InternalMcpCatalogModel.findDefaultEnvironmentLocalCatalogs(
+            organizationId,
+          );
+        await reconcileCatalogDeployments({
+          catalogs,
+          reason: "default environment network policy change",
+        });
       }
 
       return reply.send(organization);
@@ -913,3 +975,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default organizationRoutes;
+
+// === Internal helpers ===
+
+function sameNetworkPolicy(
+  a: NetworkPolicy | null,
+  b: NetworkPolicy | null,
+): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}

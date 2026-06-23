@@ -1,4 +1,4 @@
-import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@shared";
+import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildSkillDescriptionPrompt,
@@ -44,15 +44,12 @@ describe("buildSkillDescriptionPrompt", () => {
   it("lists tools but excludes skill-runtime tools", () => {
     const prompt = buildSkillDescriptionPrompt(
       makeAgent({
-        tools: [
-          { name: "slack__send" },
-          { name: TOOL_ACTIVATE_SKILL_FULL_NAME },
-        ],
+        tools: [{ name: "slack__send" }, { name: TOOL_LOAD_SKILL_FULL_NAME }],
       }),
     );
 
     expect(prompt).toContain("slack__send");
-    expect(prompt).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+    expect(prompt).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   it("lists suggested prompts as examples", () => {

@@ -1,4 +1,4 @@
-import { SkillModel } from "@/models";
+import { SkillModel, SkillVersionModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { InsertSkill } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
@@ -253,5 +253,78 @@ describe("SkillModel.findImportNameCollisions", () => {
     });
 
     expect(collisions.has("shared")).toBe(true);
+  });
+});
+
+describe("SkillModel immutable versioning", () => {
+  test("createWithFiles writes version 1 with the body and files", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, content: "# v1 body" }),
+      files: [{ path: "references/a.md", content: "# A", kind: "reference" }],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    expect(skill.latestVersion).toBe(1);
+    const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
+    expect(v1?.content).toBe("# v1 body");
+    const files = await SkillVersionModel.findFiles(v1?.id ?? "");
+    expect(files.map((f) => f.path)).toEqual(["references/a.md"]);
+  });
+
+  test("updateWithFiles forks a new version only when the payload changes", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, content: "# original" }),
+      files: [{ path: "references/a.md", content: "# A", kind: "reference" }],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    // metadata-only edit with the identical body + files: no new version.
+    const unchanged = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { description: "new description", content: "# original" },
+      files: [{ path: "references/a.md", content: "# A", kind: "reference" }],
+    });
+    expect(unchanged?.latestVersion).toBe(1);
+
+    // a body change forks version 2.
+    const edited = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { content: "# edited" },
+    });
+    expect(edited?.latestVersion).toBe(2);
+    const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
+    expect(v2?.content).toBe("# edited");
+    // version 1 is immutable and still readable.
+    const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
+    expect(v1?.content).toBe("# original");
+  });
+
+  test("updateWithFiles forks when only the resource files change", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, content: "# body" }),
+      files: [{ path: "references/a.md", content: "# A", kind: "reference" }],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const edited = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { content: "# body" },
+      files: [
+        { path: "references/a.md", content: "# A v2", kind: "reference" },
+      ],
+    });
+    expect(edited?.latestVersion).toBe(2);
+    const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
+    const files = await SkillVersionModel.findFiles(v2?.id ?? "");
+    expect(files.map((f) => f.content)).toEqual(["# A v2"]);
   });
 });

@@ -8,18 +8,20 @@ import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import { context, propagation } from "@opentelemetry/api";
-import type { InteractionSource } from "@shared";
+import type { InteractionSource } from "@archestra/shared";
 import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  providerRequiresPerUserCredential,
+  requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
-} from "@shared";
+} from "@archestra/shared";
+import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
@@ -33,11 +35,13 @@ import {
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -268,6 +272,12 @@ export async function createLLMModelForAgent(params: {
     !isOllama &&
     !isAzureWithEntra
   ) {
+    // Per-user providers (GitHub Copilot) need the acting user's own linked
+    // account; surface a typed error so callers can prompt them to connect
+    // rather than showing a generic "configure a key" message.
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new LlmProviderAuthRequiredError(provider);
+    }
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -390,8 +400,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- OpenAI-compatible providers (use createOpenAI with .chat()) ---
 
   openai: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      const client = createOpenAI({ apiKey, baseURL, headers, fetch });
+      // "pro" reasoning models are Responses-API-only; routing them through
+      // .chat() hits /chat/completions and 404s. See requiresOpenAiResponsesApi.
+      return requiresOpenAiResponsesApi(modelName)
+        ? client.responses(modelName)
+        : client.chat(modelName);
+    },
     defaultBaseUrl: config.llm.openai.baseUrl,
     apiKeyRequiredMessage:
       "OpenAI API key is required. Please configure OPENAI_API_KEY.",
@@ -436,6 +452,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  "github-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
+    // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
+    // the short-lived Copilot bearer — exchanging here too would hand the
+    // proxy an already-exchanged bearer it cannot exchange again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["github-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
   },
 
   azure: {
@@ -601,7 +629,19 @@ function createTracedFetch(): typeof globalThis.fetch {
     for (const [key, value] of Object.entries(carrier)) {
       headers.set(key, value);
     }
-    return globalThis.fetch(input, { ...init, headers });
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults
+    // untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+
+    if (!dispatcher) {
+      return globalThis.fetch(input, { ...init, headers });
+    }
+
+    return globalThis.fetch(input, {
+      ...init,
+      headers,
+      dispatcher,
+    } as RequestInit);
   };
 }
 

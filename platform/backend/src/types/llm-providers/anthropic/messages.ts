@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-const RoleSchema = z.enum(["user", "assistant"]);
+// "system" covers mid-conversation system messages (anthropic-beta:
+// mid-conversation-system-2026-04-07), which Claude Code injects into
+// `messages` for hook output and similar context — distinct from the
+// top-level `system` field.
+const RoleSchema = z.enum(["user", "assistant", "system"]);
 
 const TextBlockSchema = z.object({
   citations: z.array(z.any()).nullable(),
@@ -34,11 +38,19 @@ const TextBlockParamSchema = z.object({
 
 const ImageBlockParamSchema = z.object({
   type: z.enum(["image"]),
-  source: z.object({
-    type: z.enum(["base64"]),
-    media_type: z.string(),
-    data: z.string(),
-  }),
+  // Anthropic accepts either an inline base64 source or a URL source it fetches
+  // itself. https://platform.claude.com/docs/en/build-with-claude/vision
+  source: z.union([
+    z.object({
+      type: z.enum(["base64"]),
+      media_type: z.string(),
+      data: z.string(),
+    }),
+    z.object({
+      type: z.enum(["url"]),
+      url: z.string(),
+    }),
+  ]),
   cache_control: z.any().nullable().optional(),
 });
 
@@ -111,18 +123,55 @@ const ToolResultBlockParamSchema = z.object({
     .optional(),
   is_error: z.boolean().optional(),
 });
-// const ServerToolUseBlockParamSchema = z.any();
-// const WebSearchToolResultBlockParamSchema = z.any();
+const ThinkingBlockParamSchema = z.object({
+  type: z.enum(["thinking"]),
+  thinking: z.string(),
+  signature: z.string(),
+});
+
+const RedactedThinkingBlockParamSchema = z.object({
+  type: z.enum(["redacted_thinking"]),
+  data: z.string(),
+});
+
+// Server-tool and container blocks are forwarded verbatim and never inspected
+// by Archestra, so only the discriminator is validated. Loose parsing keeps
+// every other field intact — a plain z.object would strip them before the
+// request reaches the upstream API.
+const ServerToolBlockParamSchema = z.looseObject({
+  type: z.enum([
+    "search_result",
+    "server_tool_use",
+    "web_search_tool_result",
+    "web_fetch_tool_result",
+    "code_execution_tool_result",
+    "bash_code_execution_tool_result",
+    "text_editor_code_execution_tool_result",
+    "tool_search_tool_result",
+    "container_upload",
+  ]),
+});
+
+// Forward-compat escape hatch: Anthropic ships new content block types behind
+// beta flags faster than this schema is updated (interleaved thinking broke
+// Claude Code through the proxy this way). Any other object with a string
+// `type` is forwarded verbatim — the upstream API is the authority on
+// validity. Cast to `never` so it adds no member to the inferred union and
+// type-narrowing in the adapters is unaffected.
+const UnknownBlockParamSchema = z.looseObject({
+  type: z.string(),
+}) as unknown as z.ZodType<never>;
 
 const ContentBlockParamSchema = z.union([
   TextBlockParamSchema,
   ImageBlockParamSchema,
   DocumentBlockParamSchema,
-  // SearchResultBlockParamSchema,
+  ThinkingBlockParamSchema,
+  RedactedThinkingBlockParamSchema,
   ToolUseBlockParamSchema,
   ToolResultBlockParamSchema,
-  // ServerToolUseBlockParamSchema,
-  // WebSearchToolResultBlockParamSchema,
+  ServerToolBlockParamSchema,
+  UnknownBlockParamSchema,
 ]);
 
 export const MessageParamSchema = z.object({

@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -108,7 +108,7 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
         No skills to share yet. Create one under{" "}
-        <Link href="/agents/skills" className="underline">
+        <Link href="/skills" className="underline">
           Skills
         </Link>
         .
@@ -233,11 +233,11 @@ function ExistingLinkPanel({
       previousLinkId: link.id,
       body: { skillIds, expiresAt: link.expiresAt },
     });
-    if (!result?.created) return;
+    if (!result) return;
     onReveal({
-      linkId: result.created.link.id,
-      cloneUrl: result.created.cloneUrl,
-      marketplaceName: result.created.marketplaceName,
+      linkId: result.link.id,
+      cloneUrl: result.cloneUrl,
+      marketplaceName: result.marketplaceName,
     });
   }, [rotateShare, link, onReveal]);
 

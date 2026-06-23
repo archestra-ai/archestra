@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type LlmProviderApiKey =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];

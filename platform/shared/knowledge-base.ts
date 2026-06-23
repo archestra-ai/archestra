@@ -62,13 +62,14 @@ export const CONNECTOR_TYPE_LABELS = {
   servicenow: "ServiceNow",
   sharepoint: "SharePoint",
   gdrive: "Google Drive",
-  file_upload: "File Upload",
   dropbox: "Dropbox",
   onedrive: "OneDrive",
   asana: "Asana",
   linear: "Linear",
   outline: "Outline",
   salesforce: "Salesforce",
+  web_crawler: "Web Crawler",
+  perforce: "Perforce (Helix Core)",
 } as const;
 
 export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;

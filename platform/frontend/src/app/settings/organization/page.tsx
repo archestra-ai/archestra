@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -28,7 +28,6 @@ import {
   validateChatLink,
 } from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
-import { ConnectSettingsSection } from "./_components/connect-settings-section";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { LogosSection } from "./_components/logos-section";
 import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
@@ -67,8 +66,8 @@ export default function OrganizationSettingsPage() {
     DEFAULT_THEME,
     isLoadingAppearance,
   } = orgTheme ?? {
-    currentUITheme: "modern-minimal" as const,
-    DEFAULT_THEME: "modern-minimal" as const,
+    currentUITheme: "caffeine" as const,
+    DEFAULT_THEME: "caffeine" as const,
   };
 
   useOnUnmount(() => {
@@ -409,11 +408,6 @@ export default function OrganizationSettingsPage() {
 
           <SiteNotificationsSection />
         </SettingsSectionStack>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium mb-4">Connect page</h3>
-        <ConnectSettingsSection />
       </div>
 
       {/* Auth Section */}

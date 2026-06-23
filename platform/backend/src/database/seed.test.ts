@@ -1,13 +1,17 @@
 import {
+  ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { afterEach, beforeEach } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema } from "@/database";
-import { SkillFileModel, SkillModel } from "@/models";
+import { OrganizationModel, SkillFileModel, SkillModel } from "@/models";
 import AgentModel from "@/models/agent";
 import {
   BUILT_IN_SKILLS,
@@ -15,7 +19,7 @@ import {
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+import { decideEnvSeed, syncBuiltInAgents, syncBuiltInSkills } from "./seed";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -144,6 +148,20 @@ Examples:
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
 
 describe("syncBuiltInSkills", () => {
+  // These cases assert on the always-on built-in skills, so pin the apps feature
+  // off (the build-app skill is gated on it) and restore the ambient flag after.
+  let originalAppsEnabled: boolean;
+  beforeEach(() => {
+    originalAppsEnabled = config.apps.enabled;
+    config.apps.enabled = false;
+  });
+  // syncBuiltInSkills syncs branding per org; reset the singleton so it never
+  // leaks an app name into a later (shuffled) test.
+  afterEach(() => {
+    config.apps.enabled = originalAppsEnabled;
+    archestraMcpBranding.syncFromOrganization(null);
+  });
+
   async function countBuiltInSkills(organizationId: string): Promise<number> {
     const rows = await db
       .select()
@@ -189,7 +207,11 @@ describe("syncBuiltInSkills", () => {
     await syncBuiltInSkills();
     await syncBuiltInSkills();
 
-    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    // apps feature pinned off here, so the apps-gated skills do not seed.
+    const expected = BUILT_IN_SKILLS.filter(
+      (skill) => !skill.requiresAppsFeature,
+    ).length;
+    expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
   test("does not seed a phantom copy when the name is already taken", async ({
@@ -281,5 +303,152 @@ describe("syncBuiltInSkills", () => {
       sourceRef,
     });
     expect(preserved?.content).toBe("EDITED BY USER");
+  });
+
+  test("brands the seeded skill under the org's white-label app name", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+
+    await syncBuiltInSkills();
+
+    const skill = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
+    });
+    // the stored row itself is branded, so every read path (catalog, load_skill,
+    // sandbox mount) shows the app name with no per-read rewriting.
+    expect(skill?.name).toBe("Acme Copilot Platform Operations");
+    expect(skill?.content).not.toContain("Archestra");
+    expect(skill?.content).not.toContain(ARCHESTRA_TOOL_PREFIX);
+    // sourceCommit is hashed over the branded body, so a pristine branded copy
+    // is recognised on re-sync (and re-brands if the app name later changes).
+    expect(skill?.sourceCommit).not.toBe(builtInSkillVersion(BASE_SKILL));
+
+    const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+    for (const file of files) {
+      expect(file.content).not.toContain("Archestra");
+    }
+  });
+
+  test("re-brands a pristine copy when the app name changes", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    // first seed with no app name → canonical "Archestra" copy.
+    await syncBuiltInSkills();
+    const before = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(before?.name).toBe("Archestra Platform Operations");
+
+    // set an app name and re-sync — the untouched copy auto-upgrades to branded.
+    await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+    await syncBuiltInSkills();
+
+    const after = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(after?.id).toBe(before?.id);
+    expect(after?.name).toBe("Acme Copilot Platform Operations");
+    expect(after?.content).not.toContain("Archestra");
+  });
+
+  test("seeds an apps-gated skill only when the apps feature is enabled", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const buildAppRef = builtInSkillSourceRef("build-app");
+
+    const original = config.apps.enabled;
+    try {
+      config.apps.enabled = false;
+      await syncBuiltInSkills();
+      expect(
+        await SkillModel.findBuiltIn({
+          organizationId: org.id,
+          sourceRef: buildAppRef,
+        }),
+      ).toBeNull();
+
+      config.apps.enabled = true;
+      await syncBuiltInSkills();
+      const seeded = await SkillModel.findBuiltIn({
+        organizationId: org.id,
+        sourceRef: buildAppRef,
+      });
+      expect(seeded).not.toBeNull();
+      expect(seeded?.content).toContain("window.archestra");
+    } finally {
+      config.apps.enabled = original;
+    }
+  });
+});
+
+describe("decideEnvSeed", () => {
+  const originals = {
+    vllm: config.llm.vllm.baseUrl,
+    azure: config.llm.azure.baseUrl,
+    openai: config.llm.openai.baseUrl,
+    bedrock: config.llm.bedrock.baseUrl,
+  };
+
+  afterEach(() => {
+    config.llm.vllm.baseUrl = originals.vllm;
+    config.llm.azure.baseUrl = originals.azure;
+    config.llm.openai.baseUrl = originals.openai;
+    config.llm.bedrock.baseUrl = originals.bedrock;
+  });
+
+  test("skips vLLM when no base URL is configured", () => {
+    config.llm.vllm.baseUrl = undefined;
+    expect(decideEnvSeed("vllm").kind).toBe("skip");
+  });
+
+  test("creates vLLM with the base URL persisted when configured", () => {
+    config.llm.vllm.baseUrl = "https://vllm.example.com/v1";
+    expect(decideEnvSeed("vllm")).toEqual({
+      kind: "create",
+      persistedBaseUrl: "https://vllm.example.com/v1",
+    });
+  });
+
+  test("skips Azure when no base URL is configured", () => {
+    config.llm.azure.baseUrl = "";
+    expect(decideEnvSeed("azure").kind).toBe("skip");
+  });
+
+  test("treats a whitespace-only base URL as not configured", () => {
+    config.llm.azure.baseUrl = "   ";
+    expect(decideEnvSeed("azure").kind).toBe("skip");
+  });
+
+  test("creates Azure with the base URL persisted when configured", () => {
+    config.llm.azure.baseUrl = "https://my-resource.openai.azure.com/openai";
+    expect(decideEnvSeed("azure")).toEqual({
+      kind: "create",
+      persistedBaseUrl: "https://my-resource.openai.azure.com/openai",
+    });
+  });
+
+  test("creates a normal provider without persisting its base URL", () => {
+    config.llm.openai.baseUrl = "https://api.openai.com/v1";
+    expect(decideEnvSeed("openai")).toEqual({
+      kind: "create",
+      persistedBaseUrl: null,
+    });
+  });
+
+  test("creates Bedrock without a base URL (region fallback)", () => {
+    config.llm.bedrock.baseUrl = "";
+    expect(decideEnvSeed("bedrock")).toEqual({
+      kind: "create",
+      persistedBaseUrl: null,
+    });
   });
 });

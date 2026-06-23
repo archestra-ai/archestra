@@ -1,13 +1,16 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ArrowLeft, Copy, Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { UseFormReturn } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
+  getCatalogMutationErrorCode,
+  REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -61,17 +64,41 @@ export function CreateCatalogDialog({
     onClose();
   };
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => {
     const apiData = {
       ...transformFormToApiData(values),
       // Record clone lineage (null for a plain "Add Server").
       clonedFrom: clonedFrom ?? null,
     };
-    const createdItem = await createMutation.mutateAsync(apiData);
-    handleClose();
-    if (createdItem) {
-      onSuccess?.({ ...createdItem, toolCount: 0 });
-    }
+    // Use the callback form so the dialog only closes on success; on a
+    // validation error the dialog stays open for correction.
+    createMutation.mutate(apiData, {
+      onSuccess: (createdItem) => {
+        handleClose();
+        if (createdItem) {
+          onSuccess?.({ ...createdItem, toolCount: 0 });
+        }
+      },
+      onError: (error) => {
+        // Network-policy rejections point at the Server URL — show them inline
+        // on that field rather than as a toast.
+        if (
+          getCatalogMutationErrorCode(error) ===
+          REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+        ) {
+          form.setError("serverUrl", {
+            type: "server",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Server URL is not allowed by the environment's network policy.",
+          });
+        }
+      },
+    });
   };
 
   const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {
@@ -79,12 +106,15 @@ export function CreateCatalogDialog({
     setStep("form");
   };
 
-  const footer = (
+  const footer = ({ hasBlockingErrors }: { hasBlockingErrors: boolean }) => (
     <DialogStickyFooter className="mt-0">
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>
-      <Button type="submit" disabled={createMutation.isPending}>
+      <Button
+        type="submit"
+        disabled={createMutation.isPending || hasBlockingErrors}
+      >
         {createMutation.isPending ? "Adding..." : "Add Server"}
       </Button>
     </DialogStickyFooter>

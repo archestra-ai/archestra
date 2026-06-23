@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  ArchestraInternalErrorCode,
+  BedrockErrorTypes,
+} from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import { ArchestraInternalErrorCode, BedrockErrorTypes } from "@shared";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
@@ -837,6 +840,26 @@ class BedrockRequestAdapter
 // RESPONSE ADAPTER
 // =============================================================================
 
+/**
+ * Cache-creation tokens written at the 1-hour TTL, from Bedrock's per-TTL
+ * `cacheDetails` breakdown (the remainder of cacheWriteInputTokens is 5m). Used
+ * to bill the 1h write portion at the higher rate.
+ */
+function bedrockCacheWrite1hTokens(
+  usage:
+    | {
+        cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[] | null;
+      }
+    | null
+    | undefined,
+): number {
+  return (usage?.cacheDetails ?? []).reduce(
+    (sum, detail) =>
+      detail?.ttl === "1h" ? sum + (detail.inputTokens ?? 0) : sum,
+    0,
+  );
+}
+
 class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   readonly provider = "bedrock" as const;
   private response: BedrockResponse;
@@ -894,6 +917,9 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return {
       inputTokens: this.response.usage?.inputTokens ?? 0,
       outputTokens: this.response.usage?.outputTokens ?? 0,
+      cacheReadTokens: this.response.usage?.cacheReadInputTokens ?? 0,
+      cacheWriteTokens: this.response.usage?.cacheWriteInputTokens ?? 0,
+      cacheWrite1hTokens: bedrockCacheWrite1hTokens(this.response.usage),
     };
   }
 
@@ -1078,7 +1104,13 @@ class BedrockStreamAdapter
       // Don't set isFinal here - metadata chunk comes after messageStop
     } else if ("metadata" in chunk && chunk.metadata) {
       const metadata = chunk.metadata as {
-        usage?: { inputTokens?: number; outputTokens?: number };
+        usage?: {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheWriteInputTokens?: number;
+          cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[];
+        };
         metrics?: { latencyMs?: number };
         trace?: unknown;
       };
@@ -1086,6 +1118,9 @@ class BedrockStreamAdapter
         this.state.usage = {
           inputTokens: metadata.usage.inputTokens ?? 0,
           outputTokens: metadata.usage.outputTokens ?? 0,
+          cacheReadTokens: metadata.usage.cacheReadInputTokens ?? 0,
+          cacheWriteTokens: metadata.usage.cacheWriteInputTokens ?? 0,
+          cacheWrite1hTokens: bedrockCacheWrite1hTokens(metadata.usage),
         };
       }
       if (metadata.metrics?.latencyMs !== undefined) {
@@ -1725,6 +1760,11 @@ export const bedrockAdapterFactory: LLMProvider<
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
+        // Preserve cache usage so getUsage() can report it on the non-streaming
+        // path; cacheDetails carries the per-TTL write split for 1h cost.
+        cacheReadInputTokens: response.usage?.cacheReadInputTokens,
+        cacheWriteInputTokens: response.usage?.cacheWriteInputTokens,
+        cacheDetails: response.usage?.cacheDetails,
       },
       metrics: response.metrics,
       additionalModelResponseFields: response.additionalModelResponseFields as

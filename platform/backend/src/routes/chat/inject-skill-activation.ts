@@ -1,21 +1,19 @@
-import {
-  type ChatMessage,
-  ChatMessageMetadataSchema,
-  type ChatMessagePart,
-} from "@shared";
+import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
+import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { resolveActivationVersion } from "@/skills/skill-version-resolution";
+import { spliceText } from "./augment-last-user-message";
 
 /**
  * When the last user message was sent via a skill slash command, prepend the
  * skill's activation block to its text so the model receives the skill's
- * instructions directly — no reliance on the model calling `activate_skill`.
+ * instructions directly — no reliance on the model calling `load_skill`.
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
@@ -28,12 +26,15 @@ export async function injectSkillActivation({
   organizationId,
   userId,
   agentId,
+  conversationId,
 }: {
   messages: ChatMessage[];
   organizationId: string;
   userId: string;
   /** The conversation's agent — gates the sandbox hint on tool assignment. */
   agentId: string | undefined;
+  /** Conversation the skill is activated in — pins/reads the mounted version. */
+  conversationId: string | undefined;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -84,46 +85,58 @@ export async function injectSkillActivation({
     return messages;
   }
 
-  const files = await SkillFileModel.findBySkillId(skill.id);
+  const canRunSandbox = await isSkillSandboxAvailableForAgent({
+    userId,
+    organizationId,
+    agentId,
+  });
+
+  // resolve the effective version and pin it by mounting (shared with
+  // load_skill), so the injected block, the mounted bytes, and a later
+  // load_skill file read all expose the same version.
+  const activation = await resolveActivationVersion({
+    skill,
+    organizationId,
+    userId,
+    conversationId,
+    canRunSandbox,
+  });
+  if (!activation) {
+    return messages;
+  }
+  const { version, mounted } = activation;
+  const files = await SkillVersionModel.findFiles(version.id);
+
   logger.info(
-    { organizationId, skillName: skill.name, fileCount: files.length },
+    {
+      organizationId,
+      skillName: skill.name,
+      version: version.version,
+      mounted,
+      fileCount: files.length,
+    },
     "[Skills] Skill activated via slash command",
   );
 
   const next = [...messages];
-  next[lastUserIndex] = prependText(
+  next[lastUserIndex] = spliceText(
     userMessage,
     formatSkillActivation({
-      skill,
+      skill: {
+        name: skill.name,
+        content: version.content,
+        compatibility: skill.compatibility,
+        allowedTools: skill.allowedTools,
+        templated: skill.templated,
+      },
       files,
-      canRunSandbox: await isSkillSandboxAvailableForAgent({
-        checker,
-        agentId,
-      }),
+      // only claim sandbox runnability when this skill actually holds the mount.
+      canRunSandbox: mounted,
       promptContext: skill.templated
         ? await buildSkillActivationPromptContext({ userId, organizationId })
         : null,
     }),
+    "prepend",
   );
   return next;
-}
-
-// ===== Internal helpers =====
-
-/** Prepend `block` to the message's first text part (adding one if absent). */
-function prependText(message: ChatMessage, block: string): ChatMessage {
-  const parts: ChatMessagePart[] = message.parts ? [...message.parts] : [];
-  const textIndex = parts.findIndex((part) => part.type === "text");
-
-  if (textIndex === -1) {
-    return { ...message, parts: [{ type: "text", text: block }, ...parts] };
-  }
-
-  const textPart = parts[textIndex];
-  const existing = typeof textPart.text === "string" ? textPart.text : "";
-  parts[textIndex] = {
-    ...textPart,
-    text: existing ? `${block}\n\n${existing}` : block,
-  };
-  return { ...message, parts };
 }

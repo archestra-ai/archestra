@@ -1,6 +1,10 @@
 "use client";
 
-import { type AgentType, type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type AgentType,
+  type archestraApiTypes,
+  E2eTestId,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -43,7 +47,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
@@ -106,8 +110,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
     | "createdAt"
-    | "toolsCount"
-    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
@@ -158,8 +160,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -358,65 +359,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             labels={agent.labels}
           />
         );
-      },
-    },
-    {
-      id: "toolsCount",
-      accessorKey: "toolsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Tools
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
-    },
-    {
-      id: "knowledgeSourcesCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Knowledge Sources
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const count =
-          (row.original.knowledgeBaseIds?.length ?? 0) +
-          (row.original.connectorIds?.length ?? 0);
-        return <div>{count}</div>;
-      },
-    },
-    {
-      id: "subagentsCount",
-      accessorKey: "subagentsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Subagents
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
       },
     },
     ...(isAgentAdmin

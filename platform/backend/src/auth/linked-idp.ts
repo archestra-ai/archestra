@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   CompleteLinkedIdentityProviderIntentRequestSchema,
   CreateLinkedIdentityProviderIntentRequestSchema,
   LINKED_IDP_AUTH_COMPLETE_PATH,
   LINKED_IDP_AUTH_INTENT_PATH,
-} from "@shared";
+} from "@archestra/shared";
 import { createAuthEndpoint, sessionMiddleware } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import type { BetterAuthPlugin } from "better-auth/types";

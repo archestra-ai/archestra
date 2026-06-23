@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared";
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import { expect, test } from "../fixtures";
 import { clickButton, waitForElementWithReload } from "../utils";
 

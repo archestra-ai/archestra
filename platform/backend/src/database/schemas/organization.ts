@@ -2,8 +2,8 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   SupportedProvider,
-} from "@shared";
-import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+} from "@archestra/shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
 import {
   boolean,
   integer,
@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionDefaultProviderKeys,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -39,10 +40,7 @@ const organizationsTable = pgTable("organization", {
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
-  theme: text("theme")
-    .$type<OrganizationTheme>()
-    .notNull()
-    .default("cosmic-night"),
+  theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()
     .notNull()
@@ -64,6 +62,17 @@ const organizationsTable = pgTable("organization", {
    * so admins may want to disable this until file-based policy support is added.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
+    .notNull()
+    .default(true),
+
+  /**
+   * @deprecated No longer consulted. Dynamic tool access is now gated solely
+   * by the per-agent `access_all_tools` setting. The column is retained (not
+   * dropped) to avoid a backwards-incompatible migration and to keep the
+   * existing API field; any stored value is ignored. Safe to drop in a future
+   * migration once no deployment reads it.
+   */
+  allowToolAutoAssignment: boolean("allow_tool_auto_assignment")
     .notNull()
     .default(true),
 
@@ -221,20 +230,27 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Custom label admins choose for the child-configuration entity of every
-   * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI replaces "Preset"/"presets" copy.
-   *
-   * Deprecated/read-only: the registry admin UI and the write endpoints that
-   * set these were removed. Existing values are still read; no new writes.
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
+
+  /**
+   * Legacy preset columns (feature removed) — retained inert (non-destructive,
+   * no migration) and no longer read or written. Held admin-chosen singular/
+   * plural labels that the catalog UI used to override "Preset"/"presets" copy.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
-   * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI. Deprecated/read-only — the
-   * write endpoint was removed.
+   * Legacy preset column (feature removed) — retained inert. Held the custom
+   * display label for the implicit "default" preset row. No longer read or
+   * written.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
@@ -274,10 +290,19 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
-   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
-   * `read_skill_file`) are assigned to every agent in the org and added to all
-   * new agents. Flipped on
-   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
+   * environment (internal_mcp_catalog.environment_id = null). User-supplied
+   * config values are allowed only if they MATCH. NULL disables. Mirrors
+   * `environment.validation_regex` for the default scope.
+   */
+  defaultEnvironmentValidationRegex: text(
+    "default_environment_validation_regex",
+  ),
+
+  /**
+   * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
+   * to every agent in the org and added to all new agents. Flipped on
+   * by the "Enable and create a new skill" empty-state button on /skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 
@@ -285,17 +310,16 @@ const organizationsTable = pgTable("organization", {
    * When true, the org's skills are exposed in chat as slash commands
    * (`/skill-name`). Invoking one injects the skill's content directly into the
    * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `activate_skill` tool).
+   * model-facing `load_skill` tool).
    */
   skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
     .notNull()
     .default(false),
 
   /**
-   * Validation regex applied to default-scoped field values when installing an
-   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
-   * default row). Stored without delimiters or flags. NULL disables validation.
-   * Deprecated/read-only — the write endpoint was removed.
+   * Legacy preset column (feature removed) — retained inert. Held a validation
+   * regex (no delimiters/flags) applied to default-scoped field values at
+   * install time. No longer read or written.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

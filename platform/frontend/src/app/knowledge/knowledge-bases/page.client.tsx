@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -178,7 +178,7 @@ function KnowledgeBasesList() {
   return (
     <KnowledgePageLayout
       title="Knowledge Bases"
-      description="Manage knowledge bases and their data connectors."
+      description="A knowledge base is a searchable collection of content, grouped from one or more connectors, that your agents can retrieve answers from."
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}

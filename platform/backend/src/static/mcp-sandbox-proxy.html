@@ -36,6 +36,25 @@
 <body>
 <script>
 
+// The ext-apps guest SDK, served same-deployment next to this proxy. The
+// Archestra Apps SDK imports it (via window.__ARCHESTRA_APP_SDK_URL__, injected
+// below) to connect to the host. location.origin is this proxy's real origin
+// (the proxy is never the opaque srcdoc guest), and /_sandbox/ is proxied to the
+// backend in every mode, so this absolute URL resolves + loads everywhere.
+const APP_SDK_URL = location.origin + "/_sandbox/ext-apps-app.js";
+
+// The Archestra Apps SDK (window.archestra), loaded by the <script src> the
+// backend injects into owned apps at serve time (app-sdk-injection.ts). Its
+// root-relative src resolves against this proxy's base URL — which srcdoc and
+// document.write children inherit — so the absolute form below is what CSP
+// must allowlist.
+const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js";
+
+// The platform baseline stylesheet, loaded by the <link> the backend injects
+// into owned apps at serve time (app-sdk-injection.ts). Root-relative href
+// resolves against this proxy origin, so style-src must allowlist this URL.
+const ARCHESTRA_APP_BASE_CSS_URL = location.origin + "/_sandbox/archestra-app-base.css";
+
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
 
@@ -66,12 +85,13 @@ function buildCSP(csp) {
   if (!csp) {
     return [
       "default-src 'none'",
-      "script-src 'unsafe-inline'",
-      "style-src 'unsafe-inline'",
+      "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL,
+      "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL,
       "img-src data: blob:",
       "font-src data: blob:",
       "media-src data: blob:",
       "connect-src 'none'",
+      "form-action 'none'",
       "frame-src 'none'",
       "object-src 'none'",
       "base-uri 'none'",
@@ -92,12 +112,13 @@ function buildCSP(csp) {
 
   return [
     "default-src 'none'",
-    "script-src 'unsafe-inline' " + resourceSrc,
-    "style-src 'unsafe-inline' " + resourceSrc,
+    "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL + " " + resourceSrc,
+    "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL + " " + resourceSrc,
     "img-src " + resourceSrc,
     "font-src " + resourceSrc,
     "media-src " + resourceSrc,
     "connect-src " + connectSrc,
+    "form-action 'none'",
     "frame-src " + frameSrc,
     "object-src 'none'",
     "base-uri " + baseUri,
@@ -108,10 +129,23 @@ function buildCSP(csp) {
  * Build CSP violation listener script (Inspector pattern).
  * Forwards securitypolicyviolation events to the host via postMessage
  * so violations can be surfaced for debugging.
+ *
+ * Violations originating from a platform-served guest SDK file are not
+ * forwarded: the SDK probes code-generation support at load with a try/catch
+ * `new Function("")`, and the caught probe still fires a
+ * securitypolicyviolation (script-src blocks eval). That is platform noise an
+ * app author cannot act on — forwarding it would flag every render as
+ * "1 runtime error". Matched by the `/_sandbox/` asset path (where both SDK
+ * files are served from) rather than `window.__ARCHESTRA_APP_SDK_URL__`, which
+ * is only injected for external apps — owned apps carry their SDK URL in the
+ * backend envelope, so keying off the global leaked the probe for every owned
+ * app.
  */
 function buildViolationListenerScript() {
   return '<script>\
 document.addEventListener("securitypolicyviolation", function(e) {\
+  var src = e.sourceFile || "";\
+  if (src.indexOf("/_sandbox/ext-apps-app.js") !== -1 || src.indexOf("/_sandbox/archestra-app-sdk.js") !== -1) return;\
   var violation = {\
     type: "mcp-apps:csp-violation",\
     directive: e.violatedDirective,\
@@ -130,24 +164,47 @@ document.addEventListener("securitypolicyviolation", function(e) {\
  * Inject CSP meta tag and violation listener into HTML (Inspector pattern).
  * Used for srcdoc loading where HTTP headers aren't available.
  */
-function injectCSP(html, cspValue) {
-  var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+function injectCSP(html, cspValue, ownedApp) {
   var violationListener = buildViolationListenerScript();
-  var injection = cspMeta + violationListener;
-
-  if (html.includes("<head>")) {
-    return html.replace("<head>", "<head>" + injection);
-  } else if (html.includes("<HEAD>")) {
-    return html.replace("<HEAD>", "<HEAD>" + injection);
-  } else if (html.includes("<html>")) {
-    return html.replace("<html>", "<html><head>" + injection + "</head>");
-  } else if (html.includes("<HTML>")) {
-    return html.replace("<HTML>", "<HTML><head>" + injection + "</head>");
-  } else if (html.includes("<!DOCTYPE") || html.includes("<!doctype")) {
-    return html.replace(/(<!DOCTYPE[^>]*>|<!doctype[^>]*>)/i, "$1<head>" + injection + "</head>");
+  var injection;
+  // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
+  // envelope (app-sdk-injection.ts), so they work identically here and in a
+  // foreign host. The proxy must NOT add a second CSP for them — a differing
+  // policy would intersect and break the render — so it only adds the violation
+  // listener. This MUST key off the trusted host-set `ownedApp` flag, never the
+  // HTML: the HTML for external MCP-UI apps is attacker-controlled, so a content
+  // marker could be spoofed to suppress the platform CSP. External apps get the
+  // full proxy CSP + SDK-URL injection.
+  if (ownedApp === true) {
+    injection = violationListener;
   } else {
-    return injection + html;
+    var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
+    // Expose the served SDK URL so the injected Apps SDK can import it (apps
+    // themselves never touch it). APP_SDK_URL is
+    // location.origin-derived (no user input), but JSON-encode defensively so it
+    // can never break out of the inline script.
+    var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
+    injection = cspMeta + sdkGlobal + violationListener;
   }
+
+  // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
+  // serve-time SDK injection (app-sdk-injection.ts) exactly: both chains
+  // resolve to the SAME first anchor, so this injection always lands before
+  // the SDK bootstrap and the SDK URL global is defined when the SDK runs.
+  // (\s[^>]*)? — attributes allowed, never a longer tag name (<header>).
+  var head = /(<head(\s[^>]*)?>)/i.exec(html);
+  if (head) {
+    return html.replace(head[1], head[1] + injection);
+  }
+  var htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
+  if (htmlTag) {
+    return html.replace(htmlTag[1], htmlTag[1] + "<head>" + injection + "</head>");
+  }
+  var doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
+  if (doctype) {
+    return html.replace(doctype[1], doctype[1] + "<head>" + injection + "</head>");
+  }
+  return injection + html;
 }
 
 // Injected at serve time by server.ts. Empty array = allow any origin (open/dev deployment).
@@ -246,7 +303,9 @@ window.addEventListener("message", async (event) => {
     }
 
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
-      const { html, sandbox, csp, permissions } = event.data.params;
+      // `ownedApp` is set by the trusted host (origin-validated above) only for
+      // Archestra-owned apps, whose envelope already carries the platform CSP.
+      const { html, sandbox, csp, permissions, ownedApp } = event.data.params;
       if (typeof sandbox === "string") {
         // Only allow known-safe sandbox tokens to prevent a compromised MCP
         // server from injecting e.g. allow-top-navigation to escape the sandbox.
@@ -265,7 +324,7 @@ window.addEventListener("message", async (event) => {
       if (typeof html === "string") {
         // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
-        const processedHtml = injectCSP(html, buildCSP(csp));
+        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
 
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc
@@ -294,12 +353,18 @@ window.addEventListener("message", async (event) => {
       }
     }
   } else if (event.source === inner.contentWindow) {
-    // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages
-    // and CSP violations. Prevents noise from browser extensions or widget internals
-    // from reaching PostMessageTransport and causing parse errors.
+    // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages,
+    // CSP violations, and runtime-error diagnostics. Prevents noise from browser
+    // extensions or widget internals from reaching PostMessageTransport and
+    // causing parse errors.
     var data = event.data;
     if (data && typeof data === "object") {
-      if (data.jsonrpc === "2.0" || data.type === "mcp-apps:csp-violation") {
+      if (
+        data.jsonrpc === "2.0" ||
+        data.type === "mcp-apps:csp-violation" ||
+        data.type === "mcp-apps:runtime-error" ||
+        data.type === "mcp-apps:screenshot"
+      ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }
     }

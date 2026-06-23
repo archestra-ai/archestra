@@ -1,0 +1,358 @@
+//! Shared data contract for the archestra-bench harness (writer) and trajectory analyzer (reader).
+//!
+//! Both sides read/write the same on-disk artifacts (`run.json`, `trajectory.jsonl`) under the same
+//! `experiments/<run>/<env>/<task>__<lane>` layout. Defining those shapes once here keeps the two
+//! from silently drifting — the rollout-directory layout already drifted once and broke the analyzer.
+
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+mod lanes;
+pub use lanes::{Lane, LaneError, Provider, find_lane, is_slug, load_lanes, split_names};
+
+/// Per-rollout artifact file names.
+pub const RUN_JSON: &str = "run.json";
+pub const TRAJECTORY_JSONL: &str = "trajectory.jsonl";
+pub const CONFIG_JSON: &str = "config.json";
+pub const AGGREGATE_JSON: &str = "aggregate.json";
+pub const SUBMISSION_JSON: &str = "submission.json";
+
+/// Slug-normalize an id for use in a filesystem path: keep `[A-Za-z0-9._-]`, replace anything else
+/// with `_`, trim leading/trailing `._-`, and fall back to `run` if nothing survives.
+pub fn slug(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    let s = out
+        .trim_matches(|c| c == '.' || c == '_' || c == '-')
+        .to_string();
+    if s.is_empty() { "run".to_string() } else { s }
+}
+
+/// The per-rollout artifact directory, relative to the run root: `<env>/<task>__<lane>`. This is the
+/// single source of truth for the layout the harness writes and the analyzer reads.
+pub fn rollout_dir(env_id: &str, task_id: &str, lane: &str) -> String {
+    format!("{}/{}__{}", slug(env_id), slug(task_id), slug(lane))
+}
+
+/// The terminal classification of a rollout, as written to `run.json`'s `outcome` field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Outcome {
+    Passed,
+    Failed,
+    FormatFailed,
+    NoSubmission,
+    AgentError,
+}
+
+impl Outcome {
+    pub fn value(&self) -> &'static str {
+        match self {
+            Outcome::Passed => "passed",
+            Outcome::Failed => "failed",
+            Outcome::FormatFailed => "format_failed",
+            Outcome::NoSubmission => "no_submission",
+            Outcome::AgentError => "agent_error",
+        }
+    }
+
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "passed" => Some(Outcome::Passed),
+            "failed" => Some(Outcome::Failed),
+            "format_failed" => Some(Outcome::FormatFailed),
+            "no_submission" => Some(Outcome::NoSubmission),
+            "agent_error" => Some(Outcome::AgentError),
+            _ => None,
+        }
+    }
+}
+
+/// Identifies a benchmark rollout. Taken from `run.json`'s authoritative fields rather than the
+/// `task__lane` directory name, which is `__`-ambiguous. Ordering drives deterministic reduce input.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RolloutId {
+    pub env: String,
+    pub task: String,
+    pub lane: String,
+}
+
+impl fmt::Display for RolloutId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}__{}", self.env, self.task, self.lane)
+    }
+}
+
+/// Typed model of a rollout's `run.json`. The harness writes a superset of these fields; the analyzer
+/// reads exactly this subset, tolerating missing optionals for forward-compat.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunMeta {
+    pub env_id: String,
+    pub task_id: String,
+    pub lane: String,
+    pub provider: String,
+    pub model: String,
+    #[serde(default)]
+    pub tool_exposure_mode: Option<String>,
+    pub outcome: String,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+    #[serde(default)]
+    pub tool_call_count: u64,
+    #[serde(default)]
+    pub turn_count: u64,
+    #[serde(default)]
+    pub total_tokens: Option<u64>,
+    #[serde(default)]
+    pub agent_error: Option<String>,
+    #[serde(default)]
+    pub stage_count: u64,
+    #[serde(default)]
+    pub format_attempts: u64,
+    #[serde(default)]
+    pub verifier_exit_code: Option<i64>,
+    #[serde(default)]
+    pub verifier_timed_out: Option<bool>,
+}
+
+impl RunMeta {
+    pub fn rollout_id(&self) -> RolloutId {
+        RolloutId {
+            env: self.env_id.clone(),
+            task: self.task_id.clone(),
+            lane: self.lane.clone(),
+        }
+    }
+
+    pub fn is_pass(&self) -> bool {
+        self.outcome == Outcome::Passed.value()
+    }
+
+    /// One-line outcome summary embedded in the per-trajectory map prompt.
+    pub fn summarize_outcome(&self) -> String {
+        let mut parts = vec![
+            format!("outcome={}", self.outcome),
+            format!("provider/model={}/{}", self.provider, self.model),
+            format!("turns={}", self.turn_count),
+            format!("tool_calls={}", self.tool_call_count),
+            format!("stages={}", self.stage_count),
+            format!("format_attempts={}", self.format_attempts),
+        ];
+        if let Some(reason) = &self.finish_reason {
+            parts.push(format!("finish={reason}"));
+        }
+        if let Some(tokens) = self.total_tokens {
+            parts.push(format!("tokens={tokens}"));
+        }
+        if let Some(code) = self.verifier_exit_code {
+            parts.push(format!("verifier_exit={code}"));
+        }
+        if self.verifier_timed_out == Some(true) {
+            parts.push("verifier_timed_out=true".to_string());
+        }
+        if let Some(err) = &self.agent_error {
+            parts.push(format!("agent_error={err}"));
+        }
+        parts.join(" ")
+    }
+}
+
+/// One `kind`-tagged line of a `trajectory.jsonl`. Unrecognised kinds degrade to [`Event::Unknown`]
+/// (forward-compat); known kinds missing a required field are a deserialization error.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Event {
+    ConversationCreated,
+    /// The agent's configured system prompt plus the initial task message, captured once at
+    /// conversation start. This is the harness-side configured input, not the full prompt the
+    /// platform materializes server-side (skill catalog, tool instructions, hook context).
+    Prompts {
+        #[serde(default)]
+        system_prompt: String,
+        user_message: String,
+    },
+    AssistantText {
+        text: String,
+    },
+    ToolCall {
+        tool_name: String,
+        input: Value,
+    },
+    ToolOutput {
+        output: Value,
+    },
+    TokenUsage,
+    Finish,
+    StageComplete {
+        stage: u32,
+    },
+    AgentError {
+        error: String,
+    },
+    Error {
+        error: String,
+    },
+    /// Boot/seed/setup failure; the sole record in an infra-failed rollout's trajectory.
+    InfraError {
+        error: String,
+    },
+    ArtifactMissing {
+        error: String,
+    },
+    ParseError {
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// The effective context the model actually received on the wire, recovered post-run from the
+    /// platform's persisted provider request (system prompt + tool names + sampling). Unlike
+    /// [`Event::Prompts`] (the harness-side configured input), this is what was assembled and sent
+    /// server-side. Normally one per conversation; more than one signals a context that drifted.
+    EffectivePrompt(EffectivePromptData),
+    /// A detected anomaly while recovering the effective prompt (fetch failed, unhandled provider
+    /// shape, empty system prompt, no interactions despite turns, or a context that varied). Surfaced
+    /// loudly instead of writing a silent null.
+    EffectivePromptError {
+        error: String,
+    },
+    /// Raw stream framing the harness could not classify, plus any future event kinds.
+    #[serde(other)]
+    Unknown,
+}
+
+/// Normalized decoding parameters, mapped from each provider's own field names
+/// (`max_output_tokens`/`maxOutputTokens` -> `max_tokens`, `topP` -> `top_p`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SamplingParams {
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<i64>,
+    pub top_p: Option<f64>,
+}
+
+/// Payload of [`Event::EffectivePrompt`]. The harness builds and serializes this; the analyzer reads
+/// it back through the enum. `system_prompt` is required — an absent one is an error path, not a null.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EffectivePromptData {
+    pub system_prompt: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    pub sampling: SamplingParams,
+    pub interaction_count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slug_normalizes_and_falls_back() {
+        assert_eq!(slug("openai/gpt-4"), "openai_gpt-4");
+        assert_eq!(slug("  ..weird.. "), "weird");
+        assert_eq!(slug("///"), "run");
+    }
+
+    #[test]
+    fn rollout_dir_is_env_task_lane() {
+        assert_eq!(
+            rollout_dir("basic", "median-salary", "kimi"),
+            "basic/median-salary__kimi"
+        );
+    }
+
+    #[test]
+    fn outcome_roundtrips_through_value() {
+        for o in [
+            Outcome::Passed,
+            Outcome::Failed,
+            Outcome::FormatFailed,
+            Outcome::NoSubmission,
+            Outcome::AgentError,
+        ] {
+            assert_eq!(Outcome::from_value(o.value()), Some(o));
+        }
+        assert_eq!(Outcome::from_value("nope"), None);
+    }
+
+    #[test]
+    fn run_meta_parses_minimal_and_tolerates_missing_optionals() {
+        let m: RunMeta = serde_json::from_str(
+            r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"passed"}"#,
+        )
+        .unwrap();
+        assert!(m.is_pass());
+        assert_eq!(m.turn_count, 0);
+        assert_eq!(m.rollout_id().to_string(), "e/t__l");
+        // Older run.json predates the flag -> absent field must default to None, not fail to parse.
+        assert_eq!(m.tool_exposure_mode, None);
+
+        let with_flag: RunMeta = serde_json::from_str(
+            r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"passed","tool_exposure_mode":"full"}"#,
+        )
+        .unwrap();
+        assert_eq!(with_flag.tool_exposure_mode.as_deref(), Some("full"));
+    }
+
+    #[test]
+    fn event_parses_known_and_unknown_kinds() {
+        let tool: Event =
+            serde_json::from_str(r#"{"kind":"tool_call","tool_name":"run","input":{"cmd":"ls"}}"#)
+                .unwrap();
+        assert!(matches!(tool, Event::ToolCall { .. }));
+        let unknown: Event = serde_json::from_str(r#"{"kind":"brand_new_kind"}"#).unwrap();
+        assert!(matches!(unknown, Event::Unknown));
+    }
+
+    #[test]
+    fn event_parses_prompts_with_default_system_prompt() {
+        let with_system: Event = serde_json::from_str(
+            r#"{"kind":"prompts","system_prompt":"be helpful","user_message":"do the task"}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(with_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt == "be helpful" && user_message == "do the task")
+        );
+        let no_system: Event =
+            serde_json::from_str(r#"{"kind":"prompts","user_message":"do the task"}"#).unwrap();
+        assert!(
+            matches!(no_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt.is_empty() && user_message == "do the task")
+        );
+    }
+
+    #[test]
+    fn effective_prompt_round_trips_through_the_enum() {
+        let data = EffectivePromptData {
+            system_prompt: "you are helpful".to_string(),
+            tools: vec!["archestra__search_tools".to_string()],
+            sampling: SamplingParams {
+                temperature: Some(0.0),
+                max_tokens: Some(8192),
+                top_p: None,
+            },
+            interaction_count: 3,
+        };
+        // The harness serializes the payload, then prefixes the kind tag (as RunArtifacts::append does).
+        let mut line = serde_json::to_value(&data).unwrap();
+        line.as_object_mut()
+            .unwrap()
+            .insert("kind".to_string(), "effective_prompt".into());
+        let parsed: Event = serde_json::from_value(line).unwrap();
+        assert!(matches!(parsed, Event::EffectivePrompt(d) if d == data));
+    }
+
+    #[test]
+    fn effective_prompt_error_parses() {
+        let parsed: Event = serde_json::from_str(
+            r#"{"kind":"effective_prompt_error","sequence":4,"error":"context varied"}"#,
+        )
+        .unwrap();
+        assert!(matches!(parsed, Event::EffectivePromptError { error } if error == "context varied"));
+    }
+}

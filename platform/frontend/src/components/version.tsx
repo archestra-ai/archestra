@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import Link from "next/link";
@@ -19,7 +20,11 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: organization } = useOrganization();
   const { data: appearance } = useAppearanceSettings();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const hideReleaseLink = config.enterpriseFeatures.fullWhiteLabeling;
+  // SPDX-SnippetEnd
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
   const version = data?.version;

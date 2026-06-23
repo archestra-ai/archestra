@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-05-26
+lastUpdated: 2026-06-11
 ---
 
 <!--
@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 -->
 
-Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases. For direct document uploads, use **Knowledge > Files**; see the [Knowledge Files section](/docs/platform-knowledge-bases#files).
+Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 
 ## Visibility
 
@@ -68,13 +68,14 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App installation. For GitHub App auth, enter the App ID and installation ID, then paste the app private key in the credential field.
+**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App. GitHub App credentials (App ID, installation ID, and private key) are stored once as an organization-level configuration under **Settings -> GitHub**; the connector references a saved configuration instead of holding its own credentials, so one App can back many connectors and skill imports.
 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
 | Authentication Method | Personal access token or GitHub App                                                            |
+| GitHub App Configuration | Saved configuration to authenticate with when using GitHub App auth (managed in **Settings -> GitHub**) |
 | Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
@@ -295,6 +296,54 @@ Example advanced config:
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
 
+## Web Crawler
+
+Crawl static HTML pages from a documentation site or public web property.
+
+**Indexed:** same-host HTML pages discovered from the start URL. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.
+
+**Authentication:** none in the initial version. The crawler only fetches pages reachable over HTTP(S).
+
+Private and internal network addresses are blocked. Start URLs and discovered pages cannot resolve to loopback, link-local, RFC 1918 private ranges, cloud metadata endpoints, or other reserved address ranges. Hosts are checked before each fetch, but DNS records can change between validation and the final network request.
+
+If the start URL is the site root, such as `https://example.com/`, and no include path prefixes are configured, the crawler can discover any same-host page within the configured depth and page limits.
+
+| Field                 | Description                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| Start URL             | First page to crawl. Crawling stays on the same host.                                                    |
+| Include Path Prefixes | Comma-separated paths to crawl, such as `/docs/` or `/guides/`. Defaults to the start URL path.          |
+| Exclude Path Patterns | Comma-separated regular expressions matched against path and query, such as `/search` or `/archive/.*`. |
+| Content Selector      | CSS selector for the page content root. Leave blank to use default document selectors.                   |
+| Exclude Selectors     | Comma-separated CSS selectors to remove before extracting text, such as `.sidebar` or `.toc`.           |
+| Max Pages             | Maximum pages to crawl in one sync (default: `250`).                                                     |
+| Max Depth             | Maximum link depth from the start URL (default: `3`).                                                    |
+| Batch Size            | Documents yielded per sync batch (default: `25`).                                                        |
+| Request Delay         | Optional delay between requests, in milliseconds.                                                        |
+| User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
+
+## Perforce (Helix Core)
+
+Sync text files from Perforce Helix Core depot paths.
+
+**Indexed:** files matching the configured extensions (defaults to `.md`, `.yaml`, `.yml`) under the configured depot paths, at their latest submitted revision. Files with non-text Perforce filetypes (binary, symlink, etc.) and files larger than 2 MB are skipped regardless of the extension list, so broadening the extensions (e.g. adding `.txt`, `.json`, or `.xml`) is safe even in depots that mix documentation with binary assets. Optional exclude paths carve subtrees (e.g. generated or vendored directories) out of the synced depot paths.
+
+**Authentication:** a Perforce username with a login ticket, sent as HTTP basic authentication. The ticket must be valid for all hosts — generate it with `p4 login -a -p`. For long-lived access, use a service account whose group has an unlimited ticket timeout. The account needs read access to the configured depot paths.
+
+The connector talks to the [P4 REST API](https://help.perforce.com/helix-core/server-apps/p4sag/current/Content/P4SAG/p4-rest-api.html), served by the built-in P4 web server. An administrator must start the web server on the P4 Server (`p4 webserver start -p <port>`; it serves HTTPS automatically when the server has an SSL certificate configured). The REST API is a Perforce Technology Preview feature (introduced with P4 Server 2025.2), so its behavior may change between server releases. No `p4` client binary and no client workspace (`P4CLIENT`) are required — files are listed and read directly in depot syntax over HTTP. For servers with self-signed certificates, provide the CA to the backend via standard Node.js trust configuration (`NODE_EXTRA_CA_CERTS`).
+
+Incremental syncs are driven by submitted changelist numbers: after the initial sync, only files changed since the last synced changelist are re-indexed. File deletions are not propagated on incremental syncs; use **Force re-sync** to rebuild the index after large depot restructurings.
+
+Each depot path and extension combination is listed in its own REST API request. On very large depots, server `maxresults` limits or per-request response bounds can reject a listing; configure narrower depot paths if the initial sync fails while listing files.
+
+| Field         | Description                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| Server URL    | Base URL of the P4 REST API served by the P4 web server (e.g., `https://perforce.example.com:8080`)    |
+| Depot Paths   | Comma-separated depot paths to sync recursively, in depot syntax (e.g., `//depot/docs`)                |
+| Username      | The Perforce user (P4USER) the connector authenticates as                                               |
+| Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
+| File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
+| Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
 ## Managing Connectors
 
 Connectors can be managed from the **Connectors** page. Open a connector to:
@@ -303,6 +352,10 @@ Connectors can be managed from the **Connectors** page. Open a connector to:
 - **Trigger sync** -- runs an immediate sync outside the schedule
 - **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
 - **View runs** -- see sync history with status, document counts, and errors
+
+## Environment
+
+A connector can be assigned a deployment environment. Only agents and gateways in the same environment can use its knowledge — a "dev" agent cannot query a "prod" connector. Unassigned connectors belong to the Default environment. See [Environments](/docs/platform-environments).
 
 ## Adding New Connector Types
 

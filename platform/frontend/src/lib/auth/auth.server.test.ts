@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { serverCanAccessPage, serverHasPermissions } from "./auth.server";
 
@@ -7,13 +7,13 @@ const { getUserPermissionsMock, getServerApiHeadersMock } = vi.hoisted(() => ({
   getServerApiHeadersMock: vi.fn(),
 }));
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getUserPermissions: getUserPermissionsMock,
   },
 }));
 
-vi.mock("@shared/access-control", () => ({
+vi.mock("@archestra/shared/access-control", () => ({
   requiredPagePermissionsMap: {
     "/mcp/gateways": {
       mcpGateway: ["read"],

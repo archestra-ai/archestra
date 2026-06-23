@@ -23,7 +23,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 // Mock shared module
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   requiredPagePermissionsMap: {
     "/protected": { "organization:read": ["read"] },
     "/admin": { "organization:write": ["write"] },
@@ -219,24 +219,6 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
     });
 
-    it("should keep sign-in visible while default password change is pending", () => {
-      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fchat");
-      window.sessionStorage.setItem(
-        "archestra.defaultPasswordChangePending",
-        "true",
-      );
-
-      render(
-        <WithAuthCheck>
-          <MockChild />
-        </WithAuthCheck>,
-      );
-
-      expect(mockRouterPush).not.toHaveBeenCalled();
-      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
-    });
-
     it("should ignore malicious redirectTo param and redirect to home", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
       const maliciousUrl = encodeURIComponent("https://evil.com/phishing");
@@ -328,6 +310,23 @@ describe("WithAuthCheck", () => {
         isPending: false,
       } as unknown as ReturnType<typeof useSession>);
       vi.mocked(usePathname).mockReturnValue("/auth/two-factor");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
+    it("should allow access to /auth/recover-account when not authenticated (backup-code sign-in)", () => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/recover-account");
 
       render(
         <WithAuthCheck>

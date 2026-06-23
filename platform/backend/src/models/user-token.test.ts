@@ -1,7 +1,9 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import UserTokenModel from "./user-token";
 
@@ -43,6 +45,29 @@ describe("UserTokenModel", () => {
       const { token } = await UserTokenModel.create(user.id, org.id);
 
       expect(token.name).toBe("Personal Token");
+    });
+
+    test("second create for the same user+org conflicts and cleans up its secret", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      await UserTokenModel.create(user.id, org.id);
+      await expect(UserTokenModel.create(user.id, org.id)).rejects.toThrow(
+        /user token already exists/,
+      );
+
+      // the conflicting create must not leak the secret it minted before the insert lost.
+      const secretName = `user-token-${user.id}-${org.id}`;
+      const secrets = await db
+        .select()
+        .from(schema.secretsTable)
+        .where(eq(schema.secretsTable.name, secretName));
+      expect(secrets).toHaveLength(1);
     });
   });
 
@@ -284,6 +309,43 @@ describe("UserTokenModel", () => {
       const second = await UserTokenModel.ensureUserToken(user.id, org.id);
 
       expect(first.id).toBe(second.id);
+    });
+
+    test("concurrent first-time creates converge on one token, no orphan secret", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      const tokens = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          UserTokenModel.ensureUserToken(user.id, org.id),
+        ),
+      );
+
+      // every caller resolves to the same single token...
+      expect(new Set(tokens.map((t) => t.id)).size).toBe(1);
+      const rows = await db
+        .select()
+        .from(schema.userTokensTable)
+        .where(
+          and(
+            eq(schema.userTokensTable.userId, user.id),
+            eq(schema.userTokensTable.organizationId, org.id),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+
+      // ...and the racers that lost cleaned up the secret they had minted (no leak).
+      const secretName = `user-token-${user.id}-${org.id}`;
+      const secrets = await db
+        .select()
+        .from(schema.secretsTable)
+        .where(eq(schema.secretsTable.name, secretName));
+      expect(secrets).toHaveLength(1);
     });
   });
 

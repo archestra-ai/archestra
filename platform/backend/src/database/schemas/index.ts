@@ -51,6 +51,13 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
+export { default as appsTable } from "./app";
+export { default as appDataTable } from "./app-data";
+export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
+export { default as appRenderScreenshotTable } from "./app-render-screenshot";
+export { default as appTeamTable } from "./app-team";
+export { default as appToolsTable } from "./app-tool";
+export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
@@ -60,6 +67,10 @@ export {
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
+export {
+  connectionSetupSkillsTable,
+  default as connectionSetupsTable,
+} from "./connection-setup";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationAttachmentsTable } from "./conversation-attachment";
@@ -72,6 +83,10 @@ export {
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
+export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
+export { default as filesTable } from "./file";
+export { default as githubAppConfigsTable } from "./github-app-config";
+export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
@@ -80,7 +95,6 @@ export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
 export { default as kbDocumentsTable } from "./kb-document";
-export { default as kbUploadedFilesTable } from "./kb-uploaded-file";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,
@@ -111,6 +125,12 @@ export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as processedEmailsTable } from "./processed-email";
+export {
+  default as projectsTable,
+  projectSharesTable,
+  projectShareTeamsTable,
+} from "./project";
+export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
@@ -121,19 +141,22 @@ export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
-export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
-export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
-export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
+export { default as skillSandboxFilesTable } from "./skill-sandbox-file";
+export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay-event";
+export { default as skillSandboxSkillMountsTable } from "./skill-sandbox-skill-mount";
 export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
+export { default as skillVersionsTable } from "./skill-version";
+export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
+export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";

@@ -1,5 +1,6 @@
-import type { ArchestraToolShortName, Permission } from "@shared";
+import type { ArchestraToolShortName, Permission } from "@archestra/shared";
 import { userHasPermission } from "@/auth/utils";
+import logger from "@/logging";
 import { UserModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
@@ -126,23 +127,51 @@ export const TOOL_PERMISSIONS: Record<
   search_tools: null,
   run_tool: null,
 
-  // code execution — gated by explicit tool assignment + the codeRuntime
-  // feature flag (the RBAC model has no "execute" action).
-  run_python: null,
-
   // skills — require skill:read; handlers further filter by per-skill scope.
   list_skills: { resource: "skill", action: "read" },
-  activate_skill: { resource: "skill", action: "read" },
-  read_skill_file: { resource: "skill", action: "read" },
+  load_skill: { resource: "skill", action: "read" },
   // Skill authoring — writes need skill:create/update; create_skill always
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
-  // Skill sandbox execution — gated by explicit `skill:execute` permission and
-  // per-agent tool assignment. Handlers additionally check `skill:read` per skill.
-  create_skill_sandbox: { resource: "skill", action: "execute" },
-  run_skill_command: { resource: "skill", action: "execute" },
-  get_skill_sandbox_artifact: { resource: "skill", action: "execute" },
+  // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
+  // assignment. The implicit per-conversation sandbox is created lazily; the
+  // create step is not a tool. load_skill (skill:read) mounts a skill into
+  // the sandbox when the caller also has sandbox:execute.
+  run_command: { resource: "sandbox", action: "execute" },
+  download_file: { resource: "sandbox", action: "execute" },
+  upload_file: { resource: "sandbox", action: "execute" },
+  search_files: { resource: "sandbox", action: "execute" },
+  read_file: { resource: "sandbox", action: "execute" },
+  save_result: { resource: "sandbox", action: "execute" },
+  edit_file: { resource: "sandbox", action: "execute" },
+  delete_file: { resource: "sandbox", action: "execute" },
+
+  // MCP Apps. The data-store tools gate on app:read/update; the running app's
+  // appId is route-bound (set by the app MCP proxy), so the permission check
+  // plus that binding together confine a caller to apps it may use.
+  scaffold_app: { resource: "app", action: "create" },
+  // refine mutates the app head (persists its spec), mirroring edit_app.
+  refine_app: { resource: "app", action: "update" },
+  list_apps: { resource: "app", action: "read" },
+  render_app: { resource: "app", action: "read" },
+  read_app: { resource: "app", action: "read" },
+  edit_app: { resource: "app", action: "update" },
+  // validate_app only reads the head html and reports static findings.
+  validate_app: { resource: "app", action: "read" },
+  // publish_app changes the app's visibility scope; the scope-promotion gate
+  // (assertCallerMayModifyApp) is the real authority, app:update is the floor.
+  publish_app: { resource: "app", action: "update" },
+  delete_app: { resource: "app", action: "delete" },
+  // Authoring intent: the preview is exercised while building/fixing an app.
+  preview_app_tool: { resource: "app", action: "update" },
+  get_app_diagnostics: { resource: "app", action: "read" },
+  app_data_get: { resource: "app", action: "read" },
+  app_data_set: { resource: "app", action: "update" },
+  app_data_list: { resource: "app", action: "read" },
+  app_data_delete: { resource: "app", action: "update" },
+  // A viewer who can use an app can run its archestra.llm.complete() calls.
+  llm_complete: { resource: "app", action: "read" },
 };
 
 /**
@@ -152,8 +181,7 @@ export const TOOL_PERMISSIONS: Record<
  */
 const ORG_CONTEXT_READ_TOOLS: ReadonlySet<ArchestraToolShortName> = new Set([
   "list_skills",
-  "activate_skill",
-  "read_skill_file",
+  "load_skill",
 ]);
 
 /**
@@ -193,6 +221,16 @@ export async function checkToolPermission(
   );
 
   if (!allowed) {
+    logger.warn(
+      {
+        organizationId: context.organizationId,
+        userId: context.userId,
+        toolName,
+        resource: perm.resource,
+        action: perm.action,
+      },
+      "[ArchestraMCP] rbac denied tool execution",
+    );
     return errorResult(
       `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`,
     );

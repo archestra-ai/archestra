@@ -6,7 +6,7 @@ import {
   getManageCredentialsButtonTestId,
   MCP_CATALOG_EDIT_QUERY_PARAM,
   type McpDeploymentStatusEntry,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   MessageSquare,
@@ -56,16 +56,13 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import {
   fetchCatalogTools,
-  useCatalogPresets,
   useRefreshInternalMcpCatalogImage,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import {
-  useDefaultEnvironment,
-  usePresetEntityName,
-} from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useDefaultEnvironment } from "@/lib/organization.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import {
   clearCatalogEditParam,
   setCatalogEditParam,
@@ -81,10 +78,6 @@ import {
   McpServerSettingsDialog,
   type SettingsPage,
 } from "./mcp-server-settings-dialog";
-import {
-  presetHasUnfilledFields,
-  useCanEditCatalogPresets,
-} from "./preset-helpers";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -111,15 +104,14 @@ export type McpServerCardProps = {
   onInstallRemoteServer: () => void;
   onInstallLocalServer: () => void;
   /**
-   * Trigger a reinstall. `flaggedInstalls` is the set of installs (parent +
-   * preset family) the caller wants reinstalled — derived from
-   * `reinstallRequired`. Empty/undefined means "decide in the handler".
+   * Trigger a reinstall. `flaggedInstalls` is the set of installs the caller
+   * wants reinstalled — derived from `reinstallRequired`. Empty/undefined means
+   * "decide in the handler".
    */
   onReinstall: (
     flaggedInstalls?: Array<{
       id: string;
       name: string;
-      presetLabel: string | null;
     }>,
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
@@ -131,16 +123,12 @@ export type McpServerCardProps = {
   onRestartPodsStarted?: (serverIds: string[]) => void;
   onRestartPodsFailed?: (serverIds: string[]) => void;
   onCancelInstallation?: (serverId: string) => void;
-  /**
-   * Called when user wants to add a personal connection from manage dialog.
-   * `presetCatalogId` is set when the user clicked Install on a specific
-   * preset card on the Credentials page; falls back to the parent catalog.
-   */
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
+  /** Called when user wants to add a personal connection from manage dialog. */
+  onAddPersonalConnection?: () => void;
   /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
+  onAddSharedConnection?: (teamId: string) => void;
   /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddOrgConnection?: () => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
@@ -175,11 +163,6 @@ export function McpServerCard({
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
-  const { data: presets = [] } = useCatalogPresets(
-    variant !== "builtin" ? item.id : null,
-  );
-  const presetCount = presets.length;
-
   const createAgent = useCreateProfile();
   const bulkAssignTools = useBulkAssignTools();
   const [isChatCreating, setIsChatCreating] = useState(false);
@@ -187,9 +170,6 @@ export function McpServerCard({
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
   // Cloning creates a new registry entry, so it's gated on the same permission
   // the create-catalog endpoint requires (mcpRegistry:create), not the broader
   // mcpServerInstallation:admin.
@@ -214,21 +194,22 @@ export function McpServerCard({
           defaultEnvironmentName: defaultEnvironment.name,
         });
 
-  // Gate the Install button when the default preset (the parent catalog
-  // itself) has unfilled preset-scoped fields and the current user cannot
-  // edit them — clicking Install would land on Step 1 and 403 on save.
-  const { singular: presetSingular, defaultLabel } = usePresetEntityName();
-  const presetSingularLower = presetSingular.toLowerCase();
-  const { canEdit: canEditPresets, isLoading: canEditPresetsLoading } =
-    useCanEditCatalogPresets(variant !== "builtin" ? item : null);
-  const defaultPresetNeedsFill =
-    variant !== "builtin" && presetHasUnfilledFields(item, item);
-  const installBlockedByPresetFill = defaultPresetNeedsFill && !canEditPresets;
-  const installBlockedByPresetFillTooltip = `This MCP server isn't ready to install in the default ${presetSingularLower} yet — some values still need to be filled in. Ask your administrator to finish configuring it.`;
+  // Whether the current user can edit this catalog item: an admin, a team-admin
+  // member of the item's teams, or the author of a personal item. Gates the
+  // inline edit form opened via the `?edit=<id>` deep link.
+  const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
+    useCanModifyCatalogItem(variant !== "builtin" ? item : null);
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
-  const { data: teams } = useTeams();
+  // Teams the user may install a shared connection for: any team for an install
+  // admin, otherwise only the teams they belong to.
+  const { data: isMcpServerInstallAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isMcpServerInstallAdmin,
+  });
 
   // Compute if user can create new installation (personal or team)
   // This is used to determine if the Connect button should be shown
@@ -313,19 +294,19 @@ export function McpServerCard({
   // is resolved at most once, so a client-side change of `?edit` to a different
   // id without a remount won't re-trigger it. Runs only after the edit-
   // permission check resolves so non-editors aren't briefly shown the form.
-  // Builtin items aren't editable, so canEditPresets is false for them.
+  // Builtin items aren't editable, so canEditCatalog is false for them.
   useEffect(() => {
     if (deepLinkHandledRef.current) return;
-    if (canEditPresetsLoading) return;
+    if (canEditCatalogLoading) return;
     if (editParam !== item.id) return;
     deepLinkHandledRef.current = true;
-    if (canEditPresets) {
+    if (canEditCatalog) {
       setSettingsInitialPage("configuration");
       setSettingsDialogOpen(true);
     } else {
       setEditNoAccessOpen(true);
     }
-  }, [editParam, item.id, canEditPresets, canEditPresetsLoading]);
+  }, [editParam, item.id, canEditCatalog, canEditCatalogLoading]);
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -354,6 +335,9 @@ export function McpServerCard({
           agentId: agent.id,
           toolId: tool.id,
           resolveAtCallTime: true,
+          ...(item.enterpriseManagedConfig
+            ? { credentialResolutionMode: "enterprise_managed" as const }
+            : {}),
         }));
         await bulkAssignTools.mutateAsync({ assignments });
       }
@@ -377,52 +361,25 @@ export function McpServerCard({
     (s) => s.ownerId === currentUserId && !s.teamId,
   );
 
-  // Preset-aware: include personal installs whose catalogId points at this
-  // catalog OR any of its child presets. Without this, an install made via
-  // preset X (catalogId = X.id) is invisible to the parent card.
-  const presetCatalogIdSet = new Set<string>([
-    item.id,
-    ...presets.map((p) => p.id),
-  ]);
-  const allServersAcrossPresets = (allMcpServers ?? []).filter((s) =>
-    presetCatalogIdSet.has(s.catalogId),
+  const allServersForCatalog = (allMcpServers ?? []).filter(
+    (s) => s.catalogId === item.id,
   );
-  const personalServersAcrossPresets = allServersAcrossPresets.filter(
+  const personalServersForCatalog = allServersForCatalog.filter(
     (s) => s.ownerId === currentUserId && !s.teamId,
   );
-  const hasPresets = presetCount > 0;
   const hasPersonalConnection =
-    personalServersAcrossPresets.length > 0 || !!personalServer;
+    personalServersForCatalog.length > 0 || !!personalServer;
 
-  const presetNameByCatalogId = new Map<string, string>();
-  presetNameByCatalogId.set(item.id, defaultLabel);
-  for (const p of presets) {
-    presetNameByCatalogId.set(p.id, p.childName ?? p.name);
-  }
-
-  // Iterate over presets (the parent catalog item + its child presets) and pick
-  // the most recent personal install per preset. The dropdown lists presets,
-  // not individual mcp_server rows.
-  const presetsForUninstall: { id: string; name: string }[] = [
-    { id: item.id, name: item.name },
-    ...presets.map((p) => ({ id: p.id, name: p.name })),
-  ];
-  const uninstallInstalls: UninstallServerInstall[] = presetsForUninstall
-    .map((preset) => {
-      const install = personalServersAcrossPresets
-        .filter((s) => s.catalogId === preset.id)
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )[0];
-      if (!install) return null;
-      return {
-        server: { id: install.id, name: install.name },
-        presetName: preset.name,
-        isDefault: preset.id === item.id,
-      };
-    })
-    .filter((x): x is UninstallServerInstall => x !== null);
+  // The most recent personal install for this catalog item, if any.
+  const uninstallInstalls: UninstallServerInstall[] = (() => {
+    const install = personalServersForCatalog
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+    return install ? [{ server: { id: install.id, name: install.name } }] : [];
+  })();
 
   const handleUninstallClick = () => {
     if (uninstallInstalls.length > 0) {
@@ -442,16 +399,10 @@ export function McpServerCard({
   ) : null;
 
   // Aggregate all installations for this catalog item (for logs dropdown).
-  // Preset-aware: include installs whose catalogId matches the parent OR any
-  // child preset id, so the Logs/Inspector/Shell selectors can switch between
-  // preset pods.
   let localInstalls: NonNullable<typeof allMcpServers> = [];
   if (variant === "local" && allMcpServers && allMcpServers.length > 0) {
-    localInstalls = allMcpServers
-      .filter(
-        ({ catalogId, serverType }) =>
-          presetCatalogIdSet.has(catalogId) && serverType === "local",
-      )
+    localInstalls = allServersForCatalog
+      .filter(({ serverType }) => serverType === "local")
       .sort((a, b) => {
         // Sort by createdAt ascending (oldest first, most recent last)
         return (
@@ -464,24 +415,14 @@ export function McpServerCard({
   const allInstalls =
     localInstalls.length > 0
       ? localInstalls
-      : allServersAcrossPresets
+      : allServersForCatalog
           .slice()
           .sort(
             (a, b) =>
               new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
           );
 
-  const installsWithPresetLabel = allInstalls.map((s) => ({
-    ...s,
-    presetLabel:
-      s.catalogId === item.id
-        ? defaultLabel
-        : (presetNameByCatalogId.get(s.catalogId) ?? null),
-  }));
-
-  // Preset-aware: an install across the parent OR any child preset that's
-  // flagged as needing reinstall should surface the banner here.
-  const userFlaggedInstalls = allServersAcrossPresets.filter(
+  const userFlaggedInstalls = allServersForCatalog.filter(
     (s) => s.reinstallRequired && s.ownerId === currentUserId,
   );
   const needsReinstall = userFlaggedInstalls.length > 0;
@@ -490,10 +431,6 @@ export function McpServerCard({
       userFlaggedInstalls.map((s) => ({
         id: s.id,
         name: s.name,
-        presetLabel:
-          s.catalogId === item.id
-            ? defaultLabel
-            : (presetNameByCatalogId.get(s.catalogId) ?? null),
       })),
     );
 
@@ -533,13 +470,10 @@ export function McpServerCard({
 
   // Catalog-scope reinstall: surfaces a banner + button on multi-tenant
   // local catalogs whose execution config (image, command, args, transport)
-  // was edited. One click recreates the shared pod for everyone and
-  // cascades tool sync. Visibility mirrors the catalog edit predicate
-  // (admin OR personal-scope owner) since only those users can apply
-  // catalog-scope changes.
-  const canEditCatalog =
-    userIsMcpServerAdmin ||
-    (item.scope === "personal" && item.authorId === currentUserId);
+  // was edited. One click recreates the shared pod for everyone and cascades
+  // tool sync. Gated by `canEditCatalog` (admin, a team-admin member of the
+  // item's teams, or the personal-scope owner) since only those users can
+  // apply catalog-scope changes.
   const needsCatalogReinstall =
     variant === "local" &&
     item.multitenant === true &&
@@ -550,10 +484,10 @@ export function McpServerCard({
   const refreshImageMutation = useRefreshInternalMcpCatalogImage();
   const showRefreshImage =
     variant === "local" &&
-    allServersAcrossPresets.some((server) => server.serverType === "local") &&
+    allServersForCatalog.some((server) => server.serverType === "local") &&
     canEditCatalog;
   const triggerRefreshImage = () => {
-    const restartServerIds = allServersAcrossPresets
+    const restartServerIds = allServersForCatalog
       .filter((server) => server.serverType === "local")
       .map((server) => server.id);
     onRestartPodsStarted?.(restartServerIds);
@@ -580,10 +514,6 @@ export function McpServerCard({
         userFlaggedInstalls.map((s) => ({
           id: s.id,
           name: s.name,
-          presetLabel:
-            s.catalogId === item.id
-              ? defaultLabel
-              : (presetNameByCatalogId.get(s.catalogId) ?? null),
         })),
         { alsoReinstallCatalog: true },
       );
@@ -599,13 +529,9 @@ export function McpServerCard({
   // Check if logs are available (local variant with at least one installation)
   const isLogsAvailable = variant === "local";
 
-  // Collect server IDs for deployment status indicator. Preset-aware: include
-  // installs whose catalogId points at the parent OR any child preset, so the
-  // pod counter aggregates across presets.
-  const deploymentServerIds = (allMcpServers ?? [])
-    .filter(
-      (s) => presetCatalogIdSet.has(s.catalogId) && s.serverType === "local",
-    )
+  // Collect server IDs for deployment status indicator.
+  const deploymentServerIds = allServersForCatalog
+    .filter((s) => s.serverType === "local")
     .map((s) => s.id);
 
   // Multi-tenant catalogs alias one K8s pod across many mcp_server rows.
@@ -653,14 +579,8 @@ export function McpServerCard({
   );
   const toolsCount = item.toolCount ?? 0;
 
-  // TEMPORARY WORKAROUND: scope the Chat button strictly to the default
-  // preset (parent catalog item). Preset installs (catalogId pointing at a
-  // child preset) should not flip on Chat. Remove once preset-scoped chat is
-  // supported.
-  const isDefaultPresetInstall =
-    isBuiltinVariant || installedServer?.catalogId === item.id;
   const chatButton =
-    isDefaultPresetInstall && toolsCount > 0 ? (
+    toolsCount > 0 ? (
       <Button
         variant="outline"
         size="sm"
@@ -738,7 +658,6 @@ export function McpServerCard({
   const hasCompactInfoContent =
     showAuthorAvatar ||
     toolsCount > 0 ||
-    hasPresets ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
 
@@ -759,7 +678,6 @@ export function McpServerCard({
             </Tooltip>
           </TooltipProvider>
           {(toolsCount > 0 ||
-            hasPresets ||
             (variant === "local" && deploymentServerIds.length > 0) ||
             (!isBuiltinVariant &&
               (connectionAvatars.length > 0 || hasOrgConnection))) && (
@@ -910,12 +828,6 @@ export function McpServerCard({
       size="sm"
       variant="outline"
       className="flex-1"
-      disabled={installBlockedByPresetFill}
-      tooltip={
-        installBlockedByPresetFill
-          ? installBlockedByPresetFillTooltip
-          : undefined
-      }
     >
       <User className="h-4 w-4" />
       Install
@@ -941,7 +853,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {(!hasPersonalConnection || hasPresets) && remoteInstallButton}
+            {!hasPersonalConnection && remoteInstallButton}
           </>
         )}
       </div>
@@ -956,16 +868,11 @@ export function McpServerCard({
             <PermissionButton
               permissions={{ mcpServerInstallation: ["create"] }}
               onClick={onInstallLocalServer}
-              disabled={!isLocalMcpEnabled || installBlockedByPresetFill}
+              disabled={!isLocalMcpEnabled}
               size="sm"
               variant="outline"
               className="w-full"
               data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
-              tooltip={
-                installBlockedByPresetFill && isLocalMcpEnabled
-                  ? installBlockedByPresetFillTooltip
-                  : undefined
-              }
             >
               <Server className="h-4 w-4" />
               Install
@@ -1005,7 +912,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {(!hasPersonalConnection || hasPresets) && localInstallButton}
+            {!hasPersonalConnection && localInstallButton}
           </>
         )}
       </div>
@@ -1031,7 +938,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {(!hasPersonalConnection || hasPresets) && localInstallButton}
+            {!hasPersonalConnection && localInstallButton}
           </>
         )}
       </div>
@@ -1061,14 +968,14 @@ export function McpServerCard({
         item={item}
         variant={variant}
         showConnections={!isBuiltinVariant}
-        connectionCount={allServersAcrossPresets.length}
+        connectionCount={allServersForCatalog.length}
         showDebug={isLogsAvailable}
         showInspector
         showYaml={variant === "local"}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
         onAddOrgConnection={onAddOrgConnection}
-        installs={installsWithPresetLabel}
+        installs={allInstalls}
         deploymentStatuses={deploymentStatuses}
         deploymentServerIds={deploymentServerIds}
         onReinstall={triggerReinstall}
@@ -1149,9 +1056,7 @@ export function McpServerCard({
               </p>
             )}
           </div>
-          {(userIsMcpServerAdmin ||
-            (item.scope === "personal" && item.authorId === currentUserId)) &&
-            settingsButton}
+          {canEditCatalog && settingsButton}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
@@ -1167,7 +1072,7 @@ export function McpServerCard({
             // the WS handler may have delivered podName for some
             // siblings but not others, leaving N-1 banners showing.
             const seenKeys = new Set<string>();
-            return allServersAcrossPresets.filter((s) => {
+            return allServersForCatalog.filter((s) => {
               if (s.localInstallationStatus !== "error") return false;
               const dedupKey = item.multitenant
                 ? `catalog:${s.catalogId}`
@@ -1179,29 +1084,18 @@ export function McpServerCard({
               return true;
             });
           })().map((failed) => {
-            const isDefaultPreset = failed.catalogId === item.id;
-            const presetLabel = isDefaultPreset
-              ? "default"
-              : (presetNameByCatalogId.get(failed.catalogId) ?? failed.name);
             const errorMsg =
               failed.localInstallationError ?? "Installation failed";
             return (
               <div
                 key={failed.id}
                 className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                data-testid={`${E2eTestId.McpServerError}-${item.name}-${presetLabel}`}
+                data-testid={`${E2eTestId.McpServerError}-${item.name}-default`}
               >
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      Installation failed
-                      {!isDefaultPreset && (
-                        <span className="ml-1 font-normal opacity-80">
-                          — preset “{presetLabel}”
-                        </span>
-                      )}
-                    </p>
+                    <p className="font-medium">Installation failed</p>
                     <p className="truncate text-xs" title={errorMsg}>
                       {errorMsg}
                     </p>
@@ -1211,7 +1105,7 @@ export function McpServerCard({
                       variant="link"
                       size="sm"
                       className="h-auto p-0 text-destructive"
-                      data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-${presetLabel}`}
+                      data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
                       onClick={() => {
                         setSettingsInitialPage("debug-logs");
                         setLogsInitialServerId(failed.id);
@@ -1224,7 +1118,7 @@ export function McpServerCard({
                       variant="link"
                       size="sm"
                       className="h-auto p-0 text-destructive"
-                      data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-${presetLabel}`}
+                      data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-default`}
                       onClick={() => {
                         setSettingsInitialPage("configuration");
                         setSettingsDialogOpen(true);

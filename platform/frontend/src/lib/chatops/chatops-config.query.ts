@@ -1,7 +1,15 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
+
+export function useNgrokConfig(enabled = true) {
+  return useQuery({
+    queryKey: ["chatops", "ngrok-config"],
+    queryFn: async () => (await archestraApiSdk.getNgrokConfig()).data ?? null,
+    enabled,
+  });
+}
 
 export function useUpdateChatOpsConfigInQuickstart() {
   const queryClient = useQueryClient();
@@ -37,6 +45,65 @@ export function useUpdateChatOpsConfigInQuickstart() {
       // Keep a defensive fallback for unexpected runtime errors.
       console.error("ChatOps config update error:", error);
       toast.error("Failed to update MS Teams configuration");
+    },
+  });
+}
+
+export function useConnectNgrok() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body: archestraApiTypes.ConnectNgrokData["body"]) => {
+      const { data, error } = await archestraApiSdk.connectNgrok({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success(
+        data.domain
+          ? `ngrok tunnel connected at ${data.domain}`
+          : "ngrok tunnel connected",
+      );
+      // Refresh config so the resolved ngrok domain (and setup status) update.
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "ngrok-config"] });
+    },
+    onError: (error) => {
+      console.error("ngrok connect error:", error);
+      toast.error("Failed to connect ngrok tunnel");
+    },
+  });
+}
+
+export function useDisconnectNgrok() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.disconnectNgrok();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("ngrok tunnel stopped");
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "ngrok-config"] });
+    },
+    onError: (error) => {
+      console.error("ngrok disconnect error:", error);
+      toast.error("Failed to stop ngrok tunnel");
     },
   });
 }

@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-05-06
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -27,9 +27,20 @@ Use this page to choose the gateway authentication method for your client, then 
 
 ## Gateway Authentication
 
-The MCP Gateway supports four client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+The MCP Gateway supports six client authentication methods. Choose based on who is calling and whether the request should carry a specific user's identity — that identity is what enables per-user **Resolve at call time**.
 
-- **OAuth 2.1** and **ID-JAG** both end with an Archestra-issued OAuth access token being sent to the gateway
+| Method | Most relevant for | Acting user | Notes |
+| --- | --- | --- | --- |
+| OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
+| OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered client scoped to an explicit gateway list. |
+| OAuth authorization code (manually registered) | A pre-approved server app acting for whoever is signed in — e.g. an agentic chat backend | Yes | Confidential client (secret + PKCE); enables per-user resolution. |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token (`arch_<token>`); team and org tokens don't identify one user. |
+| ID-JAG | Clients signed in through a corporate IdP (enterprise-managed authorization) | Yes | RFC 8693 token exchange; the IdP issues a JWT Archestra validates. |
+| JWKS | Callers presenting an external IdP JWT directly | Yes | Validated against the profile's IdP; no Archestra token issued. |
+
+These do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+
+- **OAuth 2.1**, **OAuth client credentials**, **OAuth authorization code (manually registered)**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
 - **Bearer token** sends a static platform-managed token directly to the gateway.
 
@@ -53,6 +64,43 @@ Endpoint discovery is automatic. The gateway exposes standard well-known endpoin
 Archestra returns the lifetime of user OAuth access tokens through the standard `expires_in` field. The default lifetime is 1 year, which reduces unnecessary reconnects for MCP-native clients like desktop apps.
 
 Admins can change this in **Settings > Organization > Auth**. The setting is organization-wide and applies to newly issued user OAuth access tokens, including MCP OAuth 2.1 and custom application authorization-code flows.
+
+### OAuth Client Credentials (Applications)
+
+When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
+
+Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+
+The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
+
+- `grant_type=client_credentials`
+- `client_id` and `client_secret`
+- `scope=mcp`
+
+It then sends that token to the gateway like any other OAuth access token (`Authorization: Bearer <token>`). The token is rejected by any gateway not on the client's list, and by gateways in another organization.
+
+Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — assign tools to a shared connection rather than **Resolve at call time**. To let a pre-registered application act with the user's identity instead, use the authorization code grant below.
+
+### OAuth Authorization Code (On behalf of users)
+
+When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
+
+Create it under **MCPs > Credentials > OAuth Clients**, choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+
+The application runs the standard browser flow:
+
+- `GET /api/auth/oauth2/authorize` with `response_type=code`, `scope=mcp` (add `offline_access` for a refresh token), the registered `redirect_uri`, and a PKCE challenge.
+- `POST /api/auth/oauth2/token` with `grant_type=authorization_code`, `client_id`, `client_secret`, and the PKCE verifier.
+
+The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow. By default the signed-in user reaches only the gateways their own permissions already allow.
+
+#### Gateway access grant
+
+Optionally, assign one or more gateways to the client as an **access grant**. Any user who authenticates through the client may then reach those gateways **in addition to** their own role-based access — even gateways they otherwise couldn't reach. The grant is additive (it never removes access) and admin-controlled (only admins register clients and set the list).
+
+This lets you gate a gateway behind a specific trusted app: restrict the gateway so it isn't reachable on its own (assign it to a team with no members — an org-wide gateway is open to all members), then grant it through the client. The gateway is then reachable only by users who come through that app. Leave the grant empty for pure identity passthrough, where access stays governed entirely by each user's permissions.
+
+To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_ENABLED=false`. This disables Dynamic Client Registration and CIMD auto-registration (above), so the gateway accepts OAuth flows only from clients you registered explicitly — both `client_credentials` and `authorization_code`.
 
 ### Bearer Token
 
@@ -153,7 +201,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity and available personal or team-scoped credentials.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Agent connections** setting.
 
 #### Static Credentials
 
@@ -163,36 +211,34 @@ When you pin a tool to a specific installed MCP server connection instead of usi
 
 - **Team-installed connection**: can only be assigned to a **team-scoped** Agent or MCP Gateway that includes that same team
 - **Personal connection**: can only be assigned to a resource the connection owner could access directly
-- **Dynamic / resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
+- **Resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
 
 This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
 
-#### Dynamic Credential Resolution
+#### Resolve at Call Time
 
-By default, each MCP server installation has a single credential that is shared by all callers.
+When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
 
-When you enable "Resolve at call time" on a server, Archestra resolves the credential dynamically based on the caller's identity. This enables multi-tenant setups where each developer uses their own GitHub PAT or each team member uses their own Jira access token.
+- **On behalf of the user** (default): the chatting identity's own connection takes priority, falling back to a connection it can access. A user token resolves to that user's personal connection, then a connection for a team they belong to, then an org-scoped connection; a team token resolves to that team's connection, then an org-scoped one. A caller with no reachable connection gets an actionable connect prompt.
+- **Always use one account**: every runtime-resolved call goes through the chosen connection, regardless of the caller — a service account. Use this when the whole org or a team should share one upstream account. If that connection is revoked, the server returns to on-behalf-of-the-user resolution.
 
 ```mermaid
 flowchart TD
-    A["Tool call arrives<br/>with Gateway Token"] --> B{Dynamic credentials<br/>enabled?}
-    B -- No --> C["Use server's<br/>pre-configured credential"]
-    B -- Yes --> D{Caller has<br/>personal credential?}
-    D -- Yes --> E["Use caller's credential"]
-    D -- No --> F{Team member<br/>has credential?}
-    F -- Yes --> G["Use team member's<br/>credential"]
-    F -- No --> J["Return error +<br/>install link"]
+    A["Tool call arrives<br/>with Gateway Token"] --> B{Assignment resolves<br/>credentials at runtime?}
+    B -- No --> C["Use the assignment's<br/>pinned credential"]
+    B -- Yes --> P{Agent connections set to<br/>one shared account?}
+    P -- Yes --> S["Use that account<br/>(service account)"]
+    P -- No --> D{Caller has their<br/>own connection?}
+    D -- Yes --> E["Use the caller's<br/>own credential"]
+    D -- No --> F{Reachable team or<br/>org connection?}
+    F -- Yes --> G["Use that<br/>connection"]
+    F -- No --> J["Return error +<br/>connect link"]
 
+    style S fill:#d4edda,stroke:#28a745
     style E fill:#d4edda,stroke:#28a745
     style G fill:#d4edda,stroke:#28a745
     style J fill:#f8d7da,stroke:#dc3545
 ```
-
-When dynamic credentials are enabled, Archestra resolves them in priority order:
-
-1. The calling user's own personal credential (highest priority)
-2. A credential owned by a team member on the same team
-3. If no credential is found, an error is returned with an install link
 
 #### Missing Credentials
 
@@ -216,6 +262,8 @@ Your server or its OAuth provider needs to expose two things:
 Archestra handles endpoint discovery, client registration, Authorization Code + PKCE, token storage, and token injection. Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
 
 If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, a direct resource metadata URL, or direct authorization and token endpoints instead of deriving everything from the MCP server URL.
+
+Set **Protected Resource** only when the OAuth provider requires a resource identifier, such as an Entra or OAuth API identifier like `api://<client-id>` or `https://api.example.com`. Archestra sends this as the OAuth `resource` parameter during authorization, token exchange, and refresh. Leave it blank for providers that do not accept resource indicators.
 
 Direct authorization and token endpoints are useful for legacy or self-hosted OAuth providers that expose fixed OAuth URLs but do not publish `/.well-known` metadata.
 

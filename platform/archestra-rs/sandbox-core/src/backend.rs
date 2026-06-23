@@ -5,38 +5,30 @@
 //! every match site to handle it.
 
 use crate::backends::dagger::DaggerBackend;
-use crate::{ArtifactBytes, CommandExecution, Limits, ReplayCommand, Result, SnapshotFile};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Limits, ReplayStep, Result};
 
 /// a materialise-and-run request handed to a backend. validated at the public
-/// core entry points before it reaches here.
+/// core entry points before it reaches here. skill files and PYTHONPATH are no
+/// longer passed separately — they ride in `replay_steps` as `SkillMount`
+/// events, applied (and PYTHONPATH extended) at their sequence point.
 #[derive(Clone)]
 pub(crate) struct RunRequest {
-    pub snapshots: Vec<SnapshotFile>,
-    pub replay_commands: Vec<ReplayCommand>,
+    pub replay_steps: Vec<ReplayStep>,
     pub limits: Limits,
     pub command: String,
     pub cwd: String,
     pub timeout_seconds: u32,
     pub traceparent: Option<String>,
-    /// optional PYTHONPATH applied as a container env var for the materialized
-    /// run. used to make a skill's modules importable from any cwd without
-    /// forcing the model to cd into the skill root.
-    pub pythonpath: Option<String>,
 }
 
 /// an artifact-read request. the backend replays history, then exports `path`.
 #[derive(Clone)]
 pub(crate) struct ArtifactRequest {
-    pub snapshots: Vec<SnapshotFile>,
-    pub replay_commands: Vec<ReplayCommand>,
+    pub replay_steps: Vec<ReplayStep>,
     pub limits: Limits,
     pub path: String,
     pub default_cwd: String,
     pub traceparent: Option<String>,
-    /// same semantics as `RunRequest::pythonpath`; forwarded to the synthetic
-    /// run used to replay history before reading the artifact, so module
-    /// imports resolve identically to the original commands.
-    pub pythonpath: Option<String>,
 }
 
 /// the behaviour every sandbox backend provides. used only via the concrete
@@ -83,6 +75,17 @@ impl Backend {
     pub(crate) async fn prewarm(&self) {
         match self {
             Backend::Dagger(b) => b.prewarm().await,
+        }
+    }
+
+    /// recover an engine fault from a handler panic payload. some backends (the
+    /// Dagger SDK) `unwrap()` transient engine errors deep in generated code, so
+    /// the failure escapes as a panic rather than a typed error; this lets the
+    /// backend-agnostic session layer re-tag the known-recoverable ones onto the
+    /// retry path without naming a concrete runtime.
+    pub(crate) fn engine_fault_from_panic(&self, message: &str) -> Option<EngineFault> {
+        match self {
+            Backend::Dagger(_) => crate::backends::dagger::engine_fault_from_panic(message),
         }
     }
 }

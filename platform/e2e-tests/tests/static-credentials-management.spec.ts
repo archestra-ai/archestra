@@ -1,5 +1,5 @@
+import { archestraApiSdk } from "@archestra/shared";
 import type { Page } from "@playwright/test";
-import { archestraApiSdk } from "@shared";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
@@ -332,7 +332,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await install(page, canCreateTeamCredential);
   }
 
-  // Check Credentials counter
+  // Check Connections counter
   const checkCredentialsCount = async (page: Page) => {
     await goToPage(page, "/mcp/registry");
     await openManageCredentialsDialog(page, catalogItemName);

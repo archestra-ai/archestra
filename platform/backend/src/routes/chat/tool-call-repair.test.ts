@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { repairHarmonyToolName } from "./tool-call-repair";
+import { repairHarmonyToolName, repairToolInputJson } from "./tool-call-repair";
 
 const AVAILABLE = [
   "archestra__run_command",
@@ -91,5 +91,93 @@ describe("repairHarmonyToolName", () => {
         AVAILABLE,
       ),
     ).toBe("archestra__run_command");
+  });
+});
+
+describe("repairToolInputJson", () => {
+  test("returns null for already-valid JSON (nothing to repair)", () => {
+    expect(repairToolInputJson('{"name":"foo","content":"bar"}')).toBeNull();
+    expect(
+      repairToolInputJson('{"a":1,"b":[1,2,3],"c":{"d":true}}'),
+    ).toBeNull();
+  });
+
+  test("escapes a raw newline inside a string value and re-parses", () => {
+    // A literal newline byte inside the quoted value — illegal raw JSON.
+    const raw = '{"content":"line one\nline two"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    const parsed = JSON.parse(repaired as string);
+    expect(parsed.content).toBe("line one\nline two");
+  });
+
+  test("escapes a raw tab inside a string value", () => {
+    const raw = '{"content":"col1\tcol2"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    expect(JSON.parse(repaired as string).content).toBe("col1\tcol2");
+  });
+
+  test("escapes carriage return and other control chars", () => {
+    const raw = '{"content":"a\rbc"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    const parsed = JSON.parse(repaired as string);
+    expect(parsed.content).toBe("a\rbc");
+    // The unusual control char must come back as a \uXXXX escape.
+    expect(repaired).toContain("\\u0001");
+  });
+
+  test("repairs raw control chars in a nested object/array value", () => {
+    const raw = '{"skill":{"files":["a\nb","c\td"]},"name":"x"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    const parsed = JSON.parse(repaired as string);
+    expect(parsed.skill.files).toEqual(["a\nb", "c\td"]);
+    expect(parsed.name).toBe("x");
+  });
+
+  test("preserves already-escaped sequences without double-escaping", () => {
+    // Valid JSON that already contains escaped \n and \" — but make it
+    // need a repair elsewhere so the function actually returns a string.
+    const raw = '{"content":"escaped \\n and \\" stay\nplus a raw newline"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    const parsed = JSON.parse(repaired as string);
+    // The pre-escaped sequences decode to a real newline and quote; the raw
+    // newline is now also a real newline. No literal backslash doubling.
+    expect(parsed.content).toBe('escaped \n and " stay\nplus a raw newline');
+    expect(repaired).not.toContain("\\\\n");
+  });
+
+  test("leaves insignificant whitespace control chars outside strings alone", () => {
+    // Raw newlines between tokens (outside any string) are legal JSON
+    // whitespace; input is already valid so it returns null.
+    const raw = '{\n  "a": 1,\n  "b": "ok"\n}';
+    expect(repairToolInputJson(raw)).toBeNull();
+  });
+
+  test("returns null for unescaped inner quotes (unrecoverable)", () => {
+    // The control-char pass cannot disambiguate an inner quote; it must not
+    // pretend to fix this — return null and let the model re-ask handle it.
+    const raw = '{"content":"he said "hi" to me"}';
+    expect(repairToolInputJson(raw)).toBeNull();
+  });
+
+  test("returns null for genuinely-unrecoverable garbage", () => {
+    expect(repairToolInputJson("{not json at all")).toBeNull();
+    expect(repairToolInputJson("}}}{{{")).toBeNull();
+  });
+
+  test("repairs the realistic skill-content failure mode", () => {
+    // create_skill / update_skill with a multi-line markdown content blob
+    // carrying raw newlines — the reported failure.
+    const raw =
+      '{"name":"my-skill","content":"# Title\n\nSome body text.\n- bullet\n"}';
+    const repaired = repairToolInputJson(raw);
+    expect(repaired).not.toBeNull();
+    const parsed = JSON.parse(repaired as string);
+    expect(parsed.name).toBe("my-skill");
+    expect(parsed.content).toBe("# Title\n\nSome body text.\n- bullet\n");
   });
 });

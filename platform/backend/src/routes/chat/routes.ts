@@ -15,8 +15,11 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
+  generateObject,
   generateText,
   hasToolCall,
+  InvalidToolInputError,
+  jsonSchema,
   type ModelMessage,
   NoSuchToolError,
   stepCountIs,
@@ -143,7 +146,7 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
-import { repairHarmonyToolName } from "./tool-call-repair";
+import { repairHarmonyToolName, repairToolInputJson } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
 // The chat route always builds a `messages` (not `prompt`) config, so the
@@ -808,32 +811,98 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
-                  // Repair tool names that carry a leaked harmony sentinel token
-                  // (e.g. `archestra__run_command<|channel|>commentary`) before
-                  // they surface as an unrecoverable NoSuchToolError. Repair lands
-                  // at tool-call parse, so the earlier tool-input-start chunk keeps
-                  // the raw name — execution is correct, but an MCP App UI start
-                  // keyed off that earlier name may not render for such calls.
-                  experimental_repairToolCall: async ({ toolCall, error }) => {
-                    if (!NoSuchToolError.isInstance(error)) {
-                      return null;
+                  // Recover from two distinct, otherwise-turn-aborting tool-call
+                  // parse failures:
+                  //  - NoSuchToolError: a leaked harmony sentinel token in the
+                  //    tool name (e.g. `archestra__run_command<|channel|>...`).
+                  //    Repair lands at tool-call parse, so the earlier
+                  //    tool-input-start chunk keeps the raw name — execution is
+                  //    correct, but an MCP App UI start keyed off that earlier
+                  //    name may not render for such calls.
+                  //  - InvalidToolInputError: the model emitted malformed JSON for
+                  //    the arguments (typically raw newlines/control chars inside a
+                  //    large multi-line `content` value, e.g. create_skill /
+                  //    update_skill). We first try a deterministic JSON repair, then
+                  //    fall back to re-asking the model for corrected arguments.
+                  experimental_repairToolCall: async ({
+                    toolCall,
+                    inputSchema,
+                    error,
+                    messages,
+                  }) => {
+                    if (NoSuchToolError.isInstance(error)) {
+                      const repaired = repairHarmonyToolName(
+                        toolCall.toolName,
+                        Object.keys(mcpTools),
+                      );
+                      if (!repaired) {
+                        return null;
+                      }
+                      logger.info(
+                        {
+                          conversationId,
+                          requestedToolName: toolCall.toolName,
+                          repairedToolName: repaired,
+                        },
+                        "Repaired harmony-marked tool name",
+                      );
+                      return { ...toolCall, toolName: repaired };
                     }
-                    const repaired = repairHarmonyToolName(
-                      toolCall.toolName,
-                      Object.keys(mcpTools),
-                    );
-                    if (!repaired) {
-                      return null;
+
+                    if (InvalidToolInputError.isInstance(error)) {
+                      // 1. Deterministic pass — escape raw control characters that
+                      // slipped into JSON string values. Loss-free when it works.
+                      const repaired = repairToolInputJson(toolCall.input);
+                      if (repaired !== null) {
+                        logger.info(
+                          { conversationId, toolName: toolCall.toolName },
+                          "Repaired malformed tool-call JSON arguments (deterministic)",
+                        );
+                        return { ...toolCall, input: repaired };
+                      }
+
+                      // 2. Model re-ask fallback — ask the model to re-emit valid
+                      // arguments that satisfy the tool's JSON schema. Any failure
+                      // degrades to today's behavior (return null → original error).
+                      try {
+                        const schema = await inputSchema({
+                          toolName: toolCall.toolName,
+                        });
+                        const { object } = await generateObject({
+                          model,
+                          schema: jsonSchema(schema),
+                          system:
+                            "You repair malformed tool-call arguments. Return only a corrected JSON object that satisfies the provided schema, preserving the original intent.",
+                          messages: [
+                            ...messages,
+                            {
+                              role: "user",
+                              content: `The previous call to the tool "${toolCall.toolName}" produced invalid JSON arguments that could not be parsed:\n\n${toolCall.input}\n\nReturn corrected arguments that match the tool's schema.`,
+                            },
+                          ],
+                        });
+                        logger.info(
+                          { conversationId, toolName: toolCall.toolName },
+                          "Repaired malformed tool-call JSON arguments (model re-ask)",
+                        );
+                        return {
+                          ...toolCall,
+                          input: JSON.stringify(object),
+                        };
+                      } catch (reaskError) {
+                        logger.warn(
+                          {
+                            conversationId,
+                            toolName: toolCall.toolName,
+                            error: reaskError,
+                          },
+                          "Failed to repair malformed tool-call JSON arguments via model re-ask",
+                        );
+                        return null;
+                      }
                     }
-                    logger.info(
-                      {
-                        conversationId,
-                        requestedToolName: toolCall.toolName,
-                        repairedToolName: repaired,
-                      },
-                      "Repaired harmony-marked tool name",
-                    );
-                    return { ...toolCall, toolName: repaired };
+
+                    return null;
                   },
                   // Emit per-step usage so the context indicator tracks the
                   // prompt growing across tool round-trips, instead of jumping

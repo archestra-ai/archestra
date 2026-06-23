@@ -40,3 +40,99 @@ export function repairHarmonyToolName(
   }
   return null;
 }
+
+// Models occasionally emit malformed JSON for tool-call arguments — most
+// commonly raw control characters (literal newlines/tabs) inside a large
+// multi-line string value such as a skill's `content` blob. The AI SDK then
+// throws an InvalidToolInputError before the tool handler runs, aborting the
+// whole chat turn. The JSON spec forbids unescaped control characters (code
+// points < 0x20) inside string literals, so escaping them is an unambiguous,
+// loss-free repair we can apply deterministically.
+
+const JSON_CONTROL_CHAR_ESCAPE: Record<number, string> = {
+  8: "\\b",
+  9: "\\t",
+  10: "\\n",
+  12: "\\f",
+  13: "\\r",
+};
+
+/**
+ * Attempt to deterministically repair malformed tool-call argument JSON by
+ * escaping raw control characters that appear inside string literals. Returns
+ * the repaired string ONLY if `JSON.parse` succeeds on the result; otherwise
+ * returns null.
+ *
+ * Scope is intentionally narrow: it only rewrites control characters (< 0x20)
+ * found inside an open string literal, tracking escape state so already-escaped
+ * sequences (`\\n`, `\"`) are preserved verbatim and never double-escaped. It
+ * does NOT try to guess unescaped inner quotes (too ambiguous) — that is left
+ * to the model re-ask fallback. Returns null when the input already parses
+ * (nothing to repair) or when the repaired result still does not parse.
+ */
+export function repairToolInputJson(raw: string): string | null {
+  try {
+    // Already valid — nothing to repair.
+    try {
+      JSON.parse(raw);
+      return null;
+    } catch {
+      // fall through to repair attempt
+    }
+
+    let result = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw[i];
+      const code = raw.charCodeAt(i);
+
+      if (escaped) {
+        // Previous char was a backslash inside a string; emit this char as-is.
+        result += char;
+        escaped = false;
+        continue;
+      }
+
+      if (inString) {
+        if (char === "\\") {
+          result += char;
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          result += char;
+          inString = false;
+          continue;
+        }
+        if (code < 0x20) {
+          // Raw control character inside a string literal — illegal in JSON.
+          const known = JSON_CONTROL_CHAR_ESCAPE[code];
+          result += known ?? `\\u${code.toString(16).padStart(4, "0")}`;
+          continue;
+        }
+        result += char;
+        continue;
+      }
+
+      // Outside a string literal. Control chars here are insignificant JSON
+      // whitespace (or genuinely invalid); leave them untouched and let the
+      // final JSON.parse be the arbiter.
+      if (char === '"') {
+        inString = true;
+      }
+      result += char;
+    }
+
+    try {
+      JSON.parse(result);
+      return result;
+    } catch {
+      return null;
+    }
+  } catch {
+    // Any unexpected error — degrade to "no repair".
+    return null;
+  }
+}

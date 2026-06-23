@@ -1681,17 +1681,68 @@ class ToolModel {
     return row?.tool ?? null;
   }
 
-  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  /**
+   * Whether a tool belongs to (is assignable/callable within) `environmentId`,
+   * reusing the canonical {@link toolInEnvironmentPredicate} so the app
+   * assignment fence and call-time fence never drift from the agent isolation
+   * rules: null = org default, and the built-in Archestra/Playwright catalogs
+   * plus delegation tools are exempt.
+   */
+  static async isToolInEnvironment(
+    toolId: string,
+    environmentId: string | null,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.id, toolId),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Of `toolIds`, the subset that belongs to `environmentId` — the batch form of
+   * {@link isToolInEnvironment}, used to trim an app's runtime tool list to its
+   * bound environment (UX hygiene; the call-time gate is the hard fence).
+   */
+  static async filterToolIdsInEnvironment(
+    toolIds: string[],
+    environmentId: string | null,
+  ): Promise<Set<string>> {
+    if (toolIds.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, toolIds),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
+   * App-owner counterpart of {@link getMcpToolsAssignedToAgent}. Includes the
+   * tool `id` so the runtime gate can apply the environment fence
+   * ({@link isToolInEnvironment}) against the resolved tool.
+   */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
     appId: string,
-  ): Promise<McpToolAssignment[]> {
+  ): Promise<(McpToolAssignment & { id: string })[]> {
     if (toolNames.length === 0) {
       return [];
     }
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
@@ -1726,6 +1777,7 @@ class ToolModel {
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,

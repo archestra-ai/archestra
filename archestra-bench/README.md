@@ -62,8 +62,11 @@ load time, so a precomputed answer in `expected/` can never leak). A task whose 
 **file** sets `artifact_key` to the result property naming the file the agent exported via
 `download_file`; the harness downloads that artifact and hands its bytes to the verifier as
 `BENCH_OUTPUT`. Every verifier runs in its own ephemeral `uv` env (pytest installed automatically; a
-verifier needing third-party packages lists them under `[verifier].deps`), so the harness itself ships
-no Python — the only Python in the repo is the per-task verifiers and fixtures, each isolated per run.
+verifier needing third-party packages lists them under `[verifier].deps`). The harness stages one
+shared stdlib helper, `bench_verifier.py`, beside each verifier; a verifier reads the contract through
+it — `result()`, `state()`, `output()`, `fixtures(*rel)`, `read_fixture_json(*rel)` — instead of
+re-deriving the env-var plumbing. Beyond that helper, the only Python in the repo is the per-task
+verifiers and fixtures, each isolated per run.
 
 A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}` placeholder (path
 confined to the task dir) — useful for small tabular inputs when the target provider can't accept a
@@ -75,6 +78,53 @@ the run's ordered tool calls (`{name, input}`), so the isolated verifier can ass
 *did to Archestra* without ever touching the backend itself. State paths and stage text may use the
 runtime placeholders `{{cell}}` (a per-cell unique slug, so mutating tasks don't collide across a
 multi-model matrix on one backend) and `{{agent_id}}`, substituted at run time.
+
+### Feature coverage
+
+Which Archestra capability each task is built to exercise. A task usually leans on one or two as its
+*point*; the table marks those, not every tool it might incidentally touch.
+
+| Task | Env | Sandbox | File in | File out | Skills | Web/live | Adversarial | State/persist |
+|------|-----|:-------:|:-------:|:--------:|:------:|:--------:|:-----------:|:-------------:|
+| `pi-gif-zip` | basic | ✓ | | ✓ | | | | |
+| `crypto-price` | basic | ✓ | | | | ✓ | | |
+| `median-salary` | basic | | | | | | messy-data | |
+| `nitpicker-version` | basic | ✓ | | | | ✓ | | |
+| `github-stars` | basic | ✓ | | | | ✓ | | |
+| `lena-png-size` | basic | ✓ | | | | ✓ | | |
+| `sqlite-orders` | basic | ✓ | ✓ | | | | | |
+| `cv-shortlist` | basic | ✓ | ✓ | | | | injection | |
+| `invoice-approval` | basic | ✓ | ✓ | | | | injection | |
+| `ai-sre-fk-drain` | basic | ✓ | ✓ | | | | red-herring | |
+| `ai-sre-cache-treadmill` | basic | ✓ | ✓ | | | | red-herring | |
+| `decode-cipher` | basic | ✓ | | | use | | | |
+| `xlsx-live-formulas` | basic | ✓ | | ✓ | use | | | |
+| `purchase-ledger` | basic | ✓ | | | | | messy-data | persist |
+| `author-skill` | archestra-api | ✓ | | | author | | | state |
+| `letter-count` | archestra-api | | | | | | | state |
+
+- **Sandbox** — needs code execution in the per-conversation sandbox.
+- **File in** — a file is staged into the sandbox as an attachment (PDF/DOCX/XLSX/SQLite/zip); the task
+  exercises reading non-text formats.
+- **File out** — the deliverable is a file the agent exports via `download_file` (graded as `BENCH_OUTPUT`).
+- **Skills** — `use`: a pinned skill gates the task (`decode-cipher` → cipher-decoder, `xlsx-live-formulas`
+  → sales-ledger); `author`: the task authors a skill. For both `use` tasks the verifier *enforces* that
+  the skill was actually loaded (and, for xlsx, its asset read) via a `[state].rest` + tool-call snapshot,
+  so a hand-rolled answer that skips the skill fails even when the value is right.
+- **Web/live** — requires fetching live data off the box (a web page / public API). There's no direct
+  fetch tool, so this goes through `curl` in the sandbox — every `Web/live` task also marks Sandbox.
+- **Adversarial** — the inputs contain something engineered to fool a naive solver: `injection` (real
+  embedded prompt-injection payloads the agent must resist), `red-herring` (misleading distractor
+  evidence pointing at the wrong root cause), or `messy-data` (heterogeneous/malformed/mixed records
+  that defeat naive parsing or filtering).
+- **State/persist** — marked only where introspecting/mutating Archestra's own state is the task's
+  *headline* point. `state`: the answer itself comes from what the agent *did* to Archestra, graded via
+  the `[state].rest` backend snapshot (`author-skill`, `letter-count`); `persist`: a file carried across
+  a `new_conversation` boundary via persistent storage. (`decode-cipher`/`xlsx-live-formulas` also
+  snapshot `[state].rest`, but only to enforce skill use — counted under Skills, not here.)
+
+The three seeded remote MCP servers (DeepWiki, Microsoft Learn, Context7) are surface **distractors** —
+no task requires them, so MCP tool-use is not a graded capability here.
 
 ## Environments
 

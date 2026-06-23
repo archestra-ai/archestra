@@ -1,3 +1,7 @@
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -44,6 +48,44 @@ describe("POST /api/projects", () => {
       conversationCount: 0,
       visibility: null,
     });
+  });
+
+  test("accepts a description at the max length but rejects one over it", async () => {
+    const atLimit = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "at-limit",
+        description: "x".repeat(PROJECT_DESCRIPTION_MAX_LENGTH),
+      },
+    });
+    expect(atLimit.statusCode).toBe(200);
+
+    const overLimit = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "over-limit",
+        description: "x".repeat(PROJECT_DESCRIPTION_MAX_LENGTH + 1),
+      },
+    });
+    expect(overLimit.statusCode).toBe(400);
+  });
+
+  test("accepts a name at the max length but rejects one over it", async () => {
+    const atLimit = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "x".repeat(PROJECT_NAME_MAX_LENGTH) },
+    });
+    expect(atLimit.statusCode).toBe(200);
+
+    const overLimit = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "x".repeat(PROJECT_NAME_MAX_LENGTH + 1) },
+    });
+    expect(overLimit.statusCode).toBe(400);
   });
 
   test("rejects invalid names with 400 and duplicates with 409", async () => {

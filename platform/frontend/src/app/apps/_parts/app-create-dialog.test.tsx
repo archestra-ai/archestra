@@ -16,6 +16,12 @@ vi.mock("@/lib/app.query", () => ({
   useCreateApp: useCreateAppMock,
 }));
 
+// The environment selector pulls in React Query hooks the bare render doesn't
+// provide; this flow test doesn't exercise environment selection, so stub it.
+vi.mock("@/components/environment-selector", () => ({
+  EnvironmentSelector: () => null,
+}));
+
 import { AppCreateDialog } from "./app-create-dialog";
 
 describe("AppCreateDialog", () => {
@@ -40,6 +46,7 @@ describe("AppCreateDialog", () => {
       name: "My App",
       description: undefined,
       scope: "personal",
+      environmentId: null,
     });
     expect(pushMock).toHaveBeenCalledWith("/apps/app-123");
   });

@@ -1,5 +1,5 @@
 {
-  "id": "8141b24b-0d09-4b4b-ad4a-e9f68e53b28c",
+  "id": "899b4035-cab1-4ad0-8a86-7042950d6e84",
   "prevId": "9d36a914-732c-4b5f-be70-1f491c850ee5",
   "version": "7",
   "dialect": "postgresql",
@@ -2436,6 +2436,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "spec": {
           "name": "spec",
           "type": "jsonb",
@@ -2490,6 +2496,21 @@
           "columns": [
             {
               "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "apps_environment_id_idx": {
+          "name": "apps_environment_id_idx",
+          "columns": [
+            {
+              "expression": "environment_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2558,6 +2579,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "apps_environment_id_environments_id_fk": {
+          "name": "apps_environment_id_environments_id_fk",
+          "tableFrom": "apps",
+          "tableTo": "environments",
+          "columnsFrom": [
+            "environment_id"
           ],
           "columnsTo": [
             "id"
@@ -10803,89 +10837,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.project_pins": {
-      "name": "project_pins",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pinned_at": {
-          "name": "pinned_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "project_pins_project_id_idx": {
-          "name": "project_pins_project_id_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "project_pins_user_id_user_id_fk": {
-          "name": "project_pins_user_id_user_id_fk",
-          "tableFrom": "project_pins",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "project_pins_project_id_projects_id_fk": {
-          "name": "project_pins_project_id_projects_id_fk",
-          "tableFrom": "project_pins",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "project_pins_user_id_project_id_pk": {
-          "name": "project_pins_user_id_project_id_pk",
-          "columns": [
-            "user_id",
-            "project_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

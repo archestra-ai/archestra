@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.71"
+    "version": "1.2.72"
   },
   "components": {
     "schemas": {
@@ -54038,6 +54038,12 @@
                     },
                     "additionalProperties": false
                   },
+                  "environmentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "teamIds": {
                     "type": "array",
                     "items": {
@@ -54092,6 +54098,12 @@
                     "templateId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "spec": {
                       "nullable": true,
@@ -54161,6 +54173,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "environmentId",
                     "spec",
                     "latestVersion",
                     "createdAt",
@@ -55072,6 +55085,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "spec": {
                       "nullable": true,
                       "type": "object",
@@ -55134,6 +55153,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "environmentId",
                     "spec",
                     "latestVersion",
                     "createdAt",
@@ -55438,6 +55458,12 @@
                     },
                     "additionalProperties": false
                   },
+                  "environmentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "teamIds": {
                     "type": "array",
                     "items": {
@@ -55501,6 +55527,12 @@
                     "templateId": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "spec": {
                       "nullable": true,
@@ -55570,6 +55602,7 @@
                     "name",
                     "description",
                     "templateId",
+                    "environmentId",
                     "spec",
                     "latestVersion",
                     "createdAt",
@@ -78592,7 +78625,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List files for a conversation: this chat's own outputs, user attachments, and the pre-existing files the agent actually touched in this chat (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List files for a conversation: this chat's own outputs, user attachments, and — for a project chat — every file in the project (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -78675,7 +78708,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "referenced": {
+                    "projectFiles": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -78714,7 +78747,7 @@
                   "required": [
                     "generated",
                     "attachments",
-                    "referenced",
+                    "projectFiles",
                     "projectName"
                   ],
                   "additionalProperties": false
@@ -205085,12 +205118,12 @@
                   "name": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 256
+                    "maxLength": 64
                   },
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 4096
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,
@@ -206064,12 +206097,12 @@
                   "name": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 256
+                    "maxLength": 64
                   },
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 4096
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,

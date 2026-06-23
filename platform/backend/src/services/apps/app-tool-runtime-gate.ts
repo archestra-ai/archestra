@@ -9,6 +9,7 @@ import {
 import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
+  AppModel,
   OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
@@ -97,6 +98,27 @@ export async function gateAppToolCall(params: {
       allowed: false,
       code: -32601,
       reason: `Tool "${toolName}" is not assigned to this app.`,
+    };
+  }
+
+  // Environment fence: a tool whose catalog left the app's bound environment is
+  // refused at call time even though its assignment row remains
+  // (re-binding an app does not strip assignments). Reuses the same predicate as
+  // the assignment fence so the two never diverge. Only upstream tools reach
+  // here — app-runtime built-ins returned above are environment-less.
+  const app = await AppModel.findById(appId);
+  if (!app) {
+    return {
+      allowed: false,
+      code: -32601,
+      reason: `App "${appId}" not found.`,
+    };
+  }
+  if (!(await ToolModel.isToolInEnvironment(tool.id, app.environmentId))) {
+    return {
+      allowed: false,
+      code: -32601,
+      reason: `Tool "${toolName}" is not available in the app's environment.`,
     };
   }
 

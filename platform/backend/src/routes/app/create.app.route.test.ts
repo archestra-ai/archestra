@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { AppVersionModel } from "@/models";
+import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -219,5 +220,94 @@ describe("POST /api/apps", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("Unknown team");
+  });
+
+  test("binds a new app to an environment", async () => {
+    const prod = await EnvironmentModel.create({
+      organizationId,
+      name: "production",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Bound", scope: "org", environmentId: prod.id },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(prod.id);
+  });
+
+  test("defaults environmentId to null when omitted", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Default Env", scope: "org" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
+  });
+
+  test("rejects an environmentId from another organization (404)", async ({
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignEnv = await EnvironmentModel.create({
+      organizationId: otherOrg.id,
+      name: "foreign",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "X", scope: "org", environmentId: foreignEnv.id },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("an admin may bind to a restricted environment", async () => {
+    const restricted = await EnvironmentModel.create({
+      organizationId,
+      name: "restricted-prod",
+      restricted: true,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "R", scope: "org", environmentId: restricted.id },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(restricted.id);
+  });
+
+  test("a member without deploy-to-restricted cannot bind to a restricted environment (403)", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const restricted = await EnvironmentModel.create({
+      organizationId,
+      name: "restricted-prod",
+      restricted: true,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    // Sanity: the member can create a personal app at the default environment,
+    // so the 403 below is the restricted-env gate, not a general denial.
+    const baseline = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Baseline", scope: "personal" },
+    });
+    expect(baseline.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Restricted",
+        scope: "personal",
+        environmentId: restricted.id,
+      },
+    });
+    expect(response.statusCode).toBe(403);
   });
 });

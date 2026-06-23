@@ -17,7 +17,6 @@ import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
-  AgentModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -319,13 +318,14 @@ const registry = defineArchestraTools([
       }
 
       // Resolve the tools list BEFORE creating the app, so a bad list never
-      // leaves a half-built app behind.
+      // leaves a half-built app behind. scaffold_app creates the app at the org
+      // default environment (environment selection is deferred to the REST/UI
+      // path), so tools resolve within the default environment — not the
+      // authoring agent's — keeping assignments consistent with the app's env.
       const toolsResolution = await resolveToolsParam({
         organizationId: context.organizationId,
         tools: args.tools,
-        environmentId: await AgentModel.findEnvironmentId(
-          context.agentId ?? context.agent.id,
-        ),
+        environmentId: null,
       });
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;

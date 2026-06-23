@@ -924,6 +924,26 @@ fn classify_engine_fault(err: &DaggerError) -> EngineFault {
     }
 }
 
+/// recover an engine fault from a *panic* payload. dagger-sdk 0.21.5 `unwrap()`s
+/// GraphQL errors inside generated lazy-arg resolvers (`gen.rs` `into_id().unwrap()`),
+/// which resolve during exec evaluation — so a stale-attachables timeout reaches
+/// us as a panic rather than a typed `DaggerError`, bypassing [`from_sdk`] /
+/// [`classify_engine_fault`]. the panic message still embeds the engine's text,
+/// enough to route it back onto the existing stale-attachables respawn path
+/// instead of wedging the session.
+///
+/// the match is intentionally as narrow as the typed path: *only* the
+/// attachables timeout maps to a fault. the engine emits that text when it gave
+/// up waiting for the client's attachables *before* running the query, so a
+/// command-executing `run` can be retried safely (nothing ran). a generic
+/// transport panic carries no fault and stays a fatal `Internal`, preserving the
+/// session layer's mid-flight non-retry guard for `run` / `read_artifact`.
+pub(crate) fn engine_fault_from_panic(message: &str) -> Option<EngineFault> {
+    message
+        .contains(SESSION_ATTACHABLES_WAIT_ERROR)
+        .then_some(EngineFault::StaleAttachables)
+}
+
 /// pull a process exit code out of the engine's typed `EXEC_ERROR` extension.
 /// falls back to scraping the message because signal-killed execs (e.g. SIGXFSZ
 /// -> 153) can surface the code only in the message even under `ReturnType::Any`.
@@ -1116,6 +1136,50 @@ mod tests {
         std::fs::remove_file(&script).ok();
     }
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn shutdown_does_not_reap_a_child_that_refuses_to_exit() {
+        // Characterises the teardown-reap limitation behind the dagger zombie.
+        // `DaggerSessionProc::shutdown` (dagger-sdk =0.21.5) only broadcasts to
+        // our in-process reader tasks and then *awaits* the child's voluntary
+        // exit — it sends no signal and never closes the child's stdin. Against a
+        // `dagger session` that keeps running (the reconnect-loop shape), it
+        // blocks and never reaps the process. Only dropping the proc force-kills
+        // it via kill_on_drop, and the post-ready teardown path calls shutdown(),
+        // not drop — so retiring a session does not, on its own, guarantee its
+        // CLI child dies.
+        let script = write_fake_session("#!/bin/sh\nsleep 120\n");
+        let mut cmd = build_session_command(&script, Path::new("/"), None);
+        let child = cmd.spawn().unwrap();
+        let pid = child.id().expect("a spawned child has a pid");
+        let proc: DaggerSessionProc = child.into();
+
+        // shutdown() blocks on the child's own exit, which never comes.
+        let returned = tokio::time::timeout(Duration::from_secs(2), proc.shutdown()).await;
+        assert!(
+            returned.is_err(),
+            "shutdown() returned for a child that never exits — SDK reaping semantics changed"
+        );
+        assert!(
+            !process_finished(pid),
+            "shutdown() left the child alive: it does not forcibly reap"
+        );
+
+        // Dropping the proc IS the forceful reaper (kill_on_drop); the post-ready
+        // teardown path never reaches a drop while shutdown() is still pending.
+        drop(proc);
+        let mut reaped = false;
+        for _ in 0..100 {
+            if process_finished(pid) {
+                reaped = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(reaped, "child {pid} should be reaped once the proc is dropped");
+        std::fs::remove_file(&script).ok();
+    }
+
     #[test]
     fn runtime_target_host_builds_a_kube_pod_address_for_an_environment() {
         assert_eq!(runtime_target_host(&RuntimeTarget::Default), None);
@@ -1209,6 +1273,36 @@ mod tests {
 
         let generic = domain_error("connection reset", None);
         assert_eq!(classify_engine_fault(&generic), EngineFault::Unreachable);
+    }
+
+    #[test]
+    fn engine_fault_from_panic_recovers_only_the_attachables_timeout() {
+        // the dagger SDK unwraps the GraphQL error, so it reaches us as the
+        // `Debug` rendering of the failed `Result` inside a panic payload.
+        let attachables = "called `Result::unwrap()` on an `Err` value: \
+             Query(DomainError { message: \"waiting for client session attachables: \
+             context deadline exceeded\" })";
+        assert_eq!(
+            engine_fault_from_panic(attachables),
+            Some(EngineFault::StaleAttachables)
+        );
+
+        // an unrelated panic must stay fatal (no respawn/retry).
+        assert_eq!(
+            engine_fault_from_panic("index out of bounds: the len is 0 but the index is 1"),
+            None
+        );
+
+        // a generic transport/engine panic carries no fault either: it is
+        // ambiguous about whether the command already ran, so it must NOT be
+        // re-tagged for retry — that ambiguity is exactly why only the
+        // pre-execution attachables timeout qualifies.
+        assert_eq!(
+            engine_fault_from_panic(
+                "called `Result::unwrap()` on an `Err` value: Query(HttpError(\"connection reset\"))"
+            ),
+            None
+        );
     }
 
     #[test]

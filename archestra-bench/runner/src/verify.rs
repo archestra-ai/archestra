@@ -9,6 +9,8 @@ use tokio::time::{Duration, timeout};
 use crate::config::types::Task;
 
 const PYTEST_REQ: &str = "pytest==8.4.1";
+const VERIFIER_SUPPORT: &str = include_str!("verifier_support.py");
+const SUPPORT_NAME: &str = "bench_verifier.py";
 const RESULT_NAME: &str = "result.json";
 const OUTPUT_NAME: &str = "artifact.bin";
 const STATE_NAME: &str = "state.json";
@@ -173,6 +175,8 @@ async fn stage(
     let test_path = workdir.join(Path::new(&task.verifier.test_file).file_name().unwrap());
     fs::copy(&verifier_source, &test_path).await?;
 
+    fs::write(workdir.join(SUPPORT_NAME), VERIFIER_SUPPORT).await?;
+
     Ok((test_path, env))
 }
 
@@ -266,7 +270,8 @@ mod tests {
         }
         let tmp = tempfile::tempdir().unwrap();
         let verifier = tmp.path().join("verifier.py");
-        tokio::fs::write(&verifier, "def test_ok(): assert True\n")
+        // Importing the staged helper proves it lands beside the verifier on pytest's sys.path.
+        tokio::fs::write(&verifier, "import bench_verifier\ndef test_ok(): assert True\n")
             .await
             .unwrap();
 

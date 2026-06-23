@@ -4,6 +4,7 @@ import type { ResourceVisibilityScope } from "@archestra/shared";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ export function AppCreateDialog({
   const createApp = useCreateApp();
 
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [environmentId, setEnvironmentId] = useState<string | null>(null);
 
   const form = useForm<CreateFormValues>({
     defaultValues: { name: "", description: "" },
@@ -48,6 +50,7 @@ export function AppCreateDialog({
       name: values.name.trim(),
       description: values.description.trim() || undefined,
       scope,
+      environmentId,
     });
     if (created) {
       onOpenChange(false);
@@ -113,6 +116,13 @@ export function AppCreateDialog({
             </SelectContent>
           </Select>
         </div>
+
+        <EnvironmentSelector
+          value={environmentId}
+          onChange={setEnvironmentId}
+          hideWhenOnlyDefault
+          helpText="Confines which MCP tools the app can use to this environment. Can be changed later in settings."
+        />
       </div>
     </StandardFormDialog>
   );

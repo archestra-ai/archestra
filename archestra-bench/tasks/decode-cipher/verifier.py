@@ -8,30 +8,18 @@ engaged the skill and that the bench provisioned it correctly.
 """
 
 import json
-import os
-from pathlib import Path
 
-
-def _load_json(env_var: str) -> dict:
-    path = os.environ.get(env_var)
-    assert path, f"{env_var} is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
-def _fixture_text(relpath: str) -> str:
-    base = os.environ.get("BENCH_FIXTURES")
-    assert base, "BENCH_FIXTURES is not set"
-    return Path(base, relpath).read_text(encoding="utf-8")
+from bench_verifier import fixtures, result, state
 
 
 def test_plaintext_matches() -> None:
-    expected = _fixture_text("expected/plaintext.txt")
-    submitted = _load_json("BENCH_RESULT")["plaintext"]
+    expected = fixtures("expected/plaintext.txt").read_text(encoding="utf-8")
+    submitted = result()["plaintext"]
     assert submitted == expected, f"submitted plaintext {submitted!r} != expected {expected!r}"
 
 
 def test_skill_loaded() -> None:
-    calls = _load_json("BENCH_STATE").get("tool_calls", [])
+    calls = state().get("tool_calls", [])
     loaded = [
         c for c in calls
         if c.get("name") == "archestra__load_skill" and "cipher-decoder" in json.dumps(c.get("input") or {})
@@ -40,8 +28,7 @@ def test_skill_loaded() -> None:
 
 
 def test_skill_seeded_from_repo() -> None:
-    state = _load_json("BENCH_STATE")
-    rest = state["rest"]
+    rest = state()["rest"]
     assert len(rest) == 1, f"expected exactly one captured rest path, got {list(rest)}"
     payload = next(iter(rest.values()))
     rows = payload.get("data") if isinstance(payload, dict) else None

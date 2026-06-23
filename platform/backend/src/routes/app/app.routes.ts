@@ -34,6 +34,7 @@ import {
   resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   ApiError,
   type App,
@@ -244,6 +245,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: user.id,
         resourceTeamIds: teamIds,
       });
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
       const { html, seededFromTemplate } = resolveCreateAppHtml({
         html: body.html,
       });
@@ -259,6 +265,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: body.name,
           description: body.description ?? null,
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
+          environmentId: body.environmentId ?? null,
         },
         payload,
         teamIds,
@@ -357,10 +364,31 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const patch: Partial<Pick<App, "name" | "description" | "scope">> = {};
+      // Re-binding the environment is authorized like the initial bind: org
+      // membership + the restricted-env permission. Only an actual change is
+      // re-authorized — editing other fields of an app bound to a restricted
+      // environment must not require deploy-to-restricted (the settings form
+      // echoes the unchanged environmentId). Existing tool assignments are not
+      // stripped here; out-of-environment ones are refused at call time.
+      if (
+        body.environmentId !== undefined &&
+        body.environmentId !== app.environmentId
+      ) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
+      const patch: Partial<
+        Pick<App, "name" | "description" | "scope" | "environmentId">
+      > = {};
       if (body.name !== undefined) patch.name = body.name;
       if (body.description !== undefined) patch.description = body.description;
       if (body.scope !== undefined) patch.scope = body.scope;
+      if (body.environmentId !== undefined)
+        patch.environmentId = body.environmentId;
 
       // Permissions ride the version envelope; an html-bearing edit inherits
       // the current head's value when the caller omits it.
@@ -702,6 +730,34 @@ function isAssignmentError(
   result: ToolAssignmentError | "duplicate" | "updated" | null,
 ): result is ToolAssignmentError {
   return result !== null && result !== "duplicate" && result !== "updated";
+}
+
+/**
+ * Authorize binding an app to `environmentId` (null = org default). Mirrors the
+ * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
+ * the restricted-env permission are enforced by `assertCanAssignEnvironment`,
+ * which also gates a restricted *default* environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
 }
 
 export default appRoutes;

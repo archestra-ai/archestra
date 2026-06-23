@@ -18,7 +18,7 @@ A project is private to its owner until shared. Sharing makes it visible to the 
 
 ## Files
 
-In a project chat, the files an agent produces (`save_result`, `download_file`) are saved to the project, so anyone with project access can reach them — unlike a personal chat, whose files stay scoped to the conversation that produced them. The chat's Files panel shows the files of that conversation (created, read, or edited); for a project, browse the full set on the project page.
+In a project chat, the files an agent produces (`save_result`, `download_file`) are saved to the project, so anyone with project access can reach them — unlike a personal chat, whose files stay scoped to the conversation that produced them. The chat's Files panel shows the files created in that chat and its attachments, and in a project chat it also lists the project's files; the project page is where you browse a project's full set.
 
 ## Scheduled tasks
 

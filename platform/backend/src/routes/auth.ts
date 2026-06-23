@@ -21,6 +21,7 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
+  AppModel,
   LlmOauthClientModel,
   McpOauthClientModel,
   MemberModel,
@@ -33,6 +34,8 @@ import {
 } from "@/models";
 import {
   appConnectorAudienceRef,
+  appIdFromConnectorPath,
+  connectorResourceUriFromAudienceRef,
   isAppConnectorAudienceRef,
   isConnectorTargetedResource,
   resolveAppConnectorResource,
@@ -474,8 +477,32 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+      const rawResponseBody = response.body ? await response.text() : null;
+
+      // Bind a shareable-App connector token to its canonical resource URI
+      // (RFC 8707) so it is accepted only at its own connector — before deriving
+      // the lifetime below, which follows the bound app's org policy and so needs
+      // the binding settled first. Fail closed if an app-connector resource was
+      // requested but the binding can't be written, rather than hand back a token
+      // that silently 401s.
+      if (response.ok) {
+        const connectorBinding = await bindAppConnectorTokenAudience({
+          resource,
+          responseBody: rawResponseBody,
+          grantType: body?.grant_type,
+          tokenEndpointOrigin,
+        });
+        if (connectorBinding.status === "error") {
+          return reply.status(400).send({
+            error: "invalid_target",
+            error_description: connectorBinding.message,
+          });
+        }
+      }
+
       const responseBody = await applyOrganizationOAuthTokenLifetimeToResponse({
-        response,
+        responseText: rawResponseBody,
+        ok: response.ok,
         resource,
         tokenEndpointOrigin,
       });
@@ -509,25 +536,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           "[auth:oauth2/token] Token request failed",
         );
-      }
-
-      // Bind a shareable-App connector token to its canonical resource URI
-      // (RFC 8707) so it is accepted only at its own connector. Fail closed if
-      // an app-connector resource was requested but the binding can't be written
-      // — better to error than hand back a token that silently 401s.
-      if (response.ok) {
-        const connectorBinding = await bindAppConnectorTokenAudience({
-          resource,
-          responseBody,
-          grantType: body?.grant_type,
-          tokenEndpointOrigin,
-        });
-        if (connectorBinding.status === "error") {
-          return reply.status(400).send({
-            error: "invalid_target",
-            error_description: connectorBinding.message,
-          });
-        }
       }
 
       reply.status(response.status);
@@ -1099,16 +1107,16 @@ function buildBetterAuthForwardedHeaders(
 }
 
 async function applyOrganizationOAuthTokenLifetimeToResponse(params: {
-  response: Response;
+  responseText: string | null;
+  ok: boolean;
   resource: unknown;
   tokenEndpointOrigin: string;
 }): Promise<string | null> {
-  if (!params.response.body) {
+  const { responseText } = params;
+  if (responseText === null) {
     return null;
   }
-
-  const responseText = await params.response.text();
-  if (!params.response.ok) {
+  if (!params.ok) {
     return responseText;
   }
 
@@ -1156,12 +1164,33 @@ async function applyOrganizationOAuthTokenLifetimeToResponse(params: {
   });
 }
 
-async function getOAuthAccessTokenLifetimeSeconds(params: {
+/**
+ * @public — exercised by auth.test.ts (knip --production ignores tests)
+ */
+export async function getOAuthAccessTokenLifetimeSeconds(params: {
   resource: unknown;
   referenceId: string | null | undefined;
   tokenEndpointOrigin: string;
   userId: string;
 }): Promise<number | null> {
+  // A shareable-App connector token is scoped to the app's organization, not the
+  // viewer's first membership — resolve the app's org (via the token's bound
+  // audience ref, or the requested `resource`) so the token can't outlive the
+  // owning org's policy. The token endpoint binds the audience before applying
+  // the lifetime, so on both grants the ref identifies the connector here.
+  const connectorAppId = resolveConnectorAppId({
+    resource: params.resource,
+    referenceId: params.referenceId,
+    tokenEndpointOrigin: params.tokenEndpointOrigin,
+  });
+  if (connectorAppId) {
+    const app = await AppModel.findById(connectorAppId);
+    if (app) {
+      const organization = await OrganizationModel.getById(app.organizationId);
+      return organization?.oauthAccessTokenLifetimeSeconds ?? null;
+    }
+  }
+
   const profileId =
     (await getProfileIdFromResource({
       resource: params.resource,
@@ -1245,6 +1274,36 @@ function getProfileIdFromReferenceId(
   return referenceId.slice(MCP_RESOURCE_REFERENCE_PREFIX.length) || null;
 }
 
+/**
+ * The app id a connector token is bound to, from its audience ref or — as a
+ * fallback — the requested `resource`, else null. The ref is preferred and
+ * authoritative: it is the token's actual audience, and better-auth ignores a
+ * re-sent `resource` on refresh, so the resource must not drive resolution away
+ * from the binding. The ref was written by our own mint and is already trusted;
+ * the client-supplied resource only resolves on a trusted origin.
+ */
+function resolveConnectorAppId(params: {
+  resource: unknown;
+  referenceId: string | null | undefined;
+  tokenEndpointOrigin: string;
+}): string | null {
+  const allowedOrigins = new Set([
+    new URL(buildOAuthIssuer()).origin,
+    params.tokenEndpointOrigin,
+  ]);
+  const canonicalUri =
+    connectorResourceUriFromAudienceRef(params.referenceId) ??
+    resolveAppConnectorResource(params.resource, allowedOrigins);
+  if (!canonicalUri) {
+    return null;
+  }
+  try {
+    return appIdFromConnectorPath(new URL(canonicalUri).pathname);
+  } catch {
+    return null;
+  }
+}
+
 function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
   return OAuthAccessTokenModel.hashTokenForLookup(oauthAccessToken);
 }
@@ -1254,11 +1313,12 @@ function hashOAuthAccessTokenForLookup(oauthAccessToken: string): string {
  * (RFC 8707), so the connector accepts it only at its own canonical URI. The
  * `resource` parameter is stripped before better-auth (which rejects a dynamic
  * audience), so the binding is stamped here, after mint. On an authorization_code
- * grant the audience is the consented `resource`; on a refresh_token grant it is
- * the audience carried on the refresh token from the original grant — a refresh
- * cannot re-target a different connector. Returns `error` when an app-connector
- * resource was requested but the token could not be bound to it, so the caller
- * fails the request rather than return a token that silently 401s.
+ * grant the audience is the consented `resource`, and a connector-targeted
+ * `resource` that cannot be bound returns `error` (RFC 8707 invalid_target) so
+ * the caller fails the request rather than hand back a token that silently 401s.
+ * On a refresh_token grant the audience is whatever better-auth inherited from
+ * the original grant; the requested `resource` is advisory there and never errors
+ * (see {@link bindRefreshedConnectorToken}).
  *
  * @public — exercised by auth.test.ts
  */
@@ -1278,6 +1338,37 @@ export async function bindAppConnectorTokenAudience(params: {
     return { status: "skip" };
   }
 
+  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
+
+  // On a refresh better-auth ignores the requested `resource` and inherits the
+  // original grant's audience, so the resource-shape checks below must not run
+  // here — erroring on a refresh would strand the token better-auth has already
+  // rotated. The inherited binding is authoritative.
+  if (params.grantType === "refresh_token") {
+    return bindRefreshedConnectorToken({
+      tokenHash,
+      resource: params.resource,
+      tokenEndpointOrigin: params.tokenEndpointOrigin,
+    });
+  }
+
+  // Initial (authorization_code) grant: the requested `resource` determines a
+  // new binding. RFC 8707 permits repeated `resource` parameters, which arrive
+  // as an array; a connector token binds to exactly one audience, so a connector
+  // named among repeated resources cannot be honored and fails closed rather than
+  // fall through to an unbound `mcp` token (which still authenticates the MCP
+  // gateway via the user-access path). A lone connector resource always arrives
+  // as a string.
+  if (Array.isArray(params.resource)) {
+    if (params.resource.some(isConnectorTargetedResource)) {
+      return {
+        status: "error",
+        message: "A connector resource must be requested as the sole audience.",
+      };
+    }
+    return { status: "skip" };
+  }
+
   const allowedOrigins = new Set([
     new URL(buildOAuthIssuer()).origin,
     params.tokenEndpointOrigin,
@@ -1290,12 +1381,11 @@ export async function bindAppConnectorTokenAudience(params: {
     ? appConnectorAudienceRef(requestedCanonical)
     : null;
 
-  // A `resource` that targets a connector path but did not resolve to a trusted
-  // canonical URI (an untrusted origin like https://evil.example.com/api/mcp/app/<id>,
-  // or a malformed/sub-path connector URL) must fail closed with RFC 8707
-  // invalid_target. Falling through to "skip" would mint an unbound `mcp` token,
-  // which still authenticates the MCP gateway via the user-access path. Absent or
-  // non-connector resources are unaffected (they bind elsewhere or not at all).
+  // A connector-targeted `resource` that did not resolve to a trusted canonical
+  // URI (an untrusted origin like https://evil.example.com/api/mcp/app/<id>, or a
+  // malformed/sub-path connector URL) fails closed with RFC 8707 invalid_target.
+  // Absent or non-connector resources are unaffected (they bind elsewhere or not
+  // at all).
   if (!requestedRef && isConnectorTargetedResource(params.resource)) {
     return {
       status: "error",
@@ -1303,44 +1393,6 @@ export async function bindAppConnectorTokenAudience(params: {
         "The requested resource is not a valid connector on this server.",
     };
   }
-
-  const tokenHash = hashOAuthAccessTokenForLookup(accessToken);
-
-  if (params.grantType === "refresh_token") {
-    // better-auth carries the original grant's audience onto the refreshed
-    // token, so a refresh cannot acquire a connector the original grant did not
-    // authorize. Honor that inherited binding and reject an attempt to
-    // re-target a different connector (RFC 8707 invalid_target).
-    const refreshed = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
-    let inheritedRef = isAppConnectorAudienceRef(refreshed?.referenceId)
-      ? (refreshed?.referenceId ?? null)
-      : null;
-    if (!inheritedRef && refreshed?.refreshId) {
-      const refresh = await OAuthRefreshTokenModel.getById(refreshed.refreshId);
-      inheritedRef = isAppConnectorAudienceRef(refresh?.referenceId)
-        ? (refresh?.referenceId ?? null)
-        : null;
-    }
-    if (requestedRef && requestedRef !== inheritedRef) {
-      return {
-        status: "error",
-        message: "The refresh token is not bound to the requested resource.",
-      };
-    }
-    if (!inheritedRef) {
-      return { status: "skip" };
-    }
-    // Stamp the access token only if better-auth did not already inherit it.
-    if (refreshed?.referenceId !== inheritedRef) {
-      await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
-        tokenHash,
-        referenceId: inheritedRef,
-      });
-    }
-    return { status: "ok" };
-  }
-
-  // Initial (authorization_code) grant: stamp the consented connector audience.
   if (!requestedRef) {
     return { status: "skip" };
   }
@@ -1380,6 +1432,84 @@ export async function bindAppConnectorTokenAudience(params: {
         { refreshId: bound.refreshId, requestedRef },
         "[auth:oauth2/token] could not carry the connector audience onto the refresh token",
       );
+    }
+  }
+  return { status: "ok" };
+}
+
+/**
+ * Bind a refreshed token to the connector audience better-auth inherited from
+ * the original grant (carried via the refresh token's `referenceId`). The
+ * requested `resource` is advisory on refresh: better-auth ignores it and cannot
+ * re-target the audience, so a mismatch is logged, never errored — erroring would
+ * strand the session better-auth has already rotated (the old refresh token is
+ * revoked the moment the new one is minted). Returns `skip` for a non-connector
+ * token.
+ */
+async function bindRefreshedConnectorToken(params: {
+  tokenHash: string;
+  resource: unknown;
+  tokenEndpointOrigin: string;
+}): Promise<{ status: "ok" | "skip" }> {
+  const refreshed = await OAuthAccessTokenModel.getByTokenHash(
+    params.tokenHash,
+  );
+  let inheritedRef = isAppConnectorAudienceRef(refreshed?.referenceId)
+    ? (refreshed?.referenceId ?? null)
+    : null;
+  if (!inheritedRef && refreshed?.refreshId) {
+    const refresh = await OAuthRefreshTokenModel.getById(refreshed.refreshId);
+    inheritedRef = isAppConnectorAudienceRef(refresh?.referenceId)
+      ? (refresh?.referenceId ?? null)
+      : null;
+  }
+  if (!inheritedRef) {
+    return { status: "skip" };
+  }
+
+  // Surface a client that asked to re-target a different connector on refresh: it
+  // gets the inherited binding regardless, but the discrepancy is worth a log.
+  const allowedOrigins = new Set([
+    new URL(buildOAuthIssuer()).origin,
+    params.tokenEndpointOrigin,
+  ]);
+  const requestedCanonical = resolveAppConnectorResource(
+    params.resource,
+    allowedOrigins,
+  );
+  const requestedRef = requestedCanonical
+    ? appConnectorAudienceRef(requestedCanonical)
+    : null;
+  if (requestedRef && requestedRef !== inheritedRef) {
+    logger.warn(
+      { requestedRef, inheritedRef },
+      "[auth:oauth2/token] refresh requested a different connector audience; honoring the inherited binding",
+    );
+  }
+
+  // Stamp the access token only if better-auth did not already inherit it. The
+  // stamp is a one-shot IS NULL write: a no-op when the row already carries the
+  // audience (idempotent success). Unlike the authorization_code path this never
+  // fails the request — better-auth has already rotated the refresh token, so
+  // erroring would strand the session. But if the row ended up unbound or bound
+  // to a different audience (stale/partial write, corruption), the refreshed
+  // token would 401 at its connector, so surface that rather than assume success.
+  if (refreshed?.referenceId !== inheritedRef) {
+    const bound =
+      await OAuthAccessTokenModel.bindReferenceIdByTokenHashWhenUnbound({
+        tokenHash: params.tokenHash,
+        referenceId: inheritedRef,
+      });
+    if (!bound) {
+      const existing = await OAuthAccessTokenModel.getByTokenHash(
+        params.tokenHash,
+      );
+      if (existing?.referenceId !== inheritedRef) {
+        logger.error(
+          { inheritedRef, existingRef: existing?.referenceId ?? null },
+          "[auth:oauth2/token] refreshed token could not inherit its connector audience",
+        );
+      }
     }
   }
   return { status: "ok" };

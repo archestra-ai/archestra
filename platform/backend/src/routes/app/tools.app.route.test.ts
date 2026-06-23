@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -168,5 +169,77 @@ describe("/api/apps/:appId/tools", () => {
       payload: { credentialResolutionMode: "dynamic" },
     });
     expect(response.statusCode).toBe(403);
+  });
+
+  test("assigning a tool outside the app's environment returns 400", async ({
+    makeApp,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const prod = await EnvironmentModel.create({
+      organizationId,
+      name: "production",
+    });
+    const dev = await EnvironmentModel.create({
+      organizationId,
+      name: "development",
+    });
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      environmentId: prod.id,
+    });
+    const devCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "dev-srv",
+      serverUrl: "https://example.com/mcp/",
+      environmentId: dev.id,
+    });
+    const devTool = await makeTool({
+      name: "dev__do_thing",
+      parameters: {},
+      catalogId: devCatalog.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/apps/${created.id}/tools/${devTool.id}`,
+      payload: { credentialResolutionMode: "dynamic" },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("assigning a tool in the app's environment succeeds", async ({
+    makeApp,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const prod = await EnvironmentModel.create({
+      organizationId,
+      name: "production",
+    });
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      environmentId: prod.id,
+    });
+    const prodCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "prod-srv",
+      serverUrl: "https://example.com/mcp/",
+      environmentId: prod.id,
+    });
+    const prodTool = await makeTool({
+      name: "prod__do_thing",
+      parameters: {},
+      catalogId: prodCatalog.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/apps/${created.id}/tools/${prodTool.id}`,
+      payload: { credentialResolutionMode: "dynamic" },
+    });
+    expect(response.statusCode).toBe(200);
   });
 });

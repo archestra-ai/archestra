@@ -180,7 +180,8 @@ export async function validateAssignment(
 export async function resolveAppToolsByName(params: {
   organizationId: string;
   toolNames: readonly string[];
-  /** Requesting agent's environment; tools are resolved within it only. */
+  /** Environment to resolve tools within (the app's bound environment; the org
+   * default for scaffold_app, where env selection is deferred). */
   environmentId: string | null;
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
@@ -300,6 +301,24 @@ export async function assignToolToApp(params: {
       error: {
         message: `Tool with ID ${params.toolId} not found`,
         type: "not_found",
+      },
+    };
+  }
+
+  // Environment fence: a tool whose catalog is outside the app's bound
+  // environment is not assignable. This is a same-org, wrong-environment tool —
+  // distinct from the foreign-org not_found above — so it gets a clear 400.
+  const inEnvironment = await ToolModel.isToolInEnvironment(
+    params.toolId,
+    app.environmentId,
+  );
+  if (!inEnvironment) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Tool is not available in the app's environment and cannot be assigned.",
+        type: "validation_error",
       },
     };
   }

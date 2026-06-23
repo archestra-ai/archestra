@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
-  ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolPrefix,
@@ -12,20 +11,9 @@ import {
 } from "./archestra-mcp-server";
 
 describe("archestra MCP tool names", () => {
-  test("contains the shared special tool short names", () => {
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("create_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("swap_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("artifact_write");
-  });
-
-  test("builds a fully-qualified Archestra tool name", () => {
-    expect(getArchestraToolFullName("create_agent")).toBe(
-      TOOL_CREATE_AGENT_FULL_NAME,
-    );
-  });
-
-  test("preserves literal full-name typing", () => {
+  test("builds a fully-qualified Archestra tool name with literal typing", () => {
     const fullName = getArchestraToolFullName("create_agent");
+    expect(fullName).toBe(TOOL_CREATE_AGENT_FULL_NAME);
     expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
   });
 
@@ -83,15 +71,22 @@ describe("archestra MCP tool names", () => {
     expect(isAgentTool("archestra__whoami")).toBe(false);
   });
 
-  test("flags the skill, sandbox, and app runtime path as always-exposed", () => {
+  test("flags the skill, sandbox, persistent-files, and app runtime path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
       "load_skill",
       "run_command",
       "download_file",
       "upload_file",
-      "create_app",
-      "update_app",
+      // persistent-files (Projects) surface — all top-level, including
+      // delete_file (deleting a file is part of the everyday file flow here,
+      // unlike delete_app below).
+      "search_files",
+      "read_file",
+      "save_result",
+      "edit_file",
+      "delete_file",
+      "scaffold_app",
       "edit_app",
       "read_app",
       "render_app",

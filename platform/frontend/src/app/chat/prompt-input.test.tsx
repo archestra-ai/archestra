@@ -1,6 +1,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
 const {
   mockUseOrganization,
@@ -665,7 +666,9 @@ describe("ArchestraPromptInput", () => {
     it("flag on: Send anyway with a throwing consumer keeps the draft and does not hang", () => {
       mockFeatureState.chatSecretScanEnabled = true;
       const agentId = "agent-1";
-      const draftKey = `archestra_chat_draft_new_${agentId}`;
+      // The new-chat draft key is agent-independent (so a typed prompt survives
+      // an agent switch); the agentId prop below no longer affects the key.
+      const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
       const text = `please rotate ${fakeGithubToken}`;
       localStorage.setItem(draftKey, text);
       mockControllerState.value = text;
@@ -704,7 +707,9 @@ describe("ArchestraPromptInput", () => {
     it("flag on: Send anyway with an async-rejecting consumer keeps the draft and does not hang", async () => {
       mockFeatureState.chatSecretScanEnabled = true;
       const agentId = "agent-1";
-      const draftKey = `archestra_chat_draft_new_${agentId}`;
+      // The new-chat draft key is agent-independent (so a typed prompt survives
+      // an agent switch); the agentId prop below no longer affects the key.
+      const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
       const text = `please rotate ${fakeGithubToken}`;
       localStorage.setItem(draftKey, text);
       mockControllerState.value = text;
@@ -803,7 +808,9 @@ describe("ArchestraPromptInput", () => {
 
   describe("draft retention on submit", () => {
     const agentId = "agent-1";
-    const draftKey = `archestra_chat_draft_new_${agentId}`;
+    // The new-chat draft key is agent-independent (so a typed prompt survives
+    // an agent switch); the agentId prop below no longer affects the key.
+    const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
 
     it("keeps the saved draft when the consumer rejects the submit", () => {
       const text = "draft text the user typed";

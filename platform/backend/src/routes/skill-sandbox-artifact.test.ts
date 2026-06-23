@@ -35,13 +35,14 @@ async function seedArtifact(params: {
   data: Buffer;
   path?: string;
   projectId?: string | null;
+  conversationId?: string | null;
 }) {
   const path = params.path ?? "/sandbox/skills/example/out.png";
   return await fileStore.put({
     organizationId: params.organizationId,
     userId: params.userId,
     projectId: params.projectId ?? null,
-    conversationId: null,
+    conversationId: params.conversationId ?? null,
     sandboxId: params.sandboxId ?? null,
     filename: basename(path),
     mimeType: params.mimeType,
@@ -86,14 +87,25 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     config.fileStorage.provider = "filesystem";
     config.fileStorage.filesystemRoot = root;
     try {
-      const dir = path.join(root, user.email);
+      const { ProjectModel } = await import("@/models");
+      const project = await ProjectModel.create({
+        organizationId,
+        userId: user.id,
+        name: "Obj Ref Proj",
+        description: null,
+      });
+      const dir = path.join(root, project.slug);
       await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(path.join(dir, "untracked-note.md"), "# hi");
 
       const [item] = await fileStore.search({
         organizationId,
         userId: user.id,
-        scope: { kind: "personal" },
+        scope: {
+          kind: "project",
+          projectId: project.id,
+          projectName: project.name,
+        },
       });
       expect(item.downloadRef.startsWith("obj_")).toBe(true);
       expect(item.downloadRef.length).toBeGreaterThan(100);
@@ -136,8 +148,62 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(response.headers["content-security-policy"]).toBe(
       "default-src 'none'; sandbox",
     );
-    expect(response.headers["cache-control"]).toBe("private, max-age=300");
+    expect(response.headers["cache-control"]).toBe("private, no-cache");
+    expect(response.headers.etag).toBeTruthy();
     expect(response.rawPayload).toEqual(PNG_FAKE);
+  });
+
+  test("revalidates with a content ETag so an edited file never previews stale", async () => {
+    // The preview panel and the download button hit this same URL; with a
+    // time-based cache an in-place edit (same row id) made the preview serve
+    // pre-edit bytes while the download showed the new ones. A content ETag +
+    // no-cache keeps them in lockstep.
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("one joke"),
+      path: "/sandbox/skills/example/jokes.txt",
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("private, no-cache");
+    const etag = first.headers.etag as string;
+    expect(etag).toBeTruthy();
+
+    // unchanged file → conditional GET revalidates to 304 (no stale body, no
+    // needless re-transfer).
+    const revalidated = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      headers: { "if-none-match": etag },
+    });
+    expect(revalidated.statusCode).toBe(304);
+
+    // edit the bytes in place (edit_file): same id, same URL, new content.
+    await fileStore.update({
+      file: artifact,
+      mimeType: "text/plain",
+      sizeBytes: Buffer.byteLength("two jokes!!"),
+      data: Buffer.from("two jokes!!"),
+    });
+
+    // the browser's conditional GET with the OLD etag now misses → fresh bytes,
+    // matching what a download would return.
+    const afterEdit = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      headers: { "if-none-match": etag },
+    });
+    expect(afterEdit.statusCode).toBe(200);
+    expect(afterEdit.body).toBe("two jokes!!");
+    expect(afterEdit.headers.etag).not.toBe(etag);
   });
 
   test("serves SVG as attachment + octet-stream (never inline as HTML)", async () => {
@@ -231,7 +297,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
   });
 });
 
-describe("My Files list routes", () => {
+describe("GET /api/skill-sandbox/conversations/:conversationId/artifacts", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -254,47 +320,47 @@ describe("My Files list routes", () => {
     await app.close();
   });
 
-  test("GET /api/skill-sandbox/files lists the user's artifacts (db mode, downloadable)", async () => {
-    const sandbox = await SkillSandboxModel.create({
-      organizationId,
+  test("lists only this conversation's artifacts, authored by the caller", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const conv = await makeConversation(agent.id, {
       userId: user.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
+      organizationId,
+    });
+    const other = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
     });
     await seedArtifact({
-      sandboxId: sandbox.id,
       userId: user.id,
       organizationId,
       mimeType: "text/plain",
-      data: Buffer.from("hi"),
-      path: "/sandbox/skills/example/out.txt",
+      data: Buffer.from("here"),
+      path: "/sandbox/here.txt",
+      conversationId: conv.id,
+    });
+    await seedArtifact({
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("there"),
+      path: "/sandbox/there.txt",
+      conversationId: other.id,
     });
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/skill-sandbox/files",
+      url: `/api/skill-sandbox/conversations/${conv.id}/artifacts`,
     });
     expect(response.statusCode).toBe(200);
-    const body = response.json<{
-      files: Array<{
-        filename: string;
-        downloadable: boolean;
-        id: string | null;
-        projectId: string | null;
-        projectName: string | null;
-      }>;
-    }>();
-    expect(body.files).toHaveLength(1);
-    expect(body.files[0]).toMatchObject({
-      filename: "out.txt",
-      downloadable: true,
-      projectId: null,
-      projectName: null,
-    });
-    expect(body.files[0].id).toBeTruthy();
+    expect(
+      response.json<Array<{ filename: string }>>().map((f) => f.filename),
+    ).toEqual(["here.txt"]);
   });
 
-  test("GET conversation artifacts returns [] for a conversation with no sandbox files", async ({
+  test("returns [] for a conversation with no sandbox files", async ({
     makeAgent,
     makeConversation,
   }) => {
@@ -309,52 +375,6 @@ describe("My Files list routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
-  });
-
-  test("GET /api/skill-sandbox/files never returns another user's files", async ({
-    makeUser,
-    makeOrganization,
-  }) => {
-    // the request is authenticated as `user`/`organizationId` (the harness).
-    const mineSandbox = await SkillSandboxModel.create({
-      organizationId,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
-    });
-    await seedArtifact({
-      sandboxId: mineSandbox.id,
-      userId: user.id,
-      organizationId,
-      mimeType: "text/plain",
-      data: Buffer.from("mine"),
-      path: "/sandbox/skills/example/mine.txt",
-    });
-
-    const otherUser = await makeUser({ email: "x-files-other@test.com" });
-    const otherOrg = await makeOrganization();
-    const theirSandbox = await SkillSandboxModel.create({
-      organizationId: otherOrg.id,
-      userId: otherUser.id,
-      conversationId: null,
-      defaultCwd: "/sandbox",
-    });
-    await seedArtifact({
-      sandboxId: theirSandbox.id,
-      userId: otherUser.id,
-      organizationId: otherOrg.id,
-      mimeType: "text/plain",
-      data: Buffer.from("theirs"),
-      path: "/sandbox/skills/example/theirs.txt",
-    });
-
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    expect(response.statusCode).toBe(200);
-    const body = response.json<{ files: Array<{ filename: string }> }>();
-    expect(body.files.map((f) => f.filename)).toEqual(["mine.txt"]);
   });
 });
 
@@ -416,40 +436,18 @@ describe("project file cross-user access", () => {
     return { project, file };
   }
 
-  test("project members see and download files produced by others", async ({
+  test("project members can download files produced by others", async ({
     makeUser,
   }) => {
     // `user` owns the project; `member` produced a file into it.
     const member = await makeUser({ email: "cross-member@test.com" });
-    const { project, file } = await seedProjectFile({
+    const { file } = await seedProjectFile({
       ownerId: user.id,
       authorId: member.id,
       name: "crossuser",
       content: "member",
       filename: "member-output.txt",
     });
-
-    // listing: the owner's My Files include the project's file
-    const files = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    const body = files.json<{
-      files: Array<{
-        id: string | null;
-        filename: string;
-        projectId: string | null;
-        projectName: string | null;
-      }>;
-    }>();
-    expect(body.files).toEqual([
-      expect.objectContaining({
-        id: file.id,
-        filename: "member-output.txt",
-        projectId: project.id,
-        projectName: "crossuser",
-      }),
-    ]);
 
     // bytes: downloadable by any project member (here, the owner)
     const bytes = await app.inject({
@@ -460,7 +458,9 @@ describe("project file cross-user access", () => {
     expect(bytes.body).toBe("member");
   });
 
-  test("a non-member gets 404 for a project's files", async ({ makeUser }) => {
+  test("a non-member gets 404 downloading a project's file", async ({
+    makeUser,
+  }) => {
     const owner = await makeUser({ email: "cross-owner@test.com" });
     const { file } = await seedProjectFile({
       ownerId: owner.id,
@@ -476,14 +476,9 @@ describe("project file cross-user access", () => {
       url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(denied.statusCode).toBe(404);
-    const files = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    expect(files.json<{ files: unknown[] }>().files).toEqual([]);
   });
 
-  test("a shared project grants members full rights — list, read, AND delete", async ({
+  test("a shared project grants members read AND delete on its files", async ({
     makeUser,
     makeMember,
   }) => {
@@ -505,26 +500,6 @@ describe("project file cross-user access", () => {
       teamIds: [],
     });
 
-    // the member's My Files include the shared project's files
-    const files = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    const body = files.json<{
-      files: Array<{
-        id: string | null;
-        filename: string;
-        projectName: string | null;
-      }>;
-    }>();
-    expect(body.files).toEqual([
-      expect.objectContaining({
-        id: file.id,
-        filename: "shared.txt",
-        projectName: "teamshared",
-      }),
-    ]);
-
     // bytes are readable through the share...
     const bytes = await app.inject({
       method: "GET",
@@ -539,14 +514,10 @@ describe("project file cross-user access", () => {
       url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(del.statusCode).toBe(200);
-    const after = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    expect(after.json<{ files: unknown[] }>().files).toEqual([]);
+    expect(await FileModel.findById(file.id)).toBeNull();
   });
 
-  test("unsharing a project revokes access to its files", async ({
+  test("unsharing a project revokes download access to its files", async ({
     makeUser,
     makeMember,
   }) => {
@@ -579,17 +550,12 @@ describe("project file cross-user access", () => {
 
     await ProjectShareModel.remove(project.id);
 
-    // revoked: both the bytes and the listing
+    // revoked: the bytes are no longer reachable
     const denied = await app.inject({
       method: "GET",
       url: `/api/skill-sandbox/artifacts/${file.id}`,
     });
     expect(denied.statusCode).toBe(404);
-    const after = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    expect(after.json<{ files: unknown[] }>().files).toEqual([]);
   });
 });
 
@@ -723,7 +689,10 @@ describe("projects feature gating", () => {
     (config.projects as { enabled: boolean }).enabled = original;
   });
 
-  test("My Files list 404s when off, but the byte route still streams", async () => {
+  test("the projects-gated routes 404 when off, but the byte route still streams", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
     const sandbox = await seedSandbox({ organizationId, userId: user.id });
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
@@ -732,15 +701,21 @@ describe("projects feature gating", () => {
       mimeType: "image/png",
       data: PNG_FAKE,
     });
+    const agent = await makeAgent({ organizationId });
+    const conv = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
+    });
 
     (config.projects as { enabled: boolean }).enabled = false;
     const app = await buildApp();
     try {
-      const files = await app.inject({
+      // the conversation-artifacts list is gated behind the Projects flag
+      const list = await app.inject({
         method: "GET",
-        url: "/api/skill-sandbox/files",
+        url: `/api/skill-sandbox/conversations/${conv.id}/artifacts`,
       });
-      expect(files.statusCode).toBe(404);
+      expect(list.statusCode).toBe(404);
 
       // the byte endpoint is always registered regardless of the flag
       const bytes = await app.inject({
@@ -754,27 +729,34 @@ describe("projects feature gating", () => {
     }
   });
 
-  test("My Files list 200s when on", async () => {
-    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+  test("the conversation-artifacts route 200s when on", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const conv = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
+    });
     await seedArtifact({
-      sandboxId: sandbox.id,
       userId: user.id,
       organizationId,
       mimeType: "text/plain",
       data: Buffer.from("hi"),
       path: "/sandbox/skills/example/out.txt",
+      conversationId: conv.id,
     });
 
     (config.projects as { enabled: boolean }).enabled = true;
     const app = await buildApp();
     try {
-      const files = await app.inject({
+      const list = await app.inject({
         method: "GET",
-        url: "/api/skill-sandbox/files",
+        url: `/api/skill-sandbox/conversations/${conv.id}/artifacts`,
       });
-      expect(files.statusCode).toBe(200);
-      const body = files.json<{ files: Array<{ filename: string }> }>();
-      expect(body.files.map((f) => f.filename)).toEqual(["out.txt"]);
+      expect(list.statusCode).toBe(200);
+      const body = list.json<Array<{ filename: string }>>();
+      expect(body.map((f) => f.filename)).toEqual(["out.txt"]);
     } finally {
       await app.close();
     }

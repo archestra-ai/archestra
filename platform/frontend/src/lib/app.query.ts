@@ -6,7 +6,6 @@ import { handleApiError } from "@/lib/utils";
 const {
   getApps,
   getApp,
-  getAppTemplates,
   getAppVersions,
   getAppTools,
   createApp,
@@ -48,22 +47,6 @@ export function useApp(appId: string | null) {
       if (error) {
         handleApiError(error);
         return null;
-      }
-      return data;
-    },
-  });
-}
-
-export function useAppTemplates(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["apps", "templates"],
-    enabled: options?.enabled ?? true,
-    staleTime: Infinity,
-    queryFn: async () => {
-      const { data, error } = await getAppTemplates();
-      if (error) {
-        handleApiError(error);
-        return [];
       }
       return data;
     },

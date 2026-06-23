@@ -754,6 +754,55 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).toContain("the error describes the expected input");
   });
 
+  test("passes the search/run tools it tells the model to call to streamText", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: "You are a careful analyst.",
+    });
+    const searchToolsName = archestraMcpBranding.getToolName(
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
+    const runToolName = archestraMcpBranding.getToolName(
+      TOOL_RUN_TOOL_SHORT_NAME,
+    );
+    mockStreamText.mockClear();
+    mockGetChatMcpTools.mockResolvedValueOnce({
+      [searchToolsName]: { description: "Search tools" },
+      [runToolName]: { description: "Run tool" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const call = mockStreamText.mock.calls[0]?.[0];
+    // The system prompt instructs the model to call these tools; they must also
+    // be present in the request, or the model is told to call tools it cannot
+    // invoke (the search_and_run_only zero-tools failure).
+    expect(call.system).toContain(
+      `call \`${searchToolsName}\` to find relevant tools`,
+    );
+    expect(Object.keys(call.tools ?? {})).toEqual(
+      expect.arrayContaining([searchToolsName, runToolName]),
+    );
+  });
+
   test("adds load-tools guidance when the agent has no authored prompt", async () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, {

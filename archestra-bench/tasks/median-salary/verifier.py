@@ -5,16 +5,9 @@ the agent). Recomputing from the fixture avoids hard-coding the expected value.
 """
 
 import csv
-import json
-import os
 import statistics
-from pathlib import Path
 
-
-def _result() -> dict:
-    path = os.environ.get("BENCH_RESULT")
-    assert path, "BENCH_RESULT is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+from bench_verifier import fixtures, result
 
 
 def _parse_salary(raw: str | None) -> int | None:
@@ -42,10 +35,8 @@ def _fixture_salaries() -> list[int]:
     # Some rows are structurally malformed (a stray comma shifts the salary out of its column), so
     # truth is defined by scanning every field of each row rather than trusting the `salary` column:
     # the salary is the lone number-parseable field. Numeric rows yield exactly one; junk rows none.
-    base = os.environ.get("BENCH_FIXTURES")
-    assert base, "BENCH_FIXTURES is not set"
     salaries: list[int] = []
-    with Path(base, "inputs", "salaries.csv").open(encoding="utf-8") as handle:
+    with fixtures("inputs", "salaries.csv").open(encoding="utf-8") as handle:
         reader = csv.reader(handle)
         next(reader, None)  # header
         for row in reader:
@@ -59,5 +50,5 @@ def test_median_matches() -> None:
     # The fixture is an odd number of integer salaries (see expected/generate.py), so the median is
     # exactly one of them -- an integer. The schema requires an integer submission; compare exactly.
     expected = statistics.median(_fixture_salaries())
-    submitted = _result()["median_salary"]
+    submitted = result()["median_salary"]
     assert submitted == expected, f"submitted median {submitted} != expected {expected}"

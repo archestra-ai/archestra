@@ -130,17 +130,22 @@ function buildCSP(csp) {
  * Forwards securitypolicyviolation events to the host via postMessage
  * so violations can be surfaced for debugging.
  *
- * Violations originating from the platform-served guest SDK file are not
+ * Violations originating from a platform-served guest SDK file are not
  * forwarded: the SDK probes code-generation support at load with a try/catch
  * `new Function("")`, and the caught probe still fires a
  * securitypolicyviolation (script-src blocks eval). That is platform noise an
  * app author cannot act on — forwarding it would flag every render as
- * "1 runtime error". The global is injected just before this listener.
+ * "1 runtime error". Matched by the `/_sandbox/` asset path (where both SDK
+ * files are served from) rather than `window.__ARCHESTRA_APP_SDK_URL__`, which
+ * is only injected for external apps — owned apps carry their SDK URL in the
+ * backend envelope, so keying off the global leaked the probe for every owned
+ * app.
  */
 function buildViolationListenerScript() {
   return '<script>\
 document.addEventListener("securitypolicyviolation", function(e) {\
-  if (e.sourceFile === window.__ARCHESTRA_APP_SDK_URL__) return;\
+  var src = e.sourceFile || "";\
+  if (src.indexOf("/_sandbox/ext-apps-app.js") !== -1 || src.indexOf("/_sandbox/archestra-app-sdk.js") !== -1) return;\
   var violation = {\
     type: "mcp-apps:csp-violation",\
     directive: e.violatedDirective,\

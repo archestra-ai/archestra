@@ -19,13 +19,15 @@ import { useOrganization } from "@/lib/organization.query";
  * creating a conversation in place.
  *
  * Used by surfaces that start a chat elsewhere (e.g. a project page handing
- * off to /chat). Selections made here persist through the same stores the
- * /chat page reads, so the handed-off chat is created with what was picked.
+ * off to /chat). The selected agent is handed to `onSubmitPrompt` so the
+ * caller can forward it explicitly (the saved-agent store alone is not
+ * authoritative — the /chat resolution chain ranks the org default and the
+ * permission-gated saved pick, so the choice must travel with the handoff).
  */
 export function NewChatComposer({
   onSubmitPrompt,
 }: {
-  onSubmitPrompt: (text: string) => void;
+  onSubmitPrompt: (text: string, agentId: string) => void;
 }) {
   const { data: internalAgents = [] } = useInternalAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
@@ -83,7 +85,7 @@ export function NewChatComposer({
             // Reject the submit so the typed prompt (and its saved draft) survive.
             throw new Error("attachments-not-supported");
           }
-          onSubmitPrompt(text);
+          onSubmitPrompt(text, agentId);
         }}
         status="ready"
         selectedModel={modelId}

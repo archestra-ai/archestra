@@ -3,7 +3,7 @@ title: "Enterprise-Managed Auth"
 category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
-order: 4
+order: 5
 lastUpdated: 2026-06-09
 ---
 

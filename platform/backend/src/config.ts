@@ -1252,21 +1252,12 @@ const config = {
   /**
    * Projects + the persistent "My Files" file system on top of the skill
    * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the search_files / save_result MCP
-   * tools, and the my_file upload source.
+   * project APIs, the My Files endpoints, the persistent-file MCP tools
+   * (search_files, read_file, save_result, edit_file, delete_file), and the
+   * my_file upload source.
    */
   projects: {
     enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
-  },
-  /**
-   * Dynamic tool access UI. Ships dark: off by default until ready to surface.
-   * Gates the per-agent "All / Custom" tools selector and the per-server
-   * "Agent connections" (on-behalf-of vs pinned service account) selector. The
-   * backend still honors a stored access_all_tools flag and the per-server
-   * connection policy; this only controls whether those controls are exposed.
-   */
-  dynamicToolAccess: {
-    enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

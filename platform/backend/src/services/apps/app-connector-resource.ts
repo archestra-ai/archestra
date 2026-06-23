@@ -128,6 +128,25 @@ export function isAppConnectorAudienceRef(
 }
 
 /**
+ * The connector's canonical resource URI recovered from a token's audience ref,
+ * or null when the ref does not bind to a connector. Inverse of {@link
+ * appConnectorAudienceRef}: lets the token endpoint resolve the owning app from
+ * a refreshed token, whose binding better-auth inherits without re-sending the
+ * `resource`.
+ */
+export function connectorResourceUriFromAudienceRef(
+  referenceId: string | null | undefined,
+): string | null {
+  if (
+    typeof referenceId !== "string" ||
+    !referenceId.startsWith(MCP_APP_RESOURCE_REFERENCE_PREFIX)
+  ) {
+    return null;
+  }
+  return referenceId.slice(MCP_APP_RESOURCE_REFERENCE_PREFIX.length) || null;
+}
+
+/**
  * The RFC 9728 `WWW-Authenticate: Bearer` challenge for a connector, pointing a
  * client at the connector's protected-resource metadata and the scope to
  * request. Emitted by both the auth middleware (a credential-less discovery

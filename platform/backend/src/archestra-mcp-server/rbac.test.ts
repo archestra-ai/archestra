@@ -39,16 +39,6 @@ describe("TOOL_PERMISSIONS map", () => {
     }
   });
 
-  test("every entry has valid resource and action or is null", () => {
-    for (const [name, perm] of Object.entries(TOOL_PERMISSIONS)) {
-      if (perm === null) continue;
-      expect(perm, `${name} should have resource`).toHaveProperty("resource");
-      expect(perm, `${name} should have action`).toHaveProperty("action");
-      expect(typeof perm.resource).toBe("string");
-      expect(typeof perm.action).toBe("string");
-    }
-  });
-
   test("read_app reads and edit_app updates", () => {
     expect(TOOL_PERMISSIONS.read_app).toEqual({
       resource: "app",

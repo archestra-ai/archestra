@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.2.71](https://github.com/archestra-ai/archestra/compare/platform-v1.2.70...platform-v1.2.71) (2026-06-21)
+
+
+### Features
+
+* **apps:** staged MCP App authoring flow (refine → scaffold → edit → validate → publish) ([#5718](https://github.com/archestra-ai/archestra/issues/5718)) ([50c668e](https://github.com/archestra-ai/archestra/commit/50c668ee99c7558fd968d0121898be81fdd270f7))
+* **frontend:** rename Triggers to Messaging Channels in sidebar ([#5729](https://github.com/archestra-ai/archestra/issues/5729)) ([26e156e](https://github.com/archestra-ai/archestra/commit/26e156e17b026aa743a5cf15b8a2c3ac8e556918))
+* **sandbox:** read_file MCP tool + SOTA-faithful file trio ([#5728](https://github.com/archestra-ai/archestra/issues/5728)) ([a743663](https://github.com/archestra-ai/archestra/commit/a7436639767e17cd32f71466627fb9cb4cfdd518))
+* **sidebar:** separate pinned and recents, polish and fixes ([#5738](https://github.com/archestra-ai/archestra/issues/5738)) ([05d5d1b](https://github.com/archestra-ai/archestra/commit/05d5d1b35dbbbea67ca7e43b6d9c29e578163716))
+
+
+### Bug Fixes
+
+* **chat:** stop header title render loop during typing animation ([#5730](https://github.com/archestra-ai/archestra/issues/5730)) ([316fa70](https://github.com/archestra-ai/archestra/commit/316fa7013f3ad92d33eab6da6a659b572941daf7))
+* **mcp:** let non-admin members re-authenticate their MCP connections ([#5740](https://github.com/archestra-ai/archestra/issues/5740)) ([d413b77](https://github.com/archestra-ai/archestra/commit/d413b77e512b324b27215c05ef623034da8f9ad4))
+* **sidebar:** play chats loaded animation only once ([#5739](https://github.com/archestra-ai/archestra/issues/5739)) ([9d3067c](https://github.com/archestra-ai/archestra/commit/9d3067ccabe69d6a912b1268919b1f5b84fe32f4))
+
+
+### Documentation
+
+* **platform:** relax test and commit rules in CLAUDE.md ([#5723](https://github.com/archestra-ai/archestra/issues/5723)) ([fd57036](https://github.com/archestra-ai/archestra/commit/fd57036919a6fb643d92013621692978424aad71))
+
+
+### Code Refactoring
+
+* **agents:** shared runAgentStream primitive for chat + A2A ([#5722](https://github.com/archestra-ai/archestra/issues/5722)) ([ef58dd7](https://github.com/archestra-ai/archestra/commit/ef58dd71eca134e797fcf4ff46d9a61107ae8ffd))
+
+
+### Miscellaneous Chores
+
+* backfill auto-generated projects for orphaned schedule triggers ([#5734](https://github.com/archestra-ai/archestra/issues/5734)) ([832132b](https://github.com/archestra-ai/archestra/commit/832132be09db0f91ad216d8820f33c1a08a5eb01))
+
 ## [1.2.70](https://github.com/archestra-ai/archestra/compare/platform-v1.2.69...platform-v1.2.70) (2026-06-20)
 
 

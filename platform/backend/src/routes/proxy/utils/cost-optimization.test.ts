@@ -166,6 +166,54 @@ describe("calculateCost", () => {
     });
     expect(cost).toBeCloseTo(0.0425);
   });
+
+  test("prefers explicit synced cache prices over the provider multiplier", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/explicit-cache",
+      provider: "anthropic",
+      modelId: "explicit-cache",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030", // $30/M output
+      cacheReadPricePerToken: "0.000002", // $2/M (multiplier would give $1/M)
+      cacheWritePricePerToken: "0.000020", // $20/M (multiplier would give $12.5/M)
+      lastSyncedAt: new Date(),
+    });
+
+    // input 0.01 + output 0.015 + read 2000/1M*$2 (0.004) + write 1000/1M*$20 (0.02)
+    const cost = await calculateCost("explicit-cache", 1000, 500, "anthropic", {
+      readTokens: 2000,
+      writeTokens: 1000,
+    });
+    expect(cost).toBeCloseTo(0.049);
+  });
+
+  test("uses custom cache price overrides over synced/derived prices", async () => {
+    const model = await ModelModel.create({
+      externalId: "anthropic/custom-cache",
+      provider: "anthropic",
+      modelId: "custom-cache",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010",
+      completionPricePerToken: "0.000030",
+      cacheReadPricePerToken: "0.000002",
+      cacheWritePricePerToken: "0.000020",
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.update(model.id, {
+      customPricePerMillionCacheRead: "1.00",
+      customPricePerMillionCacheWrite: "5.00",
+    });
+
+    // input 0.01 + output 0.015 + read 2000/1M*$1 (0.002) + write 1000/1M*$5 (0.005)
+    const cost = await calculateCost("custom-cache", 1000, 500, "anthropic", {
+      readTokens: 2000,
+      writeTokens: 1000,
+    });
+    expect(cost).toBeCloseTo(0.032);
+  });
 });
 
 describe("calculateCacheCost", () => {
@@ -222,6 +270,60 @@ describe("calculateCacheCost", () => {
     );
     expect(result?.cacheCost).toBeCloseTo(0.0175);
     expect(result?.cacheSavings).toBeCloseTo(0.0125);
+  });
+
+  test("computes cache cost from explicit prices even when the provider has no multiplier", async () => {
+    await ModelModel.create({
+      externalId: "cohere/cache-explicit",
+      provider: "cohere",
+      modelId: "cache-explicit",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030",
+      cacheReadPricePerToken: "0.000001", // $1/M
+      cacheWritePricePerToken: "0.000012", // $12/M
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000/1M*$1 = 0.002 cost; write 1000/1M*$12 = 0.012 cost → 0.014
+    // read saved 2000/1M*($10-$1) = 0.018; write surcharge 1000/1M*($12-$10) = 0.002
+    const result = await calculateCacheCost(
+      "cache-explicit",
+      "cohere",
+      2000,
+      1000,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.014);
+    expect(result?.cacheSavings).toBeCloseTo(0.016);
+  });
+
+  test("skips an unpriced cache direction instead of fabricating savings", async () => {
+    // A provider with no cache multiplier and only a synced cache-read price:
+    // the write direction is genuinely unpriced and must be skipped, not zeroed.
+    await ModelModel.create({
+      externalId: "cohere/cache-read-only",
+      provider: "cohere",
+      modelId: "cache-read-only",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.00001", // $10/M input
+      completionPricePerToken: "0.00003",
+      cacheReadPricePerToken: "0.000001", // $1/M read, no write synced
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000/1M*$1 = 0.002 cost; read saved 2000/1M*($10-$1) = 0.018.
+    // 1000 write tokens are unpriced → contribute no cost and no savings.
+    const result = await calculateCacheCost(
+      "cache-read-only",
+      "cohere",
+      2000,
+      1000,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.002);
+    expect(result?.cacheSavings).toBeCloseTo(0.018);
+    expect(result?.cacheReadSavings).toBeCloseTo(0.018);
   });
 });
 

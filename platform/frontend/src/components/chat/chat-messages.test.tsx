@@ -1446,7 +1446,7 @@ describe("owned-app inline rendering", () => {
         role: "assistant",
         parts: [
           {
-            type: "tool-sparky__create_app",
+            type: "tool-sparky__scaffold_app",
             toolCallId: "call-app-1",
             state: "output-available",
             input: { name: "To Do App", html: "<h1>hi</h1>" },
@@ -1468,8 +1468,8 @@ describe("owned-app inline rendering", () => {
   }
 
   it.each([
-    "create_app",
-    "update_app",
+    "scaffold_app",
+    "edit_app",
     "render_app",
   ])("mounts the app-bound runtime for a branded %s result", (shortName) => {
     renderAppToolPart({ type: `tool-sparky__${shortName}` });
@@ -1480,8 +1480,8 @@ describe("owned-app inline rendering", () => {
   });
 
   it.each([
-    "sparky__create_app",
-    "create_app",
+    "sparky__scaffold_app",
+    "scaffold_app",
   ])("mounts the app-bound runtime for a run_tool dispatch targeting %s", (targetName) => {
     renderAppToolPart({
       type: "tool-sparky__run_tool",
@@ -1497,8 +1497,8 @@ describe("owned-app inline rendering", () => {
     );
   });
 
-  it("does not mount for a foreign-prefix create_app result", () => {
-    renderAppToolPart({ type: "tool-other__create_app" });
+  it("does not mount for a foreign-prefix scaffold_app result", () => {
+    renderAppToolPart({ type: "tool-other__scaffold_app" });
     expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
   });
 
@@ -1510,6 +1510,16 @@ describe("owned-app inline rendering", () => {
         structuredContent: { apps: [appOutput.structuredContent] },
       },
     });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  // refine_app/validate_app return an app id but are not rendering tools: they
+  // must not mount a canvas (would otherwise re-render the app on every refine).
+  it.each([
+    "refine_app",
+    "validate_app",
+  ])("does not mount for a branded %s result carrying the app id", (shortName) => {
+    renderAppToolPart({ type: `tool-sparky__${shortName}` });
     expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
   });
 
@@ -1552,7 +1562,7 @@ describe("owned-app inline rendering", () => {
             output: { content: "results" },
           },
           {
-            type: "tool-sparky__create_app",
+            type: "tool-sparky__scaffold_app",
             toolCallId: "call-app-1",
             state: "output-available",
             input: { name: "To Do App", html: "<h1>hi</h1>" },

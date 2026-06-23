@@ -1,11 +1,17 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  type ArchestraToolShortName,
   CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
+import EnvironmentModel from "@/models/environment";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
 
@@ -128,15 +134,28 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     makeTool,
     makeAppTool,
   });
-  const management = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-    toolInput: {},
-    ...BASE,
-  });
-  expect(management.allowed).toBe(false);
+  // Every authoring/management tool is rejected from the app surface — only the
+  // reserved app built-ins below are dispatchable as an app.
+  const authoringTools: ArchestraToolShortName[] = [
+    TOOL_SCAFFOLD_APP_SHORT_NAME,
+    TOOL_REFINE_APP_SHORT_NAME,
+    TOOL_EDIT_APP_SHORT_NAME,
+    TOOL_VALIDATE_APP_SHORT_NAME,
+    TOOL_PUBLISH_APP_SHORT_NAME,
+  ];
+  for (const shortName of authoringTools) {
+    const management = await gateAppToolCall({
+      appId,
+      organizationId,
+      userId,
+      toolName: getArchestraToolFullName(shortName),
+      toolInput: {},
+      ...BASE,
+    });
+    expect(management.allowed, `${shortName} must not be app-callable`).toBe(
+      false,
+    );
+  }
 
   const dataStore = await gateAppToolCall({
     appId,
@@ -396,4 +415,90 @@ test("a permissive org skips policy enforcement", async ({
     ...BASE,
   });
   expect(decision.allowed).toBe(true);
+});
+
+test("refuses an assigned tool whose catalog left the app's environment", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const user = await makeUser();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+  const dev = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "development",
+  });
+  // App bound to prod; the assigned tool's catalog is in dev — a stale
+  // assignment that survives a re-bind. The call-time gate refuses it even
+  // though the app_tools row is still present.
+  const app = await makeApp({ organizationId: org.id, environmentId: prod.id });
+  const devCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: dev.id,
+  });
+  const tool = await makeTool({
+    name: `dev__x_${crypto.randomUUID().slice(0, 8)}`,
+    catalogId: devCatalog.id,
+  });
+  await makeAppTool(app.id, tool.id);
+
+  const decision = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: user.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(decision.allowed).toBe(false);
+  expect(decision.allowed === false && decision.reason).toContain(
+    "environment",
+  );
+});
+
+test("allows an assigned tool in the app's bound environment", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const user = await makeUser();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+  const app = await makeApp({ organizationId: org.id, environmentId: prod.id });
+  const prodCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: prod.id,
+  });
+  const tool = await makeTool({
+    name: `prod__x_${crypto.randomUUID().slice(0, 8)}`,
+    catalogId: prodCatalog.id,
+  });
+  await makeAppTool(app.id, tool.id);
+
+  const decision = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: user.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(decision).toEqual({
+    allowed: true,
+    kind: "upstream",
+    resolvedToolName: tool.name,
+  });
 });

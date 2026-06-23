@@ -79,6 +79,55 @@ describe("interaction routes", () => {
     expect(response.json().data).toHaveLength(1);
   });
 
+  test("lists interactions whose response carries a non-standard finish_reason", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Models fronted by OpenRouter can emit finish_reason values outside the
+    // canonical OpenAI set; the stored row must still serialize on read-back.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: {
+        model: "minimax/minimax-m3",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      response: {
+        id: "test-response",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "minimax/minimax-m3",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "Hi there",
+              refusal: null,
+            },
+            finish_reason: "unusual_reason",
+            logprobs: null,
+          },
+        ],
+      },
+      type: "openai:chatCompletions",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].response.choices[0].finish_reason).toBe(
+      "unusual_reason",
+    );
+  });
+
   test("returns chat errors on interaction detail for chat sessions", async ({
     makeAgent,
   }) => {

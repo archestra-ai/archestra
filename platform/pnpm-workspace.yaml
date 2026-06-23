@@ -38,7 +38,7 @@ overrides:
   form-data@<4: 3.0.5
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
-  dompurify: 3.4.0
+  dompurify: 3.4.10
   glob: 11.1.0
   # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
   esbuild: '>=0.28.1'

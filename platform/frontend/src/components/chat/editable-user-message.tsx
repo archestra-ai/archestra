@@ -12,7 +12,6 @@ import {
 import { MessageActions } from "@/components/chat/message-actions";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,

@@ -28,6 +28,7 @@ import {
   TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -482,6 +483,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -489,6 +491,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
+
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
 
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
         throw new ApiError(
@@ -576,6 +584,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectorType: body.connectorType,
         config: body.config,
         secretId,
+        environmentId: body.environmentId ?? null,
         schedule: body.schedule,
         enabled: body.enabled,
       });
@@ -763,6 +772,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
       },
@@ -773,6 +783,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
 
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
@@ -1301,6 +1319,35 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default knowledgeBaseRoutes;
 
 // ===== Internal Helpers =====
+
+/**
+ * Gate assigning a knowledge base / connector to an environment. Mirrors the
+ * agent + MCP-catalog write paths: a restricted environment (or a restricted
+ * org default when environmentId is null/omitted) requires
+ * environment:deploy-to-restricted (environment:admin implies it). Also
+ * validates the environment belongs to the org, preventing cross-tenant binding.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
+}
 
 async function findKnowledgeBaseOrThrow(params: {
   id: string;

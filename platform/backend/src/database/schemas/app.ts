@@ -2,12 +2,15 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  jsonb,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AppSpec } from "@/types/app-spec";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import environmentsTable from "./environment";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -46,6 +49,27 @@ const appsTable = softDeletablePgTable(
     /** Id of the starter template the app was created from, for provenance. */
     templateId: text("template_id"),
     /**
+     * Optional Environment the app is bound to. The bound environment confines
+     * which MCP tools the app may be assigned and may call at runtime to that
+     * environment (matched on the tool's catalog environment). Null = the org
+     * default environment. ON DELETE SET NULL re-binds the app to the default
+     * rather than orphaning it.
+     *
+     * The FK is referential only; it does NOT encode org ownership, so the write
+     * path that sets `apps.environment_id` validates the environment belongs to
+     * the app's organization (via `assertCanAssignEnvironment`) to prevent
+     * cross-tenant binding.
+     */
+    environmentId: uuid("environment_id").references(
+      () => environmentsTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
+     * Consolidated requirements the app was refined to (mutable head; re-refining
+     * overwrites it). Null for legacy apps authored before the refine flow.
+     */
+    spec: jsonb("spec").$type<AppSpec>(),
+    /**
      * Head version number, pointing at the latest `app_versions` row. Bumped in
      * the same transaction as an edit that forks a new version. Every app has at
      * least version 1 (written on create).
@@ -60,6 +84,7 @@ const appsTable = softDeletablePgTable(
   (table) => [
     index("apps_organization_id_idx").on(table.organizationId),
     index("apps_scope_idx").on(table.scope),
+    index("apps_environment_id_idx").on(table.environmentId),
     // Name uniqueness mirrors visibility (like skills): personal apps are unique
     // per (org, author), shared apps per org. Soft-deleted rows are excluded so
     // deleting an app frees its name for re-use.

@@ -8,12 +8,14 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useCreateProject, useProjects } from "@/lib/projects/projects.query";
 
 export default function ProjectsPageClient() {
@@ -24,20 +26,36 @@ export default function ProjectsPageClient() {
   );
 }
 
+const PROJECTS_DESCRIPTION =
+  "Collections of chats with shared files. Share a project to let teammates follow along and start their own chats.";
+
 function ProjectsList() {
   const { data, isPending } = useProjects();
+  const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const projects = data ?? [];
+
+  // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
+  // project on, so prompt to add one instead of offering project creation.
+  if (!isApiKeyLoading && !hasAnyApiKey) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <NoApiKeySetup description="Connect an LLM provider to start a project" />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout
       title="Projects"
-      description="Collections of chats with shared files. Share a project to let teammates follow along and start their own chats."
+      description={PROJECTS_DESCRIPTION}
       actionButton={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New project
-        </Button>
+        hasAnyApiKey ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New project
+          </Button>
+        ) : undefined
       }
     >
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -80,10 +98,6 @@ function ProjectsList() {
                   {project.description}
                 </p>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                {project.conversationCount}{" "}
-                {project.conversationCount === 1 ? "chat" : "chats"}
-              </p>
             </Link>
           ))}
         </div>

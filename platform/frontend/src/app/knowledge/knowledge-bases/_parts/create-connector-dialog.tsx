@@ -8,6 +8,7 @@ import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ type CreateConnectorFormValues = {
   email: string;
   apiToken: string;
   schedule: string;
+  environmentId: string | null;
 };
 
 type ConnectorVisibility = NonNullable<
@@ -100,6 +102,7 @@ export function CreateConnectorDialog({
       email: "",
       apiToken: "",
       schedule: "0 */6 * * *",
+      environmentId: null,
     },
   });
 
@@ -138,6 +141,7 @@ export function CreateConnectorDialog({
       teamIds: visibility === "team-scoped" ? teamIds : [],
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
+      environmentId: values.environmentId,
       ...(usesGithubApp || !requiresCredentials
         ? {}
         : {
@@ -346,6 +350,18 @@ export function CreateConnectorDialog({
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="environmentId"
+                  render={({ field }) => (
+                    <EnvironmentSelector
+                      value={field.value ?? null}
+                      onChange={field.onChange}
+                      helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+                    />
+                  )}
+                />
+
                 <KnowledgeSourceVisibilitySelector
                   visibility={visibility}
                   onVisibilityChange={setVisibility}
@@ -353,6 +369,8 @@ export function CreateConnectorDialog({
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
                 />
+
+                <div className="border-t" />
 
                 {urlConfig && (
                   <FormField

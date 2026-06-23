@@ -114,7 +114,7 @@ describe("diagnostics store", () => {
   it("a newer version resets the collection; a stale mount is ignored", () => {
     reportAppDiagnostic(APP, 1, { type: "error", message: "v1 error" });
     reportAppDiagnostic(APP, 2, { type: "error", message: "v2 error" });
-    // the old create_app card (still mounted, labeled v1) reports late
+    // the old scaffold_app card (still mounted, labeled v1) reports late
     reportAppDiagnostic(APP, 1, { type: "error", message: "stale v1 report" });
     // an unknown-version mount ranks below any known version
     reportAppDiagnostic(APP, null, { type: "error", message: "unknown" });

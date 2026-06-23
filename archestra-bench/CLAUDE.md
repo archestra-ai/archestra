@@ -6,9 +6,13 @@ file layout, lifecycle) live in `../README.md` -- this file is the discipline, n
 ## The prompt is a real user's ask
 
 - Read like a coworker's request, not a spec sheet. No mention of the sandbox, `run_command`,
-  `search_tools`, `/home/sandbox` paths, or "the verifier". The only tool a prompt names is
-  `submit_result` (the protocol requires it).
-- Don't spoon-feed the approach or name the skill/tool that solves it -- discovering it is the task.
+  `search_tools`, `/home/sandbox` paths, or "the verifier".
+- Don't spoon-feed the approach or name the skill/tool that solves it -- finding the right tool is
+  itself a key capability under test, so naming it hands the model the answer. A prompt names only the
+  **delivery-protocol** tools the harness grades through -- `submit_result` (always) and `download_file`
+  (file-output tasks) -- never a task-solving tool (`create_skill`, `load_skill`, `list_skills`, a
+  skill, a sandbox command). State the goal ("author a skill that…", "use that skill to…"); let the
+  agent discover how.
 - Never reveal the agent is inside a benchmark/eval/harness. No "benchmark", "eval", "test", "graded",
   or "fixture" language on any agent-facing surface -- the prompt **and** the skills/files it loads. A
   real user would never say "the benchmark blobs"; they have a blob and want it decoded.

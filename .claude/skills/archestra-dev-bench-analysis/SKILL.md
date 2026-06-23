@@ -33,18 +33,20 @@ newest under `archestra-bench/experiments/`:
 It resolves the run dir to an absolute path, runs `archestra-bench prepare` (failures-first manifest;
 **fail-fast** — if it exits non-zero, surface the printed `path:line` error and stop), and writes
 under `<RUN_DIR>/_prep_claude/`: `manifest.json`, `metrics.md`, `order.tsv` (`idx<TAB>id<TAB>outcome`,
-manifest order), and `map-args.json` (ready-to-pass `args` for the map workflow). It prints a
+manifest order), one pre-rendered triage prompt per rollout under `prompts/<NN>.txt`, and
+`map-args.json` (small, ready-to-pass `args` for the map workflow). It prints a
 `KEY=value` summary — capture `RUN_DIR`, `TS`, `TRIAGE_DIR`, `MAP_ARGS`, `METRICS`, `ORDER`,
 `ANALYSES_DOC`, `REPORT_DOC` — then the metrics block. **State which `RUN_DIR` it chose.**
 
 ## 2. Map — one triage workflow
 
 `Read` the `MAP_ARGS` file (`map-args.json`) and pass its JSON as `args` to the Workflow tool with
-`scriptPath: <SKILL_DIR>/workflows/map.mjs`. The args already contain `triageDir`, the verbatim
-`mapTemplate`, and the `rollouts` array (`{idx,id,outcome,outcomeSummary,trajectoryMd}`) in manifest
-order — no hand-shaping. The workflow fans out one **Sonnet** triage agent per rollout (auto-batched
-at the concurrency cap — no manual 8-at-a-time loop), each reads its own trajectory and `Write`s its
-triage (≤6000 chars) to `<TRIAGE_DIR>/<NN>.md` (zero-padded `idx`). It returns `{written, total}`; if
+`scriptPath: <SKILL_DIR>/workflows/map.mjs`. The file is small by design — `triageDir`, `promptsDir`,
+and the `rollouts` array (`{idx,id}`, manifest order); the filled triage prompts live on disk under
+`promptsDir`, so the bulk never flows through your context. The workflow fans out one **Sonnet**
+triage agent per rollout (auto-batched at the concurrency cap — no manual 8-at-a-time loop); each
+reads its pre-rendered prompt (`<promptsDir>/<NN>.txt`) and the trajectory it points to, then `Write`s
+its triage (≤6000 chars) to `<TRIAGE_DIR>/<NN>.md` (zero-padded `idx`). It returns `{written, total}`; if
 `written < total`, note which indices are missing a triage file before continuing. Sonnet is
 deliberate — triage is a cheap bounded read; reserve the stronger model for the reduce synthesis.
 
@@ -58,7 +60,8 @@ T=<TRIAGE_DIR>; OUT=<ANALYSES_DOC>
 { cat <METRICS>; printf '\n# Per-trajectory analyses\n'; \
   while IFS=$'\t' read -r idx id outcome; do f=$(printf '%s/%02d.md' "$T" "$idx"); \
     printf '\n## %s — %s\n\n' "$id" "$outcome"; \
-    if [ "$(wc -m < "$f")" -gt 6000 ]; then head -c 6000 "$f"; printf '\n[analysis truncated]\n'; \
+    if [ ! -f "$f" ]; then printf '[MISSING TRIAGE]\n'; \
+    elif [ "$(wc -m < "$f")" -gt 6000 ]; then head -c 6000 "$f"; printf '\n[analysis truncated]\n'; \
     else cat "$f"; printf '\n'; fi; \
   done < <ORDER>; } > "$OUT"
 ```

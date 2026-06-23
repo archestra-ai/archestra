@@ -285,6 +285,13 @@ class AgentModel {
       organizationId = firstOrg?.id || "";
     }
 
+    // Dynamic tool access only works through the search/run dispatch surface, so
+    // an all-tools agent must use progressive loading. Coerce here so every
+    // create path (UI, MCP tools, REST, import, clone) keeps the invariant.
+    if (agent.accessAllTools === true) {
+      agent.toolExposureMode = "search_and_run_only";
+    }
+
     const slug =
       agent.agentType === "mcp_gateway"
         ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
@@ -343,6 +350,10 @@ class AgentModel {
     // Auto-assign the MCP App management tools when the apps feature is
     // enabled, so new agents can build and use apps without per-agent setup.
     await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+
+    // Auto-assign the code-execution sandbox + Projects file tools based on the
+    // runtime/Projects flags, so new agents can use them without manual setup.
+    await ToolModel.assignSandboxToolsToAgent(createdAgent.id, organizationId);
 
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
@@ -1201,6 +1212,16 @@ class AgentModel {
     return result?.organizationId ?? null;
   }
 
+  static async findEnvironmentId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ environmentId: schema.agentsTable.environmentId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.environmentId ?? null;
+  }
+
   static async findIdentityProviderId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ identityProviderId: schema.agentsTable.identityProviderId })
@@ -1720,6 +1741,21 @@ class AgentModel {
 
     if (!existingAgent) {
       return null;
+    }
+
+    // Keep the all-tools ⇒ progressive-loading invariant on every update path:
+    // if the agent's effective accessAllTools is on, force search_and_run_only.
+    // Only mutate when there is an actual inconsistency to fix, so unrelated
+    // updates don't spuriously rewrite the exposure mode.
+    const effectiveAccessAllTools =
+      agent.accessAllTools ?? existingAgent.accessAllTools;
+    const effectiveToolExposureMode =
+      agent.toolExposureMode ?? existingAgent.toolExposureMode;
+    if (
+      effectiveAccessAllTools &&
+      effectiveToolExposureMode !== "search_and_run_only"
+    ) {
+      agent.toolExposureMode = "search_and_run_only";
     }
 
     // If setting isDefault to true, unset isDefault for other agents of the same type

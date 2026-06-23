@@ -3,6 +3,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
+import { AppSpecSchema } from "./app-spec";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
 
 /** Apps share the personal/team/org visibility model of agents and skills. */
@@ -13,7 +14,6 @@ export type AppScope = z.infer<typeof AppScopeSchema>;
 // stored size is bounded regardless of multi-byte content.
 export const APP_NAME_MAX_LENGTH = 100;
 export const APP_DESCRIPTION_MAX_LENGTH = 500;
-export const APP_TEMPLATE_ID_MAX_LENGTH = 100;
 export const APP_HTML_MAX_BYTES = 512 * 1024;
 /** Per-document size cap for the App Data Store. */
 export const APP_DATA_MAX_VALUE_BYTES = 256 * 1024;
@@ -46,14 +46,52 @@ export const AppUiPermissionsSchema = z
   .strict();
 export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
 
+/**
+ * Unified Apps-surface listing item. The Apps page lists owned apps and
+ * external UI-providing installed MCP servers as one entity, distinguished by
+ * `source`. `executionModel` and `cspOrigin` are the machine-readable trust
+ * disclosure (mcp-apps.md FR-29): owned apps run as the viewer under the
+ * platform-pinned CSP; external apps run server-scoped under the server's own
+ * declared CSP. `GET /api/apps/:appId` still returns {@link SelectAppSchema}.
+ */
+const AppListItemBaseSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable(),
+  scope: AppScopeSchema,
+  authorId: z.string().nullable(),
+  executionModel: z.enum(["viewer-scoped", "server-scoped"]),
+  cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+});
+
+export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
+  source: z.literal("owned"),
+  id: z.string(),
+  latestVersion: z.number().int(),
+});
+
+export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
+  source: z.literal("external"),
+  mcpServerId: z.string(),
+  resourceUri: z.string(),
+});
+
+export const AppListItemSchema = z.discriminatedUnion("source", [
+  OwnedAppListItemSchema,
+  ExternalAppListItemSchema,
+]);
+export type AppListItem = z.infer<typeof AppListItemSchema>;
+export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
+
 // drizzle-derived schemas (internal: model layer reads/writes through these).
 export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   scope: AppScopeSchema,
+  spec: AppSpecSchema.nullable(),
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {
   scope: AppScopeSchema.optional(),
+  spec: AppSpecSchema.nullable().optional(),
 }).omit({
   id: true,
   latestVersion: true,
@@ -68,12 +106,14 @@ export const SelectAppVersionSchema = createSelectSchema(
   schema.appVersionsTable,
   {
     uiPermissions: AppUiPermissionsSchema.nullable(),
+    spec: AppSpecSchema.nullable(),
   },
 );
 export const InsertAppVersionSchema = createInsertSchema(
   schema.appVersionsTable,
   {
     uiPermissions: AppUiPermissionsSchema.nullable().optional(),
+    spec: AppSpecSchema.nullable().optional(),
   },
 ).omit({ id: true, createdAt: true });
 
@@ -104,7 +144,7 @@ export const SelectAppRenderScreenshotSchema = createSelectSchema(
   schema.appRenderScreenshotTable,
 );
 
-// Public payloads (create_app/update_app tools + REST CRUD). HTML and its
+// Public payloads (REST CRUD + the scaffold_app MCP tool). HTML and its
 // security envelope live in app_versions, so these are hand-authored composites
 // rather than table inserts.
 const htmlField = z
@@ -117,12 +157,65 @@ const htmlField = z
 export const CreateAppSchema = z.object({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
-  templateId: z.string().max(APP_TEMPLATE_ID_MAX_LENGTH).optional(),
   scope: AppScopeSchema.optional(),
-  // One of html/templateId is required (resolveCreateAppHtml enforces it):
-  // explicit html wins, otherwise the template seeds the first version.
+  // html is optional: supply it to seed explicitly, otherwise the single
+  // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
+  // Environment binding. null/omitted = org default. Org membership and the
+  // restricted-env permission are enforced in the route via
+  // assertCanAssignEnvironment.
+  environmentId: z.string().uuid().nullable().optional(),
+});
+
+// Input for the `scaffold_app` MCP tool: it always seeds the single default
+// template (no html), so the staged authoring flow is scaffold → edit_app.
+// strictObject so apps.ts can extend it with the tool-assignment `tools` param.
+export const ScaffoldAppSchema = z.strictObject({
+  name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
+  description: z
+    .string()
+    .max(APP_DESCRIPTION_MAX_LENGTH)
+    .optional()
+    .describe("Optional description."),
+  scope: AppScopeSchema.optional().describe(
+    "Visibility scope. Defaults to personal (owned by the calling user).",
+  ),
+  uiPermissions: AppUiPermissionsSchema.optional().describe(
+    "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
+  ),
+});
+
+// Input for the `refine_app` MCP tool: the step between scaffold and edit. It
+// clarifies what an app should be — optionally asking the user model-authored
+// questions, and/or persisting a consolidated product spec on the app head.
+export const RefineAppToolSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to refine."),
+  questions: z
+    .array(
+      z.strictObject({
+        id: z
+          .string()
+          .min(1)
+          .describe("Stable key the answer is returned under."),
+        prompt: z.string().min(1).describe("The question shown to the user."),
+        options: z
+          .array(z.string().min(1))
+          .min(1)
+          .optional()
+          .describe(
+            "When present, the question is single-select over these options; otherwise it is free-text.",
+          ),
+      }),
+    )
+    .max(3)
+    .optional()
+    .describe(
+      "Up to 3 clarifying questions to ask the user before consolidating the spec.",
+    ),
+  spec: AppSpecSchema.optional().describe(
+    "The consolidated product requirements to persist on the app (features/data/ui/tools — no implementation stack).",
+  ),
 });
 
 // A curated starter an app can be seeded from. Shipped as static backend
@@ -141,7 +234,14 @@ export const UpdateAppSchema = z.object({
   // Supplying html forks a new immutable version (no-op forks are suppressed).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
+  // Re-bind the app's environment. null = org default. Existing tool
+  // assignments are not stripped on re-bind; out-of-environment ones are refused
+  // at call time instead.
+  environmentId: z.string().uuid().nullable().optional(),
 });
+
+export type { AppSpec } from "./app-spec";
+export { AppSpecSchema } from "./app-spec";
 
 export type App = z.infer<typeof SelectAppSchema>;
 export type InsertApp = z.infer<typeof InsertAppSchema>;

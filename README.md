@@ -14,12 +14,12 @@
 </p>
 </div>
 
-All-in-one enterprise AI platform for those who are tired of wiring up kagent, kMCP, OpenWebUI, and LiteLLM and still being frustrated by **reliability**, **governance**, **security**, **observability**, **cost tracking**, and **general complexity of building a mature enterprise AI platform**.
+All-in-one enterprise AI platform for those who are tired of wiring up kagent, kMCP, OpenWebUI, and LiteLLM — and still being frustrated by **reliability**, **governance**, **security**, **observability**, **cost tracking**, and **the general complexity of building a mature enterprise AI platform**.
 
 - 💬 [Internal chat UI for non-technical users](https://archestra.ai/docs/platform-chat)
   - 👥 [Projects for collaboration](https://archestra.ai/docs/platform-projects)
   - 📱 [MCP Apps](https://archestra.ai/docs/platform-apps)
-  - 💼 [Slack](https://archestra.ai/docs/platform-slack), [MS Teams](https://archestra.ai/docs/platform-ms-teams), and [Email](https://archestra.ai/docs/platform-agent-triggers-email) UI's
+  - 💼 [Slack](https://archestra.ai/docs/platform-slack), [MS Teams](https://archestra.ai/docs/platform-ms-teams), and [Email](https://archestra.ai/docs/platform-agent-triggers-email) UIs
 - 🛠️ [Developer LLM & MCP access portal](https://archestra.ai/docs/platform-llm-proxy) (Claude, Codex, etc.)
 - 🚪 [LLM Gateway](https://archestra.ai/docs/platform-llm-proxy)
   - 🌐 [Any provider](https://archestra.ai/docs/platform-supported-llm-providers) (Anthropic, OpenAI, Azure, Bedrock, DeepSeek, and more)
@@ -45,7 +45,7 @@ All-in-one enterprise AI platform for those who are tired of wiring up kagent, k
 - 🛡️ [Deterministic Guardrails](https://archestra.ai/docs/platform-ai-tool-guardrails)
   - 🧪 [Dual LLM](https://archestra.ai/docs/platform-dual-llm) and [Lethal Trifecta](https://archestra.ai/docs/platform-lethal-trifecta) protections
 - 🪪 [Identity & Access](https://archestra.ai/docs/platform-access-control)
-  - 🔐 [SSO](https://archestra.ai/docs/platform-sso) (OIDC, SAML, Okta, Microsoft Entra)
+  - 🔐 [SSO](https://archestra.ai/docs/platform-sso) (OIDC, SAML, Okta, and Microsoft Entra)
   - 👮 [RBAC with role mapping and team sync](https://archestra.ai/docs/platform-access-control)
   - 🗝️ [Secrets management](https://archestra.ai/docs/platform-secrets-management)
 - 🌎 [Environments](https://archestra.ai/docs/platform-environments)
@@ -57,7 +57,7 @@ All-in-one enterprise AI platform for those who are tired of wiring up kagent, k
   - 📝 Logs
   - 💵 [Per-team cost tracking](https://archestra.ai/docs/platform-costs-and-limits)
 
-Already running dangerous single-tenant agents like Claude Cowork, OpenClaw, Hermes in your enterprise? [Migration Kit →](migration-kit/README.md)
+Already running dangerous single-tenant agents like Claude Cowork, OpenClaw, or Hermes in your enterprise? [Migration Kit →](migration-kit/README.md)
 
 ## Quickstart
 

@@ -10,7 +10,7 @@ to the same scalar history. The `overall` run dir carries run-wide tags; each `l
 carries per-(env, task) tags, so lanes line up as sibling series sharing task tags.
 
 Pure read of the run dir → write event files under `--out`. Missing/null metrics are skipped, never
-faked. CI copies `--out` to GCS afterwards.
+faked. The pod's `publish_run.py` uploads `--out` to GCS afterwards.
 """
 
 import argparse

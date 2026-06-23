@@ -1,8 +1,8 @@
 # Short-lived benchmark Job. Runs the bench container against an ephemeral Postgres sidecar (zero blast
 # radius on staging's DB) and the shared staging Dagger engine (reached via kube-pod:// with the
-# platform service account's RBAC). The bench container keep-alives behind a /work/DONE marker so CI
-# can kubectl cp the run tarball from the live container; CI deletes the Job as the normal teardown,
-# and activeDeadlineSeconds / ttlSecondsAfterFinished are the backstop. `${...}` are filled by envsubst.
+# platform service account's RBAC). The pod owns reporting: it uploads results to GCS and posts Slack,
+# so CI applies the Job and leaves. activeDeadlineSeconds / ttlSecondsAfterFinished handle teardown.
+# `${...}` are filled by envsubst.
 #
 # Native sidecars (initContainers with restartPolicy: Always) require the cluster control plane to be
 # >= 1.29 (GA / on by default). CI asserts this before applying.
@@ -73,6 +73,21 @@ spec:
                 secretKeyRef:
                   name: archestra-bench-secrets
                   key: ZAI_API_KEY
+            # Reporting: the pod exports TensorBoard scalars, uploads artifacts to GCS (auth via the
+            # platform SA's Workload Identity), and posts the Slack summary itself.
+            - name: GCS_BUCKET
+              value: "${GCS_BUCKET}"
+            - name: GITHUB_RUN_NUMBER
+              value: "${GITHUB_RUN_NUMBER}"
+            - name: GITHUB_RUN_ATTEMPT
+              value: "${GITHUB_RUN_ATTEMPT}"
+            - name: RUN_URL
+              value: "${RUN_URL}"
+            - name: SLACK_BENCH_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: archestra-bench-secrets
+                  key: SLACK_BENCH_WEBHOOK_URL
           resources:
             requests:
               cpu: "1"

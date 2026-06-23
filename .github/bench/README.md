@@ -5,12 +5,18 @@ staging platform image, an ephemeral Postgres sidecar, and the shared staging ma
 It never mutates the live staging Deployment, its DB, or its data. Trigger manually from the Actions
 tab (`workflow_dispatch`) or wait for the daily cron.
 
+The k8s Job owns the run end to end: the pod runs the benchmark, exports TensorBoard scalars, uploads
+artifacts to GCS, and posts the Slack summary. CI only builds the image, applies the Job, and watches a
+short fail-fast window (a boot/infra failure terminates the pod fast and reds CI with its logs; a pod
+still running past the window is left to finish and self-report). Run health (zero passes ⇒ broken
+harness) is the pod's exit code, so its terminal phase is the signal.
+
 Files:
 
-- `Dockerfile` — bench runner image: the `archestra-bench` binary + `/bench` fixtures + `uv` on top of
-  the resolved `PLATFORM_IMAGE`.
-- `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, packages the
-  run dir into `run.tgz` + sha, then keep-alives for `kubectl cp`.
+- `Dockerfile` — bench runner image: the `archestra-bench` binary + `/bench` fixtures + reporting
+  scripts + `uv` on top of the resolved `PLATFORM_IMAGE`.
+- `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, then exports
+  TensorBoard, uploads to GCS, and posts Slack (`scripts/export_tensorboard.py`, `scripts/publish_run.py`).
 - `job.yaml` — the k8s Job (bench container + `pgvector` sidecar). `${...}` filled by `envsubst` in CI.
 
 ## One-time prerequisites (not automated)
@@ -27,17 +33,21 @@ printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30,"matchesPrefi
   > /tmp/lifecycle.json
 gcloud storage buckets update gs://archestra-bench-history --lifecycle-file=/tmp/lifecycle.json
 
-# Grant the CI releaser SA object write (same SA the workflow authenticates as).
+# The pod uploads results as the platform Deployment's service account (Workload Identity), so grant
+# THAT GCP SA object write. Resolve it from the k8s SA annotation:
+PLATFORM_GSA=$(kubectl get sa archestra-platform -n archestra \
+  -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}')
 gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
-  --member="serviceAccount:<RELEASER_SA_EMAIL>" --role="roles/storage.objectAdmin"
+  --member="serviceAccount:${PLATFORM_GSA}" --role="roles/storage.objectAdmin"
 ```
 
 ### 2. GitHub secrets
 
-- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `archestra-bench/lanes.toml`). The
-  workflow syncs it into the `archestra-bench-secrets` k8s secret each run.
-- `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the Slack step
-  is skipped.
+Both are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
+
+- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `archestra-bench/lanes.toml`).
+- `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
+  the Slack post.
 
 The WIF auth and GKE creds reuse the existing
 `DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME` /
@@ -51,6 +61,7 @@ gs://archestra-bench-history/
   tb/daily/lane=<lane>/    per-(env, task) tags; lanes are sibling series sharing task tags
   runs/<run>/aggregate.json        per-run aggregate
   runs/<run>/report.md             per-run markdown report
+  runs/<run>/run.tgz               full run dir (per-rollout JSON, backend + bench logs)
 ```
 
 `<run>` is `${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}`; the TensorBoard step is

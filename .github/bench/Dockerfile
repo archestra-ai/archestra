@@ -24,6 +24,12 @@ USER root
 COPY --from=uv /uv /usr/local/bin/uv
 # hadolint ignore=DL3018
 RUN apk add --no-cache python3
+# Bake the reporting deps into a venv so the pod exports TensorBoard + uploads to GCS offline — no
+# runtime package resolution at the critical post-run reporting step (a cold/failed fetch there would
+# silently lose a whole run's results). PATH-prepended so plain `python3` resolves them.
+RUN uv venv /opt/bench-venv \
+    && uv pip install --python /opt/bench-venv/bin/python tensorboard google-cloud-storage
+ENV PATH="/opt/bench-venv/bin:${PATH}"
 
 COPY --from=bench-builder /src/archestra-bench/target/release/archestra-bench /usr/local/bin/archestra-bench
 # Fixtures the harness reads locally via --bench-dir (skills are web-pinned and fetched at runtime, so
@@ -31,6 +37,8 @@ COPY --from=bench-builder /src/archestra-bench/target/release/archestra-bench /u
 COPY archestra-bench/envs /bench/envs
 COPY archestra-bench/tasks /bench/tasks
 COPY archestra-bench/lanes.toml /bench/lanes.toml
+# Post-run reporting (TensorBoard export + GCS upload + Slack) runs in-pod via uv.
+COPY archestra-bench/scripts /bench/scripts
 COPY .github/bench/runner-entrypoint.sh /usr/local/bin/run-benchmark
 RUN chmod +x /usr/local/bin/run-benchmark
 

@@ -1,15 +1,15 @@
 #!/bin/sh
-# Drives one benchmark run inside the prod platform image: provisions the bench env file, runs
-# the benchmark against the Postgres sidecar + staging Dagger engine, then packages the run dir into a
-# single checksummed tarball and keep-alives so CI can `kubectl cp` it from the still-live container.
-# Hard-kill paths (OOM/eviction/deadline SIGKILL) never reach the marker; CI detects those itself.
+# Drives one benchmark run inside the prod platform image and owns reporting end to end: provisions the
+# bench env file, runs the benchmark against the Postgres sidecar + staging Dagger engine, then exports
+# TensorBoard scalars, uploads artifacts to GCS, and posts the Slack summary. The final publish step's
+# exit code encodes harness health (zero passes ⇒ broken), so the pod's terminal phase is the signal CI
+# reads — CI applies the Job and leaves, it does not wait or copy anything out.
 set -eu
 umask 077
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (shared with the postgres sidecar)}"
 BENCH_ENVS="${BENCH_ENVS:-basic}"
 BENCH_LANES="${BENCH_LANES:-glm}"
-KEEPALIVE_SECONDS="${KEEPALIVE_SECONDS:-900}"
 
 # The bench resolves its Postgres from ARCHESTRA_BENCH_DATABASE_URL and creates a fresh per-run
 # database on it; the backend's own ARCHESTRA_DATABASE_URL is then derived from that. `Instance::start`
@@ -27,6 +27,9 @@ export ARCHESTRA_AUTH_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 
 mkdir -p /work/run
 
+# The bench exits non-zero whenever any rollout fails, which is normal for a model benchmark — so its
+# exit code is not the health signal. Health is read from aggregate.json by the publish step. tee keeps
+# progress visible in `kubectl logs` and captures it for upload.
 set +e
 archestra-bench benchmark \
   --platform-dir /app \
@@ -35,19 +38,23 @@ archestra-bench benchmark \
   --lanes "${BENCH_LANES}" \
   --max-workers 1 \
   --run-dir /work/run \
-  --out /work/run/report.md
-bench_status=$?
+  --out /work/run/report.md 2>&1 | tee /work/run/bench.log
 set -e
-# The bench exits non-zero whenever any rollout failed, which is normal for a model benchmark — so the
-# exit code is logged for diagnostics but is NOT the CI health signal. CI gates on the pass count in
-# aggregate.json instead (zero passes ⇒ broken harness).
-echo "benchmark exited with status ${bench_status}"
 
-# Package the run dir into one checksummed blob: `kubectl cp` silently truncates large/odd trees, so CI
-# moves a single verifiable artifact instead. Runs even on bench failure so CI salvages partial results.
+# Package the run dir (report, aggregate, per-rollout JSON, backend + bench logs) so the GCS upload
+# carries one verifiable archive alongside the unpacked aggregate/report.
 tar czf /work/run.tgz -C /work run
-sha256sum /work/run.tgz > /work/run.tgz.sha256
-touch /work/DONE
 
-echo "run packaged; keep-alive ${KEEPALIVE_SECONDS}s so CI can kubectl cp the tarball"
-sleep "${KEEPALIVE_SECONDS}"
+# Reporting deps are baked into the image venv, so these run with plain python3 (no runtime fetch).
+# Best-effort export: a missing aggregate (hard bench crash) must still reach the publish step so it
+# reports a failure rather than the pod dying silently here; the export outcome is passed on so publish
+# can flag a lost TensorBoard history.
+if python3 /bench/scripts/export_tensorboard.py --run-dir /work/run --out /work/tb; then
+  export BENCH_TB_EXPORT_OK=1
+else
+  export BENCH_TB_EXPORT_OK=0
+fi
+
+# Final step: uploads to GCS, posts Slack, and exits non-zero on a broken harness so the pod's terminal
+# phase reflects run health.
+exec python3 /bench/scripts/publish_run.py --tb /work/tb --run-dir /work/run --tarball /work/run.tgz

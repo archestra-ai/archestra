@@ -135,10 +135,14 @@ jobs:
       - name: Create bench secret
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          SLACK_BENCH_WEBHOOK_URL: ${{ secrets.SLACK_BENCH_WEBHOOK_URL }}
         run: |
           set -euo pipefail
+          # The pod reads both: the glm lane key and (optionally, empty when unset) the Slack webhook it
+          # posts the summary to. Recreated each run; left in place since the pod needs it after CI exits.
           kubectl create secret generic archestra-bench-secrets -n archestra \
             --from-literal=ZAI_API_KEY="${ZAI_API_KEY}" \
+            --from-literal=SLACK_BENCH_WEBHOOK_URL="${SLACK_BENCH_WEBHOOK_URL:-}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply benchmark Job
@@ -150,24 +154,30 @@ jobs:
         run: |
           set -euo pipefail
           RUN_NUMBER="${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           # An ephemeral, localhost-only sidecar password (the DB dies with the pod); alphanumeric so it
           # is safe in the bench .env URL.
           POSTGRES_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
           export BENCH_IMAGE PLATFORM_SA DAGGER_RUNNER_HOST RUN_NUMBER POSTGRES_PASSWORD
+          export GCS_BUCKET RUN_URL GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT
           echo "run_number=${RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
           # The single-quoted list is envsubst's allowlist of vars to expand (not shell expansion).
           # shellcheck disable=SC2016
-          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${RUN_NUMBER} ${POSTGRES_PASSWORD}' \
+          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT}' \
             < .github/bench/job.yaml | kubectl apply -f -
 
-      - name: Wait for the run to finish
-        id: wait
+      # The pod runs the full benchmark and reports its own results (GCS + Slack), so CI does not wait
+      # out the ~30 min run. But a boot/infra failure makes the bench fast-fail and the pod terminate
+      # within a minute or two — so we watch a short window: a pod that fails fast reds this job (with
+      # its logs dumped inline), while a pod still running past the window has cleared the fast-fail zone
+      # and is left to finish and self-report.
+      - name: Confirm bench started (fail-fast window)
         env:
           RUN_NUMBER: ${{ steps.apply.outputs.run_number }}
         run: |
           set -uo pipefail
           SEL="app=archestra-bench,run=${RUN_NUMBER}"
-          # Find the pod (give the scheduler a moment).
+          # Find the pod (give the scheduler + image pull a moment).
           POD=""
           for _ in $(seq 1 60); do
             POD=$(kubectl get pods -n archestra -l "${SEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
@@ -176,131 +186,31 @@ jobs:
           done
           if [ -z "${POD}" ]; then
             echo "::error::no pod found for ${SEL}"
-            echo "result=no-pod" >> "${GITHUB_OUTPUT}"
             exit 1
           fi
-          echo "pod=${POD}" >> "${GITHUB_OUTPUT}"
-          echo "watching pod ${POD}"
-          # Break on /work/DONE (clean exit, tarball ready) or a terminal Failed phase (OOM/eviction/
-          # deadline SIGKILL never writes DONE). Bounded so a stuck pod can't pin the step.
-          for _ in $(seq 1 520); do
+          echo "watching pod ${POD} for a fast-fail window"
+          # A healthy run takes far longer than the fast-fail zone, so ~3 min of *running* means it has
+          # cleared boot/infra failures. The watch ceiling (90 * 10s = 15 min, on top of up to 5 min of
+          # pod discovery above) bounds a stuck Pending / slow pull.
+          RUNNING_TICKS=0
+          for _ in $(seq 1 90); do
             PHASE=$(kubectl get pod "${POD}" -n archestra -o jsonpath='{.status.phase}' 2>/dev/null || true)
-            if [ "${PHASE}" = "Failed" ] || [ "${PHASE}" = "Succeeded" ]; then
-              echo "::error::pod reached terminal phase ${PHASE} without DONE"
-              echo "result=pod-${PHASE}" >> "${GITHUB_OUTPUT}"
-              exit 1
-            fi
-            if kubectl exec "${POD}" -n archestra -c bench -- test -f /work/DONE 2>/dev/null; then
-              echo "DONE marker present"
-              echo "result=done" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-            sleep 15
+            case "${PHASE}" in
+              Failed)
+                echo "::error::pod ${POD} terminated Failed within the fast-fail window — harness broken"
+                kubectl logs "${POD}" -n archestra -c bench --tail=80 || true
+                exit 1 ;;
+              Succeeded)
+                echo "pod ${POD} finished fast and healthy (self-reported)"
+                exit 0 ;;
+              Running)
+                RUNNING_TICKS=$((RUNNING_TICKS + 1))
+                if [ "${RUNNING_TICKS}" -ge 18 ]; then
+                  echo "pod ${POD} running $((RUNNING_TICKS * 10))s — cleared fast-fail; left to self-report"
+                  exit 0
+                fi ;;
+            esac
+            sleep 10
           done
-          echo "::error::timed out waiting for DONE"
-          echo "result=timeout" >> "${GITHUB_OUTPUT}"
+          echo "::error::pod ${POD} never cleared the fast-fail window (stuck Pending / slow pull?)"
           exit 1
-
-      - name: Copy and extract run directory
-        id: extract
-        if: steps.wait.outputs.result == 'done'
-        env:
-          POD: ${{ steps.wait.outputs.pod }}
-        run: |
-          set -euo pipefail
-          kubectl cp "archestra/${POD}:/work/run.tgz" run.tgz -c bench
-          kubectl cp "archestra/${POD}:/work/run.tgz.sha256" run.tgz.sha256 -c bench
-          GOT=$(sha256sum run.tgz | awk '{print $1}')
-          WANT=$(awk '{print $1}' run.tgz.sha256)
-          if [ "${GOT}" != "${WANT}" ]; then
-            echo "::error::run.tgz checksum mismatch (got ${GOT}, want ${WANT})"
-            exit 1
-          fi
-          tar xzf run.tgz
-          test -f run/aggregate.json
-
-      - name: Collect container logs
-        if: always() && steps.wait.outputs.pod != ''
-        env:
-          POD: ${{ steps.wait.outputs.pod }}
-        run: |
-          set -uo pipefail
-          mkdir -p logs
-          kubectl logs "${POD}" -n archestra -c bench --tail=-1 > logs/bench.log 2>&1 || true
-          kubectl logs "${POD}" -n archestra -c postgres --tail=-1 > logs/postgres.log 2>&1 || true
-
-      - name: Clean up Job and secret
-        if: always() && steps.apply.outputs.run_number != ''
-        env:
-          RUN_NUMBER: ${{ steps.apply.outputs.run_number }}
-        run: |
-          set -uo pipefail
-          # Best-effort: ttlSecondsAfterFinished / activeDeadlineSeconds are the teardown backstop, so a
-          # transient API error here must not red the job or skip later steps.
-          kubectl delete job -n archestra -l "app=archestra-bench,run=${RUN_NUMBER}" --ignore-not-found || true
-          kubectl delete secret archestra-bench-secrets -n archestra --ignore-not-found || true
-
-      - name: Upload run directory artifact
-        if: always() && steps.wait.outputs.result == 'done'
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: benchmark-run-${{ steps.apply.outputs.run_number }}
-          path: |
-            run
-            logs
-
-      - name: Set up uv
-        if: steps.extract.outcome == 'success'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
-
-      - name: Export to TensorBoard and upload to GCS
-        if: steps.extract.outcome == 'success'
-        run: |
-          set -euo pipefail
-          uv run archestra-bench/scripts/export_tensorboard.py --run-dir run --out tb
-          gcloud storage rsync -r tb "${GCS_BUCKET}/tb/daily"
-          gcloud storage cp run/aggregate.json "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/aggregate.json"
-          gcloud storage cp run/report.md "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/report.md"
-
-      # Zero passes signals a broken harness (missing tool surface / feature flags), not a hard task set
-      # — the exact silent-failure the plan guards against. A normal run with some failures stays green;
-      # this runs after the GCS upload so the broken run's data is still captured for debugging.
-      - name: Assert benchmark health (pass rate > 0)
-        if: steps.extract.outcome == 'success'
-        run: |
-          set -euo pipefail
-          PASSED=$(jq -r '.passed' run/aggregate.json)
-          TOTAL=$(jq -r '.total' run/aggregate.json)
-          echo "passed=${PASSED} total=${TOTAL}"
-          if [ "${TOTAL}" -eq 0 ] || [ "${PASSED}" -eq 0 ]; then
-            echo "::error::benchmark produced ${PASSED}/${TOTAL} passed — harness likely broken"
-            exit 1
-          fi
-
-      - name: Post Slack summary
-        if: always()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_BENCH_WEBHOOK_URL }}
-          WAIT_RESULT: ${{ steps.wait.outputs.result }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -uo pipefail
-          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
-            echo "no Slack webhook configured; skipping"
-            exit 0
-          fi
-          if [ "${WAIT_RESULT}" = "done" ] && [ -f run/aggregate.json ]; then
-            PASSED=$(jq -r '.passed' run/aggregate.json)
-            TOTAL=$(jq -r '.total' run/aggregate.json)
-            RATE=$(jq -r '(.pass_rate * 100) | floor' run/aggregate.json)
-            OUTCOMES=$(jq -r '.outcomes | to_entries | map("\(.key)=\(.value)") | join(" ")' run/aggregate.json)
-            if [ "${PASSED}" -eq 0 ]; then
-              TEXT="⚠️ Benchmark: 0/${TOTAL} passed — harness likely broken · ${OUTCOMES}"
-            else
-              TEXT="✅ Benchmark: ${PASSED}/${TOTAL} passed (${RATE}%) · ${OUTCOMES}"
-            fi
-          else
-            TEXT="❌ Benchmark FAILED (${WAIT_RESULT:-error}) — no aggregate produced"
-          fi
-          PAYLOAD=$(jq -n --arg text "${TEXT} | ${RUN_URL}" '{text: $text}')
-          curl -fsS -X POST -H 'Content-type: application/json' --data "${PAYLOAD}" "${SLACK_WEBHOOK_URL}"

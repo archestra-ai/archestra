@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   getProvidersWithOptionalApiKey,
+  isLlmProviderTemporarilyHidden,
   isProviderApiKeyOptional,
   requiresOpenAiResponsesApi,
 } from "./model-constants";
@@ -46,5 +47,17 @@ describe("provider API key optional helpers", () => {
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
     ).toEqual(["ollama", "vllm", "azure"]);
+  });
+});
+
+describe("isLlmProviderTemporarilyHidden", () => {
+  test("hides GitHub Copilot from the configuration UI", () => {
+    expect(isLlmProviderTemporarilyHidden("github-copilot")).toBe(true);
+  });
+
+  test("does not hide standard providers", () => {
+    expect(isLlmProviderTemporarilyHidden("anthropic")).toBe(false);
+    expect(isLlmProviderTemporarilyHidden("openai")).toBe(false);
+    expect(isLlmProviderTemporarilyHidden("bedrock")).toBe(false);
   });
 });

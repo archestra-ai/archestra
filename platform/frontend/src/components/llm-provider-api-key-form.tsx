@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
+  isLlmProviderTemporarilyHidden,
   isProviderApiKeyOptional,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
@@ -546,6 +547,16 @@ export function LlmProviderApiKeyForm({
               <SelectContent>
                 <LlmProviderSelectItems
                   options={Object.entries(PROVIDER_CONFIG)
+                    .filter(
+                      ([key]) =>
+                        // Keep temporarily-hidden providers out of the picker,
+                        // but still show the one already selected (e.g. editing
+                        // an existing GitHub Copilot key) so it stays manageable.
+                        key === provider ||
+                        !isLlmProviderTemporarilyHidden(
+                          key as CreateLlmProviderApiKeyBody["provider"],
+                        ),
+                    )
                     .sort(([, a], [, b]) => a.name.localeCompare(b.name))
                     .map(([key, config]) => {
                       const providerKey =

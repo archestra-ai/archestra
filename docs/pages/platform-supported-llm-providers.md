@@ -513,6 +513,8 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ## GitHub Copilot
 
+> **Note:** GitHub Copilot is temporarily hidden from the provider selection in the UI, so it can't currently be added as a Model Provider. The provider and its endpoints remain fully functional for existing keys; this section is retained for reference.
+
 [GitHub Copilot](https://github.com/features/copilot) exposes the models included with a user's Copilot subscription (GPT, Claude, Gemini, and others, depending on plan) through an OpenAI-compatible API. Unlike other providers, Copilot has no static API keys: access is tied to an individual GitHub account.
 
 ### Supported GitHub Copilot APIs

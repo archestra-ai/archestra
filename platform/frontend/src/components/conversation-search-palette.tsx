@@ -147,7 +147,7 @@ const navigationItems = [
     label: "Model Providers",
     value: "model-providers",
     keywords: "provider settings api keys models llm",
-    href: "/llm/model-providers/api-keys",
+    href: "/llm/model-providers",
   },
   {
     icon: Key,

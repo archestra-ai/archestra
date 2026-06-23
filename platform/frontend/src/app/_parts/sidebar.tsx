@@ -286,9 +286,10 @@ const contentNavGroups: NavGroup[] = [
         subItems: [
           {
             title: "Model Providers",
-            url: "/llm/model-providers/api-keys",
+            url: "/llm/model-providers",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/model-providers"),
+              pathname.startsWith("/llm/model-providers") ||
+              pathname.startsWith("/llm/models"),
           },
           {
             title: "Credentials",

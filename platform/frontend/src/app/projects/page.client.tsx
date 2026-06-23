@@ -5,6 +5,8 @@ import {
   FolderKanban,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   Trash2,
   Users,
@@ -35,6 +37,7 @@ import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
   useDeleteProject,
+  usePinProject,
   useProjects,
   useUpdateProject,
 } from "@/lib/projects/projects.query";
@@ -63,6 +66,7 @@ function ProjectsList() {
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
+  const pinProjectMutation = usePinProject();
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
@@ -127,12 +131,24 @@ function ProjectsList() {
             <ProjectSection
               title="Pinned"
               projects={pinnedProjects}
+              onTogglePin={(project) =>
+                pinProjectMutation.mutate({
+                  id: project.id,
+                  pinned: !project.pinnedAt,
+                })
+              }
               onEdit={setEditingProject}
               onDelete={setDeletingProject}
             />
           )}
           <ProjectSection
             projects={unpinnedProjects}
+            onTogglePin={(project) =>
+              pinProjectMutation.mutate({
+                id: project.id,
+                pinned: !project.pinnedAt,
+              })
+            }
             onEdit={setEditingProject}
             onDelete={setDeletingProject}
           />
@@ -149,11 +165,13 @@ type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 function ProjectSection({
   title,
   projects,
+  onTogglePin,
   onEdit,
   onDelete,
 }: {
   title?: string;
   projects: ProjectListItem[];
+  onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 }) {
@@ -171,6 +189,7 @@ function ProjectSection({
           <ProjectCard
             key={project.id}
             project={project}
+            onTogglePin={onTogglePin}
             onEdit={onEdit}
             onDelete={onDelete}
           />
@@ -182,10 +201,12 @@ function ProjectSection({
 
 function ProjectCard({
   project,
+  onTogglePin,
   onEdit,
   onDelete,
 }: {
   project: ProjectListItem;
+  onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 }) {
@@ -211,12 +232,13 @@ function ProjectCard({
               {project.visibility === "organization" ? "Org" : "Teams"}
             </Badge>
           )}
-          {project.isOwner && (
-            <ProjectCardActions
-              onEdit={() => onEdit(project)}
-              onDelete={() => onDelete(project)}
-            />
-          )}
+          <ProjectCardActions
+            pinned={!!project.pinnedAt}
+            canManage={project.isOwner}
+            onTogglePin={() => onTogglePin(project)}
+            onEdit={() => onEdit(project)}
+            onDelete={() => onDelete(project)}
+          />
         </span>
       </div>
       {project.description && (
@@ -232,9 +254,15 @@ function ProjectCard({
 }
 
 function ProjectCardActions({
+  pinned,
+  canManage,
+  onTogglePin,
   onEdit,
   onDelete,
 }: {
+  pinned: boolean;
+  canManage: boolean;
+  onTogglePin: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -246,14 +274,26 @@ function ProjectCardActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onEdit}>
-          <Pencil className="h-4 w-4" />
-          Edit details
+        <DropdownMenuItem onSelect={onTogglePin}>
+          {pinned ? (
+            <PinOff className="h-4 w-4" />
+          ) : (
+            <Pin className="h-4 w-4" />
+          )}
+          {pinned ? "Unpin" : "Pin"}
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
+        {canManage && (
+          <>
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil className="h-4 w-4" />
+              Edit details
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

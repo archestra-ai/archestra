@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
+const mockPinMutate = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
@@ -180,6 +181,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: mockUpdateMutateAsync,
     isPending: false,
   }),
+  usePinProject: () => ({ mutate: mockPinMutate }),
 }));
 
 import ProjectsPageClient from "./page.client";
@@ -225,15 +227,21 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Other project")).toBeInTheDocument();
   });
 
-  it("shows edit details and delete in owner card menus without pin actions", () => {
+  it("shows pin, edit details, and delete in owner card menus", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 
     render(<ProjectsPageClient />);
 
+    expect(screen.getByText("Pin")).toBeInTheDocument();
     expect(screen.getByText("Edit details")).toBeInTheDocument();
     expect(screen.getByText("Delete")).toBeInTheDocument();
-    expect(screen.queryByText("Pin")).not.toBeInTheDocument();
     expect(screen.queryByText("Unpin")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Pin"));
+    expect(mockPinMutate).toHaveBeenCalledWith({
+      id: "owner",
+      pinned: true,
+    });
 
     fireEvent.click(screen.getByText("Edit details"));
     expect(
@@ -242,6 +250,24 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("shows unpin in pinned project card menus", () => {
+    mockProjects = [
+      makeProject({
+        id: "pinned-owner",
+        name: "Pinned owner project",
+        pinnedAt: "2026-01-03T00:00:00.000Z",
+      }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    fireEvent.click(screen.getByText("Unpin"));
+    expect(mockPinMutate).toHaveBeenCalledWith({
+      id: "pinned-owner",
+      pinned: false,
+    });
   });
 });
 

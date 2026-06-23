@@ -11,6 +11,8 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
   Users,
 } from "lucide-react";
@@ -52,6 +54,7 @@ import {
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import {
   useDeleteProject,
+  usePinProject,
   useProject,
   useProjectConversations,
   useProjectFiles,
@@ -77,6 +80,7 @@ function ProjectDetail() {
   const { data: project, isPending } = useProject(id);
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
+  const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -124,32 +128,49 @@ function ProjectDetail() {
               {!project.isOwner && (
                 <Badge variant="secondary">Shared with you</Badge>
               )}
-              {project.isOwner && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Project actions"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-                      <Pencil className="h-4 w-4" />
-                      Edit details
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onSelect={() => setConfirmDelete(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Project actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      pinProjectMutation.mutate({
+                        id: project.id,
+                        pinned: !project.pinnedAt,
+                      })
+                    }
+                  >
+                    {project.pinnedAt ? (
+                      <PinOff className="h-4 w-4" />
+                    ) : (
+                      <Pin className="h-4 w-4" />
+                    )}
+                    {project.pinnedAt ? "Unpin" : "Pin"}
+                  </DropdownMenuItem>
+                  {project.isOwner && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                        <Pencil className="h-4 w-4" />
+                        Edit details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setConfirmDelete(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           }
         >

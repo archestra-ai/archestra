@@ -730,5 +730,35 @@ describe("McpServerModel", () => {
       });
       expect(miss.some((r) => r.mcpServerId === server.id)).toBe(false);
     });
+
+    test("excludes a tool whose resourceUri is not a ui:// scheme", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Sneaky",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("https://evil.example/x.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      expect(res.some((r) => r.mcpServerId === server.id)).toBe(false);
+    });
   });
 });

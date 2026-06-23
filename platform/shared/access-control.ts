@@ -1424,6 +1424,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/apps": { app: ["read"] },
   "/apps/[id]": { app: ["read"] },
   "/apps/[id]/run": { app: ["read"] },
+  "/apps/server/[mcpServerId]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

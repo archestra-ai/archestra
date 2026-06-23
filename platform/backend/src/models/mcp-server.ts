@@ -351,6 +351,14 @@ class McpServerModel {
     }
 
     const searchTerm = search?.trim();
+    // An MCP App UI resource must use the ui:// scheme; a tool whose
+    // _meta.ui.resourceUri is some other URI is not an app and must not surface
+    // here. Canonical key first, then the legacy flat key.
+    const toolMeta = schema.toolsTable.meta;
+    const uiResourceUri = sql<string | null>`coalesce(
+      case when ${toolMeta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->'ui'->>'resourceUri' end,
+      case when ${toolMeta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->>'ui/resourceUri' end
+    )`;
     const rows = await db
       .select({
         mcpServerId: schema.mcpServersTable.id,
@@ -360,9 +368,7 @@ class McpServerModel {
         catalogName: schema.internalMcpCatalogTable.name,
         catalogDescription: schema.internalMcpCatalogTable.description,
         toolName: schema.toolsTable.name,
-        resourceUri: sql<
-          string | null
-        >`coalesce(${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri', ${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri')`,
+        resourceUri: uiResourceUri,
       })
       .from(schema.mcpServersTable)
       .innerJoin(
@@ -376,10 +382,7 @@ class McpServerModel {
       .where(
         and(
           ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-          or(
-            sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' IS NOT NULL`,
-            sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' IS NOT NULL`,
-          ),
+          sql`${uiResourceUri} IS NOT NULL`,
           accessibleIds
             ? inArray(schema.mcpServersTable.id, accessibleIds)
             : undefined,

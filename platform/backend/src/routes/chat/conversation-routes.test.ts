@@ -4,6 +4,7 @@ import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -182,6 +183,38 @@ describe("chat conversation and message routes", () => {
         }),
       ],
     });
+  });
+
+  test("keeps the project link when forking own conversation in a project", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "own-project",
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/fork`,
+      payload: { agentId: agent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The owner can always access their own project, so the fork stays in it.
+    expect(response.json().projectId).toBe(project.id);
   });
 
   test("forks an accessible scheduled run conversation for the current user", async ({

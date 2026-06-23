@@ -76,8 +76,8 @@ pub struct EnvConfig {
     pub tasks: Vec<Task>,
     pub tools: Vec<String>,
     pub share_backend: bool,
-    /// When set, the harness starts its synthetic `acme_it` MCP and registers it to this env's agent.
-    /// Requires `share_backend = false` (the fixture server is torn down per isolated lane).
+    /// When set, the harness starts its synthetic `acme_it` MCP and registers it to this env's agents.
+    /// Works in both modes: shared backends start one instance for all lanes, isolated lanes one each.
     pub fixture_mcp: bool,
     pub platform: PlatformConfig,
 }

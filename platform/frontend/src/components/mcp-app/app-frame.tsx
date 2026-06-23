@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useInlineCeiling } from "@/components/mcp-app/app-height";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
+  McpAppAddressPill,
   McpAppFullscreenExitButton,
   McpAppRefreshButton,
   McpAppTopBar,
@@ -108,18 +109,20 @@ export function AppFrame({
           inlineCeiling={inlineCeiling}
           fillContainer={fillContainer}
           topBar={
-            <McpAppTopBar
-              label={label ?? app.name}
-              actions={
-                <>
-                  <McpAppRefreshButton onClick={reload} />
-                  {displayMode === "fullscreen" && (
-                    <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-                  )}
-                  {actions}
-                </>
-              }
-            />
+            <McpAppTopBar>
+              <McpAppAddressPill
+                label={label ?? app.name}
+                actions={
+                  <>
+                    <McpAppRefreshButton onClick={reload} />
+                    {displayMode === "fullscreen" && (
+                      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+                    )}
+                    {actions}
+                  </>
+                }
+              />
+            </McpAppTopBar>
           }
           bottomBar={
             appId && app.latestVersion != null ? (

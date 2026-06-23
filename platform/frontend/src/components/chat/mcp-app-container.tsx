@@ -21,11 +21,13 @@ import {
 } from "@/components/mcp-app/app-height";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
+  McpAppAddressPill,
   McpAppChangelogPill,
   McpAppFullscreenExitButton,
   McpAppRefreshButton,
   McpAppSidebarButton,
   McpAppStandaloneButton,
+  McpAppSwitcher,
   McpAppTopBar,
   McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
@@ -247,6 +249,16 @@ export function McpAppSection({
       </div>
     ) : null;
 
+  const pillActions = (
+    <>
+      <McpAppRefreshButton onClick={reload} />
+      {displayMode === "fullscreen" && (
+        <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+      )}
+      {appId && <McpAppStandaloneButton appId={appId} />}
+    </>
+  );
+
   const liveSurface = (
     <McpAppErrorBoundary>
       <McpAppCard
@@ -257,39 +269,30 @@ export function McpAppSection({
         inlineCeiling={inlineCeiling}
         fillContainer={renderInSidebar}
         topBar={
+          // Refresh, plus a fullscreen-exit button that only appears while
+          // fullscreen (the enter icon is hidden for now, but app-requested
+          // fullscreen stays usable), plus open-standalone for owned apps.
           <McpAppTopBar
-            label={headerName}
-            switcher={
-              renderInSidebar && apps.length > 1
-                ? {
-                    value: selectedToolCallId,
-                    options: apps.map((app) => ({
-                      value: app.toolCallId,
-                      label: app.label,
-                    })),
-                    onChange: select,
-                  }
-                : undefined
-            }
-            actions={
-              // Refresh, plus a fullscreen-exit button that only appears while
-              // fullscreen (the enter icon is hidden for now, but app-requested
-              // fullscreen stays usable), plus open-standalone for owned apps.
-              // The open-in-side-panel control lives in the top bar's right zone.
-              <>
-                <McpAppRefreshButton onClick={reload} />
-                {displayMode === "fullscreen" && (
-                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-                )}
-                {appId && <McpAppStandaloneButton appId={appId} />}
-              </>
-            }
             right={
               toolCallId && !renderInSidebar ? (
                 <McpAppSidebarButton onClick={handleShowInSidebar} />
               ) : undefined
             }
-          />
+          >
+            {renderInSidebar && apps.length > 1 ? (
+              <McpAppSwitcher
+                value={selectedToolCallId}
+                options={apps.map((app) => ({
+                  value: app.toolCallId,
+                  label: app.label,
+                }))}
+                onChange={select}
+                actions={pillActions}
+              />
+            ) : (
+              <McpAppAddressPill label={headerName} actions={pillActions} />
+            )}
+          </McpAppTopBar>
         }
         bottomBar={
           appId && appVersion != null ? (
@@ -344,7 +347,11 @@ export function McpAppSection({
           size={size}
           inlineCeiling={inlineCeiling}
           frozenHeight={lastInlineHeightRef.current}
-          topBar={<McpAppTopBar label={headerName} />}
+          topBar={
+            <McpAppTopBar>
+              <McpAppAddressPill label={headerName} />
+            </McpAppTopBar>
+          }
           placeholder={
             <span className="text-muted-foreground">Showing in sidebar</span>
           }

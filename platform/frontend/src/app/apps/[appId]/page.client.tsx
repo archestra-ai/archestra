@@ -54,7 +54,7 @@ export default function AppDetailPage({ appId }: { appId: string }) {
         </TabsList>
 
         <TabsContent value="preview">
-          <div className="min-h-[400px] overflow-hidden rounded-lg border">
+          <div className="h-[70vh] min-h-[400px] overflow-hidden rounded-lg border">
             <AppFrame
               endpoint={{ kind: "app", appId }}
               fillContainer

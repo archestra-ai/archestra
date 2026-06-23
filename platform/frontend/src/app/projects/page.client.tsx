@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import { FolderKanban, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -179,12 +183,19 @@ function CreateProjectDialog({
           <Input
             autoFocus
             placeholder="Project name"
-            {...form.register("name", { required: true, maxLength: 256 })}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            {...form.register("name", {
+              required: true,
+              maxLength: PROJECT_NAME_MAX_LENGTH,
+            })}
           />
           <Textarea
             placeholder="Description (optional)"
             rows={3}
-            {...form.register("description", { maxLength: 4096 })}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            {...form.register("description", {
+              maxLength: PROJECT_DESCRIPTION_MAX_LENGTH,
+            })}
           />
         </div>
       </div>

@@ -1,4 +1,8 @@
-import { RouteId } from "@archestra/shared";
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -30,8 +34,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "project rather than the individual author.",
         tags: ["Projects"],
         body: z.object({
-          name: z.string().min(1).max(256),
-          description: z.string().max(4096).nullable().optional(),
+          name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH),
+          description: z
+            .string()
+            .max(PROJECT_DESCRIPTION_MAX_LENGTH)
+            .nullable()
+            .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
@@ -101,8 +109,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          name: z.string().min(1).max(256).optional(),
-          description: z.string().max(4096).nullable().optional(),
+          name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH).optional(),
+          description: z
+            .string()
+            .max(PROJECT_DESCRIPTION_MAX_LENGTH)
+            .nullable()
+            .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

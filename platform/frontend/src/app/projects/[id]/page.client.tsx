@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import {
   CalendarClock,
   Eye,
@@ -501,12 +505,19 @@ function EditProjectDialog({
         <div className="flex-1 space-y-3">
           <Input
             placeholder="Project name"
-            {...form.register("name", { required: true, maxLength: 256 })}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            {...form.register("name", {
+              required: true,
+              maxLength: PROJECT_NAME_MAX_LENGTH,
+            })}
           />
           <Textarea
             placeholder="What is this project about?"
             rows={3}
-            {...form.register("description", { maxLength: 4096 })}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            {...form.register("description", {
+              maxLength: PROJECT_DESCRIPTION_MAX_LENGTH,
+            })}
           />
         </div>
       </div>

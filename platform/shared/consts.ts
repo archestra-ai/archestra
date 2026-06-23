@@ -30,6 +30,21 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
+/**
+ * Max length (characters) of a project's display name. Mirrors the existing
+ * limit enforced by the projects API and the create/edit forms.
+ */
+export const PROJECT_NAME_MAX_LENGTH = 256;
+
+/**
+ * Max length (characters) of a project's description. Kept short so a
+ * description stays a short blurb in project cards/headers rather than an
+ * effectively unbounded wall of text. Enforced by the projects API and the
+ * create/edit forms; existing longer descriptions are truncated to this length
+ * by a data migration.
+ */
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 500;
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";

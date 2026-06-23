@@ -1,11 +1,12 @@
 "use client";
 
+import type { archestraApiTypes } from "@archestra/shared";
 import {
   FolderKanban,
   MoreHorizontal,
-  Pin,
-  PinOff,
+  Pencil,
   Plus,
+  Trash2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -15,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -32,8 +34,9 @@ import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
-  usePinProject,
+  useDeleteProject,
   useProjects,
+  useUpdateProject,
 } from "@/lib/projects/projects.query";
 
 export default function ProjectsPageClient() {
@@ -51,8 +54,15 @@ function ProjectsList() {
   const { data, isPending } = useProjects();
   const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectListItem | null>(
+    null,
+  );
+  const [deletingProject, setDeletingProject] =
+    useState<ProjectListItem | null>(null);
   const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
-  const pinProjectMutation = usePinProject();
+  const pinnedProjects = projects.filter((project) => project.pinnedAt);
+  const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
+  const deleteProject = useDeleteProject();
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
@@ -78,71 +88,54 @@ function ProjectsList() {
       }
     >
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {editingProject && (
+        <EditProjectDetailsDialog
+          project={editingProject}
+          open={!!editingProject}
+          onOpenChange={(open) => {
+            if (!open) setEditingProject(null);
+          }}
+        />
+      )}
+      {deletingProject && (
+        <DeleteConfirmDialog
+          open={!!deletingProject}
+          onOpenChange={(open) => {
+            if (!open) setDeletingProject(null);
+          }}
+          title={`Delete ${deletingProject.name}?`}
+          description="Chats are kept as ordinary conversations. Project files are deleted with the project."
+          isPending={deleteProject.isPending}
+          onConfirm={async () => {
+            const ok = await deleteProject.mutateAsync({
+              id: deletingProject.id,
+            });
+            if (ok) setDeletingProject(null);
+          }}
+          confirmLabel="Delete"
+          pendingLabel="Deleting..."
+        />
+      )}
       {projects.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
           <FolderKanban className="h-8 w-8 opacity-50" />
           <p>{isPending ? "Loading…" : "No projects yet"}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <Link
-                  href={`/projects/${project.id}`}
-                  className="flex min-w-0 items-center gap-2"
-                >
-                  <span className="shrink-0">
-                    <AgentIcon
-                      icon={project.icon}
-                      fallbackType="project"
-                      size={18}
-                    />
-                  </span>
-                  <span className="min-w-0 truncate font-medium">
-                    {project.name}
-                  </span>
-                  {project.pinnedAt && (
-                    <Pin
-                      className="h-3.5 w-3.5 shrink-0 fill-muted-foreground text-muted-foreground"
-                      aria-label="Pinned project"
-                    />
-                  )}
-                </Link>
-                <span className="flex shrink-0 items-center gap-1">
-                  {!project.isOwner && (
-                    <Badge variant="secondary">Shared with you</Badge>
-                  )}
-                  {project.isOwner && project.visibility && (
-                    <Badge variant="outline" className="gap-1">
-                      <Users className="h-3 w-3" />
-                      {project.visibility === "organization" ? "Org" : "Teams"}
-                    </Badge>
-                  )}
-                  <ProjectCardActions
-                    pinned={!!project.pinnedAt}
-                    onTogglePin={() =>
-                      pinProjectMutation.mutate({
-                        id: project.id,
-                        pinned: !project.pinnedAt,
-                      })
-                    }
-                  />
-                </span>
-              </div>
-              {project.description && (
-                <Link
-                  href={`/projects/${project.id}`}
-                  className="mt-1 block line-clamp-2 text-sm text-muted-foreground"
-                >
-                  {project.description}
-                </Link>
-              )}
-            </div>
-          ))}
+        <div className="space-y-6">
+          {pinnedProjects.length > 0 && (
+            <ProjectSection
+              title="Pinned"
+              projects={pinnedProjects}
+              onEdit={setEditingProject}
+              onDelete={setDeletingProject}
+            />
+          )}
+          <ProjectSection
+            projects={unpinnedProjects}
+            onEdit={setEditingProject}
+            onDelete={setDeletingProject}
+          />
         </div>
       )}
     </PageLayout>
@@ -151,12 +144,99 @@ function ProjectsList() {
 
 // === internal components ===
 
-function ProjectCardActions({
-  pinned,
-  onTogglePin,
+type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
+
+function ProjectSection({
+  title,
+  projects,
+  onEdit,
+  onDelete,
 }: {
-  pinned: boolean;
-  onTogglePin: () => void;
+  title?: string;
+  projects: ProjectListItem[];
+  onEdit: (project: ProjectListItem) => void;
+  onDelete: (project: ProjectListItem) => void;
+}) {
+  if (projects.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      {title ? (
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h2>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {projects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            project={project}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProjectCard({
+  project,
+  onEdit,
+  onDelete,
+}: {
+  project: ProjectListItem;
+  onEdit: (project: ProjectListItem) => void;
+  onDelete: (project: ProjectListItem) => void;
+}) {
+  return (
+    <div className="rounded-lg border p-4 transition-colors hover:bg-muted/50">
+      <div className="flex items-center justify-between gap-2">
+        <Link
+          href={`/projects/${project.id}`}
+          className="flex min-w-0 items-center gap-2"
+        >
+          <span className="shrink-0">
+            <AgentIcon icon={project.icon} fallbackType="project" size={18} />
+          </span>
+          <span className="min-w-0 truncate font-medium">{project.name}</span>
+        </Link>
+        <span className="flex shrink-0 items-center gap-1">
+          {!project.isOwner && (
+            <Badge variant="secondary">Shared with you</Badge>
+          )}
+          {project.isOwner && project.visibility && (
+            <Badge variant="outline" className="gap-1">
+              <Users className="h-3 w-3" />
+              {project.visibility === "organization" ? "Org" : "Teams"}
+            </Badge>
+          )}
+          {project.isOwner && (
+            <ProjectCardActions
+              onEdit={() => onEdit(project)}
+              onDelete={() => onDelete(project)}
+            />
+          )}
+        </span>
+      </div>
+      {project.description && (
+        <Link
+          href={`/projects/${project.id}`}
+          className="mt-1 block line-clamp-2 text-sm text-muted-foreground"
+        >
+          {project.description}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function ProjectCardActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -166,13 +246,13 @@ function ProjectCardActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onTogglePin}>
-          {pinned ? (
-            <PinOff className="h-4 w-4" />
-          ) : (
-            <Pin className="h-4 w-4" />
-          )}
-          {pinned ? "Unpin" : "Pin"}
+        <DropdownMenuItem onSelect={onEdit}>
+          <Pencil className="h-4 w-4" />
+          Edit details
+        </DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2 className="h-4 w-4" />
+          Delete
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -184,6 +264,8 @@ type CreateProjectForm = {
   description: string;
   icon: string | null;
 };
+
+type EditProjectDetailsForm = CreateProjectForm;
 
 function CreateProjectDialog({
   open,
@@ -236,6 +318,87 @@ function CreateProjectDialog({
             }
           >
             Create
+          </Button>
+        </>
+      }
+    >
+      <div className="flex items-start gap-3">
+        <AgentIconPicker
+          value={icon}
+          onChange={(next) => form.setValue("icon", next)}
+          fallbackType="project"
+        />
+        <div className="flex-1 space-y-3">
+          <Input
+            autoFocus
+            placeholder="Project name"
+            {...form.register("name", { required: true, maxLength: 256 })}
+          />
+          <Textarea
+            placeholder="Description (optional)"
+            rows={3}
+            {...form.register("description", { maxLength: 4096 })}
+          />
+        </div>
+      </div>
+    </StandardFormDialog>
+  );
+}
+
+function EditProjectDetailsDialog({
+  project,
+  open,
+  onOpenChange,
+}: {
+  project: ProjectListItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const updateProject = useUpdateProject();
+  const form = useForm<EditProjectDetailsForm>({
+    defaultValues: {
+      name: project.name,
+      description: project.description ?? "",
+      icon: project.icon,
+    },
+  });
+  const icon = form.watch("icon");
+
+  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
+    const ok = await updateProject.mutateAsync({
+      id: project.id,
+      name: name.trim(),
+      description: description.trim() || null,
+      icon,
+    });
+    if (ok) onOpenChange(false);
+  });
+
+  return (
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit project"
+      description="Update this project's name, emoji, and description."
+      size="small"
+      onSubmit={onSubmit}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={updateProject.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={
+              updateProject.isPending || !form.watch("name").trim().length
+            }
+          >
+            Save
           </Button>
         </>
       }

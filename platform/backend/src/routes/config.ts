@@ -52,6 +52,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               fullWhiteLabeling: z.boolean(),
             }),
             features: z.strictObject({
+              betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
               sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
@@ -102,6 +103,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
         },
         features: {
+          betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,

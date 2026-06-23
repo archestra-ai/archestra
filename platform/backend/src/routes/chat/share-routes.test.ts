@@ -1,8 +1,10 @@
+import { ProjectShareModel } from "@/models";
 import ConversationModel from "@/models/conversation";
 import ConversationShareModel from "@/models/conversation-share";
 import MessageModel from "@/models/message";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -203,6 +205,112 @@ describe("chat share routes", () => {
         }),
       ],
     });
+  });
+
+  test("keeps the project link when forking a shared conversation in a project the forker can access", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = currentUser;
+    const viewer = await makeUser();
+
+    await makeMember(owner.id, organizationId);
+    await makeMember(viewer.id, organizationId);
+
+    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "shared-project",
+      description: null,
+    });
+    // Share the project org-wide so the viewer can access it (and so a chat
+    // started from the shared chat belongs in the project).
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: sharedAgent.id,
+      projectId: project.id,
+    });
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    currentUser = viewer;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/shared/${share.id}/fork`,
+      payload: { agentId: sharedAgent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().projectId).toBe(project.id);
+  });
+
+  test("drops the project link when the forker cannot access the source's project", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = currentUser;
+    const viewer = await makeUser();
+
+    await makeMember(owner.id, organizationId);
+    await makeMember(viewer.id, organizationId);
+
+    const sharedAgent = await makeAgent({ organizationId, teams: [] });
+
+    // Owner-only project (no share row): the conversation is shared, but the
+    // project is not, so the fork must not attach to a project the viewer
+    // cannot see (which would be invisible and unmanageable to them).
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "private-project",
+      description: null,
+    });
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: sharedAgent.id,
+      projectId: project.id,
+    });
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    currentUser = viewer;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/shared/${share.id}/fork`,
+      payload: { agentId: sharedAgent.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().projectId).toBeNull();
   });
 
   test("does not fork a shared conversation with an inaccessible agent", async ({

@@ -7,13 +7,6 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type RightPanelTab = "files" | "browser" | "apps";
@@ -56,7 +49,7 @@ export function RightSidePanel({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
-  const { apps, selectedToolCallId, select, setPortalTarget } = useApps();
+  const { apps, setPortalTarget } = useApps();
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
@@ -141,28 +134,11 @@ export function RightSidePanel({
               hideHeader
             />
           )}
-          {/* Apps tab content: selector + portal target. */}
+          {/* Apps tab content: portal target. The app-switcher lives in the
+              hosted card's header (see McpAppCard), so the panel only provides
+              the portal mount + empty state here. */}
           {resolvedTab === "apps" && (
             <div className="flex flex-col h-full">
-              {apps.length > 0 ? (
-                <div className="flex items-center gap-2 border-b px-2 py-2">
-                  <Select
-                    value={selectedToolCallId ?? undefined}
-                    onValueChange={(value) => select(value)}
-                  >
-                    <SelectTrigger className="flex-1 h-8 text-xs">
-                      <SelectValue placeholder="Choose an App" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {apps.map((app) => (
-                        <SelectItem key={app.toolCallId} value={app.toolCallId}>
-                          <span className="truncate">{app.label}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
               <div ref={portalDivRef} className="flex-1 min-h-0 relative">
                 {apps.length === 0 && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">

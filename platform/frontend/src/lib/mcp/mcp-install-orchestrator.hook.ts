@@ -100,6 +100,9 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
             (server) => server.catalogId === params.catalogItem.id,
           );
           setOAuthIsFirstInstallation(isFirstInstallation);
+          // Remember where the install was started (e.g. a chat conversation)
+          // so the callback can return the user there instead of the registry.
+          setOAuthReturnUrl(window.location.href);
         }
 
         redirectBrowserToUrl(authorizationUrl);

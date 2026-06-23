@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { DEFAULT_APP_NAME, MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
 import { slugify } from "./utils";
 
@@ -616,17 +617,24 @@ function isArchestraToolShortName(
 export function getArchestraMcpCatalogName(
   options?: ArchestraMcpIdentityOptions,
 ): string {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (!options?.fullWhiteLabeling) {
     return DEFAULT_APP_NAME;
   }
 
   const trimmedAppName = options.appName?.trim();
   return trimmedAppName || DEFAULT_APP_NAME;
+  // SPDX-SnippetEnd
 }
 
 export function getArchestraMcpServerName(
   options?: ArchestraMcpIdentityOptions,
 ): string {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (!options?.fullWhiteLabeling) {
     return ARCHESTRA_MCP_SERVER_NAME;
   }
@@ -634,6 +642,7 @@ export function getArchestraMcpServerName(
   const catalogName = getArchestraMcpCatalogName(options);
   const brandedServerName = slugify(catalogName);
   return brandedServerName || ARCHESTRA_MCP_SERVER_NAME;
+  // SPDX-SnippetEnd
 }
 
 export function getArchestraToolPrefix(

@@ -170,9 +170,18 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(repo_root: PathBuf, run_id: impl Into<String>, log_path: PathBuf) -> Self {
+    /// `platform_dir`, when set, *is* the platform directory directly (the prod image lays the app out
+    /// at `/app`, not `<repo>/platform`); unset falls back to today's `repo_root/platform`. The bench
+    /// Postgres compose file is only used in the runner-managed local path, so it always derives from
+    /// `repo_root`.
+    pub fn new(
+        repo_root: PathBuf,
+        platform_dir: Option<PathBuf>,
+        run_id: impl Into<String>,
+        log_path: PathBuf,
+    ) -> Self {
         let run_id = run_id.into();
-        let platform = repo_root.join("platform");
+        let platform = platform_dir.unwrap_or_else(|| repo_root.join("platform"));
         let bench_compose = repo_root
             .join("archestra-bench")
             .join("dev")
@@ -299,12 +308,22 @@ impl Instance {
 
     async fn migrate(&self) -> Result<(), LifecycleError> {
         info!("migrating {}", self.db_name);
-        let output = Command::new("pnpm")
-            .args([
-                &"--filter".to_string(),
-                &"@backend".to_string(),
-                &"db:migrate".to_string(),
-            ])
+        // The prod image has no pnpm; `ARCHESTRA_BENCH_MIGRATE_CMD` lets the image run drizzle-kit
+        // directly. The command runs via `sh -c` in the platform dir with the backend env (so
+        // `ARCHESTRA_DATABASE_URL` points at the per-run database). Unset → today's pnpm invocation.
+        let mut command = match migrate_cmd_override() {
+            Some(cmd) => {
+                let mut c = Command::new("sh");
+                c.arg("-c").arg(cmd);
+                c
+            }
+            None => {
+                let mut c = Command::new("pnpm");
+                c.args(["--filter", "@backend", "db:migrate"]);
+                c
+            }
+        };
+        let output = command
             .current_dir(&self.platform)
             .envs(self.backend_env())
             .output()
@@ -599,19 +618,40 @@ pub fn build_backend_env(
         "ARCHESTRA_CODE_RUNTIME_ENABLED".to_string(),
         "true".to_string(),
     );
+    // These two keys are always force-set (the dev default points the backend at the local Dagger
+    // engine), so `/app/.env` cannot steer them — the prod image delivers them through the process
+    // env instead, which this honors over the dev default.
     env.insert(
         "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST".to_string(),
-        DAGGER_RUNNER_HOST.to_string(),
+        env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")
+            .unwrap_or_else(|| DAGGER_RUNNER_HOST.to_string()),
     );
     env.insert(
         "ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN".to_string(),
-        dagger_cli_bin.to_string(),
+        env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN")
+            .unwrap_or_else(|| dagger_cli_bin.to_string()),
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
     // Per-lane projects isolate file ownership so lanes sharing one backend don't collide on common
     // artifact names; the feature must be on for `POST /api/projects` and project-scoped conversations.
     env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
     env
+}
+
+/// Treat an empty/whitespace value as unset so an exported-but-blank container env var falls back to
+/// the default rather than wiping it.
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.filter(|s| !s.trim().is_empty())
+}
+
+/// Read a process-env override (empty/whitespace → unset).
+fn env_override(key: &str) -> Option<String> {
+    non_empty(std::env::var(key).ok())
+}
+
+/// The migration command to run instead of the dev `pnpm --filter @backend db:migrate`, if set.
+fn migrate_cmd_override() -> Option<String> {
+    env_override("ARCHESTRA_BENCH_MIGRATE_CMD")
 }
 
 async fn free_port() -> Result<u16, LifecycleError> {
@@ -684,6 +724,42 @@ mod tests {
         assert!(
             signal::kill(Pid::from_raw(pid), None).is_err(),
             "process group should be dead after shutdown_all"
+        );
+    }
+
+    #[test]
+    fn test_non_empty_treats_blank_as_unset() {
+        assert_eq!(non_empty(None), None);
+        assert_eq!(non_empty(Some(String::new())), None);
+        assert_eq!(non_empty(Some("   ".to_string())), None);
+        assert_eq!(non_empty(Some("/app".to_string())), Some("/app".to_string()));
+    }
+
+    #[test]
+    fn test_platform_dir_override_vs_default() {
+        let repo = PathBuf::from("/repo");
+        let log = PathBuf::from("/tmp/x.log");
+
+        let default = Instance::new(repo.clone(), None, "rid", log.clone());
+        assert_eq!(default.platform, repo.join("platform"));
+
+        let overridden = Instance::new(repo, Some(PathBuf::from("/app")), "rid", log);
+        assert_eq!(overridden.platform, PathBuf::from("/app"));
+    }
+
+    #[test]
+    fn test_build_backend_env_dagger_defaults_when_unset() {
+        // No process-env override → the dev defaults stand (the `.env` base map cannot steer these two,
+        // so they are force-set; the override path swaps the default for a process-env value).
+        let base = HashMap::new();
+        let env = build_backend_env(&base, "postgres://h/db", "http://localhost:1", 2, "/dev/dagger");
+        assert_eq!(
+            env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST"),
+            Some(&DAGGER_RUNNER_HOST.to_string())
+        );
+        assert_eq!(
+            env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN"),
+            Some(&"/dev/dagger".to_string())
         );
     }
 

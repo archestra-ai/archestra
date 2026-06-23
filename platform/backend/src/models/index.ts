@@ -70,6 +70,7 @@ export {
   default as ProjectModel,
   ProjectNameExistsError,
 } from "./project";
+export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";

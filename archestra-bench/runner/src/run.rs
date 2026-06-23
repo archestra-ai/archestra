@@ -96,6 +96,8 @@ pub struct RunCtx {
     pub envs_dir: PathBuf,
     /// Rewrite each env's `*.mcp.lock` from the observed surface instead of enforcing it.
     pub update_mcp_lock: bool,
+    /// Platform directory override (the prod image lays the app out at `/app`); `None` → `<repo>/platform`.
+    pub platform_dir: Option<PathBuf>,
 }
 
 /// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
@@ -137,6 +139,7 @@ pub async fn run(
     run_dir: Option<&Path>,
     max_workers: Option<usize>,
     update_mcp_lock: bool,
+    platform_dir: Option<&Path>,
 ) -> Result<RunOutcome, RunError> {
     let envs_dir = bench_dir.join("envs");
     let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
@@ -169,6 +172,7 @@ pub async fn run(
         api_keys,
         envs_dir,
         update_mcp_lock,
+        platform_dir: platform_dir.map(Path::to_path_buf),
     };
 
     let results = execute_plan(plan, ctx.clone(), workers).await;
@@ -503,7 +507,12 @@ async fn setup_shared_env(
     let log_path = ctx
         .root_run_dir
         .join(format!("{}.backend.log", slug(&env.id)));
-    let mut instance = Instance::new(repo_root(), format!("{}-{}", ctx.run_id, env.id), log_path);
+    let mut instance = Instance::new(
+        repo_root(),
+        ctx.platform_dir.clone(),
+        format!("{}-{}", ctx.run_id, env.id),
+        log_path,
+    );
     instance.start().await.map_err(|e| e.to_string())?;
 
     let client = instance.client.clone();
@@ -651,6 +660,7 @@ async fn run_isolated_lane(
         .join(format!("{}__{}.backend.log", slug(&env.id), lane.slug()));
     let mut instance = Instance::new(
         repo_root(),
+        ctx.platform_dir.clone(),
         format!("{}-{}-{}", ctx.run_id, env.id, lane.name),
         log_path,
     );
@@ -2842,6 +2852,7 @@ mod tests {
             api_keys: std::collections::HashMap::new(),
             envs_dir: tmp.path().to_path_buf(),
             update_mcp_lock: false,
+            platform_dir: None,
         };
         let mut env = dummy_env("e", vec![dummy_task("t1")]);
         env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;

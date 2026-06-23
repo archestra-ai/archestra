@@ -1,4 +1,8 @@
-import { RouteId } from "@archestra/shared";
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -30,8 +34,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "project rather than the individual author.",
         tags: ["Projects"],
         body: z.object({
-          name: z.string().min(1).max(256),
-          description: z.string().max(4096).nullable().optional(),
+          name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH),
+          description: z
+            .string()
+            .max(PROJECT_DESCRIPTION_MAX_LENGTH)
+            .nullable()
+            .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
@@ -53,6 +61,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isOwner: true,
         conversationCount: 0,
         visibility: null,
+        pinnedAt: null,
         createdAt: project.createdAt,
       };
     },
@@ -101,8 +110,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          name: z.string().min(1).max(256).optional(),
-          description: z.string().max(4096).nullable().optional(),
+          name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH).optional(),
+          description: z
+            .string()
+            .max(PROJECT_DESCRIPTION_MAX_LENGTH)
+            .nullable()
+            .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
@@ -208,6 +221,44 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.PinProject,
+        description:
+          "Pin a project to the current user's sidebar. Personal — does not " +
+          "affect other members. Any user who can read the project may pin it.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.pin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinProject,
+        description:
+          "Remove the current user's pin on a project. Idempotent; allowed " +
+          "even if the project was since unshared from the user.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.unpin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
   );
 };
 

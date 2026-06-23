@@ -86,7 +86,7 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `pi-gif-zip` | basic | ✓ | | ✓ | | | | |
 | `crypto-price` | basic | ✓ | | | | ✓ | | |
 | `median-salary` | basic | | | | | | messy-data | |
-| `nitpicker-version` | basic | | | | | ✓ | | |
+| `nitpicker-version` | basic | ✓ | | | | ✓ | | |
 | `github-stars` | basic | ✓ | | | | ✓ | | |
 | `lena-png-size` | basic | ✓ | | | | ✓ | | |
 | `sqlite-orders` | basic | ✓ | ✓ | | | | | |
@@ -105,14 +105,20 @@ Which Archestra capability each task is built to exercise. A task usually leans 
   exercises reading non-text formats.
 - **File out** — the deliverable is a file the agent exports via `download_file` (graded as `BENCH_OUTPUT`).
 - **Skills** — `use`: a pinned skill gates the task (`decode-cipher` → cipher-decoder, `xlsx-live-formulas`
-  → sales-ledger); `author`: the task authors a skill.
-- **Web/live** — requires fetching live data off the box (a web page / public API).
+  → sales-ledger); `author`: the task authors a skill. For both `use` tasks the verifier *enforces* that
+  the skill was actually loaded (and, for xlsx, its asset read) via a `[state].rest` + tool-call snapshot,
+  so a hand-rolled answer that skips the skill fails even when the value is right.
+- **Web/live** — requires fetching live data off the box (a web page / public API). There's no direct
+  fetch tool, so this goes through `curl` in the sandbox — every `Web/live` task also marks Sandbox.
 - **Adversarial** — the inputs contain something engineered to fool a naive solver: `injection` (real
   embedded prompt-injection payloads the agent must resist), `red-herring` (misleading distractor
   evidence pointing at the wrong root cause), or `messy-data` (heterogeneous/malformed/mixed records
   that defeat naive parsing or filtering).
-- **State/persist** — `state`: graded via the `[state].rest` backend snapshot (what the agent *did* to
-  Archestra); `persist`: a file carried across a `new_conversation` boundary via persistent storage.
+- **State/persist** — marked only where introspecting/mutating Archestra's own state is the task's
+  *headline* point. `state`: the answer itself comes from what the agent *did* to Archestra, graded via
+  the `[state].rest` backend snapshot (`author-skill`, `letter-count`); `persist`: a file carried across
+  a `new_conversation` boundary via persistent storage. (`decode-cipher`/`xlsx-live-formulas` also
+  snapshot `[state].rest`, but only to enforce skill use — counted under Skills, not here.)
 
 The three seeded remote MCP servers (DeepWiki, Microsoft Learn, Context7) are surface **distractors** —
 no task requires them, so MCP tool-use is not a graded capability here.

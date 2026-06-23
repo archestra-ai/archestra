@@ -101,8 +101,8 @@ export async function gateAppToolCall(params: {
     };
   }
 
-  // Environment fence (FR-25): a tool whose catalog left the app's bound
-  // environment is refused at call time even though its assignment row remains
+  // Environment fence: a tool whose catalog left the app's bound environment is
+  // refused at call time even though its assignment row remains
   // (re-binding an app does not strip assignments). Reuses the same predicate as
   // the assignment fence so the two never diverge. Only upstream tools reach
   // here — app-runtime built-ins returned above are environment-less.

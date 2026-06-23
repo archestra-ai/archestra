@@ -305,7 +305,7 @@ export async function assignToolToApp(params: {
     };
   }
 
-  // Environment fence (FR-25): a tool whose catalog is outside the app's bound
+  // Environment fence: a tool whose catalog is outside the app's bound
   // environment is not assignable. This is a same-org, wrong-environment tool —
   // distinct from the foreign-org not_found above — so it gets a clear 400.
   const inEnvironment = await ToolModel.isToolInEnvironment(

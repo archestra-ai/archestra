@@ -162,8 +162,8 @@ export const CreateAppSchema = z.object({
   // default template seeds the first version (resolveCreateAppHtml).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
-  // Environment binding (FR-25). null/omitted = org default. Org membership and
-  // the restricted-env permission are enforced in the route via
+  // Environment binding. null/omitted = org default. Org membership and the
+  // restricted-env permission are enforced in the route via
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),
 });
@@ -234,7 +234,7 @@ export const UpdateAppSchema = z.object({
   // Supplying html forks a new immutable version (no-op forks are suppressed).
   html: htmlField.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
-  // Re-bind the app's environment (FR-25). null = org default. Existing tool
+  // Re-bind the app's environment. null = org default. Existing tool
   // assignments are not stripped on re-bind; out-of-environment ones are refused
   // at call time instead.
   environmentId: z.string().uuid().nullable().optional(),

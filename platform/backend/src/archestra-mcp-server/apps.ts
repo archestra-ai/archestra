@@ -319,7 +319,7 @@ const registry = defineArchestraTools([
 
       // Resolve the tools list BEFORE creating the app, so a bad list never
       // leaves a half-built app behind. scaffold_app creates the app at the org
-      // default environment (FR-25: env selection is deferred to the REST/UI
+      // default environment (environment selection is deferred to the REST/UI
       // path), so tools resolve within the default environment — not the
       // authoring agent's — keeping assignments consistent with the app's env.
       const toolsResolution = await resolveToolsParam({

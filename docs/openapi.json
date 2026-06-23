@@ -161802,6 +161802,12 @@
                             "$ref": "#/components/schemas/EmbeddingDimensions"
                           }
                         ]
+                      },
+                      "requiresUserConnection": {
+                        "type": "boolean"
+                      },
+                      "isConnected": {
+                        "type": "boolean"
                       }
                     },
                     "required": [

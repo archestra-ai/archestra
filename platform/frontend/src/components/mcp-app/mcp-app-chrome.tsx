@@ -1,5 +1,5 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { ChevronDown, PanelRight, RefreshCw } from "lucide-react";
+import { AppWindow, ChevronDown, PanelRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { Button } from "@/components/ui/button";
@@ -145,6 +145,34 @@ export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
     >
       <RefreshCw className="h-3.5 w-3.5" />
     </Button>
+  );
+}
+
+/**
+ * Compact, non-interactive changelog row for a superseded owned-app render — an
+ * earlier render the conversation has since replaced with a newer one. Reuses
+ * the address-pill look but is static: it marks the version this render produced
+ * ("Dashboard · v2 · Updated") without mounting a live iframe. Only the latest
+ * render of an app stays live.
+ */
+export function McpAppChangelogPill({
+  appName,
+  version,
+  verb,
+}: {
+  appName: string | null;
+  version: number | null;
+  verb: string | null;
+}) {
+  return (
+    <div className={cn(PILL_CLASS, "text-xs text-muted-foreground")}>
+      <AppWindow className="mx-1 h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate px-1">
+        {appName ?? "App"}
+        {version != null && ` · v${version}`}
+        {verb && ` · ${verb}`}
+      </span>
+    </div>
   );
 }
 

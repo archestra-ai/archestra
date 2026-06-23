@@ -132,6 +132,26 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
+ * Whether an owned-app render has been superseded by a newer render of the same
+ * app in the conversation. The app registry (see {@link deriveAppsFromMessages})
+ * dedupes owned apps by `appId` to their latest render, so a render is superseded
+ * when the registry holds an entry for its `appId` whose `toolCallId` differs.
+ *
+ * Returns `false` when the registry has no entry for the app yet (e.g. mid-stream
+ * before the result is derived) so a freshly arriving render is never wrongly
+ * collapsed. Superseded renders show a static changelog pill instead of a live
+ * iframe; only the latest render of each app stays live.
+ */
+export function isSupersededOwnedRender(params: {
+  apps: PanelApp[];
+  appId: string;
+  toolCallId: string | undefined;
+}): boolean {
+  const latest = params.apps.find((a) => a.appId === params.appId)?.toolCallId;
+  return latest !== undefined && latest !== params.toolCallId;
+}
+
+/**
  * Derive the list of MCP Apps for a conversation directly from its messages
  * (plus any early UI-start data from the active stream).
  *

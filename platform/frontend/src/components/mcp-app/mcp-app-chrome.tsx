@@ -35,7 +35,7 @@ export function McpAppTopBar({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b px-2">
+    <div className="relative z-10 grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.08)]">
       <div className="flex min-w-0 items-center justify-start gap-0.5">
         {left}
       </div>
@@ -234,7 +234,7 @@ export function McpAppVersionBar({
   version: number;
 }) {
   return (
-    <div className="flex h-9 shrink-0 items-center border-t px-2">
+    <div className="relative z-10 flex h-9 shrink-0 items-center px-2 shadow-[0_-1px_2px_-1px_rgb(0_0_0/0.08)]">
       <Button
         asChild
         variant="ghost"

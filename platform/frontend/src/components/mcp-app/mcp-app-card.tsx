@@ -1,28 +1,23 @@
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
-import { RefreshCw } from "lucide-react";
-import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
 import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
 } from "@/components/mcp-app/app-height";
-import {
-  type McpAppAction,
-  McpAppActions,
-} from "@/components/mcp-app/mcp-app-actions";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared chrome for every MCP App surface (chat, right panel, Apps page). A
- * top bar holds the refresh control (left), the app name (center), and the
- * {@link McpAppActions} icons (right: fullscreen, side panel, …); a bottom bar
- * holds the app-version link to the app's page. Between
- * them sit an optional diagnostics badge and the app body — either the live
- * runtime (`children`) or, when `placeholder` is set, a frozen-height frosted
- * stand-in so moving an app into the side panel doesn't reflow chat. The bottom
- * bar is omitted for the placeholder stand-in.
+ * Shared layout chrome for every MCP App surface (chat, right panel, Apps page).
+ * Owns the card frame, the inline / fullscreen / fill geometry, body sizing, and
+ * the optional frozen placeholder. The per-surface controls are passed in as the
+ * `topBar` and `bottomBar` slots — see the building blocks in `mcp-app-chrome`
+ * ({@link McpAppTopBar} / {@link McpAppRefreshButton} / {@link McpAppVersionBar})
+ * and {@link McpAppActions} — so the card itself stays free of action wiring.
+ *
+ * Between the bars sit an optional diagnostics badge and the app body — either
+ * the live runtime (`children`) or, when `placeholder` is set, a frozen-height
+ * frosted stand-in so moving an app into the side panel doesn't reflow chat.
  *
  * Uses a single stable tree for inline / fullscreen / fill so the iframe child
  * is never unmounted when toggling — only CSS classes change. In fullscreen,
@@ -36,17 +31,13 @@ export function McpAppCard({
   size,
   inlineCeiling,
   fillContainer = false,
-  appName,
-  onRefresh,
   placeholder,
   frozenHeight,
-  appId,
-  appVersion,
-  actions,
-  onShowInSidebar,
+  topBar,
+  bottomBar,
 }: {
   displayMode: McpUiDisplayMode;
-  /** Toggle inline ↔ fullscreen; also invoked by the Escape key while fullscreen. */
+  /** Toggle inline ↔ fullscreen; invoked by the Escape key while fullscreen. */
   onToggleFullscreen: () => void;
   children?: React.ReactNode;
   /**
@@ -60,11 +51,6 @@ export function McpAppCard({
   inlineCeiling: number;
   /** When true, the app fills its parent container (used when portaled to the panel). */
   fillContainer?: boolean;
-  /** Center of the top bar. A string renders as the app name; a node (e.g. an
-   * app-switcher select used in the panel) renders as-is. */
-  appName?: React.ReactNode;
-  /** Reload the iframe (bumps the runtime's reload nonce). Refresh icon hidden when absent. */
-  onRefresh?: () => void;
   /**
    * When set, the body renders this node — frozen to `frozenHeight`, frosted —
    * instead of `children`. Used in chat while the live iframe lives in the panel.
@@ -72,11 +58,10 @@ export function McpAppCard({
   placeholder?: React.ReactNode;
   /** Locked body height for the placeholder, so chat keeps the app's footprint. */
   frozenHeight?: number;
-  appId?: string;
-  /** Owned-app version, shown as a link to the app's page in the bottom bar. */
-  appVersion?: number | null;
-  actions: McpAppAction[];
-  onShowInSidebar?: () => void;
+  /** Top-bar controls (refresh, name, actions). Hidden when absent. */
+  topBar?: React.ReactNode;
+  /** Bottom-bar controls (e.g. the app-version link). Hidden when absent. */
+  bottomBar?: React.ReactNode;
 }) {
   const isFullscreen = displayMode === "fullscreen";
   const [bounds, setBounds] = useState<{
@@ -137,42 +122,7 @@ export function McpAppCard({
           : undefined
       }
     >
-      {/* Top bar: refresh (left) · name (center) · action icons (right). Fixed
-          height (matches the h-7 icon buttons + padding) so the bar doesn't
-          shrink when a surface renders fewer/no buttons — e.g. the placeholder. */}
-      <div className="grid h-9 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b px-2">
-        <div className="flex items-center justify-start">
-          {onRefresh && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground"
-              onClick={onRefresh}
-              aria-label="Reload app"
-              title="Reload app"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-        {typeof appName === "string" ? (
-          <span className="truncate text-center text-xs font-medium text-foreground">
-            {appName}
-          </span>
-        ) : (
-          <div className="flex min-w-0 justify-center">{appName}</div>
-        )}
-        <div className="flex items-center justify-end gap-0.5">
-          <McpAppActions
-            appId={appId}
-            actions={actions}
-            onShowInSidebar={onShowInSidebar}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={onToggleFullscreen}
-          />
-        </div>
-      </div>
+      {topBar}
 
       {diagnostics && <div className="shrink-0">{diagnostics}</div>}
 
@@ -209,20 +159,7 @@ export function McpAppCard({
         </div>
       )}
 
-      {/* Bottom bar: app-version link to the app's page. Shown only when there's
-          an owned-app version to surface; hidden for the placeholder stand-in. */}
-      {!placeholder && appId && appVersion != null && (
-        <div className="flex h-9 shrink-0 items-center border-t px-2">
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground"
-          >
-            <Link href={`/apps/${appId}`}>Version {appVersion}</Link>
-          </Button>
-        </div>
-      )}
+      {bottomBar}
     </div>
   );
 }

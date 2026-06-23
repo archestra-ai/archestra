@@ -4,8 +4,16 @@ import { getArchestraAppResourceUri } from "@archestra/shared";
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import { useState } from "react";
 import { useInlineCeiling } from "@/components/mcp-app/app-height";
-import type { McpAppAction } from "@/components/mcp-app/mcp-app-actions";
+import {
+  type McpAppAction,
+  McpAppActions,
+} from "@/components/mcp-app/mcp-app-actions";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
+import {
+  McpAppRefreshButton,
+  McpAppTopBar,
+  McpAppVersionBar,
+} from "@/components/mcp-app/mcp-app-chrome";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useApp } from "@/lib/app.query";
 
@@ -44,11 +52,29 @@ export function AppRuntimeFrame({
           size={null}
           inlineCeiling={inlineCeiling}
           fillContainer
-          appName={app.name}
-          onRefresh={() => setReloadNonce((nonce) => nonce + 1)}
-          appId={appId}
-          appVersion={app.latestVersion}
-          actions={actions}
+          topBar={
+            <McpAppTopBar
+              left={
+                <McpAppRefreshButton
+                  onClick={() => setReloadNonce((nonce) => nonce + 1)}
+                />
+              }
+              center={app.name}
+              right={
+                <McpAppActions
+                  appId={appId}
+                  actions={actions}
+                  isFullscreen={displayMode === "fullscreen"}
+                  onToggleFullscreen={handleToggleFullscreen}
+                />
+              }
+            />
+          }
+          bottomBar={
+            app.latestVersion != null ? (
+              <McpAppVersionBar appId={appId} version={app.latestVersion} />
+            ) : undefined
+          }
         >
           <McpAppRuntime
             toolResourceUri={getArchestraAppResourceUri(appId)}

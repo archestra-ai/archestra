@@ -16,8 +16,16 @@ import {
   INITIAL_INLINE_HEIGHT,
   useInlineCeiling,
 } from "@/components/mcp-app/app-height";
-import type { McpAppAction } from "@/components/mcp-app/mcp-app-actions";
+import {
+  type McpAppAction,
+  McpAppActions,
+} from "@/components/mcp-app/mcp-app-actions";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
+import {
+  McpAppRefreshButton,
+  McpAppTopBar,
+  McpAppVersionBar,
+} from "@/components/mcp-app/mcp-app-chrome";
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
@@ -254,23 +262,39 @@ export function McpAppSection({
         size={size}
         inlineCeiling={inlineCeiling}
         fillContainer={renderInSidebar}
-        appName={
-          renderInSidebar && apps.length > 1 ? (
-            <SidebarAppSwitcher
-              apps={apps}
-              value={selectedToolCallId}
-              onSelect={select}
-            />
-          ) : (
-            headerName
-          )
+        topBar={
+          <McpAppTopBar
+            left={<McpAppRefreshButton onClick={handleRefresh} />}
+            center={
+              renderInSidebar && apps.length > 1 ? (
+                <SidebarAppSwitcher
+                  apps={apps}
+                  value={selectedToolCallId}
+                  onSelect={select}
+                />
+              ) : (
+                headerName
+              )
+            }
+            right={
+              <McpAppActions
+                appId={appId}
+                actions={liveActions}
+                onShowInSidebar={
+                  toolCallId && !renderInSidebar
+                    ? handleShowInSidebar
+                    : undefined
+                }
+                isFullscreen={displayMode === "fullscreen"}
+                onToggleFullscreen={handleToggleFullscreen}
+              />
+            }
+          />
         }
-        onRefresh={handleRefresh}
-        appId={appId}
-        appVersion={appVersion}
-        actions={liveActions}
-        onShowInSidebar={
-          toolCallId && !renderInSidebar ? handleShowInSidebar : undefined
+        bottomBar={
+          appId && appVersion != null ? (
+            <McpAppVersionBar appId={appId} version={appVersion} />
+          ) : undefined
         }
       >
         <McpAppRuntime
@@ -317,13 +341,21 @@ export function McpAppSection({
           onToggleFullscreen={handleToggleFullscreen}
           size={size}
           inlineCeiling={inlineCeiling}
-          appName={headerName}
           frozenHeight={lastInlineHeightRef.current}
-          appId={appId}
-          // Unselected placeholders carry the open-in-sidebar action so the user
-          // can switch the panel to this app; the selected one already shows it.
-          actions={["showInSidebar"]}
-          onShowInSidebar={isSelected ? undefined : handleShowInSidebar}
+          topBar={
+            <McpAppTopBar
+              center={headerName}
+              right={
+                // Unselected placeholders carry the open-in-sidebar action so the
+                // user can switch the panel to this app; the selected one already
+                // shows it.
+                <McpAppActions
+                  actions={["showInSidebar"]}
+                  onShowInSidebar={isSelected ? undefined : handleShowInSidebar}
+                />
+              }
+            />
+          }
           placeholder={
             <span className="text-muted-foreground">
               {isSelected ? "Showing in sidebar" : "Open in the side panel"}

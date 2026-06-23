@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockRunFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockRunMarkCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockRunSetChatConversationId = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(true),
+);
 const mockTriggerFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockUserGetById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockAgentFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
@@ -16,6 +19,7 @@ vi.mock("@/models", () => ({
   ScheduleTriggerRunModel: {
     findById: mockRunFindById,
     markCompleted: mockRunMarkCompleted,
+    setChatConversationId: mockRunSetChatConversationId,
   },
   ScheduleTriggerModel: {
     findById: mockTriggerFindById,
@@ -33,6 +37,17 @@ vi.mock("@/models", () => ({
 
 vi.mock("@/auth", () => ({
   hasAnyAgentTypeAdminPermission: mockHasAnyAgentTypeAdminPermission,
+}));
+
+const mockEnsureTriggerConversation = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "conv-1", userId: "user-1" }),
+);
+const mockAppendRunMessages = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+vi.mock("@/services/scheduled-run-conversation", () => ({
+  ensureTriggerConversation: mockEnsureTriggerConversation,
+  appendRunMessagesToConversation: mockAppendRunMessages,
 }));
 
 const mockExecuteA2AMessage = vi.hoisted(() =>
@@ -102,29 +117,49 @@ describe("handleScheduleTriggerRunExecution", () => {
     vi.restoreAllMocks();
     mockRunFindById.mockResolvedValue(null);
     mockRunMarkCompleted.mockResolvedValue(null);
+    mockRunSetChatConversationId.mockResolvedValue(true);
     mockTriggerFindById.mockResolvedValue(null);
     mockUserGetById.mockResolvedValue(null);
     mockAgentFindById.mockResolvedValue(null);
     mockUserHasAgentAccess.mockResolvedValue(true);
     mockHasAnyAgentTypeAdminPermission.mockResolvedValue({ success: false });
+    mockEnsureTriggerConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+    });
+    mockAppendRunMessages.mockResolvedValue(undefined);
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
     });
   });
 
-  test("executes A2A message and marks run as success", async () => {
+  test("wraps the run in the schedule's chat, executes against it, and appends its turn", async () => {
     mockRunFindById.mockResolvedValue(makeRun());
     mockTriggerFindById.mockResolvedValue(makeTrigger());
     mockUserGetById.mockResolvedValue(makeUser());
     mockAgentFindById.mockResolvedValue(makeAgent());
     mockUserHasAgentAccess.mockResolvedValue(true);
+    // The CAS win (a real run row) gates the message append.
+    mockRunMarkCompleted.mockResolvedValue(makeRun({ status: "success" }));
 
     await handleScheduleTriggerRunExecution({
       runId: "run-1",
       triggerId: "trigger-1",
     });
 
+    expect(mockEnsureTriggerConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: expect.objectContaining({ id: "trigger-1" }),
+        ownerUserId: "user-1",
+        organizationId: "org-1",
+      }),
+    );
+    // The run links to (and executes against) the shared conversation.
+    expect(mockRunSetChatConversationId).toHaveBeenCalledWith(
+      "run-1",
+      "conv-1",
+    );
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: "agent-1",
@@ -132,6 +167,7 @@ describe("handleScheduleTriggerRunExecution", () => {
         organizationId: "org-1",
         userId: "user-1",
         sessionId: "scheduled-run-1",
+        conversationId: "conv-1",
         source: "schedule-trigger",
       }),
     );
@@ -140,6 +176,32 @@ describe("handleScheduleTriggerRunExecution", () => {
       status: "success",
       error: null,
     });
+    expect(mockAppendRunMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        run: expect.objectContaining({ id: "run-1" }),
+        organizationId: "org-1",
+      }),
+    );
+  });
+
+  test("does not append messages when another worker already completed the run", async () => {
+    mockRunFindById.mockResolvedValue(makeRun());
+    mockTriggerFindById.mockResolvedValue(makeTrigger());
+    mockUserGetById.mockResolvedValue(makeUser());
+    mockAgentFindById.mockResolvedValue(makeAgent());
+    mockUserHasAgentAccess.mockResolvedValue(true);
+    // CAS lost: the run was already flipped out of `running`, so markCompleted
+    // returns null and the turn must not be appended a second time.
+    mockRunMarkCompleted.mockResolvedValue(null);
+
+    await handleScheduleTriggerRunExecution({
+      runId: "run-1",
+      triggerId: "trigger-1",
+    });
+
+    expect(mockExecuteA2AMessage).toHaveBeenCalled();
+    expect(mockAppendRunMessages).not.toHaveBeenCalled();
   });
 
   test("marks run as failed when trigger no longer exists", async () => {
@@ -214,6 +276,8 @@ describe("handleScheduleTriggerRunExecution", () => {
       status: "failed",
       error: "LLM provider down",
     });
+    // A failed run has no successful turn to wrap into the chat.
+    expect(mockAppendRunMessages).not.toHaveBeenCalled();
   });
 
   test("skips execution when run is not in running state", async () => {

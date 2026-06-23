@@ -6,6 +6,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   ne,
   type SQL,
   sql,
@@ -221,6 +222,28 @@ class ScheduleTriggerModel {
       .where(eq(schema.scheduleTriggersTable.id, id));
   }
 
+  /**
+   * Link the trigger to its single shared chat conversation. Compare-and-swap
+   * on a null `chat_conversation_id` so two runs racing to create the first
+   * conversation can't both win: returns true only for the writer that set it.
+   */
+  static async setChatConversationId(
+    triggerId: string,
+    conversationId: string,
+  ): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.scheduleTriggersTable)
+      .set({ chatConversationId: conversationId })
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.id, triggerId),
+          isNull(schema.scheduleTriggersTable.chatConversationId),
+        ),
+      )
+      .returning({ id: schema.scheduleTriggersTable.id });
+    return !!updated;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -326,6 +349,7 @@ function triggerColumns() {
     name: schema.scheduleTriggersTable.name,
     agentId: schema.scheduleTriggersTable.agentId,
     projectId: schema.scheduleTriggersTable.projectId,
+    chatConversationId: schema.scheduleTriggersTable.chatConversationId,
     messageTemplate: schema.scheduleTriggersTable.messageTemplate,
     cronExpression: schema.scheduleTriggersTable.cronExpression,
     timezone: schema.scheduleTriggersTable.timezone,

@@ -7,6 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
+import conversationsTable from "./conversation";
 import projectsTable from "./project";
 import usersTable from "./user";
 
@@ -27,6 +28,17 @@ const scheduleTriggersTable = pgTable(
     projectId: uuid("project_id").references(() => projectsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * The single chat conversation this schedule's runs are wrapped into
+     * (cowork-style): created on the first run and reused by every later run,
+     * so all runs show up as one chat instead of one chat per run. SET NULL if
+     * the conversation is deleted; the trigger keeps running and re-creates one
+     * on its next run.
+     */
+    chatConversationId: uuid("chat_conversation_id").references(
+      () => conversationsTable.id,
+      { onDelete: "set null" },
+    ),
     messageTemplate: text("message_template").notNull(),
     cronExpression: text("cron_expression").notNull(),
     timezone: text("timezone").notNull(),
@@ -46,6 +58,9 @@ const scheduleTriggersTable = pgTable(
     index("schedule_triggers_agent_id_idx").on(table.agentId),
     index("schedule_triggers_project_id_idx").on(table.projectId),
     index("schedule_triggers_actor_user_id_idx").on(table.actorUserId),
+    index("schedule_triggers_chat_conversation_id_idx").on(
+      table.chatConversationId,
+    ),
     index("schedule_triggers_enabled_last_executed_at_idx").on(
       table.enabled,
       table.lastExecutedAt,

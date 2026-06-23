@@ -1251,6 +1251,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetScheduleTriggerRun]: {
     scheduledTask: ["read"],
   },
+  [RouteId.CreateScheduleTriggerConversation]: {
+    scheduledTask: ["create"],
+  },
   [RouteId.CreateScheduleTriggerRunConversation]: {
     scheduledTask: ["create"],
   },

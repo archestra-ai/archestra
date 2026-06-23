@@ -4,7 +4,7 @@ import {
   ConversationModel,
   InteractionModel,
   MessageModel,
-  ScheduleTriggerRunModel,
+  ScheduleTriggerModel,
 } from "@/models";
 import type {
   Conversation,
@@ -14,49 +14,54 @@ import type {
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 
 /**
- * Shared helpers for the chat conversation backing a scheduled trigger run.
+ * The chat conversation backing a scheduled trigger is shared by ALL of its
+ * runs (cowork-style): one chat per schedule, not one per run. Each run executes
+ * against this conversation and appends its own turn once it finishes, so the
+ * chat grows into the schedule's full run history instead of spawning a new
+ * (and empty, until viewed) conversation every time.
  *
- * Two callers materialize this conversation:
- *   - the run handler, BEFORE execution, for project-scoped triggers — so the
- *     run executes against a real conversation whose `project_id` lets the file
- *     tools resolve project scope (save_result etc. land in the project).
- *   - the run-view route, AFTER execution, to show the run as a chat.
+ * Two callers materialize the conversation:
+ *   - the run handler, BEFORE execution, for every run — so the run executes
+ *     against a real conversation whose `project_id` (project triggers) or
+ *     `conversation_id` (unscoped triggers) lets the file tools resolve scope.
+ *   - the routes, to open the schedule's chat from the UI.
  *
- * Creation is centralized here and linked with a compare-and-swap so the two
- * paths can never create two conversations for one run. Messages are
- * reconstructed from the run's interactions (the A2A executor persists
- * interactions, not chat messages), so backfilling is done by the view path
- * once interactions exist — never at creation time.
+ * Creation is centralized here and linked to the trigger with a compare-and-swap
+ * so concurrent first runs can never create two conversations for one schedule.
+ * Messages are reconstructed from a run's interactions (the A2A executor persists
+ * interactions, not chat messages) and appended by the handler once the run
+ * succeeds — never at creation time, when no interactions exist yet.
  */
-
-/** A short title seeded from the trigger's message template. */
-function buildRunConversationSeedTitle(prompt: string): string {
-  const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
-  if (!normalizedPrompt) {
-    return "Scheduled run";
-  }
-  return normalizedPrompt.length > 72
-    ? `${normalizedPrompt.slice(0, 69).trimEnd()}...`
-    : normalizedPrompt;
-}
 
 /**
- * Create the run's chat conversation and link it to the run (CAS on a null
- * `chat_conversation_id`). If another path linked first, the just-created
- * conversation is dropped and the winner's conversation is returned, so a run
- * never ends up with two conversations.
+ * Return the schedule's single chat conversation, creating and linking it on
+ * first use (CAS on the trigger's null `chat_conversation_id`). If another path
+ * linked first, the just-created conversation is dropped and the winner's is
+ * returned, so a schedule never ends up with two conversations.
  */
-export async function createAndLinkRunConversation(params: {
-  run: ScheduleTriggerRun;
+export async function ensureTriggerConversation(params: {
   trigger: ScheduleTrigger;
-  /** Conversation owner: the actor (execution path) or requester (view path). */
+  /** Conversation owner: the trigger's actor (so its runs own their own chat). */
   ownerUserId: string;
   organizationId: string;
 }): Promise<Conversation> {
-  const { run, trigger, ownerUserId, organizationId } = params;
+  const { trigger, ownerUserId, organizationId } = params;
+
+  // Fast path: already linked (the FK SET-NULLs the link if the conversation is
+  // deleted, so a non-null id always resolves to a live conversation).
+  if (trigger.chatConversationId) {
+    const existing = await ConversationModel.findByIdInOrganization({
+      id: trigger.chatConversationId,
+      organizationId,
+    });
+    if (existing) {
+      return existing;
+    }
+  }
+
   const agent = await AgentModel.findById(trigger.agentId);
   if (!agent || agent.organizationId !== organizationId) {
-    throw new Error("The agent used for this run no longer exists");
+    throw new Error("The agent used for this schedule no longer exists");
   }
 
   const llmSelection = await resolveConversationLlmSelectionForAgent({
@@ -72,16 +77,15 @@ export async function createAndLinkRunConversation(params: {
     userId: ownerUserId,
     organizationId,
     agentId: trigger.agentId,
-    title: buildRunConversationSeedTitle(trigger.messageTemplate),
+    title: trigger.name,
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
-    artifact: run.artifact ?? undefined,
     projectId: trigger.projectId ?? null,
     origin: "schedule_trigger",
   });
 
-  const won = await ScheduleTriggerRunModel.setChatConversationId(
-    run.id,
+  const won = await ScheduleTriggerModel.setChatConversationId(
+    trigger.id,
     created.id,
   );
   if (won) {
@@ -90,7 +94,7 @@ export async function createAndLinkRunConversation(params: {
 
   // Lost the race: another path linked first. Drop our orphan and return theirs.
   await ConversationModel.delete(created.id, ownerUserId, organizationId);
-  const fresh = await ScheduleTriggerRunModel.findById(run.id);
+  const fresh = await ScheduleTriggerModel.findById(trigger.id);
   const existing = fresh?.chatConversationId
     ? await ConversationModel.findByIdInOrganization({
         id: fresh.chatConversationId,
@@ -98,32 +102,34 @@ export async function createAndLinkRunConversation(params: {
       })
     : null;
   if (!existing) {
-    throw new Error("Failed to resolve the run conversation");
+    throw new Error("Failed to resolve the schedule conversation");
   }
   return existing;
 }
 
 /**
- * Backfill chat messages from the run's interactions when the conversation has
- * none yet. No-op until interactions exist, so it is safe to call repeatedly
- * (and must NOT be called before execution, or it would seed placeholders).
+ * Append a finished run's turn to the schedule's shared conversation and sync
+ * the run's artifact (latest run wins). Reconstructs the turn from the run's
+ * interactions; a no-op when the run produced none, so it never seeds a
+ * placeholder transcript.
+ *
+ * The caller (run handler) guarantees this runs exactly once per run by gating
+ * on the `running -> success` status transition, so there is no self-dedup here.
+ * Message `createdAt` is derived from the run's `startedAt` so successive runs
+ * render in chronological order even if a slow run appends after a later one.
  */
-export async function backfillRunConversationMessages(params: {
+export async function appendRunMessagesToConversation(params: {
   conversation: Conversation;
   trigger: ScheduleTrigger;
   run: ScheduleTriggerRun;
-  ownerUserId: string;
+  organizationId: string;
 }): Promise<void> {
-  const { conversation, trigger, run, ownerUserId } = params;
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
-    return;
-  }
+  const { conversation, trigger, run, organizationId } = params;
 
   const interactionResult = await InteractionModel.findAllPaginated(
     { limit: 50, offset: 0 },
     { sortBy: "createdAt", sortDirection: "desc" },
-    ownerUserId,
+    conversation.userId,
     true,
     { profileId: trigger.agentId, sessionId: `scheduled-${run.id}` },
   );
@@ -131,19 +137,30 @@ export async function backfillRunConversationMessages(params: {
     interactionResult.data,
     trigger.messageTemplate,
   );
-  if (uiMessages.length === 0) {
-    return;
+
+  if (uiMessages.length > 0) {
+    // Order successive runs chronologically by the run's own start time, not
+    // wall-clock at append, so a slow run can't jump ahead of a later one.
+    const base = (run.startedAt ?? run.createdAt).getTime();
+    await MessageModel.bulkCreate(
+      uiMessages.map((message, index) => ({
+        conversationId: conversation.id,
+        role: message.role,
+        content: message,
+        createdAt: new Date(base + index),
+      })),
+    );
   }
 
-  const createdAt = Date.now();
-  await MessageModel.bulkCreate(
-    uiMessages.map((message, index) => ({
-      conversationId: conversation.id,
-      role: message.role,
-      content: message,
-      createdAt: new Date(createdAt + index),
-    })),
-  );
+  // Surface the latest run's artifact (if any) as the conversation's document.
+  if (run.artifact && run.artifact !== conversation.artifact) {
+    await ConversationModel.update(
+      conversation.id,
+      conversation.userId,
+      organizationId,
+      { artifact: run.artifact },
+    );
+  }
 }
 
 // === internal ===

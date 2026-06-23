@@ -816,6 +816,7 @@ async function makeInteraction(
       | "response"
       | "type"
       | "model"
+      | "sessionId"
       | "inputTokens"
       | "outputTokens"
       | "cost"

@@ -18,10 +18,7 @@ import {
   ScheduleTriggerRunModel,
 } from "@/models";
 import { projectService } from "@/services/project";
-import {
-  backfillRunConversationMessages,
-  createAndLinkRunConversation,
-} from "@/services/scheduled-run-conversation";
+import { ensureTriggerConversation } from "@/services/scheduled-run-conversation";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -644,12 +641,41 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/schedule-triggers/:id/conversation",
+    {
+      schema: {
+        operationId: RouteId.CreateScheduleTriggerConversation,
+        description:
+          "Create or return the single chat conversation shared by all of a schedule's runs",
+        tags: ["Schedule Triggers"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId, headers }, reply) => {
+      const trigger = await findAccessibleTriggerOrThrow({
+        id,
+        userId: user.id,
+        organizationId,
+        headers,
+      });
+
+      const conversation = await openTriggerConversation({
+        trigger,
+        organizationId,
+      });
+
+      return reply.send(conversation);
+    },
+  );
+
+  fastify.post(
     "/api/schedule-triggers/:id/runs/:runId/conversation",
     {
       schema: {
         operationId: RouteId.CreateScheduleTriggerRunConversation,
         description:
-          "Create or return the chat conversation linked to a schedule run",
+          "Return the chat conversation that wraps a schedule's runs (resolved from the run's trigger)",
         tags: ["Schedule Triggers"],
         params: z.object({
           id: UuidIdSchema,
@@ -667,9 +693,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      const conversation = await ensureRunConversation({
-        run,
-        userId: user.id,
+      const trigger = await ScheduleTriggerModel.findById(run.triggerId);
+      if (!trigger) {
+        throw new ApiError(400, "The trigger for this run no longer exists");
+      }
+
+      const conversation = await openTriggerConversation({
+        trigger,
         organizationId,
       });
 
@@ -734,73 +764,39 @@ async function findAccessibleRunOrThrow(params: {
   return run;
 }
 
-async function ensureRunConversation(params: {
-  run: z.infer<typeof SelectScheduleTriggerRunSchema>;
-  userId: string;
+/**
+ * Open the schedule's single shared chat conversation, creating it on first use.
+ * All of a schedule's runs are wrapped into this one conversation; its messages
+ * are populated by the run handler as each run finishes, so this just resolves
+ * (and lazily creates) the conversation — it never backfills per run. Owned by
+ * the trigger's actor so every run's chat has one stable owner.
+ */
+async function openTriggerConversation(params: {
+  trigger: z.infer<typeof SelectScheduleTriggerSchema>;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema>> {
-  const { run, userId, organizationId } = params;
+  const { trigger, organizationId } = params;
 
-  const trigger = await ScheduleTriggerModel.findById(run.triggerId);
-  if (!trigger) {
-    throw new ApiError(400, "The trigger for this run no longer exists");
-  }
-
-  // A project-scoped run's conversation was created up front by the handler;
-  // otherwise create it now, owned by the requester so follow-up chat uses
-  // their own model/API key access.
-  let conversation = run.chatConversationId
-    ? await ConversationModel.findByIdInOrganization({
-        id: run.chatConversationId,
-        organizationId,
-      })
-    : null;
-  if (!conversation) {
-    try {
-      conversation = await createAndLinkRunConversation({
-        run,
-        trigger,
-        ownerUserId: userId,
-        organizationId,
-      });
-    } catch {
-      throw new ApiError(
-        400,
-        "The agent used for this run no longer exists or is unavailable",
-      );
-    }
-  }
-
-  // Sync the run artifact into the conversation if missing.
-  if (run.artifact && !conversation.artifact) {
-    const updated = await ConversationModel.update(
-      conversation.id,
-      conversation.userId,
+  let conversation: z.infer<typeof SelectConversationSchema>;
+  try {
+    conversation = await ensureTriggerConversation({
+      trigger,
+      ownerUserId: trigger.actorUserId,
       organizationId,
-      { artifact: run.artifact },
+    });
+  } catch {
+    throw new ApiError(
+      400,
+      "The agent used for this schedule no longer exists or is unavailable",
     );
-    if (updated) {
-      conversation = updated;
-    }
   }
 
-  // Reconstruct the chat from the run's interactions (the up-front path links
-  // the conversation before any interactions exist, so this is where messages
-  // are populated for project runs too).
-  await backfillRunConversationMessages({
-    conversation,
-    trigger,
-    run,
-    ownerUserId: conversation.userId,
-  });
-
-  const refreshedConversation = await ConversationModel.findById({
+  const refreshedConversation = await ConversationModel.findByIdInOrganization({
     id: conversation.id,
-    userId: conversation.userId,
     organizationId,
   });
   if (!refreshedConversation) {
-    throw new ApiError(500, "Failed to load the run conversation");
+    throw new ApiError(500, "Failed to load the schedule conversation");
   }
 
   return refreshedConversation;

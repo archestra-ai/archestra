@@ -1,0 +1,3 @@
+ALTER TABLE "schedule_triggers" ADD COLUMN "chat_conversation_id" uuid;--> statement-breakpoint
+ALTER TABLE "schedule_triggers" ADD CONSTRAINT "schedule_triggers_chat_conversation_id_conversations_id_fk" FOREIGN KEY ("chat_conversation_id") REFERENCES "public"."conversations"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
+CREATE INDEX "schedule_triggers_chat_conversation_id_idx" ON "schedule_triggers" USING btree ("chat_conversation_id");

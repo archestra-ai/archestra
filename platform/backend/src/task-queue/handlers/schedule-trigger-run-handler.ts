@@ -9,7 +9,11 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
-import { createAndLinkRunConversation } from "@/services/scheduled-run-conversation";
+import {
+  appendRunMessagesToConversation,
+  ensureTriggerConversation,
+} from "@/services/scheduled-run-conversation";
+import type { Conversation } from "@/types";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -53,6 +57,7 @@ export async function handleScheduleTriggerRunExecution(
 
   let status: "success" | "failed" = "success";
   let errorMessage: string | null = null;
+  let conversation: Conversation | undefined;
 
   try {
     const actor = await UserModel.getById(trigger.actorUserId);
@@ -84,19 +89,21 @@ export async function handleScheduleTriggerRunExecution(
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
-    // For a project-scoped trigger, materialize the run's chat conversation up
-    // front and execute against it, so the file tools resolve the project scope
-    // (results land in the project). Unscoped triggers keep the headless path.
-    let conversationId: string | undefined;
-    if (trigger.projectId) {
-      const conversation = await createAndLinkRunConversation({
-        run,
-        trigger,
-        ownerUserId: actor.id,
-        organizationId: trigger.organizationId,
-      });
-      conversationId = conversation.id;
-    }
+    // Materialize the schedule's single shared chat conversation up front and
+    // execute against it. The conversation gives the file tools a scope to
+    // resolve — project scope for a project trigger, the user's
+    // `<email>/<conversationId>/` folder for an unscoped one — so a run's files
+    // never land in the flat headless bucket. Mirror the link onto the run so
+    // run-level navigation and lookups keep working.
+    conversation = await ensureTriggerConversation({
+      trigger,
+      ownerUserId: actor.id,
+      organizationId: trigger.organizationId,
+    });
+    await ScheduleTriggerRunModel.setChatConversationId(
+      run.id,
+      conversation.id,
+    );
 
     await executeA2AMessage({
       agentId: trigger.agentId,
@@ -104,7 +111,7 @@ export async function handleScheduleTriggerRunExecution(
       organizationId: trigger.organizationId,
       userId: actor.id,
       sessionId: `scheduled-${run.id}`,
-      conversationId,
+      conversationId: conversation.id,
       source: "schedule-trigger",
       scheduleTriggerRunId: run.id,
     });
@@ -119,11 +126,28 @@ export async function handleScheduleTriggerRunExecution(
     );
   }
 
-  await ScheduleTriggerRunModel.markCompleted({
+  // `markCompleted` is a compare-and-swap on `running` status, so only the
+  // attempt that flips the run to its terminal state wins. Gating the message
+  // append on that win makes persistence exactly-once: a retried/duplicate
+  // delivery early-returns above (status no longer `running`) and never appends
+  // the same turn twice.
+  const completed = await ScheduleTriggerRunModel.markCompleted({
     runId: run.id,
     status,
     error: errorMessage,
   });
+
+  if (completed && status === "success" && conversation) {
+    // Re-read the run to capture an artifact the agent may have written during
+    // execution, then append this run's turn to the shared conversation.
+    const finishedRun = (await ScheduleTriggerRunModel.findById(run.id)) ?? run;
+    await appendRunMessagesToConversation({
+      conversation,
+      trigger,
+      run: finishedRun,
+      organizationId: trigger.organizationId,
+    });
+  }
 
   metrics.scheduleTrigger.reportScheduleTriggerRun(agentName, status);
 

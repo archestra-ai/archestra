@@ -22,10 +22,10 @@ In a project chat, the files an agent produces (`save_result`, `download_file`) 
 
 ## Scheduled tasks
 
-A schedule runs an agent automatically on a repeating cron schedule, scoped to the project. Each run starts a chat in the project — it appears in the project's session list marked as a scheduled run — and any result it saves lands in the project's files. This makes recurring work (a daily summary, periodic triage) accumulate in the same shared place as the rest of the project.
+A schedule runs an agent automatically on a repeating cron schedule, scoped to the project. All of a schedule's runs are wrapped into a single chat — the schedule keeps one conversation and each run appends its turn, rather than spawning a new chat every time — so recurring work (a daily summary, periodic triage) accumulates in one place instead of cluttering the project's session list. Any result a run saves lands in the project's files.
 
-Schedules are managed from the project page. Pick the agent, write the task prompt, and choose a cron schedule and timezone (defaulted to your browser's). A run executes under the permissions of the user who created the schedule. Editing, enabling/disabling, and deleting a schedule are done from its row.
+Schedules are managed from the project page. Pick the agent, write the task prompt, and choose a cron schedule and timezone (defaulted to your browser's). A run executes under the permissions of the user who created the schedule. Editing, enabling/disabling, and deleting a schedule are done from its row's menu.
 
 Callers who cannot pick an agent (no `agent:read`, for example a restricted "basic user" role) do not see the agent selector; their schedules run the organization's default agent.
 
-Every completed run preserves the full agent conversation. Open a run from the project's chats to review it; the owner can continue chatting in the same context, and a user with `scheduledTask:admin` can view (but not continue) other users' runs. See [Access Control](./platform-access-control) for role configuration.
+Click a schedule to open its chat and review the full history of its runs. The owner can continue chatting in the same context, and a user with `scheduledTask:admin` can view (but not continue) other users' schedules. See [Access Control](./platform-access-control) for role configuration.

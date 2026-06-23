@@ -14,6 +14,7 @@ const {
   runScheduleTriggerNow,
   getScheduleTriggerRuns,
   getScheduleTriggerRun,
+  createScheduleTriggerConversation,
   createScheduleTriggerRunConversation,
 } = archestraApiSdk;
 
@@ -27,6 +28,8 @@ export type ScheduleTrigger = {
   name: string;
   agentId: string;
   projectId?: string | null;
+  /** The single chat conversation all of this schedule's runs are wrapped into. */
+  chatConversationId: string | null;
   messageTemplate: string;
   cronExpression: string;
   timezone: string;
@@ -306,6 +309,36 @@ export function useScheduleTriggerRun(
     ...(params?.refetchInterval
       ? { refetchInterval: params.refetchInterval }
       : {}),
+  });
+}
+
+/**
+ * Open (creating on first use) the single chat conversation that wraps all of a
+ * schedule's runs — the project schedule row navigates to it.
+ */
+export function useCreateScheduleTriggerConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ triggerId }: { triggerId: string }) => {
+      const response = await createScheduleTriggerConversation({
+        path: { id: triggerId },
+      });
+      if (response.error) {
+        handleApiError(response.error);
+        throw new Error("Failed to open this schedule's chat");
+      }
+      return response.data as { id: string };
+    },
+    onSuccess: (conversation, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: scheduleTriggerKeys.detail(variables.triggerId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversation.id],
+      });
+    },
   });
 }
 

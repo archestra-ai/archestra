@@ -1,7 +1,7 @@
 import { type Mock, vi } from "vitest";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
-import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
@@ -50,7 +50,7 @@ describe("schedule trigger routes", () => {
     await app.close();
   });
 
-  test("returns an existing run conversation for scheduled task admins when it belongs to another user", async ({
+  test("returns the schedule's shared conversation (with its run history) for scheduled task admins when it belongs to another user", async ({
     makeAgent,
     makeMember,
     makeScheduleTrigger,
@@ -87,8 +87,10 @@ describe("schedule trigger routes", () => {
         parts: [{ type: "text", text: "Scheduled task result" }],
       },
     });
-    await ScheduleTriggerRunModel.setChatConversationId(
-      run.id,
+    // All runs share the trigger's conversation, so the run-conversation route
+    // resolves it from the trigger link (not a per-run link).
+    await ScheduleTriggerModel.setChatConversationId(
+      trigger.id,
       conversation.id,
     );
 
@@ -108,6 +110,41 @@ describe("schedule trigger routes", () => {
         }),
       ],
     });
+  });
+
+  test("POST /conversation creates and reuses one shared conversation for a schedule", async ({
+    makeInternalAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: adminUser.id,
+      agentId: agent.id,
+    });
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/conversation`,
+    });
+    expect(first.statusCode).toBe(200);
+    const conversationId = first.json().id as string;
+    expect(conversationId).toEqual(expect.any(String));
+    expect(first.json().origin).toBe("schedule_trigger");
+
+    // The trigger is now linked, and a second open returns the same chat.
+    const linked = await ScheduleTriggerModel.findById(trigger.id);
+    expect(linked?.chatConversationId).toBe(conversationId);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/conversation`,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().id).toBe(conversationId);
   });
 
   test("returns 403 when a non-admin opens another user's run conversation", async ({

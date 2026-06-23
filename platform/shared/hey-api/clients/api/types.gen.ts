@@ -54579,6 +54579,7 @@ export type GetScheduleTriggersResponses = {
             name: string;
             agentId: string;
             projectId: string | null;
+            chatConversationId: string | null;
             messageTemplate: string;
             cronExpression: string;
             timezone: string;
@@ -54700,6 +54701,7 @@ export type CreateScheduleTriggerResponses = {
         name: string;
         agentId: string;
         projectId: string | null;
+        chatConversationId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -54891,6 +54893,7 @@ export type GetScheduleTriggerResponses = {
         name: string;
         agentId: string;
         projectId: string | null;
+        chatConversationId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55005,6 +55008,7 @@ export type UpdateScheduleTriggerResponses = {
         name: string;
         agentId: string;
         projectId: string | null;
+        chatConversationId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55111,6 +55115,7 @@ export type EnableScheduleTriggerResponses = {
         name: string;
         agentId: string;
         projectId: string | null;
+        chatConversationId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55217,6 +55222,7 @@ export type DisableScheduleTriggerResponses = {
         name: string;
         agentId: string;
         projectId: string | null;
+        chatConversationId: string | null;
         messageTemplate: string;
         cronExpression: string;
         timezone: string;
@@ -55541,6 +55547,164 @@ export type GetScheduleTriggerRunResponses = {
 };
 
 export type GetScheduleTriggerRunResponse = GetScheduleTriggerRunResponses[keyof GetScheduleTriggerRunResponses];
+
+export type CreateScheduleTriggerConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/schedule-triggers/{id}/conversation';
+};
+
+export type CreateScheduleTriggerConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateScheduleTriggerConversationError = CreateScheduleTriggerConversationErrors[keyof CreateScheduleTriggerConversationErrors];
+
+export type CreateScheduleTriggerConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        modelId: string | null;
+        hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        projectId: string | null;
+        origin: 'user' | 'schedule_trigger';
+        pinnedAt: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        projectName?: string | null;
+        projectIcon?: string | null;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'provider_auth_required' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type CreateScheduleTriggerConversationResponse = CreateScheduleTriggerConversationResponses[keyof CreateScheduleTriggerConversationResponses];
 
 export type CreateScheduleTriggerRunConversationData = {
     body?: never;

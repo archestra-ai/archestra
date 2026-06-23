@@ -9,6 +9,7 @@ import {
   Power,
   Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   DEFAULT_FORM_STATE,
@@ -38,6 +39,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type ScheduleTrigger,
   useCreateScheduleTrigger,
+  useCreateScheduleTriggerConversation,
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
@@ -95,40 +97,68 @@ export function ProjectSchedulesSection({ projectId }: { projectId: string }) {
 // === internal components ===
 
 function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
+  const router = useRouter();
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
   const deleteSchedule = useDeleteScheduleTrigger();
+  const openChat = useCreateScheduleTriggerConversation();
   const [editOpen, setEditOpen] = useState(false);
+
+  // Open the single chat all of this schedule's runs are wrapped into. If a run
+  // has already created it we navigate straight there; otherwise the trigger
+  // conversation is created on demand.
+  const openScheduleChat = () => {
+    if (schedule.chatConversationId) {
+      router.push(`/chat/${schedule.chatConversationId}`);
+      return;
+    }
+    openChat.mutate(
+      { triggerId: schedule.id },
+      { onSuccess: (conversation) => router.push(`/chat/${conversation.id}`) },
+    );
+  };
 
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
-      <span
-        className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10",
-          !schedule.enabled && "bg-muted",
-        )}
+      <button
+        type="button"
+        onClick={openScheduleChat}
+        disabled={openChat.isPending}
+        aria-label={`Open chat for ${schedule.name}`}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-progress"
       >
-        <CalendarClock
+        <span
           className={cn(
-            "h-4 w-4 text-primary",
-            !schedule.enabled && "text-muted-foreground",
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10",
+            !schedule.enabled && "bg-muted",
           )}
-          aria-hidden
-        />
-      </span>
-      <span className={cn("min-w-0 flex-1", !schedule.enabled && "opacity-60")}>
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{schedule.name}</span>
-          {!schedule.enabled && (
-            <Badge variant="outline" className="shrink-0">
-              Disabled
-            </Badge>
-          )}
+        >
+          <CalendarClock
+            className={cn(
+              "h-4 w-4 text-primary",
+              !schedule.enabled && "text-muted-foreground",
+            )}
+            aria-hidden
+          />
         </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {schedule.agent?.name ?? "Default agent"}
+        <span
+          className={cn("min-w-0 flex-1", !schedule.enabled && "opacity-60")}
+        >
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium">
+              {schedule.name}
+            </span>
+            {!schedule.enabled && (
+              <Badge variant="outline" className="shrink-0">
+                Disabled
+              </Badge>
+            )}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {schedule.agent?.name ?? "Default agent"}
+          </span>
         </span>
-      </span>
+      </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Schedule actions">

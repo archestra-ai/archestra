@@ -36,7 +36,6 @@ archestra-bench benchmark \
   --bench-dir /bench \
   --env "${BENCH_ENVS}" \
   --lanes "${BENCH_LANES}" \
-  --max-workers 1 \
   --run-dir /work/run \
   --out /work/run/report.md 2>&1 | tee /work/run/bench.log
 set -e

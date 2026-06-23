@@ -83,6 +83,7 @@ export const RouteId = {
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
+  McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -557,7 +558,6 @@ export const RouteId = {
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
-  GetSkillSandboxFiles: "getSkillSandboxFiles",
   CreateProject: "createProject",
   GetProjects: "getProjects",
   GetProject: "getProject",
@@ -590,6 +590,7 @@ export const RouteId = {
 
   // MCP App Routes
   GetApps: "getApps",
+  GetExternalApp: "getExternalApp",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",

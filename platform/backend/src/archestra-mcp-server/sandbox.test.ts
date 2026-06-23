@@ -1180,18 +1180,22 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
     return { ...context, conversationId: conversation.id };
   }
 
-  async function seedPfsArtifact(filename: string, content = "abc") {
+  async function seedPfsArtifact(
+    filename: string,
+    content = "abc",
+    conversationId: string | null = null,
+  ) {
     const sandbox = await SkillSandboxModel.create({
       organizationId,
       userId,
-      conversationId: null,
+      conversationId,
       defaultCwd: "/home/sandbox",
     });
     return fileStore.put({
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId,
       sandboxId: sandbox.id,
       filename,
       mimeType: "text/plain",
@@ -1201,14 +1205,15 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
   }
 
   describe("search_files", () => {
-    test("lists and filters the user's persistent files", async () => {
-      await seedPfsArtifact("q2-report.txt");
-      await seedPfsArtifact("notes.txt");
+    test("lists and filters this conversation's persistent files", async () => {
+      const ctx = await makeConversationCtx();
+      await seedPfsArtifact("q2-report.txt", "abc", ctx.conversationId);
+      await seedPfsArtifact("notes.txt", "abc", ctx.conversationId);
 
       const all = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
         {},
-        context,
+        ctx,
       );
       expect(all.isError).toBe(false);
       const allOut = structuredOf<{
@@ -1223,7 +1228,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
       const filtered = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
         { query: "REPORT" },
-        context,
+        ctx,
       );
       const filteredOut = structuredOf<{ files: Array<{ filename: string }> }>(
         filtered,
@@ -1235,19 +1240,20 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
     });
 
     test("never returns another user's files", async ({ makeUser }) => {
-      await seedPfsArtifact("mine.txt");
+      const ctx = await makeConversationCtx();
+      await seedPfsArtifact("mine.txt", "abc", ctx.conversationId);
       const stranger = await makeUser({ email: "pfs-stranger@test.com" });
       const strangerSandbox = await SkillSandboxModel.create({
         organizationId,
         userId: stranger.id,
-        conversationId: null,
+        conversationId: ctx.conversationId,
         defaultCwd: "/home/sandbox",
       });
       await fileStore.put({
         organizationId,
         userId: stranger.id,
         projectId: null,
-        conversationId: null,
+        conversationId: ctx.conversationId ?? null,
         sandboxId: strangerSandbox.id,
         filename: "theirs.txt",
         mimeType: "text/plain",
@@ -1258,7 +1264,7 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
       const result = await executeArchestraTool(
         TOOL_SEARCH_FILES_FULL_NAME,
         {},
-        context,
+        ctx,
       );
       const out = structuredOf<{ files: Array<{ filename: string }> }>(result);
       expect(out.files.map((f) => f.filename)).toEqual(["mine.txt"]);
@@ -1268,7 +1274,11 @@ describe("PFS tools (search_files, my_file source, download_file project)", () =
   describe("upload_file my_file source", () => {
     test("loads PFS bytes by id and marks the upload origin", async () => {
       const ctx = await makeConversationCtx();
-      const artifact = await seedPfsArtifact("pull-me.txt", "pfs-bytes");
+      const artifact = await seedPfsArtifact(
+        "pull-me.txt",
+        "pfs-bytes",
+        ctx.conversationId,
+      );
       const spy = vi
         .spyOn(skillSandboxRuntimeService, "uploadFile")
         .mockResolvedValue({
@@ -1535,6 +1545,34 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
     expect(textOf(second)).toContain("already exists");
   });
 
+  test("save_result overwrite is idempotent for a headless (no-conversation) write", async () => {
+    // the base context has no conversationId and no project → the orphan scope.
+    const first = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "run.md", content: "v1" },
+      context,
+    );
+    expect(first.isError).toBe(false);
+    const firstId = structuredOf<{ fileId: string }>(first).fileId;
+
+    // a re-run with overwrite must replace the orphan in place, not dead-end
+    // with FileNameExistsError.
+    const second = await executeArchestraTool(
+      SAVE_RESULT_FULL_NAME,
+      { filename: "run.md", content: "v2", overwrite: true },
+      context,
+    );
+    expect(second.isError).toBe(false);
+    const out = structuredOf<{ fileId: string; overwritten: boolean }>(second);
+    expect(out.fileId).toBe(firstId);
+    expect(out.overwritten).toBe(true);
+
+    const { FileModel } = await import("@/models");
+    const row = await FileModel.findById(firstId);
+    expect(row?.conversationId).toBeNull();
+    expect(row?.data?.toString()).toBe("v2");
+  });
+
   test("save_result overwrite replaces an existing file in place, keeping its id", async () => {
     const ctx = await makePlainChatCtx();
     const first = await executeArchestraTool(
@@ -1789,12 +1827,16 @@ describe("read_file", () => {
     return { project, ctx: { ...context, conversationId: conversation.id } };
   }
 
-  function makePersonalFile(filename: string, body: string) {
+  function makePersonalFile(
+    filename: string,
+    body: string,
+    conversationId: string | null = null,
+  ) {
     return fileStore.put({
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId,
       filename,
       mimeType: "text/plain",
       sizeBytes: Buffer.byteLength(body),
@@ -1804,7 +1846,11 @@ describe("read_file", () => {
 
   test("reads a file's content as numbered lines, by id", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("a.txt", "first\nsecond\nthird");
+    const file = await makePersonalFile(
+      "a.txt",
+      "first\nsecond\nthird",
+      ctx.conversationId,
+    );
 
     const result = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
@@ -1827,7 +1873,7 @@ describe("read_file", () => {
 
   test("reads by filename", async () => {
     const ctx = await makePlainChatCtx();
-    await makePersonalFile("notes.md", "hello");
+    await makePersonalFile("notes.md", "hello", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
       { filename: "notes.md" },
@@ -1839,7 +1885,11 @@ describe("read_file", () => {
 
   test("windows large files with offset/limit and flags truncation", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("lines.txt", "l1\nl2\nl3\nl4\nl5");
+    const file = await makePersonalFile(
+      "lines.txt",
+      "l1\nl2\nl3\nl4\nl5",
+      ctx.conversationId,
+    );
 
     const head = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
@@ -1868,7 +1918,7 @@ describe("read_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "fake.txt",
       mimeType: "text/plain",
       sizeBytes: 5,
@@ -1889,7 +1939,7 @@ describe("read_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "latin1.txt",
       mimeType: "text/plain",
       sizeBytes: 3,
@@ -1915,7 +1965,7 @@ describe("read_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "pic.png",
       mimeType: "image/png",
       sizeBytes: pngBytes.byteLength,
@@ -1945,7 +1995,7 @@ describe("read_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "sneaky.txt",
       mimeType: "text/plain",
       sizeBytes: gifBytes.byteLength,
@@ -1987,7 +2037,7 @@ describe("read_file", () => {
         organizationId,
         userId,
         projectId: null,
-        conversationId: null,
+        conversationId: ctx.conversationId,
         filename: c.name,
         mimeType: c.mime,
         sizeBytes: c.bytes.byteLength,
@@ -2037,7 +2087,7 @@ describe("read_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "huge.png",
       mimeType: "image/png",
       sizeBytes: big.byteLength,
@@ -2054,7 +2104,7 @@ describe("read_file", () => {
 
   test("returns no lines when offset is past the end of the file", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("two.txt", "a\nb");
+    const file = await makePersonalFile("two.txt", "a\nb", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
       { id: file.id, offset: 99 },
@@ -2072,7 +2122,11 @@ describe("read_file", () => {
   test("explains when a single line exceeds the output byte cap", async () => {
     const ctx = await makePlainChatCtx();
     const huge = "x".repeat(config.skillsSandbox.outputBytesLimit + 100);
-    const file = await makePersonalFile("huge-line.txt", huge);
+    const file = await makePersonalFile(
+      "huge-line.txt",
+      huge,
+      ctx.conversationId,
+    );
     const result = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
       { id: file.id },
@@ -2110,7 +2164,7 @@ describe("read_file", () => {
 
   test("reports an empty file", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("blank.txt", "");
+    const file = await makePersonalFile("blank.txt", "", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_READ_FILE_FULL_NAME,
       { id: file.id },
@@ -2149,7 +2203,11 @@ describe("read_file", () => {
 
   test("reads without materializing a sandbox and records a read touch", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("touch.txt", "content");
+    const file = await makePersonalFile(
+      "touch.txt",
+      "content",
+      ctx.conversationId,
+    );
     const createSpy = vi.spyOn(SkillSandboxModel, "create");
     const defaultSpy = vi.spyOn(SkillSandboxModel, "findOrCreateDefault");
 
@@ -2250,12 +2308,16 @@ describe("edit_file / delete_file", () => {
     return { project, ctx: { ...context, conversationId: conversation.id } };
   }
 
-  function makePersonalFile(filename: string, body: string) {
+  function makePersonalFile(
+    filename: string,
+    body: string,
+    conversationId: string | null = null,
+  ) {
     return fileStore.put({
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId,
       filename,
       mimeType: "text/plain",
       sizeBytes: Buffer.byteLength(body),
@@ -2268,6 +2330,7 @@ describe("edit_file / delete_file", () => {
     const file = await makePersonalFile(
       "poem.md",
       "roses are red\nviolets are blue\n",
+      ctx.conversationId,
     );
 
     const result = await executeArchestraTool(
@@ -2293,7 +2356,11 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file resolves by filename", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("notes.txt", "old value");
+    const file = await makePersonalFile(
+      "notes.txt",
+      "old value",
+      ctx.conversationId,
+    );
 
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
@@ -2307,7 +2374,11 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file errors when old_string is not found", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("a.txt", "hello world");
+    const file = await makePersonalFile(
+      "a.txt",
+      "hello world",
+      ctx.conversationId,
+    );
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
       { id: file.id, old_string: "absent", new_string: "x" },
@@ -2321,7 +2392,7 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file errors when old_string is not unique without replace_all", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("dup.txt", "a a a");
+    const file = await makePersonalFile("dup.txt", "a a a", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
       { id: file.id, old_string: "a", new_string: "b" },
@@ -2335,7 +2406,7 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file replace_all changes every occurrence", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("dup.txt", "a a a");
+    const file = await makePersonalFile("dup.txt", "a a a", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
       { id: file.id, old_string: "a", new_string: "b", replace_all: true },
@@ -2349,7 +2420,7 @@ describe("edit_file / delete_file", () => {
 
   test("edit_file rejects new_string equal to old_string", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("a.txt", "keep");
+    const file = await makePersonalFile("a.txt", "keep", ctx.conversationId);
     const result = await executeArchestraTool(
       TOOL_EDIT_FILE_FULL_NAME,
       { id: file.id, old_string: "keep", new_string: "keep" },
@@ -2364,7 +2435,7 @@ describe("edit_file / delete_file", () => {
       organizationId,
       userId,
       projectId: null,
-      conversationId: null,
+      conversationId: ctx.conversationId,
       filename: "image.bin",
       mimeType: "application/octet-stream",
       sizeBytes: 4,
@@ -2396,7 +2467,7 @@ describe("edit_file / delete_file", () => {
 
   test("delete_file removes the file", async () => {
     const ctx = await makePlainChatCtx();
-    const file = await makePersonalFile("trash.txt", "bye");
+    const file = await makePersonalFile("trash.txt", "bye", ctx.conversationId);
 
     const result = await executeArchestraTool(
       TOOL_DELETE_FILE_FULL_NAME,

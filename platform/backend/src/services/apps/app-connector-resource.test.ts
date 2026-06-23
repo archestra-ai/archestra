@@ -4,6 +4,7 @@ import {
   appIdFromConnectorPath,
   buildConnectorResourceUri,
   canonicalizeConnectorResourceUri,
+  connectorResourceUriFromAudienceRef,
   connectorWwwAuthenticate,
   isAppConnectorAudienceRef,
   isConnectorTargetedResource,
@@ -158,5 +159,25 @@ describe("appIdFromConnectorPath", () => {
   test("returns null for a non-connector path or an empty id", () => {
     expect(appIdFromConnectorPath("/api/apps")).toBeNull();
     expect(appIdFromConnectorPath("/api/mcp/app/")).toBeNull();
+  });
+});
+
+describe("connectorResourceUriFromAudienceRef", () => {
+  test("round-trips a connector audience ref back to its canonical URI", () => {
+    const uri = `https://host/api/mcp/app/${APP_ID}`;
+    expect(
+      connectorResourceUriFromAudienceRef(appConnectorAudienceRef(uri)),
+    ).toBe(uri);
+  });
+
+  test("returns null for a non-connector ref or absent value", () => {
+    expect(connectorResourceUriFromAudienceRef("mcp-resource:abc")).toBeNull();
+    expect(
+      connectorResourceUriFromAudienceRef("mcp-oauth-client:abc"),
+    ).toBeNull();
+    expect(connectorResourceUriFromAudienceRef("not-a-ref")).toBeNull();
+    expect(connectorResourceUriFromAudienceRef("mcp-app-resource:")).toBeNull();
+    expect(connectorResourceUriFromAudienceRef(null)).toBeNull();
+    expect(connectorResourceUriFromAudienceRef(undefined)).toBeNull();
   });
 });

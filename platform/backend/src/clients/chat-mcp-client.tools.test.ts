@@ -20,7 +20,11 @@ import { resolveSessionExternalIdpToken } from "@/services/identity-providers/se
 import { beforeEach, describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
-import { MAX_IDENTICAL_TOOL_CALLS } from "./tool-call-repeat-tracker";
+import {
+  MAX_IDENTICAL_TOOL_CALLS,
+  REPEAT_CALL_TERMINATION_CEILING,
+  ToolCallRepeatTracker,
+} from "./tool-call-repeat-tracker";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -670,6 +674,44 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     // A fresh run executes the same call rather than carrying over the nudge.
     expect(toolResultContent(fresh)).toContain("ok");
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+  });
+
+  test("at the termination ceiling the breaker emits a terminal message and the caller's tracker reports termination", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "external result" }],
+      isError: false,
+    } as never);
+
+    // The run owns the tracker so the breaker records into the same instance the
+    // run's stop condition reads.
+    const repeatTracker = new ToolCallRepeatTracker();
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      repeatTracker,
+    });
+
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      await tools.extsrv__fetch_data.execute?.(
+        { query: "stuck" },
+        execOptions(`call-${i}`),
+      );
+      expect(repeatTracker.hasReachedTerminationCeiling()).toBe(false);
+    }
+
+    const terminal = await tools.extsrv__fetch_data.execute?.(
+      { query: "stuck" },
+      execOptions("call-ceiling"),
+    );
+    expect(toolResultContent(terminal)).toContain("run is being stopped");
+    expect(repeatTracker.hasReachedTerminationCeiling()).toBe(true);
   });
 
   test("breaks repeated identical delegation calls without spawning more child agents", async () => {

@@ -154,7 +154,7 @@ function ProjectDetail() {
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and files are kept — chats become ordinary conversations, the files stay in My Files."
+            description="Chats and files are kept — chats become ordinary conversations, and their files remain available in those conversations."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });

@@ -6,25 +6,15 @@ btc_usd / sol_usd; the tolerance allows harmless rounding of the requested Yahoo
 values, not nearby candles or alternate fields.
 """
 
-import json
-import os
-from pathlib import Path
+from bench_verifier import read_fixture_json, result
 
 _TOLERANCE = 0.005  # ±0.5%
 
 
-def _load(env_var: str, *rel: str) -> dict:
-    base = os.environ.get(env_var)
-    assert base, f"{env_var} is not set"
-    path = Path(base, *rel)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def test_ratio_matches() -> None:
-    result = _load("BENCH_RESULT")
-    expected = _load("BENCH_FIXTURES", "expected", "expected.json")
+    expected = read_fixture_json("expected", "expected.json")
     expected_ratio = expected["btc_usd"] / expected["sol_usd"]
-    submitted = result["btc_sol_ratio"]
+    submitted = result()["btc_sol_ratio"]
     assert abs(submitted - expected_ratio) <= _TOLERANCE * expected_ratio, (
         f"submitted {submitted} not within {_TOLERANCE:.1%} of {expected_ratio}"
     )

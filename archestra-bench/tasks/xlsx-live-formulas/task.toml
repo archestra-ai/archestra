@@ -1,14 +1,14 @@
 artifact_key = "artifact"
 
 [[stages]]
-text = """Build a sales-bonus report as an Excel workbook (.xlsx) with **live formulas** (not precomputed
+text = """Build a sales-bonus report as an Excel workbook (.xlsx) with live formulas (not precomputed
 numbers), then export it.
 
 Base it on the Q3 sales ledger -- one row per sale, with columns `sale_id`, `salesperson`, `team`,
 `units`, `unit_price`, and `commission_pct` (a fraction). The ledger is NOT attached to this message;
 locate it among the resources available to you in this instance and read it.
 
-Produce a NEW single-worksheet workbook with this EXACT layout:
+Produce a new single-worksheet workbook with this exact layout:
 
 - Row 1 headers, columns A..G:
   `sale_id, salesperson, team, units, unit_price, commission_pct, bonus`

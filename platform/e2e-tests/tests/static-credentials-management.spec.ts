@@ -169,7 +169,7 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         .getByRole("dialog")
         .filter({ visible: true })
         .last()
-        .getByRole("button", { name: /^Credentials\b/ });
+        .getByRole("button", { name: /^Connections\b/ });
       await expect(connectionsButton).toBeVisible();
       await closeOpenDialogs(page);
 
@@ -332,7 +332,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await install(page, canCreateTeamCredential);
   }
 
-  // Check Credentials counter
+  // Check Connections counter
   const checkCredentialsCount = async (page: Page) => {
     await goToPage(page, "/mcp/registry");
     await openManageCredentialsDialog(page, catalogItemName);
@@ -340,7 +340,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
       .getByRole("dialog")
       .filter({ visible: true })
       .last()
-      .getByRole("button", { name: /^Credentials\b/ });
+      .getByRole("button", { name: /^Connections\b/ });
     await expect(connectionsButton).toBeVisible();
     await closeOpenDialogs(page);
   };

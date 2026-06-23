@@ -2122,6 +2122,13 @@
       "when": 1782141505231,
       "tag": "0302_coerce_all_tools_agents_to_progressive",
       "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1782168863366,
+      "tag": "0303_minor_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

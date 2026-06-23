@@ -117,7 +117,7 @@ export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
-// persistent file system (My Files): files agents produced, across conversations
+// persistent files: produced by agents, scoped to a conversation (or a project)
 export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 export const TOOL_READ_FILE_SHORT_NAME = "read_file";
 export const TOOL_SAVE_RESULT_SHORT_NAME = "save_result";

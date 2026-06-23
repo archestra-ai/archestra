@@ -68,6 +68,10 @@ class ConversationFileTouchModel {
         : and(
             eq(schema.filesTable.userId, params.scope.userId),
             isNull(schema.filesTable.projectId),
+            // a no-project file is scoped to its conversation, so a referenced
+            // file can only be one this conversation produced (an old touch on
+            // another conversation's file must not leak into this panel).
+            eq(schema.filesTable.conversationId, params.conversationId),
           );
     return db
       .select({

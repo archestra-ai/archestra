@@ -7,9 +7,15 @@
 
 import { ChatErrorCode } from "@archestra/shared";
 import type { ModelMessage } from "ai";
-import { simulateReadableStream } from "ai";
+import { simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { z } from "zod";
+import {
+  REPEAT_CALL_TERMINATION_CEILING,
+  REPEAT_CALL_TERMINATION_NOTICE,
+  type ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import { ProviderError } from "@/routes/chat/errors";
 import { executeA2AMessage } from "./a2a-executor";
 
@@ -249,5 +255,66 @@ describe("executeA2AMessage real stream boundary", () => {
       model.doStreamCalls[0].prompt.length,
     );
     expect(result.text).toBe("Recovered after trim");
+  });
+
+  test("stops via the repeat-call ceiling and surfaces a termination notice as text", async () => {
+    // The model repeats the same tool call every step (unique call ids, identical
+    // name+args), so the run's tracker streak climbs to the ceiling.
+    let step = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            {
+              type: "tool-call",
+              toolCallId: `tc-${step++}`,
+              toolName: "stuck_tool",
+              input: "{}",
+            },
+            {
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool-calls" },
+              usage,
+            },
+          ],
+        }),
+      }),
+    });
+    primeAgent(model);
+
+    // Stand in for the real breaker (which lives in the mocked getChatMcpTools):
+    // record into the run's tracker and skip execution. The run hands its own
+    // tracker to getChatMcpTools and reads the same instance in its stopWhen.
+    let captured: ToolCallRepeatTracker | undefined;
+    mockGetChatMcpTools.mockImplementation(
+      ({ repeatTracker }: { repeatTracker: ToolCallRepeatTracker }) => {
+        captured = repeatTracker;
+        return Promise.resolve({
+          stuck_tool: tool({
+            description: "always repeated",
+            inputSchema: z.object({}),
+            execute: async () => {
+              repeatTracker.record("stuck_tool", {});
+              return "skipped: repeated call";
+            },
+          }),
+        });
+      },
+    );
+
+    const result = await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    // The loop stopped once the streak hit the ceiling, before MAX_AGENT_STEPS.
+    expect(captured?.hasReachedTerminationCeiling()).toBe(true);
+    expect(model.doStreamCalls).toHaveLength(REPEAT_CALL_TERMINATION_CEILING);
+    // No assistant text was produced, so the caller-visible notice stands in.
+    expect(result.text).toBe(REPEAT_CALL_TERMINATION_NOTICE);
   });
 });

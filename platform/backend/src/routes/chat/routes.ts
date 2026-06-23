@@ -45,6 +45,10 @@ import {
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
+import {
+  repeatCeilingStopCondition,
+  type ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
@@ -83,6 +87,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
@@ -456,7 +461,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
-          { mcpTools, toolUiResourceUris, systemPrompt, toolSelection },
+          {
+            mcpTools,
+            toolUiResourceUris,
+            systemPrompt,
+            toolSelection,
+            repeatTracker,
+          },
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
@@ -795,7 +806,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   model,
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(),
+                  stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   // Repair tool names that carry a leaked harmony sentinel token
                   // (e.g. `archestra__run_command<|channel|>commentary`) before
@@ -1942,6 +1953,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
         : null;
 
+      // The conversation owns its no-project files, so they must die with it
+      // rather than linger as unreachable orphans (the FK is SET NULL). Purge
+      // them BEFORE the delete, while they still carry the conversation id, and
+      // only when the owner-scoped lookup above confirmed the caller owns it.
+      if (conversation) {
+        await fileStore.purgeConversationFiles({
+          organizationId,
+          conversationId: id,
+        });
+      }
+
       // The delete is the source of truth. Do not stop the stream or tear down
       // browser runtime before it succeeds: a failed delete must leave the
       // conversation and its in-flight response intact.
@@ -2660,11 +2682,12 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   return { firstUserMessage, firstAssistantMessage };
 }
 
-export function buildChatStopConditions() {
+export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
     stepCountIs(MAX_AGENT_STEPS),
     hasToolCall(getChatStopToolNames().swapAgentToolName),
     hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
+    repeatCeilingStopCondition(repeatTracker),
   ];
 }
 

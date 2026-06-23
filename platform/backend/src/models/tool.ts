@@ -1756,6 +1756,30 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /**
+   * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
+   * Powers the server-scoped Apps run path: building `tools/list` and gating
+   * `tools/call` on `_meta.ui.visibility`.
+   */
+  static async findByCatalogIdWithMeta(catalogId: string): Promise<
+    Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown> | undefined;
+      meta: Record<string, unknown> | null;
+    }>
+  > {
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;

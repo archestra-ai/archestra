@@ -29,7 +29,10 @@ import {
 } from "@/archestra-mcp-server";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
-import type { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
+import type {
+  RepeatSeverity,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -1255,9 +1258,18 @@ function buildPreToolUseBlockedResult(reason: string | null): string {
 /**
  * Tool-result text returned in place of executing a tool call that has repeated
  * with identical arguments past the threshold (see ToolCallRepeatTracker). The
- * call is not executed; this message replaces its result.
+ * call is not executed; this message replaces its result. At the termination
+ * tier the run is also stopped (see repeatCeilingStopCondition), so this text is
+ * the last recorded content and states why the run ended.
  */
-function buildRepeatedCallNudge(toolName: string, count: number): string {
+function buildRepeatedCallNudge(
+  toolName: string,
+  count: number,
+  severity: RepeatSeverity,
+): string {
+  if (severity === "terminate") {
+    return `You have called \`${toolName}\` with identical arguments ${count} times in a row despite earlier nudges, so the run is being stopped — repeating it cannot produce a different result.`;
+  }
   return `You have called \`${toolName}\` with identical arguments ${count} times in a row, so it was not executed again — repeating it will not produce a different result. Change the arguments, use a different tool, or give your best final answer with what you already know.`;
 }
 
@@ -1289,8 +1301,11 @@ function applyRepeatedCallBreaker(params: {
       sessionId: ctx.sessionId ?? null,
       toolName,
       count: repeat.count,
+      severity: repeat.severity,
     },
-    "Skipping repeated identical tool call; nudging the model",
+    repeat.severity === "terminate"
+      ? "Repeated identical tool call hit the ceiling; stopping the run"
+      : "Skipping repeated identical tool call; nudging the model",
   );
   span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, false);
   reportToolMetrics({
@@ -1300,7 +1315,7 @@ function applyRepeatedCallBreaker(params: {
     startTime,
     isError: false,
   });
-  return buildRepeatedCallNudge(toolName, repeat.count);
+  return buildRepeatedCallNudge(toolName, repeat.count, repeat.severity);
 }
 
 /** Max chars of tool output passed to a PostToolUse hook payload. */

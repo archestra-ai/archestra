@@ -3,7 +3,6 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { projectService } from "@/services/project";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
@@ -165,42 +164,6 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationId,
           authorUserId: user.id,
         }),
-    );
-
-    fastify.get(
-      "/api/skill-sandbox/files",
-      {
-        schema: {
-          operationId: RouteId.GetSkillSandboxFiles,
-          description:
-            "List the calling user's persistent files (My Files): their own " +
-            "artifact files across all conversations, plus the files of " +
-            "projects shared with them.",
-          tags: ["Skills"],
-          response: constructResponseSchema(
-            z.object({ files: z.array(SandboxFileListItemSchema) }),
-          ),
-        },
-      },
-      async ({ organizationId, user }) => {
-        const [own, shared] = await Promise.all([
-          fileStore.search({
-            organizationId,
-            userId: user.id,
-            scope: { kind: "personal" },
-          }),
-          projectService.listSharedProjectFiles({
-            organizationId,
-            userId: user.id,
-          }),
-        ]);
-        // newest-first across personal + every shared project (the per-project
-        // fan-out in listSharedProjectFiles loses global ordering otherwise).
-        const files = [...own, ...shared].sort(
-          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-        );
-        return { files };
-      },
     );
   }
 };

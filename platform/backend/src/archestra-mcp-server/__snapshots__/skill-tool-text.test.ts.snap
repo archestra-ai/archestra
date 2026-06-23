@@ -83,11 +83,11 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
+  "description": "Copy a file out of the conversation's sandbox into durable storage, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
+    "description": "Copy a file out of the sandbox into durable storage, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved to the project. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -210,11 +210,11 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__read_file 1`] = `
 {
-  "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, use the download URL or copy the file into the sandbox with upload_file and inspect it with run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
+  "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, copy the file into the sandbox with upload_file and inspect it with run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), use the download URL or upload_file + run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
+    "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), copy the file into the sandbox with upload_file + run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
     "properties": {
       "filename": {
         "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
@@ -299,7 +299,7 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 
 exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 {
-  "description": "Save inline content directly to the user's persistent file storage (My Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "description": "Save inline content directly to the user's persistent file storage (My Files) — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). Pass \`overwrite: true\` to replace an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is rejected. In a project chat the file is saved to the project. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -327,7 +327,7 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
       },
       "overwrite": {
         "default": false,
-        "description": "Replace an existing file of the same name in place, keeping its id and download URL. Default false errors if the name is already taken.",
+        "description": "Replace an existing file of the same name in place, keeping its id. Default false errors if the name is already taken.",
         "type": "boolean",
       },
     },

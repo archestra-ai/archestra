@@ -23,6 +23,10 @@ spec:
       labels:
         app: archestra-bench
         run: "${RUN_NUMBER}"
+      annotations:
+        # The bench runs ~30 min; without this the cluster autoscaler evicts it on node scale-down
+        # mid-run (the pod has no controller to reschedule it, so the run is just lost).
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     spec:
       restartPolicy: Never
       serviceAccountName: ${PLATFORM_SA}

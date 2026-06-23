@@ -50,9 +50,14 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
           search: search || undefined,
         },
       });
+      // Re-throw instead of swallowing into `[]`: a failed request (e.g. offline
+      // `TypeError: Failed to fetch`) must surface as React Query's `isError`,
+      // not masquerade as "zero keys" — otherwise gating UIs misread a network
+      // outage as "no API key configured". No toast here: this is a background
+      // gating query, so callers render an error/connectivity state instead of
+      // spamming a toast on every offline render.
       if (error) {
-        handleApiError(error);
-        return [];
+        throw toApiError(error);
       }
       return data ?? [];
     },
@@ -70,18 +75,34 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;
   isLoading: boolean;
+  isError: boolean;
+  isFetching: boolean;
+  refetch: () => void;
 } {
   const { data: canReadKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
   const { data: canReadModels } = useHasPermissions({ llmModel: ["read"] });
   const enabled = canReadKeys === true && canReadModels === true;
-  const { data: keys = [], isLoading } = useLlmProviderApiKeys({ enabled });
+  const {
+    data: keys,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useLlmProviderApiKeys({ enabled });
   const permissionsResolving =
     canReadKeys === undefined || canReadModels === undefined;
   return {
-    hasAnyApiKey: keys.length > 0,
+    // True only when the query actually succeeded with ≥1 key. A failed request
+    // leaves `keys` undefined, so callers can't misread an outage as "zero keys".
+    hasAnyApiKey: (keys?.length ?? 0) > 0,
     isLoading: permissionsResolving || (enabled && isLoading),
+    isError: enabled && isError,
+    isFetching: enabled && isFetching,
+    refetch: () => {
+      void refetch();
+    },
   };
 }
 

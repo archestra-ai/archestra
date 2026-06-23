@@ -8,6 +8,14 @@ const mockPinMutate = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
+const mockRefetchApiKey = vi.fn();
+let mockApiKeyState = {
+  hasAnyApiKey: true,
+  isLoading: false,
+  isError: false,
+  isFetching: false,
+};
+
 type ProjectFixture = {
   id: string;
   name: string;
@@ -166,8 +174,29 @@ vi.mock("@/components/ui/textarea", () => ({
   ),
 }));
 
+vi.mock("@/components/connectivity-error", () => ({
+  ConnectivityError: ({
+    onRetry,
+    description = "Check your connection and try again.",
+  }: {
+    onRetry: () => void;
+    description?: string;
+  }) => (
+    <div>
+      <p>Couldn't reach the server</p>
+      <p>{description}</p>
+      <button type="button" onClick={onRetry}>
+        Try again
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useHasAnyApiKey: () => ({ hasAnyApiKey: true, isLoading: false }),
+  useHasAnyApiKey: () => ({
+    ...mockApiKeyState,
+    refetch: mockRefetchApiKey,
+  }),
 }));
 
 vi.mock("@/lib/projects/projects.query", () => ({
@@ -190,6 +219,12 @@ describe("ProjectsPageClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProjects = [];
+    mockApiKeyState = {
+      hasAnyApiKey: true,
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+    };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
   });
@@ -250,6 +285,43 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("shows a connectivity state, not the add-key prompt, when the keys query errors", () => {
+    mockApiKeyState = {
+      hasAnyApiKey: false,
+      isLoading: false,
+      isError: true,
+      isFetching: false,
+    };
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByText("Couldn't reach the server")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Connect an LLM provider to start a project"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Try again"));
+    expect(mockRefetchApiKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the add-key prompt when the keys query succeeds with zero keys", () => {
+    mockApiKeyState = {
+      hasAnyApiKey: false,
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+    };
+
+    render(<ProjectsPageClient />);
+
+    expect(
+      screen.getByText("Connect an LLM provider to start a project"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Couldn't reach the server"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows unpin in pinned project card menus", () => {

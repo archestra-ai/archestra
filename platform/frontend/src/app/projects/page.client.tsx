@@ -22,6 +22,7 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { ConnectivityError } from "@/components/connectivity-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
@@ -59,7 +60,13 @@ const PROJECTS_DESCRIPTION =
 
 function ProjectsList() {
   const { data, isPending } = useProjects();
-  const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
+  const {
+    hasAnyApiKey,
+    isLoading: isApiKeyLoading,
+    isError: isApiKeyError,
+    isFetching: isApiKeyFetching,
+    refetch: refetchApiKey,
+  } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectListItem | null>(
     null,
@@ -71,6 +78,20 @@ function ProjectsList() {
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
+
+  // The keys query failed (e.g. offline) — show a connectivity state rather than
+  // the "Add an LLM Provider Key" prompt, which would misread a network outage
+  // as a missing key.
+  if (isApiKeyError) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <ConnectivityError
+          onRetry={refetchApiKey}
+          isRetrying={isApiKeyFetching}
+        />
+      </PageLayout>
+    );
+  }
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.

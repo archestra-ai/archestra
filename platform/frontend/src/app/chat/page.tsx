@@ -49,6 +49,7 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { ConnectivityError } from "@/components/connectivity-error";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
@@ -282,8 +283,15 @@ export function ChatPageContent({
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
-  const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
+  const {
+    data: chatApiKeys = [],
+    isLoading: isLoadingApiKeys,
+    isError: isApiKeysError,
+    isFetching: isApiKeysFetching,
+    refetch: refetchApiKeys,
+  } = useLlmProviderApiKeys({
+    enabled: hasChatAccess && canUseProviderSettings,
+  });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -1766,6 +1774,18 @@ export function ChatPageContent({
       <div className="flex items-center justify-center h-full">
         <LoadingSpinner />
       </div>
+    );
+  }
+
+  // The keys query failed (e.g. offline) — show a connectivity state instead of
+  // the "Add an LLM Provider Key" prompt, which would misattribute a network
+  // outage to a missing key.
+  if (isApiKeysError) {
+    return (
+      <ConnectivityError
+        onRetry={() => refetchApiKeys()}
+        isRetrying={isApiKeysFetching}
+      />
     );
   }
 

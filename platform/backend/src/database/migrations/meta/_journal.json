@@ -2129,6 +2129,13 @@
       "when": 1782168863366,
       "tag": "0303_minor_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1782211728112,
+      "tag": "0304_wild_sandman",
+      "breakpoints": true
     }
   ]
 }

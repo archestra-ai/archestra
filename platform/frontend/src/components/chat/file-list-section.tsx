@@ -61,13 +61,16 @@ export function FileSection({
       <div className="overflow-hidden rounded-md border">
         {items.map((item, i) => {
           const customActions = renderActions?.(item) ?? null;
+          const isSelected = item.id === selectedId;
           return (
             <div
               key={item.id}
               className={cn(
-                "flex items-center text-sm hover:bg-muted/50",
+                "flex items-center text-sm",
                 i > 0 && "border-t",
-                item.id === selectedId && "bg-muted",
+                isSelected
+                  ? "bg-accent font-medium text-accent-foreground"
+                  : "hover:bg-muted/50",
               )}
             >
               {/* Clicking the row body opens the preview; the trailing actions

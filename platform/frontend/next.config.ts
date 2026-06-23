@@ -61,7 +61,31 @@ const nextConfig: NextConfig = {
     keepAlive: true,
   },
   async redirects() {
-    return [];
+    // Permanent redirects for routes renamed in the model-providers / skills /
+    // messaging-channels restructure, so existing bookmarks and links don't 404.
+    // `:path*` matches the bare path and any sub-path.
+    return [
+      {
+        source: "/agents/skills/:path*",
+        destination: "/skills/:path*",
+        permanent: true,
+      },
+      {
+        source: "/agents/triggers/:path*",
+        destination: "/messaging-channels/:path*",
+        permanent: true,
+      },
+      {
+        source: "/llm/model-providers/api-keys",
+        destination: "/llm/model-providers",
+        permanent: true,
+      },
+      {
+        source: "/llm/model-providers/models",
+        destination: "/llm/models",
+        permanent: true,
+      },
+    ];
   },
   async rewrites() {
     const backendUrl =

@@ -7,21 +7,13 @@ mounted `/skills/<name>` path proves the bundled script actually ran -- not mere
 created or mounted. BENCH_RESULT carries the submitted prime count.
 """
 
-import json
-import os
-from pathlib import Path
+from bench_verifier import result, state
 
 _PRIMES_LE_100000 = 9592  # π(100000), a fixed mathematical constant
 
 
-def _load(env_var: str) -> dict:
-    base = os.environ.get(env_var)
-    assert base, f"{env_var} is not set"
-    return json.loads(Path(base).read_text(encoding="utf-8"))
-
-
-def _created_skill(state: dict) -> dict:
-    rest = state["rest"]
+def _created_skill(snapshot: dict) -> dict:
+    rest = snapshot["rest"]
     assert len(rest) == 1, f"expected exactly one captured rest path, got {list(rest)}"
     skills = next(iter(rest.values()))
     rows = skills.get("data") if isinstance(skills, dict) else None
@@ -41,12 +33,12 @@ def _run_command_text(call: dict) -> str:
 
 
 def test_skill_created_and_script_ran() -> None:
-    state = _load("BENCH_STATE")
-    skill = _created_skill(state)
+    snapshot = state()
+    skill = _created_skill(snapshot)
     mount = f"/skills/{skill['name']}"
     ran = [
         call
-        for call in state.get("tool_calls", [])
+        for call in snapshot.get("tool_calls", [])
         if call.get("name") == "archestra__run_command"
         and mount in (text := _run_command_text(call))
         and "count.py" in text  # the mounted bundle was *executed*, not merely listed/inspected
@@ -55,7 +47,7 @@ def test_skill_created_and_script_ran() -> None:
 
 
 def test_prime_count_correct() -> None:
-    result = _load("BENCH_RESULT")
-    assert result["prime_count"] == _PRIMES_LE_100000, (
-        f"submitted prime_count {result['prime_count']} != π(100000) = {_PRIMES_LE_100000}"
+    submitted = result()
+    assert submitted["prime_count"] == _PRIMES_LE_100000, (
+        f"submitted prime_count {submitted['prime_count']} != π(100000) = {_PRIMES_LE_100000}"
     )

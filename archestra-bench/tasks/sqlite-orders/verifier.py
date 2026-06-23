@@ -5,23 +5,13 @@ staged to the agent). Recomputing the aggregate from the fixture avoids hard-cod
 value.
 """
 
-import json
-import os
 import sqlite3
-from pathlib import Path
 
-
-def _result() -> dict:
-    path = os.environ.get("BENCH_RESULT")
-    assert path, "BENCH_RESULT is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+from bench_verifier import fixtures, result
 
 
 def _top_customer() -> str:
-    base = os.environ.get("BENCH_FIXTURES")
-    assert base, "BENCH_FIXTURES is not set"
-    db_path = Path(base, "inputs", "orders.sqlite")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(fixtures("inputs", "orders.sqlite"))
     try:
         # Highest total amount wins; ties broken alphabetically by customer name.
         row = conn.execute(
@@ -38,5 +28,5 @@ def _top_customer() -> str:
 
 def test_top_customer_matches() -> None:
     expected = _top_customer()
-    submitted = _result()["top_customer"]
+    submitted = result()["top_customer"]
     assert submitted == expected, f"submitted top_customer {submitted!r} != expected {expected!r}"

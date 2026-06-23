@@ -55,7 +55,8 @@ class _Summary:
 def _summarize(aggregate_path: Path) -> _Summary:
     # A hard bench crash can leave no aggregate, or a half-written one — both must still produce a
     # failure summary so the pod reports rather than dying here.
-    failed = _Summary(healthy=False, text="❌ Benchmark FAILED — no usable aggregate produced")
+    # The bot name already carries "benchmark", so the text omits it.
+    failed = _Summary(healthy=False, text="❌ FAILED — no usable aggregate produced")
     if not aggregate_path.is_file():
         return failed
     try:
@@ -67,9 +68,9 @@ def _summarize(aggregate_path: Path) -> _Summary:
         logger.exception("could not parse %s", aggregate_path)
         return failed
     if total == 0 or passed == 0:
-        return _Summary(healthy=False, text=f"⚠️ Benchmark: {passed}/{total} passed — harness likely broken · {outcomes}")
+        return _Summary(healthy=False, text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}")
     rate = int(pass_rate * 100)
-    return _Summary(healthy=True, text=f"✅ Benchmark: {passed}/{total} passed ({rate}%) · {outcomes}")
+    return _Summary(healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}")
 
 
 def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]:
@@ -123,7 +124,7 @@ def _post_slack(summary: _Summary, warnings: list[str]) -> None:
         text += " · ⚠️ " + "; ".join(warnings)
     run_url = os.environ.get("RUN_URL", "").strip()
     if run_url:
-        text += f" | {run_url}"
+        text += f" · <{run_url}|run>"
     payload = json.dumps({"text": text}).encode()
     request = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
     try:

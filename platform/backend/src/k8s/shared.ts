@@ -104,6 +104,53 @@ export function loadKubeConfig(): {
 }
 
 /**
+ * Loads and initializes KubeConfig specifically for personal MCP servers.
+ * Falls back to default orchestrator settings if personal settings are not configured.
+ */
+export function loadPersonalKubeConfig(): {
+  kubeConfig: k8s.KubeConfig;
+  namespace: string;
+} {
+  const kc = new k8s.KubeConfig();
+  const personalConfig = config.orchestrator.kubernetes.personal;
+
+  const personalKubeconfigPath =
+    personalConfig.kubeconfig && personalConfig.kubeconfig.trim().length > 0
+      ? personalConfig.kubeconfig.trim()
+      : undefined;
+
+  const mainKubeconfigPath =
+    kubeconfig && kubeconfig.trim().length > 0 ? kubeconfig.trim() : undefined;
+
+  if (personalConfig.loadKubeconfigFromCurrentCluster) {
+    kc.loadFromCluster();
+    logger.info("Loaded personal kubeconfig from current cluster");
+  } else if (personalKubeconfigPath) {
+    validateKubeconfig(personalKubeconfigPath);
+    kc.loadFromFile(personalKubeconfigPath);
+    logger.info(`Loaded personal kubeconfig from ${personalKubeconfigPath}`);
+  } else if (loadKubeconfigFromCurrentCluster) {
+    // Fall back to main cluster config if personal config is not explicitly set
+    kc.loadFromCluster();
+    logger.info("Loaded personal kubeconfig from current cluster (fallback)");
+  } else if (mainKubeconfigPath) {
+    // Fall back to main kubeconfig file if personal config is not explicitly set
+    validateKubeconfig(mainKubeconfigPath);
+    kc.loadFromFile(mainKubeconfigPath);
+    logger.info(`Loaded personal kubeconfig from main ${mainKubeconfigPath} (fallback)`);
+  } else {
+    kc.loadFromDefault();
+    logger.info("No personal kubeconfig provided — using default kubeconfig");
+  }
+
+  return {
+    kubeConfig: kc,
+    namespace: personalConfig.namespace || namespace || "default",
+  };
+}
+
+
+/**
  * Creates all K8s API clients from a loaded KubeConfig.
  */
 export function createK8sClients(

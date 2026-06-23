@@ -66,6 +66,11 @@ vi.mock("@/config", async (importOriginal) => {
           namespace: "test-namespace",
           kubeconfig: undefined,
           loadKubeconfigFromCurrentCluster: false,
+          personal: {
+            namespace: undefined,
+            kubeconfig: undefined,
+            loadKubeconfigFromCurrentCluster: false,
+          },
         },
       },
     },
@@ -2125,3 +2130,199 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     expect(mockDeleteDeployment).not.toHaveBeenCalled();
   });
 });
+
+describe("McpServerRuntimeManager - Personal MCP Isolation", () => {
+  let originalPersonalConfig: any;
+  let configModule: any;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    mockK8sDeploymentInstances.length = 0;
+
+    configModule = await import("@/config");
+    originalPersonalConfig = { ...configModule.default.orchestrator.kubernetes.personal };
+  });
+
+  afterEach(() => {
+    if (configModule) {
+      configModule.default.orchestrator.kubernetes.personal = originalPersonalConfig;
+    }
+  });
+
+  test("routes personal scope server to personal namespace when personal config is active", async () => {
+    // Configure personal settings
+    configModule.default.orchestrator.kubernetes.personal = {
+      namespace: "personal-mcp-ns",
+      kubeconfig: "/path/to/personal-kubeconfig",
+      loadKubeconfigFromCurrentCluster: false,
+    };
+
+    // Mock valid kubeconfig read for custom path
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        clusters: [{ name: "personal-cluster", server: "https://personal.k8s.local" }],
+        contexts: [{ name: "personal-context" }],
+        users: [{ name: "personal-user" }],
+      }),
+    );
+
+    // Mock KubeConfig loadFromFile to populate clusters
+    const loadFromFileSpy = vi
+      .spyOn(k8s.KubeConfig.prototype, "loadFromFile")
+      .mockImplementation(function (this: any, path: string) {
+        this.loadFromString(
+          JSON.stringify({
+            clusters: [{ name: "personal-cluster", server: "https://personal.k8s.local" }],
+            contexts: [{ name: "personal-context" }],
+            users: [{ name: "personal-user" }],
+          })
+        );
+      });
+
+    const defaultMockApi = {
+      listNamespacedPod: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedDeployment: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedSecret: vi.fn().mockResolvedValue({ items: [] }),
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+
+    const personalMockApi = {
+      listNamespacedPod: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedDeployment: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedSecret: vi.fn().mockResolvedValue({ items: [] }),
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+
+    const mockMakeApiClient = vi
+      .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+      .mockImplementation(function (this: any) {
+        const isPersonal = this.clusters?.[0]?.server === "https://personal.k8s.local";
+        return (isPersonal ? personalMockApi : defaultMockApi) as any;
+      });
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    // Verify personal properties are set up on the manager
+    // @ts-expect-error - testing private property
+    expect(manager.personalNamespace).toBe("personal-mcp-ns");
+    // @ts-expect-error - testing private property
+    expect(manager.personalK8sApi).toBe(personalMockApi);
+
+    // Inject mock K8s clients that startServer checks for
+    const managerAny = manager as any;
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+    managerAny.personalK8sAttach = {};
+    managerAny.personalK8sLog = {};
+    managerAny.personalK8sExec = {};
+
+    // Create a mock MCP server with personal scope
+    const personalMcpServer = {
+      id: "personal-server-1",
+      name: "my-personal-server",
+      scope: "personal",
+      catalogId: "catalog-1",
+      secretId: null,
+      environmentValues: {},
+    } as any;
+
+    // Mock catalog item
+    const InternalMcpCatalogModel = (await import("@/models/internal-mcp-catalog")).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+      id: "catalog-1",
+      serverType: "local",
+      localConfig: { environment: [] },
+    } as any);
+
+    // Start the server
+    await manager.startServer(personalMcpServer);
+
+    // Verify that the deployment was constructed in the personal namespace
+    expect(mockK8sDeploymentInstances.length).toBe(1);
+    const deploymentOptions = mockK8sDeploymentInstances[0].options;
+    expect(deploymentOptions.namespace).toBe("personal-mcp-ns");
+    expect(deploymentOptions.k8sApi).toBe(personalMockApi);
+
+    loadFromFileSpy.mockRestore();
+    mockMakeApiClient.mockRestore();
+  });
+
+  test("falls back to default namespace/cluster when personal config is omitted", async () => {
+    // Explicitly disable personal config
+    configModule.default.orchestrator.kubernetes.personal = {
+      namespace: undefined,
+      kubeconfig: undefined,
+      loadKubeconfigFromCurrentCluster: false,
+    };
+
+    // Mock valid default kubeconfig read
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        clusters: [{ name: "default-cluster", server: "https://default.k8s.local" }],
+        contexts: [{ name: "default-context" }],
+        users: [{ name: "default-user" }],
+      }),
+    );
+
+    const defaultMockApi = {
+      listNamespacedPod: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedDeployment: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedSecret: vi.fn().mockResolvedValue({ items: [] }),
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+
+    const mockMakeApiClient = vi
+      .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+      .mockReturnValue(defaultMockApi as any);
+
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    // Verify personal properties default to the default namespace/clients
+    // @ts-expect-error - testing private property
+    expect(manager.personalNamespace).toBe("test-namespace");
+    // @ts-expect-error - testing private property
+    expect(manager.personalK8sApi).toBe(defaultMockApi);
+
+    // Inject mock K8s clients that startServer checks for
+    const managerAny = manager as any;
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    // Create a mock MCP server with personal scope
+    const personalMcpServer = {
+      id: "personal-server-2",
+      name: "my-personal-server-fallback",
+      scope: "personal",
+      catalogId: "catalog-1",
+      secretId: null,
+      environmentValues: {},
+    } as any;
+
+    // Mock catalog item
+    const InternalMcpCatalogModel = (await import("@/models/internal-mcp-catalog")).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+      id: "catalog-1",
+      serverType: "local",
+      localConfig: { environment: [] },
+    } as any);
+
+    // Start the server
+    await manager.startServer(personalMcpServer);
+
+    // Verify that the deployment was constructed in the fallback default namespace
+    expect(mockK8sDeploymentInstances.length).toBe(1);
+    const deploymentOptions = mockK8sDeploymentInstances[0].options;
+    expect(deploymentOptions.namespace).toBe("test-namespace");
+    expect(deploymentOptions.k8sApi).toBe(defaultMockApi);
+
+    mockMakeApiClient.mockRestore();
+  });
+});
+

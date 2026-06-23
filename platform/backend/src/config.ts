@@ -1159,6 +1159,17 @@ const config = {
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
+      personal: {
+        namespace:
+          process.env.ARCHESTRA_ORCHESTRATOR_PERSONAL_K8S_NAMESPACE ||
+          undefined,
+        kubeconfig:
+          process.env.ARCHESTRA_ORCHESTRATOR_PERSONAL_KUBECONFIG || undefined,
+        loadKubeconfigFromCurrentCluster:
+          process.env
+            .ARCHESTRA_ORCHESTRATOR_PERSONAL_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+          "true",
+      },
     },
   },
   /**

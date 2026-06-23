@@ -4,6 +4,7 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   loadKubeConfig,
+  loadPersonalKubeConfig,
   namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
@@ -59,6 +60,15 @@ export class McpServerRuntimeManager {
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
+  private personalK8sApi?: k8s.CoreV1Api;
+  private personalK8sAppsApi?: k8s.AppsV1Api;
+  private personalK8sAuthApi?: k8s.AuthorizationV1Api;
+  private personalK8sNetworkingApi?: k8s.NetworkingV1Api;
+  private personalK8sCustomObjectsApi?: k8s.CustomObjectsApi;
+  private personalK8sAttach?: k8s.Attach;
+  private personalK8sLog?: k8s.Log;
+  private personalK8sExec?: k8s.Exec;
+  private personalNamespace: string = "";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
@@ -80,6 +90,19 @@ export class McpServerRuntimeManager {
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
       this.namespace = clients.namespace;
+
+      const { kubeConfig: personalKc, namespace: personalNs } = loadPersonalKubeConfig();
+      const personalClients = createK8sClients(personalKc, personalNs);
+
+      this.personalK8sApi = personalClients.coreApi;
+      this.personalK8sAppsApi = personalClients.appsApi;
+      this.personalK8sAuthApi = personalClients.authApi;
+      this.personalK8sNetworkingApi = personalClients.networkingApi;
+      this.personalK8sCustomObjectsApi = personalClients.customObjectsApi;
+      this.personalK8sAttach = personalClients.attach;
+      this.personalK8sExec = personalClients.exec;
+      this.personalK8sLog = personalClients.log;
+      this.personalNamespace = personalClients.namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
       this.status = "error";
@@ -91,6 +114,15 @@ export class McpServerRuntimeManager {
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
+
+      this.personalK8sApi = undefined;
+      this.personalK8sAppsApi = undefined;
+      this.personalK8sAuthApi = undefined;
+      this.personalK8sNetworkingApi = undefined;
+      this.personalK8sCustomObjectsApi = undefined;
+      this.personalK8sAttach = undefined;
+      this.personalK8sLog = undefined;
+      this.personalNamespace = "";
       return; // graceful fallback: constructor completes with runtime disabled
     }
   }
@@ -102,6 +134,31 @@ export class McpServerRuntimeManager {
    */
   get isEnabled(): boolean {
     return this.status !== "error" && this.status !== "stopped";
+  }
+
+  private getK8sClientsForServer(mcpServer: McpServer) {
+    if (mcpServer.scope === "personal" && this.personalK8sApi) {
+      return {
+        k8sApi: this.personalK8sApi,
+        k8sAppsApi: this.personalK8sAppsApi,
+        k8sNetworkingApi: this.personalK8sNetworkingApi,
+        k8sCustomObjectsApi: this.personalK8sCustomObjectsApi,
+        k8sAttach: this.personalK8sAttach,
+        k8sExec: this.personalK8sExec,
+        k8sLog: this.personalK8sLog,
+        namespace: this.personalNamespace,
+      };
+    }
+    return {
+      k8sApi: this.k8sApi,
+      k8sAppsApi: this.k8sAppsApi,
+      k8sNetworkingApi: this.k8sNetworkingApi,
+      k8sCustomObjectsApi: this.k8sCustomObjectsApi,
+      k8sAttach: this.k8sAttach,
+      k8sExec: this.k8sExec,
+      k8sLog: this.k8sLog,
+      namespace: this.namespace,
+    };
   }
 
   get platformNamespace(): string {
@@ -207,16 +264,29 @@ export class McpServerRuntimeManager {
       this.onRuntimeStartupSuccess();
 
       // Fire-and-forget: backfill team-id labels on existing regcred secrets
-      this.backfillRegcredTeamLabels(installedServers).catch((err) => {
+      this.backfillRegcredTeamLabels(installedServers, this.k8sApi, this.namespace).catch((err) => {
         logger.warn(
           { err },
           "Failed to backfill team-id labels on regcred secrets",
         );
       });
+      if (this.personalK8sApi) {
+        this.backfillRegcredTeamLabels(installedServers, this.personalK8sApi, this.personalNamespace).catch((err) => {
+          logger.warn(
+            { err },
+            "Failed to backfill team-id labels on personal regcred secrets",
+          );
+        });
+      }
 
-      this.cleanupOrphanedDeployments(installedServers).catch((err) => {
+      this.cleanupOrphanedDeployments(installedServers, this.k8sApi, this.k8sAppsApi, this.namespace).catch((err) => {
         logger.warn({ err }, "Failed to cleanup orphaned MCP deployments");
       });
+      if (this.personalK8sApi && this.personalK8sAppsApi) {
+        this.cleanupOrphanedDeployments(installedServers, this.personalK8sApi, this.personalK8sAppsApi, this.personalNamespace).catch((err) => {
+          logger.warn({ err }, "Failed to cleanup orphaned personal MCP deployments");
+        });
+      }
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -327,6 +397,12 @@ export class McpServerRuntimeManager {
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
 
       logger.info("K8s connection verified successfully");
+
+      if (this.personalK8sApi) {
+        logger.info(`Verifying personal K8s connection to namespace: ${this.personalNamespace}`);
+        await this.personalK8sApi.listNamespacedPod({ namespace: this.personalNamespace });
+        logger.info("Personal K8s connection verified successfully");
+      }
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to connect to Kubernetes: ${errorMsg}`);
@@ -453,18 +529,22 @@ export class McpServerRuntimeManager {
         }
       }
 
+      const clients = this.getK8sClientsForServer(mcpServer);
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sNetworkingApi: this.k8sNetworkingApi,
-        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(
-          catalogItem,
-          options?.networkPolicyResolutionCache,
-        ),
+        k8sApi: clients.k8sApi,
+        k8sAppsApi: clients.k8sAppsApi,
+        k8sNetworkingApi: clients.k8sNetworkingApi,
+        k8sCustomObjectsApi: clients.k8sCustomObjectsApi,
+        k8sAttach: clients.k8sAttach,
+        k8sLog: clients.k8sLog,
+        namespace:
+          mcpServer.scope === "personal"
+            ? clients.namespace
+            : await this.resolveNamespaceForCatalog(
+                catalogItem,
+                options?.networkPolicyResolutionCache,
+              ),
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -475,9 +555,9 @@ export class McpServerRuntimeManager {
         }),
         networkPolicyCapabilities:
           options?.networkPolicyCapabilities ??
-          (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
+          (await getK8sCapabilitiesFromApi(clients.k8sCustomObjectsApi))
             .networkPolicy,
-        k8sExec: this.k8sExec,
+        k8sExec: clients.k8sExec,
       });
 
       // Register the deployment BEFORE starting it
@@ -663,26 +743,29 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
+      const clients = this.getK8sClientsForServer(mcpServer);
       const k8sDeployment = new K8sDeployment({
         mcpServer,
-        k8sApi: this.k8sApi,
-        k8sAppsApi: this.k8sAppsApi,
-        k8sNetworkingApi: this.k8sNetworkingApi,
-        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
-        k8sAttach: this.k8sAttach,
-        k8sLog: this.k8sLog,
+        k8sApi: clients.k8sApi,
+        k8sAppsApi: clients.k8sAppsApi,
+        k8sNetworkingApi: clients.k8sNetworkingApi,
+        k8sCustomObjectsApi: clients.k8sCustomObjectsApi,
+        k8sAttach: clients.k8sAttach,
+        k8sLog: clients.k8sLog,
         namespace:
           namespaceOverride ??
-          (await this.resolveNamespaceForCatalog(catalogItem)),
+          (mcpServer.scope === "personal"
+            ? clients.namespace
+            : await this.resolveNamespaceForCatalog(catalogItem)),
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
           mcpServer,
           catalogItem,
         }),
         networkPolicyCapabilities: (
-          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+          await getK8sCapabilitiesFromApi(clients.k8sCustomObjectsApi)
         ).networkPolicy,
-        k8sExec: this.k8sExec,
+        k8sExec: clients.k8sExec,
       });
 
       // Teardown path (explicit namespace): skip endpoint resolution and the
@@ -1219,8 +1302,10 @@ export class McpServerRuntimeManager {
    */
   private async backfillRegcredTeamLabels(
     installedServers: McpServer[],
+    k8sApi: k8s.CoreV1Api | undefined = this.k8sApi,
+    namespace: string = this.namespace,
   ): Promise<void> {
-    if (!this.k8sApi) return;
+    if (!k8sApi) return;
 
     const serverIdToTeamId = new Map<string, string>();
     for (const server of installedServers) {
@@ -1232,8 +1317,8 @@ export class McpServerRuntimeManager {
     if (serverIdToTeamId.size === 0) return;
 
     try {
-      const secrets = await this.k8sApi.listNamespacedSecret({
-        namespace: this.namespace,
+      const secrets = await k8sApi.listNamespacedSecret({
+        namespace: namespace,
         labelSelector: "app=mcp-server,type=regcred",
         fieldSelector: "type=kubernetes.io/dockerconfigjson",
       });
@@ -1252,9 +1337,9 @@ export class McpServerRuntimeManager {
         if (!secretName) continue;
 
         try {
-          await this.k8sApi.patchNamespacedSecret({
+          await k8sApi.patchNamespacedSecret({
             name: secretName,
-            namespace: this.namespace,
+            namespace: namespace,
             body: {
               metadata: {
                 labels: {
@@ -1288,8 +1373,11 @@ export class McpServerRuntimeManager {
    */
   private async cleanupOrphanedDeployments(
     installedServers: McpServer[],
+    k8sApi: k8s.CoreV1Api | undefined = this.k8sApi,
+    k8sAppsApi: k8s.AppsV1Api | undefined = this.k8sAppsApi,
+    namespace: string = this.namespace,
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) return;
+    if (!k8sApi || !k8sAppsApi) return;
 
     const serverById = new Map<string, McpServer>();
     for (const server of installedServers) {
@@ -1311,8 +1399,8 @@ export class McpServerRuntimeManager {
     };
 
     try {
-      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
-        namespace: this.namespace,
+      const deployments = await k8sAppsApi.listNamespacedDeployment({
+        namespace: namespace,
         labelSelector: "app=mcp-server",
       });
 
@@ -1341,9 +1429,9 @@ export class McpServerRuntimeManager {
         );
 
         try {
-          await this.k8sAppsApi.deleteNamespacedDeployment({
+          await k8sAppsApi.deleteNamespacedDeployment({
             name: deploymentName,
-            namespace: this.namespace,
+            namespace: namespace,
           });
         } catch (err) {
           logger.warn(
@@ -1353,9 +1441,9 @@ export class McpServerRuntimeManager {
         }
 
         try {
-          await this.k8sApi.deleteNamespacedService({
+          await k8sApi.deleteNamespacedService({
             name: `${deploymentName}-service`,
-            namespace: this.namespace,
+            namespace: namespace,
           });
         } catch (err) {
           logger.debug(

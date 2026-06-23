@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
@@ -776,6 +777,7 @@ export function LocalServerInstallDialog({
                           <Input
                             id={`env-${env.key}`}
                             type="password"
+                            autoComplete={MCP_SECRET_AUTOCOMPLETE}
                             value={environmentValues[env.key] || ""}
                             onChange={(e) =>
                               handleEnvVarChange(env.key, e.target.value)
@@ -980,6 +982,7 @@ export function LocalServerInstallDialog({
                         <Input
                           id={`user-config-${fieldName}`}
                           type="password"
+                          autoComplete={MCP_SECRET_AUTOCOMPLETE}
                           value={userConfigValues[fieldName] || ""}
                           onChange={(e) =>
                             handleUserConfigChange(fieldName, e.target.value)

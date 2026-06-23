@@ -12,6 +12,10 @@ import {
 import { createPortal } from "react-dom";
 import { useApps } from "@/components/chat/apps-context";
 import {
+  getAppRenderVerb,
+  isSupersededOwnedRender,
+} from "@/components/chat/chat-messages.utils";
+import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
   useInlineCeiling,
@@ -22,6 +26,7 @@ import {
 } from "@/components/mcp-app/mcp-app-actions";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
+  McpAppChangelogPill,
   McpAppRefreshButton,
   McpAppSidebarButton,
   McpAppTopBar,
@@ -219,6 +224,20 @@ export function McpAppSection({
 
   if (effectiveResourceState === "empty") {
     return null;
+  }
+
+  // A superseded owned-app render (a newer render of the same app exists in the
+  // conversation) collapses to a static changelog pill instead of mounting the
+  // live runtime — only the latest render of each app stays live. External
+  // MCP-UI renders have no appId and are distinct invocations, never superseded.
+  if (appId && isSupersededOwnedRender({ apps, appId, toolCallId })) {
+    return (
+      <McpAppChangelogPill
+        appName={appName ?? null}
+        version={appVersion ?? null}
+        verb={getAppRenderVerb(toolName)}
+      />
+    );
   }
 
   const diagnosticsBadge =

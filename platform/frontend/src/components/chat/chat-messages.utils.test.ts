@@ -8,6 +8,7 @@ import {
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
+  getAppRenderVerb,
   hasTextPart,
   identifyCompactToolGroups,
   isSupersededOwnedRender,
@@ -741,5 +742,17 @@ describe("isSupersededOwnedRender", () => {
     expect(
       isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc1" }),
     ).toBe(false);
+  });
+});
+
+describe("getAppRenderVerb", () => {
+  it("maps each app-rendering tool to its past-tense verb", () => {
+    expect(getAppRenderVerb("archestra__scaffold_app")).toBe("Created");
+    expect(getAppRenderVerb("archestra__edit_app")).toBe("Updated");
+    expect(getAppRenderVerb("archestra__render_app")).toBe("Rendered");
+  });
+
+  it("returns null for non-app tools", () => {
+    expect(getAppRenderVerb("google__search")).toBeNull();
   });
 });

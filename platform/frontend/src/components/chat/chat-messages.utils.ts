@@ -1,11 +1,15 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  getArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
@@ -149,6 +153,25 @@ export function isSupersededOwnedRender(params: {
 }): boolean {
   const latest = params.apps.find((a) => a.appId === params.appId)?.toolCallId;
   return latest !== undefined && latest !== params.toolCallId;
+}
+
+/**
+ * Past-tense verb describing what an owned-app render did, derived from the tool
+ * that produced it — used as the trailing label on a superseded render's
+ * changelog pill (e.g. "Dashboard · v2 · Updated"). Returns `null` for unknown
+ * tools so the pill simply omits the verb.
+ */
+export function getAppRenderVerb(toolName: string): string | null {
+  switch (getArchestraToolShortName(toolName, { includeDefaultPrefix: true })) {
+    case TOOL_SCAFFOLD_APP_SHORT_NAME:
+      return "Created";
+    case TOOL_EDIT_APP_SHORT_NAME:
+      return "Updated";
+    case TOOL_RENDER_APP_SHORT_NAME:
+      return "Rendered";
+    default:
+      return null;
+  }
 }
 
 /**

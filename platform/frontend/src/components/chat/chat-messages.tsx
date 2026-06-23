@@ -12,10 +12,7 @@ import {
   SWAP_AGENT_POKE_PREFIX,
   SWAP_AGENT_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
-  TOOL_EDIT_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SWAP_AGENT_FULL_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
@@ -62,7 +59,6 @@ import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
-import { McpAppChangelogPill } from "@/components/mcp-app/mcp-app-chrome";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
@@ -101,7 +97,6 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
-import { useApps } from "./apps-context";
 import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
   extractFileAttachments,
@@ -109,7 +104,6 @@ import {
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
-  isSupersededOwnedRender,
   resolveRunToolTargetName,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
@@ -1463,22 +1457,6 @@ function ChatScrollButton({
   );
 }
 
-/** Past-tense verb for an owned-app render's changelog pill, from its tool. */
-function getAppRenderVerb(
-  shortName: ArchestraToolShortName | null,
-): string | null {
-  switch (shortName) {
-    case TOOL_SCAFFOLD_APP_SHORT_NAME:
-      return "Created";
-    case TOOL_EDIT_APP_SHORT_NAME:
-      return "Updated";
-    case TOOL_RENDER_APP_SHORT_NAME:
-      return "Rendered";
-    default:
-      return null;
-  }
-}
-
 const MessageTool = memo(
   function MessageTool({
     part,
@@ -1583,10 +1561,6 @@ const MessageTool = memo(
     const shouldDefaultOpen = isApprovalRequested;
 
     // Hooks must be called before any early returns
-    // The deduped app registry tells us which render of an owned app is the
-    // latest; superseded renders collapse to a static changelog pill so only the
-    // newest render of each app keeps a live iframe.
-    const { apps } = useApps();
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
     const [userDenied, setUserDenied] = useState(false);
     const [userHasInteracted, setUserHasInteracted] = useState(false);
@@ -1715,20 +1689,6 @@ const MessageTool = memo(
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
 
-    // A superseded owned-app render (a newer render of the same app exists in
-    // the conversation) collapses to a static changelog pill instead of a live
-    // iframe — only the latest render of each app stays live.
-    const ownedRenderSuperseded =
-      ownedApp != null &&
-      isSupersededOwnedRender({
-        apps,
-        appId: ownedApp.appId,
-        toolCallId: part.toolCallId,
-      });
-    const ownedRenderVerb = ownedApp
-      ? getAppRenderVerb(getToolShortName(mcpAppToolName))
-      : null;
-
     // MCP App tools: compact circle + canvas below (no collapsible wrapper)
     if ((uiResourceUri || ownedApp) && !isApprovalRequested && !errorText) {
       const compactState = getCompactToolState({ part, toolResultPart });
@@ -1821,12 +1781,6 @@ const MessageTool = memo(
                       : undefined
                   }
                   onSendMessage={onSendMessage}
-                />
-              ) : ownedApp && ownedRenderSuperseded ? (
-                <McpAppChangelogPill
-                  appName={ownedApp.appName}
-                  version={ownedApp.latestVersion}
-                  verb={ownedRenderVerb}
                 />
               ) : ownedApp ? (
                 <McpAppSection

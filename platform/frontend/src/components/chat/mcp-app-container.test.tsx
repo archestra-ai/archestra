@@ -574,6 +574,76 @@ describe("McpAppSection sidebar hosting", () => {
   });
 });
 
+describe("McpAppSection superseded renders", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("collapses to a changelog pill when a newer render of the same app exists", async () => {
+    await act(async () => {
+      render(
+        // Registry's latest render of APP_ID is tc2, so the tc1 section below is
+        // superseded and must render the static pill, not a live iframe.
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc2",
+              label: "Dashboard",
+              appId: APP_ID,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(screen.getByText(/Dashboard · v1 · Updated/)).toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("renders the live surface for the latest render of an app", async () => {
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              appId: APP_ID,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
+  });
+});
+
 describe("McpAppSection error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();

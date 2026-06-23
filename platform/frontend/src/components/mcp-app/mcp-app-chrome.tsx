@@ -3,9 +3,9 @@ import {
   AppWindow,
   ChevronDown,
   type LucideIcon,
-  Minimize,
   PanelRight,
   RefreshCw,
+  SquareArrowOutDownLeft,
   SquareArrowOutUpRight,
 } from "lucide-react";
 import Link from "next/link";
@@ -176,7 +176,7 @@ export function McpAppFullscreenExitButton({
 }) {
   return (
     <McpAppIconButton
-      icon={Minimize}
+      icon={SquareArrowOutDownLeft}
       label="Exit fullscreen"
       onClick={onClick}
     />

@@ -5,9 +5,22 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { type Mock, vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
+import { createServerScopedServer } from "./mcp-server-gateway.utils";
 import mcpServerProxyRoutes from "./mcp-server-proxy";
+
+// Stub the MCP transport boundary so a request that passes the access +
+// visibility gates surfaces as a 500 instead of hijacking the socket. A gate
+// *rejection* returns a 200 JSON-RPC error and never reaches this, which is
+// exactly what lets these tests assert "the request got through the gate".
+vi.mock("./mcp-server-gateway.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./mcp-server-gateway.utils")>()),
+  createServerScopedServer: vi.fn(),
+}));
+
+const mockCreateServerScopedServer = createServerScopedServer as Mock;
 
 async function buildApp(
   userId: string,
@@ -175,5 +188,94 @@ describe("mcpServerProxyRoutes POST /api/mcp/server/:mcpServerId", () => {
       payload: rpc("tools/call", { name: "modelonly", arguments: {} }),
     });
     expect(res.json().error.code).toBe(-32601);
+  });
+});
+
+describe("mcpServerProxyRoutes gate pass-through", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    mockCreateServerScopedServer.mockReset();
+    if (app) await app.close();
+  });
+
+  test("an app-visible tools/call passes the gate and reaches the transport", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "appcallable",
+      meta: { _meta: { ui: { visibility: ["app"] } } },
+    });
+    mockCreateServerScopedServer.mockImplementation(() => {
+      throw new Error("transport unavailable in test");
+    });
+    app = await buildApp(user.id, org.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/call", { name: "appcallable", arguments: {} }),
+    });
+
+    // Passed the visibility gate (a rejection would be a 200 JSON-RPC error),
+    // so execution proceeded into the transport setup.
+    expect(res.statusCode).toBe(500);
+    expect(mockCreateServerScopedServer).toHaveBeenCalledWith({
+      mcpServerId: server.id,
+      catalogId: catalog.id,
+    });
+  });
+
+  test("a non-tools/call method bypasses the tool-visibility gate", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    mockCreateServerScopedServer.mockImplementation(() => {
+      throw new Error("transport unavailable in test");
+    });
+    app = await buildApp(user.id, org.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/list", {}),
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(mockCreateServerScopedServer).toHaveBeenCalledWith({
+      mcpServerId: server.id,
+      catalogId: catalog.id,
+    });
   });
 });

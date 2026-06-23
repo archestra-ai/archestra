@@ -720,9 +720,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   fastify.route({
     method: "POST",
     url: "/api/auth/sign-in/sso",
@@ -751,7 +751,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send(response.body ? await response.text() : null);
     },
   });
-// SPDX-SnippetEnd
+  // SPDX-SnippetEnd
 
   // Existing auth handler for all other auth routes
   fastify.route({

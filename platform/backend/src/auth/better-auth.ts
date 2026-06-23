@@ -1469,9 +1469,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         }
       }
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
@@ -1486,7 +1486,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
       }
-// SPDX-SnippetEnd
+      // SPDX-SnippetEnd
     }
   }
 }

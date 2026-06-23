@@ -53,16 +53,16 @@ export function KnowledgeSourceVisibilitySelector({
   const knowledgeBaseEnterprise = useEnterpriseFeature("knowledgeBase");
 
   const options = visibilityEntries
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     .filter(
       ([value]) =>
         value !== "team-scoped" ||
         knowledgeBaseEnterprise ||
         visibility === "team-scoped",
     )
-// SPDX-SnippetEnd
+    // SPDX-SnippetEnd
     .map(([value, option]) => ({
       ...option,
       value,

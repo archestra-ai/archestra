@@ -14,11 +14,11 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 
 export function useArchestraMcpIdentity() {
   const appName = useAppName();
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const fullWhiteLabeling = appConfig.enterpriseFeatures.fullWhiteLabeling;
-// SPDX-SnippetEnd
+  // SPDX-SnippetEnd
 
   return useMemo(() => {
     const options = {

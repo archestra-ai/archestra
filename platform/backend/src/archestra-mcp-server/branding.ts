@@ -37,15 +37,15 @@ class ArchestraMcpBranding {
     return getArchestraToolPrefix(this.identity);
   }
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   get iconLogo(): string | null {
     return config.enterpriseFeatures.fullWhiteLabeling
       ? this.state.iconLogo
       : null;
   }
-// SPDX-SnippetEnd
+  // SPDX-SnippetEnd
 
   get allowedServerNames(): string[] {
     return Array.from(

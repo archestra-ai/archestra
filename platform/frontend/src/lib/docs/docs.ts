@@ -10,13 +10,13 @@ export function getFrontendDocsUrl(
   page: DocsPage,
   anchor?: string,
 ): string | null {
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (appConfig.enterpriseFeatures.fullWhiteLabeling) {
     return null;
   }
-// SPDX-SnippetEnd
+  // SPDX-SnippetEnd
 
   return getDocsUrl(page, anchor);
 }
@@ -32,16 +32,16 @@ export function getVisibleDocsUrl(
     return null;
   }
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (
     appConfig.enterpriseFeatures.fullWhiteLabeling &&
     url.startsWith(WEBSITE_URL)
   ) {
     return null;
   }
-// SPDX-SnippetEnd
+  // SPDX-SnippetEnd
 
   return url;
 }

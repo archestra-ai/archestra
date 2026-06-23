@@ -4,7 +4,6 @@ import {
   type archestraApiTypes,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_FILENAME,
-  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import {
@@ -27,13 +26,17 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
   type FileListItem,
   FileSection,
 } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
+import {
+  INSTRUCTIONS_SELECTION,
+  InstructionsRow,
+  ProjectInstructionsPanel,
+} from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -61,8 +64,6 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
-  useProjectInstructions,
-  useSetProjectInstructions,
   useSetProjectShare,
   useUpdateProject,
 } from "@/lib/projects/projects.query";
@@ -295,9 +296,6 @@ function ChatsList({
  * Files panel: same resizable shell, same tab header, same stacked
  * list-over-preview body.
  */
-/** Sentinel selection id for the pinned instructions entry (not a file ref). */
-const INSTRUCTIONS_SELECTION = "__project_instructions__";
-
 function ProjectFilesSidebar({
   projectId,
   projectName,
@@ -401,174 +399,6 @@ function ProjectFilesSidebar({
         </div>
       </Tabs>
     </ResizableRightPanel>
-  );
-}
-
-/** The always-present, pinned instructions entry at the top of the file list. */
-function InstructionsRow({
-  selected,
-  hasContent,
-  onSelect,
-}: {
-  selected: boolean;
-  hasContent: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-        selected ? "border-primary/40 bg-muted" : "hover:bg-muted/50",
-      )}
-    >
-      <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {PROJECT_INSTRUCTIONS_FILENAME}
-        </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {hasContent
-            ? "Project instructions for every chat"
-            : "Empty — add instructions for every chat"}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-/**
- * The instructions surface for the pinned entry. The owner lands straight in the
- * editor (no repeated filename header, no Edit button); non-owners get a
- * read-only rendered view with a Close.
- */
-function ProjectInstructionsPanel({
-  projectId,
-  isOwner,
-  onClose,
-}: {
-  projectId: string;
-  isOwner: boolean;
-  onClose: () => void;
-}) {
-  const { data, isPending } = useProjectInstructions(projectId);
-  const setInstructions = useSetProjectInstructions();
-  const content = data?.content ?? "";
-
-  if (isPending) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <p className="p-4 text-xs text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  if (isOwner) {
-    return (
-      <InstructionsEditor
-        initialContent={content}
-        saving={setInstructions.isPending}
-        onCancel={onClose}
-        onSave={async (value) => {
-          const ok = await setInstructions.mutateAsync({
-            id: projectId,
-            content: value,
-          });
-          if (ok) onClose();
-        }}
-      />
-    );
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-end border-b px-3 py-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground"
-          onClick={onClose}
-        >
-          Close
-        </Button>
-      </div>
-      {content.trim() ? (
-        <ConversationArtifactPanel
-          artifact={content}
-          isOpen
-          onToggle={onClose}
-          embedded
-          hideHeader
-        />
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-          The project owner hasn't added any instructions.
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * The textarea editor. Mounts only once the content has loaded, so the draft is
- * seeded directly from `initialContent`. Save persists and (via onSave)
- * collapses the panel; Cancel just collapses.
- */
-function InstructionsEditor({
-  initialContent,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  initialContent: string;
-  saving: boolean;
-  onSave: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState(initialContent);
-  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Instructions that apply to every chat in this project…"
-        className="min-h-40 flex-1 resize-none font-mono text-xs"
-        autoFocus
-      />
-      <div className="flex items-center justify-between">
-        <span
-          className={cn(
-            "text-[11px]",
-            overLimit ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {draft.length.toLocaleString()} /{" "}
-          {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onSave(draft)}
-            disabled={saving || overLimit}
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
 

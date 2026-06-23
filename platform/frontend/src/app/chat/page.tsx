@@ -1882,6 +1882,7 @@ export function ChatPageContent({
                     <ConversationFilesPanel
                       conversationId={conversationId}
                       artifact={conversation?.artifact}
+                      projectId={conversation?.projectId}
                       onClose={closeRightPanel}
                     />
                   </div>
@@ -2221,6 +2222,7 @@ export function ChatPageContent({
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
             artifact={conversation?.artifact}
+            projectId={conversation?.projectId}
             conversationId={conversationId}
             agentId={browserToolsAgentId}
             onCreateConversationWithUrl={handleCreateConversationWithUrl}

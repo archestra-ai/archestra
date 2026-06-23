@@ -1,0 +1,62 @@
+[
+  {
+    "material_name": "Steel Beam W12",
+    "quantity": 320,
+    "unit_cost_cents": 41275,
+    "level": "L2"
+  },
+  {
+    "material_name": "Ceiling Tile",
+    "quantity": 4800,
+    "unit_cost_cents": 239,
+    "level": "L4"
+  },
+  {
+    "material_name": "Floor Joist",
+    "quantity": 1150,
+    "unit_cost_cents": 1860,
+    "level": "L1"
+  },
+  {
+    "material_name": "Anchor Bolt",
+    "quantity": 9200,
+    "unit_cost_cents": 42,
+    "level": "BASEMENT"
+  },
+  {
+    "material_name": "Glass Panel",
+    "quantity": 260,
+    "unit_cost_cents": 13495,
+    "level": "L3"
+  },
+  {
+    "material_name": "HVAC Duct Section",
+    "quantity": 540,
+    "unit_cost_cents": 5600,
+    "level": "ROOF"
+  },
+  {
+    "material_name": "Copper Wire 12AWG",
+    "quantity": 7750,
+    "unit_cost_cents": 19,
+    "level": "L2"
+  },
+  {
+    "material_name": "Fire Sprinkler Head",
+    "quantity": 430,
+    "unit_cost_cents": 2250,
+    "level": "L4"
+  },
+  {
+    "material_name": "Sheet Metal Flashing",
+    "quantity": 1600,
+    "unit_cost_cents": 908,
+    "level": "ROOF"
+  },
+  {
+    "material_name": "Ductile Iron Fitting",
+    "quantity": 88,
+    "unit_cost_cents": 7130,
+    "level": "BASEMENT"
+  }
+]

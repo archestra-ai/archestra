@@ -1,0 +1,70 @@
+[[stages]]
+text = """Hey, I'm the renewals lead and I'm prepping for our quarterly churn review. I've pulled together four files on the accounts coming up for renewal and I could use a hand turning them into a shortlist. They're attached:
+
+- crm_accounts.csv - one row per account with its ARR, segment, and renewal date.
+- usage_logs.jsonl - two lines per account, the prior period and current period active-user counts.
+- support_tickets.csv - the support tickets we've logged per account, with severity and status.
+- invoices.csv - billing status per account, paid or overdue.
+
+The way we usually score churn risk, treating July 1 2026 as the reference date for anything time-based: for each account we work out four drivers, each normalized to land between 0 and 1.
+
+- usage_decline_norm = clamp((prev - curr)/prev, 0, 1) using that account's prev/curr active_users; if prev==0 then 0.
+- support_load_norm = min(count of tickets with severity=="high" AND status=="open" for the account, 3) / 3.
+- billing_norm = min(count of invoices with status=="overdue" for the account, 2) / 2.
+- renewal_timing_norm: days_to_renewal = (renewal_date - 2026-07-01).days; if days_to_renewal <= 0 then 1.0; elif days_to_renewal >= 90 then 0.0; else (90 - days_to_renewal)/90.
+
+Then we weight them - usage 0.40, support 0.25, billing 0.20, renewal 0.15 - and roll it up into a single score:
+
+score = 100 * (0.40*usage_decline_norm + 0.25*support_load_norm + 0.20*billing_norm + 0.15*renewal_timing_norm).
+
+For each account I also like to call out the top driver, meaning the driver with the largest weighted contribution (weight_i * norm_i); the codes are "usage_decline", "support_load", "billing", "renewal_timing", and when there's a tie we break it by that listed order (usage_decline wins ties, then support_load, etc.).
+
+What I need from you is the ranking - the top 5 accounts by score descending, breaking ties by score desc, then arr_usd desc, then account_id ascending - plus the total ARR at risk across those five, and the main driver behind each of them.
+
+Send it back with submit_result: ranking as a list of the five account_id strings in order, arr_at_risk_usd as the summed ARR over those five, and top_drivers as an object mapping each of those five account_id values to its driver code."""
+
+  [[stages.files]]
+  src = "crm_accounts.csv"
+  dest = "/home/sandbox/attachments/crm_accounts.csv"
+  mime_type = "text/csv"
+
+  [[stages.files]]
+  src = "usage_logs.jsonl"
+  dest = "/home/sandbox/attachments/usage_logs.jsonl"
+  mime_type = "application/octet-stream"
+
+  [[stages.files]]
+  src = "support_tickets.csv"
+  dest = "/home/sandbox/attachments/support_tickets.csv"
+  mime_type = "text/csv"
+
+  [[stages.files]]
+  src = "invoices.csv"
+  dest = "/home/sandbox/attachments/invoices.csv"
+  mime_type = "text/csv"
+
+[result_schema]
+type = "object"
+required = ["ranking", "arr_at_risk_usd", "top_drivers"]
+additionalProperties = false
+
+  [result_schema.properties.ranking]
+  type = "array"
+  minItems = 5
+  maxItems = 5
+
+    [result_schema.properties.ranking.items]
+    type = "string"
+
+  [result_schema.properties.arr_at_risk_usd]
+  type = "number"
+  minimum = 0
+
+  [result_schema.properties.top_drivers]
+  type = "object"
+
+    [result_schema.properties.top_drivers.additionalProperties]
+    enum = ["usage_decline", "support_load", "billing", "renewal_timing"]
+
+[verifier]
+deps = []

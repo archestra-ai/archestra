@@ -1,0 +1,64 @@
+[[stages]]
+text = """Handing off the overnight shift -- I've attached flows.csv, a flow export from last night's traffic. Columns are src_ip, dst_ip, dst_port, proto, packets, bytes, first_ts, last_ts (timestamps are epoch seconds). Could you run our usual triage over it and tell me which source IPs look suspicious?
+
+Here are the rules of thumb we use:
+
+- Port scanning: group flows by (src_ip, dst_ip). A src_ip is scanning if for some dst_ip the number of distinct dst_port values is more than 20.
+- Flood / DoS: a src_ip is flooding if any single flow has a rate above 1000 packets per second, where rate = packets / max(1, last_ts - first_ts).
+- Beaconing / C2: group flows by (src_ip, dst_ip). If a pair has 5 or more flows, sort them by first_ts and look at the gaps between consecutive first_ts values; the src_ip is beaconing if the spread of those gaps (max gap minus min gap) is 5 seconds or less.
+
+I'd also like the protocol breakdown -- the count of flows per proto value.
+
+Send it back with submit_result as result = {"protocol_counts": {"<proto>": <count>, ...}, "port_scan_src_ips": [...], "dos_src_ips": [...], "beaconing_src_ips": [...], "flags": {"port_scan": <bool>, "dos": <bool>, "beaconing": <bool>}}, where each flag says whether the matching list came back non-empty."""
+
+  [[stages.files]]
+  src = "flows.csv"
+  dest = "/home/sandbox/attachments/flows.csv"
+  mime_type = "text/csv"
+
+[result_schema]
+type = "object"
+required = ["protocol_counts", "port_scan_src_ips", "dos_src_ips", "beaconing_src_ips", "flags"]
+additionalProperties = false
+
+  [result_schema.properties.protocol_counts]
+  type = "object"
+
+    [result_schema.properties.protocol_counts.additionalProperties]
+    type = "integer"
+    minimum = 0
+
+  [result_schema.properties.port_scan_src_ips]
+  type = "array"
+
+    [result_schema.properties.port_scan_src_ips.items]
+    type = "string"
+
+  [result_schema.properties.dos_src_ips]
+  type = "array"
+
+    [result_schema.properties.dos_src_ips.items]
+    type = "string"
+
+  [result_schema.properties.beaconing_src_ips]
+  type = "array"
+
+    [result_schema.properties.beaconing_src_ips.items]
+    type = "string"
+
+  [result_schema.properties.flags]
+  type = "object"
+  required = ["port_scan", "dos", "beaconing"]
+  additionalProperties = false
+
+    [result_schema.properties.flags.properties.port_scan]
+    type = "boolean"
+
+    [result_schema.properties.flags.properties.dos]
+    type = "boolean"
+
+    [result_schema.properties.flags.properties.beaconing]
+    type = "boolean"
+
+[verifier]
+deps = []

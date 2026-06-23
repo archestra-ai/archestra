@@ -100,8 +100,12 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `decode-cipher` | basic | ✓ | | | use | | | |
 | `xlsx-live-formulas` | basic | ✓ | | ✓ | use | | | |
 | `purchase-ledger` | basic | ✓ | | | | | messy-data | persist |
+| `aec-material-json-takeoff` | basic | ✓ | ✓ | ✓ | | | messy-data | |
+| `renewal-churn-risk` | basic | ✓ | ✓ | | | | | |
+| `pcap-soc-triage` | basic | ✓ | ✓ | | | | red-herring | |
 | `author-skill` | archestra-api | ✓ | | | author | | | state |
 | `letter-count` | archestra-api | | | | | | | state |
+| `author-aec-normalizer-skill` | archestra-api | ✓ | ✓ | | author | | | state |
 
 - **Sandbox** — needs code execution in the per-conversation sandbox.
 - **File in** — a file is staged into the sandbox as an attachment (PDF/DOCX/XLSX/SQLite/zip); the task
@@ -170,7 +174,8 @@ read-only against backend state), and a set of sandbox tasks including —
   distinguished from a genuinely-expired-token red herring.
 
 `archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
-tool and skill catalog is the subject under test; `tools = ["create_skill"]`) with two tasks —
+tool and skill catalog is the subject under test; `tools = ["create_skill", "update_skill"]`) with
+three tasks —
 
 - `author-skill` — author a skill bundling a Python script (turn 1), then load and run it to compute
   an answer (turn 2); the verifier confirms via `BENCH_STATE` that the skill exists with a bundled
@@ -178,6 +183,11 @@ tool and skill catalog is the subject under test; `tools = ["create_skill"]`) wi
 - `letter-count` — count how many of the agent's tools + the instance's skills have a name containing
   the letter 'a' exactly three times; the verifier recomputes the count from the snapshotted
   `/api/agents/<id>/tools` + `/api/skills`, so there is no hardcoded answer.
+- `author-aec-normalizer-skill` — author a reusable material-export normalizer skill and run it on one
+  vendor schema (turn 1), then *update that same skill* for a second, differently-shaped schema and
+  rerun (turn 2); the verifier confirms via `BENCH_STATE` that exactly one manual skill exists, was
+  updated in place (version advanced, not recreated), and ran the bundled script on both files, and
+  that the submitted normalized rows match the recompute.
 
 ## Lifecycle: fresh backend over shared infra
 

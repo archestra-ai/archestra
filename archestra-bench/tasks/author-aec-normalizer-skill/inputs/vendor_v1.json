@@ -1,0 +1,56 @@
+[
+  {
+    "mat": "  2x4 Lumber  ",
+    "qty": "1,200",
+    "cost_ea": 3.45,
+    "lvl": "l1"
+  },
+  {
+    "mat": "Drywall Sheet",
+    "qty": "850",
+    "cost_ea": 12.99,
+    "lvl": "l2"
+  },
+  {
+    "mat": " Rebar #4 ",
+    "qty": "2,400",
+    "cost_ea": 0.87,
+    "lvl": "l1"
+  },
+  {
+    "mat": "Concrete Mix Bag",
+    "qty": "3,000",
+    "cost_ea": 6.5,
+    "lvl": "roof"
+  },
+  {
+    "mat": "  Roofing Shingle ",
+    "qty": "12,500",
+    "cost_ea": 1.15,
+    "lvl": "roof"
+  },
+  {
+    "mat": "Insulation Roll",
+    "qty": "640",
+    "cost_ea": 42.0,
+    "lvl": "l3"
+  },
+  {
+    "mat": " PVC Pipe 2in ",
+    "qty": "1,050",
+    "cost_ea": 7.33,
+    "lvl": "l2"
+  },
+  {
+    "mat": "Door Frame",
+    "qty": "75",
+    "cost_ea": 88.49,
+    "lvl": "l1"
+  },
+  {
+    "mat": "  Window Unit",
+    "qty": "120",
+    "cost_ea": 245.0,
+    "lvl": "l3"
+  }
+]

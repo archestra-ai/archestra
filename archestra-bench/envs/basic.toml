@@ -1,6 +1,6 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage"]
 
 # These tasks don't mutate shared backend state (the skill/tool catalog), and the skill surface is
 # large + web-pinned -- so seed one backend once and let concurrent lanes share it. Sandbox workspaces

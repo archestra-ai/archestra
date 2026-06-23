@@ -1,0 +1,87 @@
+artifact_key = "artifact"
+
+[[stages]]
+text = """Hey, can you put together a material cost takeoff for me? I've attached materials.json -- it's
+our line-item export for the building, one entry per material with a trade, a level, a quantity, a
+unit cost, and (sometimes) a spec section.
+
+I need three things:
+
+- The total cost broken down by trade, and separately broken down by floor/level.
+- A list of the line items that are still missing their spec section, so I can chase those down.
+- An Excel (.xlsx) summary of the takeoff I can share with the team.
+
+A few things about how I want the numbers computed:
+
+- A line's cost is its quantity times its unit cost. The quantities came out of the old system a bit
+  messy -- some have thousands separators (commas) in them -- so strip the commas before multiplying.
+- One of the lines is marked voided; that line doesn't count toward any of the totals, and it
+  shouldn't show up in the missing-spec list either.
+- Group the trade totals by the trade name and the level totals by the level name.
+- The grand total is the sum of every line that isn't voided.
+- For the missing-spec list, I want the material id of every line (other than the voided one) whose
+  spec section is blank or missing. Those lines still cost money, so they stay in the cost totals --
+  it's just the spec reference that's missing.
+
+When it's ready, export the workbook with download_file and send it over with submit_result like:
+result = {
+  "artifact": "<exported filename>",
+  "totals_by_trade": [{"trade": "<name>", "total_cost": <number>}, ...],
+  "totals_by_level": [{"level": "<name>", "total_cost": <number>}, ...],
+  "missing_spec_material_ids": ["<material_id>", ...],
+  "grand_total_cost": <number>
+}"""
+
+  [[stages.files]]
+  src = "materials.json"
+  dest = "/home/sandbox/attachments/materials.json"
+  mime_type = "application/json"
+
+[result_schema]
+type = "object"
+required = ["artifact", "totals_by_trade", "totals_by_level", "missing_spec_material_ids", "grand_total_cost"]
+additionalProperties = false
+
+  [result_schema.properties.artifact]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.totals_by_trade]
+  type = "array"
+
+    [result_schema.properties.totals_by_trade.items]
+    type = "object"
+    required = ["trade", "total_cost"]
+    additionalProperties = false
+
+      [result_schema.properties.totals_by_trade.items.properties.trade]
+      type = "string"
+
+      [result_schema.properties.totals_by_trade.items.properties.total_cost]
+      type = "number"
+
+  [result_schema.properties.totals_by_level]
+  type = "array"
+
+    [result_schema.properties.totals_by_level.items]
+    type = "object"
+    required = ["level", "total_cost"]
+    additionalProperties = false
+
+      [result_schema.properties.totals_by_level.items.properties.level]
+      type = "string"
+
+      [result_schema.properties.totals_by_level.items.properties.total_cost]
+      type = "number"
+
+  [result_schema.properties.missing_spec_material_ids]
+  type = "array"
+
+    [result_schema.properties.missing_spec_material_ids.items]
+    type = "string"
+
+  [result_schema.properties.grand_total_cost]
+  type = "number"
+
+[verifier]
+deps = ["openpyxl==3.1.5"]

@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
-import { RouteId } from "@archestra/shared";
+import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
@@ -694,7 +695,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { catalogId } }, reply) => {
+    async ({ body: { catalogId }, organizationId }, reply) => {
       // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
       const catalogItem =
         await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
@@ -789,7 +790,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Attempting dynamic client registration",
           );
           registrationResult = await registerOAuthClient(registrationEndpoint, {
-            client_name: `Archestra Platform - ${catalogItem.name}`,
+            client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
             redirect_uris: [redirectUri],
             grant_types: ["authorization_code", "refresh_token"],
             response_types: ["code"],
@@ -1171,6 +1172,28 @@ function tryParseOAuthResourceUrl(oauthResource: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve the brand name used as the OAuth client name during dynamic client
+ * registration. This is the name remote MCP servers surface in their consent
+ * screens (e.g. "Archestra Platform - Atlassian Cloud MCP"). When enterprise
+ * full white-labeling is active and the organization has configured an app
+ * name, that name is used instead so the consent flow reflects the deployment's
+ * own branding. Falls back to the default product name otherwise.
+ */
+async function resolveOAuthClientBrandName(
+  organizationId: string,
+): Promise<string> {
+  const defaultBrandName = `${DEFAULT_APP_NAME} Platform`;
+
+  if (!config.enterpriseFeatures.fullWhiteLabeling) {
+    return defaultBrandName;
+  }
+
+  const organization = await OrganizationModel.getById(organizationId);
+  const appName = organization?.appName?.trim();
+  return appName || defaultBrandName;
 }
 
 export default oauthRoutes;

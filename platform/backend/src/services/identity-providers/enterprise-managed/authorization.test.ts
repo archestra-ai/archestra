@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";

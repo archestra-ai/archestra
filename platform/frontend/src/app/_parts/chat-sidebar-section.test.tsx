@@ -46,6 +46,15 @@ let mockConversations: Array<{
   updatedAt: string;
   messages: unknown[];
   agent: { id: string; name: string };
+  projectName?: string | null;
+  projectIcon?: string | null;
+}> = [];
+
+let mockProjects: Array<{
+  id: string;
+  name: string;
+  icon: string | null;
+  pinnedAt: string | null;
 }> = [];
 
 vi.mock("@/lib/chat/chat.query", () => ({
@@ -64,6 +73,21 @@ vi.mock("@/lib/chat/chat.query", () => ({
     variables: undefined,
   }),
   usePinConversation: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => true,
+}));
+
+vi.mock("@/lib/projects/projects.query", () => ({
+  useProjects: () => ({ data: mockProjects }),
+  usePinProject: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/components/agent-icon", () => ({
+  AgentIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="project-emoji">{icon}</span>
+  ),
 }));
 
 // Minimal sidebar UI mock - render children directly
@@ -172,6 +196,16 @@ vi.mock("@/lib/utils", () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
 }));
 
+vi.mock("lucide-react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("lucide-react")>();
+  return {
+    ...actual,
+    Folder: (props: React.SVGProps<SVGSVGElement>) => (
+      <svg aria-label="projects icon" {...props} />
+    ),
+  };
+});
+
 // Import after mocks
 import { ChatSidebarSection } from "./chat-sidebar-section";
 
@@ -199,6 +233,7 @@ describe("ChatSidebarSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConversations = [];
+    mockProjects = [];
   });
 
   it("does not render when no conversations exist", () => {
@@ -321,5 +356,73 @@ describe("ChatSidebarSection", () => {
 
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
+  });
+
+  it("shows a pinned project's emoji and name when an emoji is present", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Generic Project",
+        icon: "📌",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
+  });
+
+  it("shows the project folder icon and name when no emoji is set", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Generic Project",
+        icon: null,
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
+  });
+
+  it("shows a chat's project emoji and name when its project has an emoji", () => {
+    mockConversations = [
+      {
+        ...makeConv("c1", "Project Chat"),
+        projectName: "Generic Project",
+        projectIcon: "📌",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Project Chat")).toBeInTheDocument();
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
+    expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
+  });
+
+  it("shows a chat's project folder icon and name when the project has no emoji", () => {
+    mockConversations = [
+      {
+        ...makeConv("c1", "Project Chat"),
+        projectName: "Generic Project",
+        projectIcon: null,
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Project Chat")).toBeInTheDocument();
+    expect(screen.getByText("Generic Project")).toBeInTheDocument();
+    expect(screen.getByLabelText("projects icon")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 });

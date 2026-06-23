@@ -1325,6 +1325,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // `downloadable` and then 403 on every fetch. Project membership is still
   // enforced in the handler (projectService.listFiles -> requireReadable).
   [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  [RouteId.PinProject]: { project: ["read"] },
+  [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes

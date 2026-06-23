@@ -1,0 +1,109 @@
+# Short-lived benchmark Job. Runs the bench container against an ephemeral Postgres sidecar (zero blast
+# radius on staging's DB) and the shared staging Dagger engine (reached via kube-pod:// with the
+# platform service account's RBAC). The pod owns reporting: it uploads results to GCS and posts Slack,
+# so CI applies the Job and leaves. activeDeadlineSeconds / ttlSecondsAfterFinished handle teardown.
+# `${...}` are filled by envsubst.
+#
+# Native sidecars (initContainers with restartPolicy: Always) require the cluster control plane to be
+# >= 1.29 (GA / on by default). CI asserts this before applying.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: archestra-bench-${RUN_NUMBER}
+  namespace: archestra
+  labels:
+    app: archestra-bench
+    run: "${RUN_NUMBER}"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: archestra-bench
+        run: "${RUN_NUMBER}"
+      annotations:
+        # The bench runs ~30 min; without this the cluster autoscaler evicts it on node scale-down
+        # mid-run (the pod has no controller to reschedule it, so the run is just lost).
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: ${PLATFORM_SA}
+      initContainers:
+        - name: postgres
+          image: pgvector/pgvector:pg17@sha256:be400b50812ab2cc908ed78593fda2e51e3b45fe774fa637f1c7b16e68531d95
+          restartPolicy: Always # native sidecar: stays up alongside the bench container, torn down with the pod
+          env:
+            - name: POSTGRES_PASSWORD
+              value: "${POSTGRES_PASSWORD}"
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: bench
+          image: ${BENCH_IMAGE}
+          command: ["run-benchmark"]
+          env:
+            - name: POSTGRES_PASSWORD
+              value: "${POSTGRES_PASSWORD}"
+            - name: BENCH_ENVS
+              value: "basic"
+            - name: BENCH_LANES
+              value: "glm"
+            # Dagger runner host is resolved from the live staging Deployment by CI.
+            - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+              value: "${DAGGER_RUNNER_HOST}"
+            # Tool surface the basic env needs; code runtime (which also gates the sandbox) is forced on
+            # by the bench, so only the agent-feature flags are set here.
+            - name: ARCHESTRA_AGENTS_SKILLS_ENABLED
+              value: "true"
+            - name: ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED
+              value: "true"
+            - name: ZAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: archestra-bench-secrets
+                  key: ZAI_API_KEY
+            # Reporting: the pod exports TensorBoard scalars, uploads artifacts to GCS (auth via the
+            # platform SA's Workload Identity), and posts the Slack summary itself.
+            - name: GCS_BUCKET
+              value: "${GCS_BUCKET}"
+            - name: GITHUB_RUN_NUMBER
+              value: "${GITHUB_RUN_NUMBER}"
+            - name: GITHUB_RUN_ATTEMPT
+              value: "${GITHUB_RUN_ATTEMPT}"
+            - name: RUN_URL
+              value: "${RUN_URL}"
+            - name: SLACK_BENCH_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: archestra-bench-secrets
+                  key: SLACK_BENCH_WEBHOOK_URL
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir: {}
+        - name: pgdata
+          emptyDir: {}

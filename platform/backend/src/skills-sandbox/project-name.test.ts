@@ -1,3 +1,4 @@
+import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { validateProjectName } from "./project-name";
 
@@ -22,9 +23,11 @@ describe("validateProjectName", () => {
     expect(validateProjectName("   ")).toMatch(/empty/i);
   });
 
-  test("rejects names over 128 characters", () => {
-    expect(validateProjectName("a".repeat(129))).toMatch(/128/);
-    expect(validateProjectName("a".repeat(128))).toBeNull();
+  test("rejects names over the max length", () => {
+    expect(
+      validateProjectName("a".repeat(PROJECT_NAME_MAX_LENGTH + 1)),
+    ).toMatch(new RegExp(String(PROJECT_NAME_MAX_LENGTH)));
+    expect(validateProjectName("a".repeat(PROJECT_NAME_MAX_LENGTH))).toBeNull();
   });
 
   test("rejects path separators and traversal", () => {

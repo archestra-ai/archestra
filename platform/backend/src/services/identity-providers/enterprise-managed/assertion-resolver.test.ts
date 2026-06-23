@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";

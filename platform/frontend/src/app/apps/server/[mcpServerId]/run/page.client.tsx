@@ -2,9 +2,9 @@
 
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { AppFrame } from "@/components/mcp-app/app-frame";
 import { Button } from "@/components/ui/button";
 import { useApps } from "@/lib/app.query";
-import { ExternalAppRuntimeFrame } from "../../../_parts/app-runtime-frame";
 
 // Full-page standalone runtime for an external UI-providing MCP server. The
 // resource uri + name are resolved from the unified Apps list (which the user
@@ -45,9 +45,10 @@ export default function ServerAppRunPage({
       </header>
       <main className="min-h-0 flex-1 overflow-auto">
         {item && item.source === "external" ? (
-          <ExternalAppRuntimeFrame
-            mcpServerId={mcpServerId}
+          <AppFrame
+            endpoint={{ kind: "server", mcpServerId }}
             resourceUri={item.resourceUri}
+            chrome={false}
           />
         ) : null}
       </main>

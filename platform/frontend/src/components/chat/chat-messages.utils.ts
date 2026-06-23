@@ -1,11 +1,15 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  getArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
@@ -129,6 +133,45 @@ export function extractOwnedAppRender(params: {
         ? structured.latestVersion
         : null,
   };
+}
+
+/**
+ * Whether an owned-app render has been superseded by a newer render of the same
+ * app in the conversation. The app registry (see {@link deriveAppsFromMessages})
+ * dedupes owned apps by `appId` to their latest render, so a render is superseded
+ * when the registry holds an entry for its `appId` whose `toolCallId` differs.
+ *
+ * Returns `false` when the registry has no entry for the app yet (e.g. mid-stream
+ * before the result is derived) so a freshly arriving render is never wrongly
+ * collapsed. Superseded renders show a static changelog pill instead of a live
+ * iframe; only the latest render of each app stays live.
+ */
+export function isSupersededOwnedRender(params: {
+  apps: PanelApp[];
+  appId: string;
+  toolCallId: string | undefined;
+}): boolean {
+  const latest = params.apps.find((a) => a.appId === params.appId)?.toolCallId;
+  return latest !== undefined && latest !== params.toolCallId;
+}
+
+/**
+ * Past-tense verb describing what an owned-app render did, derived from the tool
+ * that produced it — used as the trailing label on a superseded render's
+ * changelog pill (e.g. "Dashboard · v2 · Updated"). Returns `null` for unknown
+ * tools so the pill simply omits the verb.
+ */
+export function getAppRenderVerb(toolName: string): string | null {
+  switch (getArchestraToolShortName(toolName, { includeDefaultPrefix: true })) {
+    case TOOL_SCAFFOLD_APP_SHORT_NAME:
+      return "Created";
+    case TOOL_EDIT_APP_SHORT_NAME:
+      return "Updated";
+    case TOOL_RENDER_APP_SHORT_NAME:
+      return "Rendered";
+    default:
+      return null;
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderKanban, Plus, Users } from "lucide-react";
+import { FolderKanban, Pin, PinOff, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
-import { useCreateProject, useProjects } from "@/lib/projects/projects.query";
+import {
+  useCreateProject,
+  usePinProject,
+  useProjects,
+} from "@/lib/projects/projects.query";
 
 export default function ProjectsPageClient() {
   return (
@@ -34,6 +38,7 @@ function ProjectsList() {
   const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const projects = data ?? [];
+  const pinProjectMutation = usePinProject();
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
@@ -82,6 +87,27 @@ function ProjectsList() {
                   <span className="truncate font-medium">{project.name}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={
+                      project.pinnedAt ? "Unpin project" : "Pin project"
+                    }
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      pinProjectMutation.mutate({
+                        id: project.id,
+                        pinned: !project.pinnedAt,
+                      });
+                    }}
+                  >
+                    {project.pinnedAt ? (
+                      <PinOff className="h-4 w-4" />
+                    ) : (
+                      <Pin className="h-4 w-4" />
+                    )}
+                  </Button>
                   {!project.isOwner && (
                     <Badge variant="secondary">Shared with you</Badge>
                   )}

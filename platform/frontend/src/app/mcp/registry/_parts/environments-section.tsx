@@ -585,6 +585,15 @@ function EnvironmentEditorDialog({
         </div>
         <div className="space-y-2">
           <Label htmlFor="environment-namespace">Namespace</Label>
+          <p className="text-xs text-muted-foreground">
+            The Kubernetes namespace where this environment's MCP server pods and
+            agent sandboxes run. Only namespaces the platform has been granted
+            RBAC for appear here — to add a new one, add it to the Helm chart's{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono">
+              rbac.environmentNamespaces
+            </code>{" "}
+            and redeploy. Leave as default to use the orchestrator's namespace.
+          </p>
           <Select
             value={
               trimmedNamespace === ""

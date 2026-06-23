@@ -212073,7 +212073,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create or return the single chat conversation shared by all of a schedule's runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Create or return the single chat conversation shared by all of a schedule's runs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
         "parameters": [
           {
             "schema": {
@@ -212791,7 +212791,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "scheduledTask:read"
           ]
         }
       }
@@ -212802,7 +212802,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Return the chat conversation that wraps a schedule's runs (resolved from the run's trigger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Return the chat conversation that wraps a schedule's runs (resolved from the run's trigger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
         "parameters": [
           {
             "schema": {
@@ -213530,7 +213530,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "scheduledTask:read"
           ]
         }
       }

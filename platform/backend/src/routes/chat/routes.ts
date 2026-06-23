@@ -3329,14 +3329,18 @@ async function findScheduleRunConversationForAdmin(params: {
     return null;
   }
 
+  // The conversation belongs to a schedule if it is linked from the trigger
+  // (the shared chat) or from one of its runs. Resolving via the trigger link
+  // too lets an admin open a schedule's chat that has no completed run yet (e.g.
+  // an unscoped trigger viewed before its first run finishes).
   const run = await ScheduleTriggerRunModel.findByChatConversationId(
     params.conversationId,
   );
-  if (!run || run.organizationId !== params.organizationId) {
-    return null;
-  }
-
-  const trigger = await ScheduleTriggerModel.findById(run.triggerId);
+  const trigger = run
+    ? await ScheduleTriggerModel.findById(run.triggerId)
+    : await ScheduleTriggerModel.findByChatConversationId(
+        params.conversationId,
+      );
   if (!trigger || trigger.organizationId !== params.organizationId) {
     return null;
   }

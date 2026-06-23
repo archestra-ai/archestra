@@ -1251,11 +1251,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetScheduleTriggerRun]: {
     scheduledTask: ["read"],
   },
+  // Opening a schedule's chat is a read action (the shared conversation is
+  // created lazily as a side effect), so anyone who can see the schedule can
+  // open it.
   [RouteId.CreateScheduleTriggerConversation]: {
-    scheduledTask: ["create"],
+    scheduledTask: ["read"],
   },
   [RouteId.CreateScheduleTriggerRunConversation]: {
-    scheduledTask: ["create"],
+    scheduledTask: ["read"],
   },
 
   // Knowledge Base Routes

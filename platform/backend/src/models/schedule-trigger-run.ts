@@ -6,6 +6,11 @@ import type {
   ScheduleTriggerRunStatus,
 } from "@/types";
 
+/** `db` or a transaction handle, so callers can run inside a transaction. */
+type DbExecutor =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 class ScheduleTriggerRunModel {
   static async create(params: {
     organizationId: string;
@@ -125,12 +130,15 @@ class ScheduleTriggerRunModel {
     return run ?? null;
   }
 
-  static async markCompleted(params: {
-    runId: string;
-    status: Extract<ScheduleTriggerRunStatus, "success" | "failed">;
-    error?: string | null;
-  }): Promise<ScheduleTriggerRun | null> {
-    const [run] = await db
+  static async markCompleted(
+    params: {
+      runId: string;
+      status: Extract<ScheduleTriggerRunStatus, "success" | "failed">;
+      error?: string | null;
+    },
+    executor: DbExecutor = db,
+  ): Promise<ScheduleTriggerRun | null> {
+    const [run] = await executor
       .update(schema.scheduleTriggerRunsTable)
       .set({
         status: params.status,

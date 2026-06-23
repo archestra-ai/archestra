@@ -1,5 +1,6 @@
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -12,6 +13,7 @@ import { metrics } from "@/observability";
 import {
   appendRunMessagesToConversation,
   ensureTriggerConversation,
+  syncRunArtifactToConversation,
 } from "@/services/scheduled-run-conversation";
 import type { Conversation } from "@/types";
 
@@ -126,26 +128,42 @@ export async function handleScheduleTriggerRunExecution(
     );
   }
 
-  // `markCompleted` is a compare-and-swap on `running` status, so only the
-  // attempt that flips the run to its terminal state wins. Gating the message
-  // append on that win makes persistence exactly-once: a retried/duplicate
-  // delivery early-returns above (status no longer `running`) and never appends
-  // the same turn twice.
-  const completed = await ScheduleTriggerRunModel.markCompleted({
-    runId: run.id,
-    status,
-    error: errorMessage,
-  });
-
-  if (completed && status === "success" && conversation) {
-    // Re-read the run to capture an artifact the agent may have written during
-    // execution, then append this run's turn to the shared conversation.
+  if (status === "success" && conversation) {
+    // Persist the run's turn ATOMICALLY with flipping it to `success`: the
+    // `markCompleted` CAS (on `running` status) and the message append commit in
+    // one transaction. Only the worker that wins the CAS appends, so a
+    // retried/duplicate delivery (which early-returns above once the run is no
+    // longer `running`) can never double-append — and a crash mid-way rolls back
+    // both, so a run is never marked done with its messages lost.
     const finishedRun = (await ScheduleTriggerRunModel.findById(run.id)) ?? run;
-    await appendRunMessagesToConversation({
-      conversation,
-      trigger,
-      run: finishedRun,
-      organizationId: trigger.organizationId,
+    const persisted = await withDbTransaction(async (tx) => {
+      const completed = await ScheduleTriggerRunModel.markCompleted(
+        { runId: run.id, status, error: errorMessage },
+        tx,
+      );
+      if (!completed) {
+        return false;
+      }
+      await appendRunMessagesToConversation(
+        { conversation, trigger, run: finishedRun },
+        tx,
+      );
+      return true;
+    });
+    // Artifact sync is idempotent (latest run wins), so it stays out of the
+    // transaction.
+    if (persisted) {
+      await syncRunArtifactToConversation({
+        conversation,
+        run: finishedRun,
+        organizationId: trigger.organizationId,
+      });
+    }
+  } else {
+    await ScheduleTriggerRunModel.markCompleted({
+      runId: run.id,
+      status,
+      error: errorMessage,
     });
   }
 

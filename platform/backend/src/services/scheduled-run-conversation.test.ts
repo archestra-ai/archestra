@@ -5,6 +5,7 @@ import { projectService } from "@/services/project";
 import {
   appendRunMessagesToConversation,
   ensureTriggerConversation,
+  syncRunArtifactToConversation,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
 
@@ -125,7 +126,6 @@ test("appendRunMessagesToConversation accumulates each run's turn, ordered by ru
     conversation,
     trigger,
     run: { ...laterRun, startedAt: new Date(2_000) },
-    organizationId: org.id,
   });
   const afterFirst = await MessageModel.findByConversation(conversation.id);
   expect(afterFirst.length).toBeGreaterThan(0);
@@ -134,7 +134,6 @@ test("appendRunMessagesToConversation accumulates each run's turn, ordered by ru
     conversation,
     trigger,
     run: { ...earlierRun, startedAt: new Date(1_000) },
-    organizationId: org.id,
   });
   const afterSecond = await MessageModel.findByConversation(conversation.id);
 
@@ -174,14 +173,13 @@ test("appendRunMessagesToConversation is a no-op when the run produced nothing",
     conversation,
     trigger,
     run,
-    organizationId: org.id,
   });
 
   const messages = await MessageModel.findByConversation(conversation.id);
   expect(messages).toHaveLength(0);
 });
 
-test("appendRunMessagesToConversation surfaces the run's artifact on the chat", async ({
+test("syncRunArtifactToConversation surfaces the run's artifact on the chat", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -207,9 +205,8 @@ test("appendRunMessagesToConversation surfaces the run's artifact on the chat", 
     organizationId: org.id,
   });
 
-  await appendRunMessagesToConversation({
+  await syncRunArtifactToConversation({
     conversation,
-    trigger,
     run: { ...run, artifact: "# Weekly summary" },
     organizationId: org.id,
   });

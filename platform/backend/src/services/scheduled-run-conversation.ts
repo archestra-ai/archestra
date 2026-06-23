@@ -108,23 +108,26 @@ export async function ensureTriggerConversation(params: {
 }
 
 /**
- * Append a finished run's turn to the schedule's shared conversation and sync
- * the run's artifact (latest run wins). Reconstructs the turn from the run's
- * interactions; a no-op when the run produced none, so it never seeds a
- * placeholder transcript.
+ * Append a finished run's turn to the schedule's shared conversation.
+ * Reconstructs the turn from the run's interactions; a no-op when the run
+ * produced none, so it never seeds a placeholder transcript.
  *
- * The caller (run handler) guarantees this runs exactly once per run by gating
- * on the `running -> success` status transition, so there is no self-dedup here.
- * Message `createdAt` is derived from the run's `startedAt` so successive runs
- * render in chronological order even if a slow run appends after a later one.
+ * The caller (run handler) runs this inside the SAME transaction that flips the
+ * run to `success` (passing that transaction as `executor`), so message
+ * persistence is atomic with the terminal-state CAS: exactly-once, never lost on
+ * a crash between the two writes. Message `createdAt` is derived from the run's
+ * `startedAt` so successive runs render in chronological order even if a slow
+ * run appends after a later one.
  */
-export async function appendRunMessagesToConversation(params: {
-  conversation: Conversation;
-  trigger: ScheduleTrigger;
-  run: ScheduleTriggerRun;
-  organizationId: string;
-}): Promise<void> {
-  const { conversation, trigger, run, organizationId } = params;
+export async function appendRunMessagesToConversation(
+  params: {
+    conversation: Conversation;
+    trigger: ScheduleTrigger;
+    run: ScheduleTriggerRun;
+  },
+  executor?: Parameters<typeof MessageModel.bulkCreate>[1],
+): Promise<void> {
+  const { conversation, trigger, run } = params;
 
   const interactionResult = await InteractionModel.findAllPaginated(
     { limit: 50, offset: 0 },
@@ -137,30 +140,44 @@ export async function appendRunMessagesToConversation(params: {
     interactionResult.data,
     trigger.messageTemplate,
   );
-
-  if (uiMessages.length > 0) {
-    // Order successive runs chronologically by the run's own start time, not
-    // wall-clock at append, so a slow run can't jump ahead of a later one.
-    const base = (run.startedAt ?? run.createdAt).getTime();
-    await MessageModel.bulkCreate(
-      uiMessages.map((message, index) => ({
-        conversationId: conversation.id,
-        role: message.role,
-        content: message,
-        createdAt: new Date(base + index),
-      })),
-    );
+  if (uiMessages.length === 0) {
+    return;
   }
 
-  // Surface the latest run's artifact (if any) as the conversation's document.
-  if (run.artifact && run.artifact !== conversation.artifact) {
-    await ConversationModel.update(
-      conversation.id,
-      conversation.userId,
-      organizationId,
-      { artifact: run.artifact },
-    );
+  // Order successive runs chronologically by the run's own start time, not
+  // wall-clock at append, so a slow run can't jump ahead of a later one.
+  const base = (run.startedAt ?? run.createdAt).getTime();
+  await MessageModel.bulkCreate(
+    uiMessages.map((message, index) => ({
+      conversationId: conversation.id,
+      role: message.role,
+      content: message,
+      createdAt: new Date(base + index),
+    })),
+    executor,
+  );
+}
+
+/**
+ * Surface the latest run's artifact (if any) as the schedule conversation's
+ * document. Idempotent (latest run wins), so it is safe to run outside the
+ * message-append transaction.
+ */
+export async function syncRunArtifactToConversation(params: {
+  conversation: Conversation;
+  run: ScheduleTriggerRun;
+  organizationId: string;
+}): Promise<void> {
+  const { conversation, run, organizationId } = params;
+  if (!run.artifact || run.artifact === conversation.artifact) {
+    return;
   }
+  await ConversationModel.update(
+    conversation.id,
+    conversation.userId,
+    organizationId,
+    { artifact: run.artifact },
+  );
 }
 
 // === internal ===

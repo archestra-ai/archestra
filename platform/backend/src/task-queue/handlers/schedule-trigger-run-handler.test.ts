@@ -45,9 +45,24 @@ const mockEnsureTriggerConversation = vi.hoisted(() =>
 const mockAppendRunMessages = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
+const mockSyncRunArtifact = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
 vi.mock("@/services/scheduled-run-conversation", () => ({
   ensureTriggerConversation: mockEnsureTriggerConversation,
   appendRunMessagesToConversation: mockAppendRunMessages,
+  syncRunArtifactToConversation: mockSyncRunArtifact,
+}));
+
+// Run the transaction callback inline with a dummy handle so the unit test needs
+// no real database connection. Preserve the real module's other exports (the
+// global test setup relies on __setTestDb).
+const mockWithDbTransaction = vi.hoisted(() =>
+  vi.fn(async (cb: (tx: unknown) => unknown) => cb({})),
+);
+vi.mock("@/database", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/database")>()),
+  withDbTransaction: mockWithDbTransaction,
 }));
 
 const mockExecuteA2AMessage = vi.hoisted(() =>
@@ -128,6 +143,8 @@ describe("handleScheduleTriggerRunExecution", () => {
       userId: "user-1",
     });
     mockAppendRunMessages.mockResolvedValue(undefined);
+    mockSyncRunArtifact.mockResolvedValue(undefined);
+    mockWithDbTransaction.mockImplementation(async (cb) => cb({}));
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
@@ -171,18 +188,19 @@ describe("handleScheduleTriggerRunExecution", () => {
         source: "schedule-trigger",
       }),
     );
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "success",
-      error: null,
-    });
+    // markCompleted is the CAS inside the persistence transaction.
+    expect(mockRunMarkCompleted).toHaveBeenCalledWith(
+      { runId: "run-1", status: "success", error: null },
+      expect.anything(),
+    );
     expect(mockAppendRunMessages).toHaveBeenCalledWith(
       expect.objectContaining({
         conversation: expect.objectContaining({ id: "conv-1" }),
         run: expect.objectContaining({ id: "run-1" }),
-        organizationId: "org-1",
       }),
+      expect.anything(),
     );
+    expect(mockSyncRunArtifact).toHaveBeenCalled();
   });
 
   test("does not append messages when another worker already completed the run", async () => {
@@ -192,7 +210,8 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockAgentFindById.mockResolvedValue(makeAgent());
     mockUserHasAgentAccess.mockResolvedValue(true);
     // CAS lost: the run was already flipped out of `running`, so markCompleted
-    // returns null and the turn must not be appended a second time.
+    // returns null, the transaction rolls back, and the turn must not be
+    // appended (nor the artifact synced) a second time.
     mockRunMarkCompleted.mockResolvedValue(null);
 
     await handleScheduleTriggerRunExecution({
@@ -202,6 +221,7 @@ describe("handleScheduleTriggerRunExecution", () => {
 
     expect(mockExecuteA2AMessage).toHaveBeenCalled();
     expect(mockAppendRunMessages).not.toHaveBeenCalled();
+    expect(mockSyncRunArtifact).not.toHaveBeenCalled();
   });
 
   test("marks run as failed when trigger no longer exists", async () => {

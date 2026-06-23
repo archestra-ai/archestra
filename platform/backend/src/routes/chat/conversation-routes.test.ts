@@ -1,6 +1,7 @@
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import MessageModel from "@/models/message";
+import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -182,6 +183,57 @@ describe("chat conversation and message routes", () => {
           parts: [{ type: "text", text: "Scheduled run complete" }],
         }),
       ],
+    });
+  });
+
+  test("allows scheduled task admins to view a schedule's chat linked from the trigger before any run links it", async ({
+    makeAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: owner.id,
+      agentId: agent.id,
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        id: "message-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Scheduled run complete" }],
+      },
+    });
+    // The shared chat is linked from the TRIGGER (not a run) — the case an
+    // unscoped schedule hits before its first run finishes.
+    await ScheduleTriggerModel.setChatConversationId(
+      trigger.id,
+      conversation.id,
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: conversation.id,
+      userId: owner.id,
     });
   });
 

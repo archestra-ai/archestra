@@ -188,6 +188,84 @@ describe("schedule trigger routes", () => {
     );
   });
 
+  test("POST /conversation lets a project member who is not the actor open a project schedule's chat", async ({
+    makeInternalAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeUser,
+  }) => {
+    // Not the actor and not a scheduledTask admin — access comes purely from
+    // project membership (mirrors the project-scoped schedule listing).
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+
+    const actor = await makeUser();
+    const member = await makeUser();
+    await makeMember(actor.id, organizationId, { role: "member" });
+    await makeMember(member.id, organizationId, { role: "member" });
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: actor.id,
+      scope: "org",
+    });
+    // The member owns the project, so they can see (and now open) its schedules.
+    const project = await projectService.create({
+      organizationId,
+      userId: member.id,
+      name: "shared",
+      description: null,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: actor.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+
+    adminUser = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/conversation`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().projectId).toBe(project.id);
+  });
+
+  test("POST /conversation 403s for a non-actor without project access", async ({
+    makeInternalAgent,
+    makeMember,
+    makeScheduleTrigger,
+    makeUser,
+  }) => {
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+
+    const actor = await makeUser();
+    const stranger = await makeUser();
+    await makeMember(actor.id, organizationId, { role: "member" });
+    await makeMember(stranger.id, organizationId, { role: "member" });
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: actor.id,
+      scope: "org",
+    });
+    // Unscoped schedule: there is no project to grant the stranger access.
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      actorUserId: actor.id,
+      agentId: agent.id,
+    });
+
+    adminUser = stranger;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/conversation`,
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
   test("POST create requires a project when the projects feature is on", async ({
     makeInternalAgent,
   }) => {

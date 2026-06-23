@@ -126,6 +126,19 @@ class ScheduleTriggerModel {
     return trigger ?? null;
   }
 
+  static async findByChatConversationId(
+    chatConversationId: string,
+  ): Promise<ScheduleTrigger | null> {
+    const [trigger] = await db
+      .select(triggerColumns())
+      .from(schema.scheduleTriggersTable)
+      .where(
+        eq(schema.scheduleTriggersTable.chatConversationId, chatConversationId),
+      );
+
+    return trigger ?? null;
+  }
+
   static async create(data: InsertScheduleTrigger): Promise<ScheduleTrigger> {
     const parsed = InsertScheduleTriggerSchema.parse(data);
     const [created] = await db

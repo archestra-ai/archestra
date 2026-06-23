@@ -5301,7 +5301,7 @@ export const getScheduleTriggerRun = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:create`: Create new scheduled tasks and trigger runs
+ * `scheduledTask:read`: View scheduled tasks and their run history
  */
 export const createScheduleTriggerConversation = <ThrowOnError extends boolean = false>(options: Options<CreateScheduleTriggerConversationData, ThrowOnError>) => (options.client ?? client).post<CreateScheduleTriggerConversationResponses, CreateScheduleTriggerConversationErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/conversation', ...options });
 
@@ -5314,7 +5314,7 @@ export const createScheduleTriggerConversation = <ThrowOnError extends boolean =
  *
  * Authorization:
  *
- * `scheduledTask:create`: Create new scheduled tasks and trigger runs
+ * `scheduledTask:read`: View scheduled tasks and their run history
  */
 export const createScheduleTriggerRunConversation = <ThrowOnError extends boolean = false>(options: Options<CreateScheduleTriggerRunConversationData, ThrowOnError>) => (options.client ?? client).post<CreateScheduleTriggerRunConversationResponses, CreateScheduleTriggerRunConversationErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/runs/{runId}/conversation', ...options });
 

@@ -658,6 +658,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        allowProjectAccess: true,
       });
 
       const conversation = await openTriggerConversation({
@@ -691,6 +692,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        allowProjectAccess: true,
       });
 
       const trigger = await ScheduleTriggerModel.findById(run.triggerId);
@@ -715,6 +717,13 @@ async function findAccessibleTriggerOrThrow(params: {
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
+  /**
+   * When set, a project schedule is also accessible to anyone with access to its
+   * project (mirrors the project-scoped listing, which shows every member's
+   * schedules). Used by the read-only open-chat routes — NOT by the management
+   * routes (edit/delete/run), which stay owner-or-admin.
+   */
+  allowProjectAccess?: boolean;
 }): Promise<z.infer<typeof SelectScheduleTriggerSchema>> {
   const trigger = await ScheduleTriggerModel.findById(params.id);
   if (!trigger || trigger.organizationId !== params.organizationId) {
@@ -735,6 +744,21 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
+  // For read-only open-chat routes, project access grants access to the
+  // project's schedules (projectService.get throws if the user can't see it).
+  if (params.allowProjectAccess && trigger.projectId) {
+    try {
+      await projectService.get({
+        id: trigger.projectId,
+        organizationId: params.organizationId,
+        userId: params.userId,
+      });
+      return trigger;
+    } catch {
+      // No project access — fall through to the 403 below.
+    }
+  }
+
   throw new ApiError(403, "You do not have access to this scheduled task");
 }
 
@@ -744,12 +768,14 @@ async function findAccessibleRunOrThrow(params: {
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
+  allowProjectAccess?: boolean;
 }): Promise<z.infer<typeof SelectScheduleTriggerRunSchema>> {
   await findAccessibleTriggerOrThrow({
     id: params.triggerId,
     userId: params.userId,
     organizationId: params.organizationId,
     headers: params.headers,
+    allowProjectAccess: params.allowProjectAccess,
   });
 
   const run = await ScheduleTriggerRunModel.findById(params.runId);

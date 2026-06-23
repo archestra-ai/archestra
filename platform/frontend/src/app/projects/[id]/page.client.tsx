@@ -502,7 +502,7 @@ function EditProjectDialog({
           onChange={(next) => form.setValue("icon", next)}
           fallbackType="project"
         />
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Input
             placeholder="Project name"
             maxLength={PROJECT_NAME_MAX_LENGTH}
@@ -563,8 +563,7 @@ function EditProjectDialog({
 
       <p className="text-xs text-muted-foreground">
         People you share with can read every chat, start their own, and work
-        with the project's files through chats. Writing in a chat stays with its
-        author.
+        with the project's files through chats.
       </p>
     </StandardFormDialog>
   );

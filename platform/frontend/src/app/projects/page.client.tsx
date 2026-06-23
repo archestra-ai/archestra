@@ -179,7 +179,7 @@ function CreateProjectDialog({
           onChange={(next) => form.setValue("icon", next)}
           fallbackType="project"
         />
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Input
             autoFocus
             placeholder="Project name"

@@ -7,12 +7,8 @@ name: Benchmark
 
 on:
   schedule:
-    - cron: "0 4 * * *" # daily 04:00 UTC
+    - cron: "0 3 * * *" # daily 03:00 UTC
   workflow_dispatch:
-  # Label a PR with `run-benchmark` to test the workflow from its branch before merge (the
-  # default-branch-only limitation of workflow_dispatch). Fork PRs are excluded so secrets never leak.
-  pull_request:
-    types: [labeled]
 
 permissions: {}
 
@@ -32,10 +28,7 @@ jobs:
     name: Run benchmark
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule' ||
-      (github.event_name == 'pull_request' &&
-      github.event.label.name == 'run-benchmark' &&
-      github.event.pull_request.head.repo.fork != true)
+      github.event_name == 'schedule'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # checkout

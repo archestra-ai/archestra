@@ -1,8 +1,8 @@
 import {
   AppWindow,
   ExternalLink,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   SquareArrowOutUpRight,
 } from "lucide-react";
 import Link from "next/link";
@@ -57,9 +57,9 @@ export function McpAppActions({
           title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
-            <Minimize2 className="h-3.5 w-3.5" />
+            <Minimize className="h-3.5 w-3.5" />
           ) : (
-            <Maximize2 className="h-3.5 w-3.5" />
+            <Maximize className="h-3.5 w-3.5" />
           )}
         </Button>
       )}

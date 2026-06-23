@@ -47,6 +47,7 @@ export function AppRuntimeFrame({
           appName={app.name}
           onRefresh={() => setReloadNonce((nonce) => nonce + 1)}
           appId={appId}
+          appVersion={app.latestVersion}
           actions={actions}
         >
           <McpAppRuntime

@@ -1,5 +1,6 @@
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
 import {
@@ -15,11 +16,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared chrome for every MCP App surface (chat, right panel, Apps page). A
- * single top bar holds the refresh control (left), the app name (center), and
- * the {@link McpAppActions} icons (right: fullscreen, side panel, …). Below it
- * sits an optional diagnostics badge and the app body — either the live runtime
- * (`children`) or, when `placeholder` is set, a frozen-height frosted stand-in
- * so moving an app into the side panel doesn't reflow chat.
+ * top bar holds the refresh control (left), the app name (center), and the
+ * {@link McpAppActions} icons (right: fullscreen, side panel, …); a bottom bar
+ * holds the app-version link to the app's page. Between
+ * them sit an optional diagnostics badge and the app body — either the live
+ * runtime (`children`) or, when `placeholder` is set, a frozen-height frosted
+ * stand-in so moving an app into the side panel doesn't reflow chat. The bottom
+ * bar is omitted for the placeholder stand-in.
  *
  * Uses a single stable tree for inline / fullscreen / fill so the iframe child
  * is never unmounted when toggling — only CSS classes change. In fullscreen,
@@ -38,6 +41,7 @@ export function McpAppCard({
   placeholder,
   frozenHeight,
   appId,
+  appVersion,
   actions,
   onShowInSidebar,
 }: {
@@ -69,6 +73,8 @@ export function McpAppCard({
   /** Locked body height for the placeholder, so chat keeps the app's footprint. */
   frozenHeight?: number;
   appId?: string;
+  /** Owned-app version, shown as a link to the app's page in the bottom bar. */
+  appVersion?: number | null;
   actions: McpAppAction[];
   onShowInSidebar?: () => void;
 }) {
@@ -200,6 +206,21 @@ export function McpAppCard({
           )}
         >
           {children}
+        </div>
+      )}
+
+      {/* Bottom bar: app-version link to the app's page. Shown only when there's
+          an owned-app version to surface; hidden for the placeholder stand-in. */}
+      {!placeholder && appId && appVersion != null && (
+        <div className="flex h-9 shrink-0 items-center border-t px-2">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground"
+          >
+            <Link href={`/apps/${appId}`}>Version {appVersion}</Link>
+          </Button>
         </div>
       )}
     </div>

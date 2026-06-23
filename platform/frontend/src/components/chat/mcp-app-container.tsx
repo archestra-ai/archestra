@@ -267,6 +267,7 @@ export function McpAppSection({
         }
         onRefresh={handleRefresh}
         appId={appId}
+        appVersion={appVersion}
         actions={liveActions}
         onShowInSidebar={
           toolCallId && !renderInSidebar ? handleShowInSidebar : undefined

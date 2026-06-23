@@ -439,8 +439,9 @@ function InstructionsRow({
 }
 
 /**
- * View/edit panel for the pinned instructions entry. Read mode renders the
- * markdown; the owner can edit it inline. Non-owners get a read-only view.
+ * The instructions surface for the pinned entry. The owner lands straight in the
+ * editor (no repeated filename header, no Edit button); non-owners get a
+ * read-only rendered view with a Close.
  */
 function ProjectInstructionsPanel({
   projectId,
@@ -453,65 +454,36 @@ function ProjectInstructionsPanel({
 }) {
   const { data, isPending } = useProjectInstructions(projectId);
   const setInstructions = useSetProjectInstructions();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-
   const content = data?.content ?? "";
-  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
 
-  const startEditing = () => {
-    setDraft(content);
-    setEditing(true);
-  };
+  if (isPending) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <p className="p-4 text-xs text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
 
-  const save = async () => {
-    if (overLimit) return;
-    const ok = await setInstructions.mutateAsync({
-      id: projectId,
-      content: draft,
-    });
-    if (ok) setEditing(false);
-  };
+  if (isOwner) {
+    return (
+      <InstructionsEditor
+        initialContent={content}
+        saving={setInstructions.isPending}
+        onCancel={onClose}
+        onSave={async (value) => {
+          const ok = await setInstructions.mutateAsync({
+            id: projectId,
+            content: value,
+          });
+          if (ok) onClose();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <FileText className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {PROJECT_INSTRUCTIONS_FILENAME}
-        </span>
-        {isOwner && !editing && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={startEditing}
-          >
-            <Pencil className="h-3 w-3" />
-            Edit
-          </Button>
-        )}
-        {editing && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setEditing(false)}
-              disabled={setInstructions.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={save}
-              disabled={setInstructions.isPending || overLimit}
-            >
-              Save
-            </Button>
-          </>
-        )}
+      <div className="flex items-center justify-end border-b px-3 py-1.5">
         <Button
           variant="ghost"
           size="sm"
@@ -521,29 +493,7 @@ function ProjectInstructionsPanel({
           Close
         </Button>
       </div>
-
-      {editing ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-1 p-3">
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add instructions that apply to every chat in this project…"
-            className="min-h-40 flex-1 resize-none font-mono text-xs"
-            autoFocus
-          />
-          <span
-            className={cn(
-              "self-end text-[11px]",
-              overLimit ? "text-destructive" : "text-muted-foreground",
-            )}
-          >
-            {draft.length.toLocaleString()} /{" "}
-            {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
-          </span>
-        </div>
-      ) : isPending ? (
-        <p className="p-4 text-xs text-muted-foreground">Loading…</p>
-      ) : content.trim() ? (
+      {content.trim() ? (
         <ConversationArtifactPanel
           artifact={content}
           isOpen
@@ -553,14 +503,71 @@ function ProjectInstructionsPanel({
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-          <p className="font-medium">No instructions yet</p>
-          <p className="mt-1">
-            {isOwner
-              ? "Add instructions to steer every chat in this project."
-              : "The project owner hasn't added any instructions."}
-          </p>
+          The project owner hasn't added any instructions.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The textarea editor. Mounts only once the content has loaded, so the draft is
+ * seeded directly from `initialContent`. Save persists and (via onSave)
+ * collapses the panel; Cancel just collapses.
+ */
+function InstructionsEditor({
+  initialContent,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  initialContent: string;
+  saving: boolean;
+  onSave: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(initialContent);
+  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="Instructions that apply to every chat in this project…"
+        className="min-h-40 flex-1 resize-none font-mono text-xs"
+        autoFocus
+      />
+      <div className="flex items-center justify-between">
+        <span
+          className={cn(
+            "text-[11px]",
+            overLimit ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {draft.length.toLocaleString()} /{" "}
+          {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onSave(draft)}
+            disabled={saving || overLimit}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

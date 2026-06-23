@@ -50,7 +50,7 @@ ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/access-request-intake"
-ref = "9c102d04d70d35066a79c5349ec8c5225732b3e4"
+ref = "7f6fe19a0ac50d67913b8d234821fc3c96000fe0"
 
 # Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
 # requires them). Each must list tools without auth or env setup hard-fails naming it.

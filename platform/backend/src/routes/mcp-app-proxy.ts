@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { RouteId } from "@archestra/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
@@ -8,11 +9,16 @@ import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { AppModel } from "@/models";
+import {
+  buildConnectorResourceUri,
+  connectorWwwAuthenticate,
+} from "@/services/apps/app-connector-resource";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type App, UuidIdSchema } from "@/types";
 import {
   APP_LAUNCH_TOOL_NAME,
   createAppServer,
+  validateAppConnectorOAuthToken,
   validateAppGatewayToken,
 } from "./mcp-app-gateway.utils";
 import {
@@ -20,6 +26,7 @@ import {
   ensureRequestSocketDestroySoon,
   extractBearerToken,
 } from "./mcp-gateway.utils";
+import { getPublicRequestOrigin } from "./request-origin";
 
 /**
  * App-bound MCP proxy: `POST /api/mcp/app/:appId`. Carries an app's runtime
@@ -58,38 +65,37 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { appId } = request.params as { appId: string };
       const body = request.body as Record<string, unknown>;
 
-      // External MCP clients present a Bearer token (validated here); Archestra's
-      // own frontend uses the browser session (request.user, populated upstream).
+      // An external client presents a Bearer token — a personal token or the
+      // native OAuth flow's audience-bound token — validated here; Archestra's
+      // own frontend uses the browser session (request.user, populated by the
+      // auth middleware, which stands down only for the Bearer path). A Bearer
+      // connection builds a fresh server per request (AppServerCache is keyed by
+      // (app, user), so reuse across tokens would leak context); the session
+      // path keeps the cache.
       const bearer = extractBearerToken(request);
       let userId: string;
       let organizationId: string;
       let tokenAuth: TokenAuthContext;
-      // A Bearer connection builds a fresh server per request: AppServerCache is
-      // keyed only by (app, user), so reusing across tokens would leak one
-      // token's credentials/context into another's calls. The session path keeps
-      // the cache (one auth context per browser user).
       let useServerCache: boolean;
+      let bypassAccessCache: boolean;
       if (bearer) {
-        const appAuth = await validateAppGatewayToken(bearer);
-        if (!appAuth.ok) {
-          throw appAuth.reason === "no_viewer"
-            ? new ApiError(
-                403,
-                "App endpoints require a user-scoped token; organization/team tokens have no viewer.",
-              )
-            : new ApiError(401, "Unauthorized");
+        const auth = await resolveBearerAuth(request, appId, bearer);
+        if (!auth.ok) {
+          if (auth.kind === "challenge") {
+            // No valid token → re-issue the RFC 9728 challenge so the client can
+            // (re)discover the authorization server.
+            setConnectorChallenge(request, reply, appId);
+            return reply.status(401).send({
+              error: { message: "Unauthorized", type: "unauthorized" },
+            });
+          }
+          throw new ApiError(403, auth.message);
         }
-        userId = appAuth.userId;
-        organizationId = appAuth.organizationId;
-        tokenAuth = {
-          tokenId: appAuth.tokenId,
-          teamId: null,
-          isOrganizationToken: false,
-          isUserToken: true,
-          userId,
-          organizationId,
-        };
+        userId = auth.userId;
+        organizationId = auth.organizationId;
+        tokenAuth = auth.tokenAuth;
         useServerCache = false;
+        bypassAccessCache = auth.bypassAccessCache;
       } else {
         userId = request.user.id;
         organizationId = request.organizationId;
@@ -102,12 +108,15 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         };
         useServerCache = true;
+        bypassAccessCache = false;
       }
 
-      // Verify the viewer may view this app (short-lived cache keyed by
+      // Verify the viewer may view this app. The OAuth path bypasses the cache so
+      // a revoked token or lost view access is denied on the next request; the
+      // session and personal-token paths keep the short-lived cache (keyed by
       // app+user+org so entries can't leak across orgs).
       const appCacheKey = `${appId}:${userId}:${organizationId}`;
-      let app = appAccessCache.get(appCacheKey);
+      let app = bypassAccessCache ? undefined : appAccessCache.get(appCacheKey);
       if (!app) {
         const isAppAdmin = await userHasPermission(
           userId,
@@ -122,7 +131,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId,
             isAppAdmin,
           })) ?? undefined;
-        if (app) {
+        if (app && !bypassAccessCache) {
           appAccessCache.set(appCacheKey, app);
         }
       }
@@ -202,6 +211,105 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+type BearerAuth =
+  | {
+      ok: true;
+      userId: string;
+      organizationId: string;
+      tokenAuth: TokenAuthContext;
+      bypassAccessCache: boolean;
+    }
+  | { ok: false; kind: "challenge" }
+  | { ok: false; kind: "forbidden"; message: string };
+
+const NO_VIEWER_MESSAGE =
+  "App endpoints require a user-scoped token; organization/team tokens have no viewer.";
+
+/**
+ * Resolve a connector Bearer token to its viewer, or signal that the request
+ * must be challenged (no valid token) or refused (a token resolving no viewer).
+ * The token is tried as a personal token first, then as a native audience-bound
+ * OAuth token. The OAuth path bypasses the app-access cache so a revoked token or
+ * lost view access is denied on the next request.
+ */
+async function resolveBearerAuth(
+  request: FastifyRequest,
+  appId: string,
+  bearer: string,
+): Promise<BearerAuth> {
+  const personal = await validateAppGatewayToken(bearer);
+  if (personal.ok) {
+    return {
+      ok: true,
+      userId: personal.userId,
+      organizationId: personal.organizationId,
+      tokenAuth: userTokenAuthContext(personal),
+      bypassAccessCache: false,
+    };
+  }
+  if (personal.reason === "no_viewer") {
+    return { ok: false, kind: "forbidden", message: NO_VIEWER_MESSAGE };
+  }
+
+  // Not a personal/team token — try the native OAuth token, which must be
+  // audience-bound to this connector's own canonical URI.
+  const connectorResourceUri = buildConnectorResourceUri(
+    getPublicRequestOrigin(request),
+    appId,
+  );
+  if (connectorResourceUri) {
+    const oauth = await validateAppConnectorOAuthToken({
+      token: bearer,
+      appId,
+      connectorResourceUri,
+    });
+    if (oauth.ok) {
+      return {
+        ok: true,
+        userId: oauth.userId,
+        organizationId: oauth.organizationId,
+        tokenAuth: userTokenAuthContext(oauth),
+        bypassAccessCache: true,
+      };
+    }
+    if (oauth.reason === "no_viewer") {
+      return { ok: false, kind: "forbidden", message: NO_VIEWER_MESSAGE };
+    }
+  }
+  return { ok: false, kind: "challenge" };
+}
+
+function userTokenAuthContext(auth: {
+  tokenId: string;
+  userId: string;
+  organizationId: string;
+}): TokenAuthContext {
+  return {
+    tokenId: auth.tokenId,
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId: auth.userId,
+    organizationId: auth.organizationId,
+  };
+}
+
+/**
+ * Attach the RFC 9728 `WWW-Authenticate` challenge pointing at this connector's
+ * protected-resource metadata, so a client discovers the authorization server
+ * and the scope to request.
+ */
+function setConnectorChallenge(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  appId: string,
+): void {
+  reply.header(
+    "WWW-Authenticate",
+    connectorWwwAuthenticate(getPublicRequestOrigin(request), appId),
+  );
+}
 
 /** Minimal reply surface the JSON-RPC gate needs — set the HTTP status to 200. */
 interface StatusReply {

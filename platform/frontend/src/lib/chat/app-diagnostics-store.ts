@@ -139,8 +139,8 @@ function dedupKey(entry: AppDiagnosticEntry): string {
   return `${entry.type}:${entry.message.slice(0, DEDUP_PREFIX_LENGTH)}`;
 }
 
-// Several mounts of the same app can report concurrently (the old create_app
-// card and the new update_app card both render the head version), so reports
+// Several mounts of the same app can report concurrently (the old scaffold_app
+// card and the new edit_app card both render the head version), so reports
 // are ordered by version: a newer version resets the collection, an older
 // (stale-labeled) mount is ignored, equal versions append. Unknown versions
 // rank below any known one.

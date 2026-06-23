@@ -92,7 +92,13 @@ The application runs the standard browser flow:
 - `GET /api/auth/oauth2/authorize` with `response_type=code`, `scope=mcp` (add `offline_access` for a refresh token), the registered `redirect_uri`, and a PKCE challenge.
 - `POST /api/auth/oauth2/token` with `grant_type=authorization_code`, `client_id`, `client_secret`, and the PKCE verifier.
 
-The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow, and the signed-in user must already have access to the gateway.
+The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow. By default the signed-in user reaches only the gateways their own permissions already allow.
+
+#### Gateway access grant
+
+Optionally, assign one or more gateways to the client as an **access grant**. Any user who authenticates through the client may then reach those gateways **in addition to** their own role-based access — even gateways they otherwise couldn't reach. The grant is additive (it never removes access) and admin-controlled (only admins register clients and set the list).
+
+This lets you gate a gateway behind a specific trusted app: restrict the gateway so it isn't reachable on its own (assign it to a team with no members — an org-wide gateway is open to all members), then grant it through the client. The gateway is then reachable only by users who come through that app. Leave the grant empty for pure identity passthrough, where access stays governed entirely by each user's permissions.
 
 To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_ENABLED=false`. This disables Dynamic Client Registration and CIMD auto-registration (above), so the gateway accepts OAuth flows only from clients you registered explicitly — both `client_credentials` and `authorization_code`.
 

@@ -1,9 +1,9 @@
 [[stages]]
 text = """Introspect this Archestra instance and count names. Consider two name sets:
 1. every TOOL available to you (use the name exactly as presented to you, including any prefix such as `archestra__`), and
-2. every SKILL in this instance (use the name as listed by the list_skills tool).
+2. every SKILL in this instance (use each skill's name as listed).
 
-Count how many names -- across both sets combined -- contain the letter "a" (case-insensitive) exactly three times. For example `archestra__run_command` contains exactly three a's (archestra→2, command→1). Enumerate your tools and the skills carefully, then call submit_result with result = {"count": <the total>}."""
+Count how many names -- across both sets combined -- contain the letter "a" (case-insensitive) exactly three times. For example, a name like `vanilla__cab` contains exactly three a's (vanilla→2, cab→1). Enumerate your tools and the skills carefully, then call submit_result with result = {"count": <the total>}."""
 
 [result_schema]
 type = "object"

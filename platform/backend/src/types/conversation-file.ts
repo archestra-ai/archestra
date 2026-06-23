@@ -13,15 +13,15 @@ const ConversationFileSchema = z.object({
 /**
  * Files for a conversation, grouped by source. The markdown artifact is
  * intentionally absent — it already ships in the conversation object and the
- * frontend synthesizes its `artifact.md` row. `myFiles` is everything the
- * agent can reach in persistent file storage from this chat: the project's
- * files for project chats, the owner's whole PFS otherwise.
+ * frontend synthesizes its `artifact.md` row. `projectFiles` is every file in
+ * the chat's project (project chats only), excluding files created in this
+ * chat (those are in `generated`); it is empty for a personal chat.
  */
 export const ConversationFilesResponseSchema = z.object({
   generated: z.array(ConversationFileSchema),
   attachments: z.array(ConversationFileSchema),
-  myFiles: z.array(ConversationFileSchema),
-  /** Set when the chat belongs to a project — `myFiles` is then the project's files. */
+  projectFiles: z.array(ConversationFileSchema),
+  /** Set when the chat belongs to a project; null for a personal chat. */
   projectName: z.string().nullable(),
 });
 export type ConversationFilesResponse = z.infer<

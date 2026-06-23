@@ -83,6 +83,18 @@ export const MCP_OAUTH_CLIENT_ID_PREFIX = "mcp_oauth_";
 export const MCP_OAUTH_CLIENT_REFERENCE_PREFIX = "mcp-oauth-client:";
 
 /**
+ * referenceId prefix that binds an access token to a single shareable MCP App
+ * connector, suffixed with the connector's canonical resource URI
+ * (`https://host/api/mcp/app/<appId>`, RFC 8707). The connector accepts a token
+ * only when this binding matches its own canonical URI; every other OAuth
+ * resource validator rejects this prefix. Distinct from `mcp-resource:`
+ * (per-profile, enterprise-managed) and `mcp-oauth-client:` (service account).
+ * The `mcp` scope is coarse, so this binding is the sole per-connector
+ * isolation — it is load-bearing.
+ */
+export const MCP_APP_RESOURCE_REFERENCE_PREFIX = "mcp-app-resource:";
+
+/**
  * Path for deep-linking to MCP catalog install dialogs.
  * Used by backend error messages and frontend routing.
  * Append `?install={catalogId}` to auto-open the install dialog.

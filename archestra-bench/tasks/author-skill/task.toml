@@ -1,8 +1,8 @@
 [[stages]]
-text = """Use the create_skill tool to author a new Agent Skill named exactly `prime-counter-{{cell}}`. Its SKILL.md frontmatter must set that `name` and a short `description`. Bundle one resource file `scripts/count.py`: a Python script that reads a single integer N from its first command-line argument and prints (to stdout) the count of prime numbers less than or equal to N. Create the skill now -- do NOT run it yet, and do NOT submit anything yet."""
+text = """Author a new Agent Skill in this instance named exactly `prime-counter-{{cell}}`. Its SKILL.md frontmatter must set that `name` and a short `description`, and it must bundle one resource file `scripts/count.py`: a Python script that reads a single integer N from its first command-line argument and prints (to stdout) the count of prime numbers less than or equal to N. Create the skill now -- do not run it yet, and do not submit anything yet."""
 
 [[stages]]
-text = """Now load that skill with load_skill (which mounts it into the sandbox under /skills/), and run its bundled scripts/count.py in the sandbox to count the primes less than or equal to 100000. Run the mounted script itself (not a re-implementation). Then call submit_result with result = {"prime_count": <the number it printed>}."""
+text = """Now use that skill to count the primes less than or equal to 100000 -- actually run the skill you just authored to get the number, not a fresh re-implementation. Then call submit_result with result = {"prime_count": <the number it printed>}."""
 
 [result_schema]
 type = "object"

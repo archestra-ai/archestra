@@ -1,13 +1,17 @@
+import { PROJECT_NAME_MAX_LENGTH } from "@archestra/shared";
+
 /**
- * Validate a project name. Returns an error message, or null when valid. One
- * validator for every entry point (route schema, agent tools), so a name that
- * passes here is safe to use as a single path-safe segment when a project owns
- * files.
+ * Validate a project's display name. Returns an error message, or null when
+ * valid. One validator for every entry point (route schema, agent tools). The
+ * project's filesystem folder is its derived, immutable slug — not the name —
+ * so these stay as conservative name hygiene (no slashes/dots/control chars).
  */
 export function validateProjectName(raw: string): string | null {
   const name = raw.trim();
   if (name.length === 0) return "project name must not be empty";
-  if (name.length > 128) return "project name must be at most 128 characters";
+  if (name.length > PROJECT_NAME_MAX_LENGTH) {
+    return `project name must be at most ${PROJECT_NAME_MAX_LENGTH} characters`;
+  }
   if (name.includes("/") || name.includes("\\")) {
     return "project name must not contain slashes";
   }

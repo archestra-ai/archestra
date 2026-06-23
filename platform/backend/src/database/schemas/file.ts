@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
@@ -76,6 +77,30 @@ const filesTable = pgTable(
     index("files_project_id_idx").on(table.projectId),
     index("files_conversation_id_idx").on(table.conversationId),
     index("files_sandbox_id_idx").on(table.sandboxId),
+    // Filename uniqueness per owner scope, so the human-readable filesystem
+    // layout is collision-free and a repeat write is rejected rather than
+    // overwriting. No-project files belong to a conversation and live at
+    // `<email>/<conversationId>/<filename>`, so a name is unique per
+    // (author, conversation) — two conversations may reuse a name.
+    uniqueIndex("files_user_conversation_filename_uidx")
+      .on(table.userId, table.conversationId, table.filename)
+      .where(
+        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NOT NULL`,
+      ),
+    // TODO(headless-files): a no-project write with no conversation (headless
+    // A2A / ChatOps / schedule / email execution) lands here as a flat
+    // `<email>/<filename>` orphan, kept unique per author by this index. Such
+    // files are created but no longer surfaced anywhere (the global "My Files"
+    // list was removed). Revisit to either surface them (e.g. scope by
+    // isolationKey) or reject no-project writes that have no conversation.
+    uniqueIndex("files_user_filename_orphan_uidx")
+      .on(table.userId, table.filename)
+      .where(
+        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NULL`,
+      ),
+    uniqueIndex("files_project_filename_uidx")
+      .on(table.projectId, table.filename)
+      .where(sql`${table.projectId} IS NOT NULL`),
     // exactly one byte location per row; provider-agnostic so adding an
     // external backend later needs no CHECK migration.
     check(

@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import { FolderKanban, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,12 +12,14 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import { useCreateProject, useProjects } from "@/lib/projects/projects.query";
 
 export default function ProjectsPageClient() {
@@ -24,20 +30,36 @@ export default function ProjectsPageClient() {
   );
 }
 
+const PROJECTS_DESCRIPTION =
+  "Collections of chats with shared files. Share a project to let teammates follow along and start their own chats.";
+
 function ProjectsList() {
   const { data, isPending } = useProjects();
+  const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const projects = data ?? [];
+
+  // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
+  // project on, so prompt to add one instead of offering project creation.
+  if (!isApiKeyLoading && !hasAnyApiKey) {
+    return (
+      <PageLayout title="Projects" description={PROJECTS_DESCRIPTION}>
+        <NoApiKeySetup description="Connect an LLM provider to start a project" />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout
       title="Projects"
-      description="Collections of chats with shared files. Share a project to let teammates follow along and start their own chats."
+      description={PROJECTS_DESCRIPTION}
       actionButton={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New project
-        </Button>
+        hasAnyApiKey ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New project
+          </Button>
+        ) : undefined
       }
     >
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -80,10 +102,6 @@ function ProjectsList() {
                   {project.description}
                 </p>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                {project.conversationCount}{" "}
-                {project.conversationCount === 1 ? "chat" : "chats"}
-              </p>
             </Link>
           ))}
         </div>
@@ -110,9 +128,15 @@ function CreateProjectDialog({
   const router = useRouter();
   const form = useForm<CreateProjectForm>({
     defaultValues: { name: "", description: "", icon: null },
+    mode: "onChange",
   });
   const createProject = useCreateProject();
   const icon = form.watch("icon");
+  const name = form.watch("name");
+  const description = form.watch("description");
+  const hasLengthError =
+    name.length > PROJECT_NAME_MAX_LENGTH ||
+    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
     const project = await createProject.mutateAsync({
@@ -147,7 +171,7 @@ function CreateProjectDialog({
           <Button
             type="submit"
             disabled={
-              createProject.isPending || !form.watch("name").trim().length
+              createProject.isPending || !name.trim().length || hasLengthError
             }
           >
             Create
@@ -161,17 +185,42 @@ function CreateProjectDialog({
           onChange={(next) => form.setValue("icon", next)}
           fallbackType="project"
         />
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Input
             autoFocus
             placeholder="Project name"
-            {...form.register("name", { required: true, maxLength: 256 })}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name", {
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
           <Textarea
             placeholder="Description (optional)"
             rows={3}
-            {...form.register("description", { maxLength: 4096 })}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.description}
+            {...form.register("description", {
+              maxLength: {
+                value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.description?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          )}
         </div>
       </div>
     </StandardFormDialog>

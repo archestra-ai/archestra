@@ -22,6 +22,7 @@ import type {
   UnsafeContextBoundary,
 } from "@/types";
 import agentsTable from "./agent";
+import environmentsTable from "./environment";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -54,6 +55,20 @@ const interactionsTable = pgTable(
     }),
     virtualKeyId: uuid("virtual_key_id").references(
       () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
+     * Snapshot of the environment this request ran under, resolved from the
+     * agent's `environment_id` at interaction-creation time (see
+     * InteractionModel.create). Null = no environment (the shared/default
+     * runtime). Snapshotting — rather than recomputing via the agent's current
+     * environment — keeps per-environment cost-limit usage stable when an agent
+     * is later reassigned, and consistent with the incremental environment
+     * limit counters that are written at request time.
+     * ON DELETE SET NULL — deleting an environment clears the snapshot.
+     */
+    environmentId: uuid("environment_id").references(
+      () => environmentsTable.id,
       { onDelete: "set null" },
     ),
     /**
@@ -126,6 +141,9 @@ const interactionsTable = pgTable(
       table.executionId,
     ),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
+    environmentIdIdx: index("interactions_environment_id_idx").on(
+      table.environmentId,
+    ),
     sessionIdIdx: index("interactions_session_id_idx").on(table.sessionId),
     createdAtIdx: index("interactions_created_at_idx").on(
       table.createdAt.desc(),

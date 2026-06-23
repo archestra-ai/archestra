@@ -529,7 +529,7 @@ export async function openManageCredentialsDialog(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
   const connectionsHeading = settingsDialog.getByRole("heading", {
-    name: "Credentials",
+    name: "Connections",
     exact: true,
   });
   if (await settingsDialog.isVisible().catch(() => false)) {
@@ -602,7 +602,7 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
     .filter({ visible: true })
     .last();
   const connectionsNavButton = visibleDialog.getByRole("button", {
-    name: /^Credentials\b/,
+    name: /^Connections\b/,
   });
   const badgeText =
     (await connectionsNavButton.textContent().catch(() => "")) ?? "";

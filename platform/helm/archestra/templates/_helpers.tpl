@@ -164,6 +164,12 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   value: {{ .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit | quote }}
 {{- end }}
 {{- end }}
+{{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+- name: ARCHESTRA_FILE_STORAGE_PROVIDER
+  value: "filesystem"
+- name: ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT
+  value: {{ .Values.archestra.fileStorage.filesystem.mountPath | quote }}
+{{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
 {{- $isSensitive := or (has $key $sensitiveEnvVars) (and (hasPrefix "ARCHESTRA_CHAT_" $key) (hasSuffix "_API_KEY" $key)) }}
@@ -269,6 +275,13 @@ Diagnostics PVC claim name
 */}}
 {{- define "archestra-platform.diagnosticsClaimName" -}}
 {{- default (printf "%s-diagnostics" (include "archestra-platform.fullname" .)) .Values.archestra.diagnostics.existingClaimName -}}
+{{- end }}
+
+{{/*
+File storage PVC claim name
+*/}}
+{{- define "archestra-platform.fileStorageClaimName" -}}
+{{- default (printf "%s-file-storage" (include "archestra-platform.fullname" .)) .Values.archestra.fileStorage.filesystem.existingClaim -}}
 {{- end }}
 
 {{/*
@@ -521,7 +534,7 @@ are covered by the pre-upgrade migration Job.
 Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumes }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -538,6 +551,11 @@ volumes:
     persistentVolumeClaim:
       claimName: {{ include "archestra-platform.diagnosticsClaimName" . }}
   {{- end }}
+  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+  - name: file-storage
+    persistentVolumeClaim:
+      claimName: {{ include "archestra-platform.fileStorageClaimName" . }}
+  {{- end }}
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -548,7 +566,7 @@ volumes:
 Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumeMounts }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumeMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -563,6 +581,11 @@ volumeMounts:
   {{- if .Values.archestra.diagnostics.enabled }}
   - name: diagnostics
     mountPath: /var/diagnostics
+    readOnly: false
+  {{- end }}
+  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+  - name: file-storage
+    mountPath: {{ .Values.archestra.fileStorage.filesystem.mountPath }}
     readOnly: false
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}

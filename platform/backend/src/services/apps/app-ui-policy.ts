@@ -92,6 +92,73 @@ export async function buildValidatedVersionPayload(params: {
   };
 }
 
+type AppValidationFinding = {
+  severity: "error" | "warning";
+  message: string;
+};
+
+/**
+ * Static, headless validation of an app's stored HTML for the `validate_app`
+ * MCP tool. Reuses the save-time Rust scan (SDK self-bootstrap, platform-asset
+ * self-loads, missing document root) — surfaced here as findings rather than a
+ * thrown rejection so authoring tools can report them — and adds the one check
+ * the scanner does not do: `<script src>`/`<link href>` hosts outside
+ * {@link APP_PLATFORM_CSP_RESOURCE_DOMAINS}, which the served CSP blocks at
+ * render time, are flagged as warnings. It cannot exercise runtime behaviour;
+ * that gap is what the live diagnostics round-trip covers.
+ */
+export async function validateAppHtmlStatic(
+  html: string,
+): Promise<AppValidationFinding[]> {
+  const findings: AppValidationFinding[] = [];
+  const { scanAppHtml } = await loadAppRuntimeNative();
+  const { rejection, warnings } = scanAppHtml(html);
+  if (rejection) {
+    findings.push({ severity: "error", message: rejectionMessage(rejection) });
+  }
+  for (const warning of warnings) {
+    findings.push({ severity: "warning", message: warning });
+  }
+  for (const host of offAllowlistResourceHosts(html)) {
+    findings.push({
+      severity: "warning",
+      message: `<script>/<link> references the host "${host}", which is outside the app CDN allowlist (${APP_PLATFORM_CSP_RESOURCE_DOMAINS.join(
+        ", ",
+      )}); the sandbox CSP blocks it at render time. Load client-side assets from an allowlisted CDN, and fetch data through an assigned MCP tool instead.`,
+    });
+  }
+  return findings;
+}
+
+const RESOURCE_REF_PATTERN =
+  /<(?:script|link)\b[^>]*?\b(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+
+// External hosts referenced by <script src>/<link href> that are not on the CSP
+// resource allowlist (exact host match, mirroring CSP host-source semantics).
+function offAllowlistResourceHosts(html: string): string[] {
+  const allowlist = new Set<string>(APP_PLATFORM_CSP_RESOURCE_DOMAINS);
+  const hosts = new Set<string>();
+  for (const match of html.matchAll(RESOURCE_REF_PATTERN)) {
+    const host = externalHost(match[1]);
+    if (host && !allowlist.has(host)) {
+      hosts.add(host);
+    }
+  }
+  return [...hosts];
+}
+
+// The host of an absolute or protocol-relative http(s) URL; null for relative,
+// data:, blob:, or otherwise host-less refs (which the resource CSP ignores).
+function externalHost(ref: string): string | null {
+  const normalized = ref.startsWith("//") ? `https:${ref}` : ref;
+  if (!/^https?:\/\//i.test(normalized)) return null;
+  try {
+    return new URL(normalized).hostname;
+  } catch {
+    return null;
+  }
+}
+
 function rejectionMessage(rejection: {
   kind: string;
   offender: string;

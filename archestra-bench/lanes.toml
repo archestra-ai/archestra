@@ -8,15 +8,15 @@
 #   base_url     optional endpoint override (e.g. an Anthropic-compatible gateway)
 #   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
 
-[[lane]]
-name = "or-nex"
-provider = "openrouter"
-model = "nex-agi/nex-n2-pro:free"
+# [[lane]]
+# name = "or-nex"
+# provider = "openrouter"
+# model = "nex-agi/nex-n2-pro:free"
 
-[[lane]]
-name = "or-owl"
-provider = "openrouter"
-model = "openrouter/owl-alpha"
+# [[lane]]
+# name = "or-owl"
+# provider = "openrouter"
+# model = "openrouter/owl-alpha"
 
 [[lane]]
 name = "minimax-3"
@@ -28,12 +28,12 @@ name = "minimax-27"
 provider = "openrouter"
 model = "minimax/minimax-m2.7"
 
-[[lane]]
-name = "kimi"
-provider = "anthropic"
-model = "kimi-for-coding"
-base_url = "https://api.kimi.com/coding/"
-api_key_env = "KIMI_API_KEY"
+# [[lane]]
+# name = "kimi"
+# provider = "anthropic"
+# model = "kimi-for-coding"
+# base_url = "https://api.kimi.com/coding/"
+# api_key_env = "KIMI_API_KEY"
 
 [[lane]]
 name = "glm"

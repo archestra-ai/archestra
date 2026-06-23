@@ -23,8 +23,7 @@ import {
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
-type BlobStorageProviderType = "db" | "s3";
-type S3BlobStorageAuthMethod = "irsa" | "static";
+type FileStorageProviderType = "db" | "filesystem";
 
 /**
  * Load .env from platform root
@@ -631,33 +630,31 @@ export const parseTrustProxy = (
 };
 
 /** @public — exported for testability */
-export function parseBlobStorageProvider(
+export function parseFileStorageProvider(
   value: string | undefined,
-): BlobStorageProviderType {
+): FileStorageProviderType {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "s3" ? "s3" : "db";
+  return normalized === "filesystem" ? "filesystem" : "db";
 }
 
 /** @public — exported for testability */
-export function parseS3BlobStorageAuthMethod(
-  value: string | undefined,
-): S3BlobStorageAuthMethod {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "static" ? "static" : "irsa";
-}
-
-/** @public — exported for testability */
-export function parseS3BlobStorageBucket(params: {
-  provider: BlobStorageProviderType;
+export function parseFileStorageFilesystemRoot(params: {
+  provider: FileStorageProviderType;
   value: string | undefined;
 }): string {
-  const bucket = params.value?.trim() ?? "";
-  if (params.provider === "s3" && !bucket) {
+  const root = params.value?.trim() ?? "";
+  if (params.provider !== "filesystem") return root;
+  if (!root) {
     throw new Error(
-      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
     );
   }
-  return bucket;
+  if (!path.isAbsolute(root)) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
+    );
+  }
+  return root;
 }
 
 /** @public — exported for testability */
@@ -724,10 +721,6 @@ const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
 
-const knowledgeFileBlobStorageProvider = parseBlobStorageProvider(
-  process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_BLOB_STORAGE_PROVIDER,
-);
-
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
  * (and logs) rather than throwing — config is built at module import, so a
@@ -784,6 +777,16 @@ const skillsSandboxEnabled =
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+
+// persistent "My Files" byte storage backend; the root is validated (required +
+// absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
+const fileStorageProvider = parseFileStorageProvider(
+  process.env.ARCHESTRA_FILE_STORAGE_PROVIDER,
+);
+const fileStorageFilesystemRoot = parseFileStorageFilesystemRoot({
+  provider: fileStorageProvider,
+  value: process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT,
+});
 
 const config = {
   frontendBaseUrl,
@@ -1249,21 +1252,23 @@ const config = {
   /**
    * Projects + the persistent "My Files" file system on top of the skill
    * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the search_files / save_result MCP
-   * tools, and the my_file upload source.
+   * project APIs, the My Files endpoints, the persistent-file MCP tools
+   * (search_files, read_file, save_result, edit_file, delete_file), and the
+   * my_file upload source.
    */
   projects: {
     enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
   },
   /**
-   * Dynamic tool access UI. Ships dark: off by default until ready to surface.
-   * Gates the per-agent "All / Custom" tools selector and the per-server
-   * "Agent connections" (on-behalf-of vs pinned service account) selector. The
-   * backend still honors a stored access_all_tools flag and the per-server
-   * connection policy; this only controls whether those controls are exposed.
+   * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
+   * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
+   * provider is used for new writes while reads dispatch per row, so a
+   * deployment can hold a mix. `filesystemRoot` is the absolute mount path,
+   * required + validated when `provider === "filesystem"`.
    */
-  dynamicToolAccess: {
-    enabled: process.env.ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED === "true",
+  fileStorage: {
+    provider: fileStorageProvider,
+    filesystemRoot: fileStorageFilesystemRoot,
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -1342,40 +1347,16 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
+      ? parsePositiveInt(
+          process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
+          300000,
+        )
+      : undefined,
   },
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
-    fileUpload: {
-      blobStorage: {
-        provider: knowledgeFileBlobStorageProvider,
-        s3: {
-          bucket: parseS3BlobStorageBucket({
-            provider: knowledgeFileBlobStorageProvider,
-            value: process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET,
-          }),
-          region:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_REGION || "",
-          prefix:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_PREFIX || "",
-          endpoint:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ENDPOINT || "",
-          forcePathStyle:
-            process.env
-              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_FORCE_PATH_STYLE ===
-            "true",
-          authMethod: parseS3BlobStorageAuthMethod(
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_AUTH_METHOD,
-          ),
-          accessKeyId:
-            process.env.ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_ACCESS_KEY_ID ||
-            "",
-          secretAccessKey:
-            process.env
-              .ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_SECRET_ACCESS_KEY || "",
-        },
-      },
-    },
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),

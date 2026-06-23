@@ -105,8 +105,8 @@ describe("handleBatchEmbedding", () => {
     ).rejects.toThrow("Missing documentIds in batch_embedding payload");
   });
 
-  // connectorRunId is optional — file_upload connectors embed documents
-  test("processes documents without connectorRunId (file upload scenario)", async () => {
+  // connectorRunId is optional — some embedding paths embed documents
+  test("processes documents without connectorRunId", async () => {
     await handleBatchEmbedding({ documentIds: ["doc-1"] });
 
     expect(mockProcessDocuments).toHaveBeenCalledWith(["doc-1"], undefined);

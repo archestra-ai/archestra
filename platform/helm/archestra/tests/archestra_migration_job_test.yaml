@@ -31,8 +31,8 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].command
           value:
-            - pnpm
-            - db:migrate
+            - ./node_modules/.bin/drizzle-kit
+            - migrate
 
   - it: does not create the migration job when disabled
     set:

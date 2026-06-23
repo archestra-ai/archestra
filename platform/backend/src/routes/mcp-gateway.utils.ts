@@ -8,6 +8,7 @@ import {
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
@@ -65,6 +66,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -151,6 +153,7 @@ export async function createAgentServer(
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   } as const;
 
   const mcpServer = new McpServer(
@@ -935,6 +938,17 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    // A token audience-bound to a shareable-App connector is valid only at that
+    // connector, never at the MCP gateway — reject it before the user-access
+    // branch would otherwise accept it on team membership alone.
+    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+      logger.warn(
+        { profileId: params.profileId },
+        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
+      );
+      return null;
+    }
+
     // Application (client_credentials) tokens minted for an MCP OAuth client
     // carry no acting user. Authorize them against the client's allowed gateways
     // instead of a user's team membership.
@@ -973,18 +987,31 @@ async function validateOAuthTokenByHash(params: {
       };
     }
 
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (
-      !(await AgentTeamModel.userHasAgentAccess(
-        userId,
-        params.profileId,
-        false,
-        agent,
-      ))
-    ) {
+    // Non-admin access has two additive sources:
+    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+    //      that minted this token — its allowedGatewayIds may grant access to
+    //      gateways the user could not otherwise reach (e.g. a gateway reachable
+    //      only through a specific pre-registered app).
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+      userId,
+      params.profileId,
+      false,
+      agent,
+    );
+    const hasClientGrant =
+      hasRbacAccess || !accessToken.clientId
+        ? false
+        : await mcpOauthClientGrantsGatewayAccess({
+            clientId: accessToken.clientId,
+            profileId: params.profileId,
+            organizationId,
+          });
+
+    if (!hasRbacAccess && !hasClientGrant) {
       logger.warn(
         { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
+        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
       return null;
     }
@@ -1080,6 +1107,29 @@ async function validateMcpOauthClientToken(params: {
     isOrganizationToken: false,
     organizationId,
   };
+}
+
+/**
+ * Whether the authorization_code MCP OAuth client that minted a user-bound token
+ * grants access to a gateway beyond the user's own RBAC. This is an additive,
+ * admin-controlled access grant: only client_credentials clients use
+ * allowedGatewayIds as a sole authority, whereas an authorization_code client's
+ * list confers extra access to anyone who authenticates through it. Disabled or
+ * deleted clients (findByClientId returns null) grant nothing.
+ */
+async function mcpOauthClientGrantsGatewayAccess(params: {
+  clientId: string;
+  profileId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedGatewayIds.includes(params.profileId);
 }
 
 /**

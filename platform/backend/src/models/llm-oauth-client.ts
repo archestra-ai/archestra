@@ -60,15 +60,19 @@ class LlmOauthClientModel {
     const clientSecretHash = isAuthorizationCode
       ? hashOauthClientSecret(clientSecret)
       : await hashClientSecret(clientSecret);
-    // For authorization_code the acting user's own identity governs proxy access
-    // and provider-key resolution, so neither field applies to those clients.
+    // allowedLlmProxyIds governs both grant types, but differently:
+    // - client_credentials: the SOLE authority — the token may only reach the
+    //   listed proxies (there is no acting user).
+    // - authorization_code: an ADDITIVE, admin-controlled grant — a user who
+    //   authenticates through the client may reach these proxies IN ADDITION to
+    //   their own RBAC. Empty = pure identity passthrough.
+    // providerApiKeys never apply to authorization_code clients: the acting
+    // user's own keys are resolved at call time.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType,
-      allowedLlmProxyIds: isAuthorizationCode
-        ? []
-        : (params.allowedLlmProxyIds ?? []),
+      allowedLlmProxyIds: params.allowedLlmProxyIds ?? [],
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ?? []),
@@ -224,13 +228,14 @@ class LlmOauthClientModel {
     if (!existing) return null;
     const isAuthorizationCode = existing.grantType === "authorization_code";
 
+    // allowedLlmProxyIds applies to both grant types (see create()); update it
+    // for either. providerApiKeys never apply to authorization_code clients.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType: existing.grantType,
-      allowedLlmProxyIds: isAuthorizationCode
-        ? []
-        : (params.allowedLlmProxyIds ?? existing.allowedLlmProxyIds),
+      allowedLlmProxyIds:
+        params.allowedLlmProxyIds ?? existing.allowedLlmProxyIds,
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ??

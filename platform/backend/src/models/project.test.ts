@@ -75,6 +75,30 @@ describe("ProjectModel", () => {
     ).rejects.toBeInstanceOf(ProjectNameExistsError);
   });
 
+  test("generates a url-safe slug, deduped within an org", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser({ email: "slug-other@test.com" });
+    const first = await makeProject({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "Quarterly Report",
+    });
+    expect(first.slug).toBe("quarterly-report");
+    // a different member may reuse the display name (names are unique per user),
+    // but the slug — the shared folder — must stay distinct within the org.
+    const second = await makeProject({
+      organizationId: org.id,
+      userId: other.id,
+      name: "Quarterly Report",
+    });
+    expect(second.slug).not.toBe(first.slug);
+    expect(second.slug.startsWith("quarterly-report-")).toBe(true);
+  });
+
   test("deleting a project nulls its conversations", async ({
     makeUser,
     makeOrganization,

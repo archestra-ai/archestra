@@ -295,4 +295,55 @@ describe("mcpOauthClientsRoutes", () => {
       "https://chat.example.com/oauth/callback2",
     ]);
   });
+
+  test("creates an authorization_code client with an additive gateway grant", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Chat Gateway",
+      agentType: "mcp_gateway",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload: {
+        name: "Chat Interface",
+        grantType: "authorization_code",
+        redirectUris: ["https://chat.example.com/oauth/callback"],
+        allowedGatewayIds: [gateway.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().grantType).toBe("authorization_code");
+    expect(response.json().allowedGatewayIds).toEqual([gateway.id]);
+  });
+
+  test("validates the gateway grant on an authorization_code client", async ({
+    makeAgent,
+  }) => {
+    // A non-gateway agent in the grant list is rejected, just like for
+    // client_credentials clients.
+    const llmProxy = await makeAgent({
+      organizationId,
+      name: "Not A Gateway",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload: {
+        name: "Chat Interface",
+        grantType: "authorization_code",
+        redirectUris: ["https://chat.example.com/oauth/callback"],
+        allowedGatewayIds: [llmProxy.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("MCP gateway not found");
+  });
 });

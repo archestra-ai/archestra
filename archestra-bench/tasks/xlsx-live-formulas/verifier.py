@@ -11,11 +11,11 @@ fails.
 
 import io
 import json
-import os
 import re
-from pathlib import Path
 
 import openpyxl
+
+from bench_verifier import output, read_fixture_json, result, state
 
 HEADER = ["sale_id", "salesperson", "team", "units", "unit_price", "commission_pct", "bonus"]
 FIRST_DATA_ROW = 2
@@ -29,24 +29,14 @@ RANGE_RE = re.compile(r"^[A-Z]+[0-9]+:[A-Z]+[0-9]+$")
 
 # === fixtures / state loading ===
 
-def _load_json(env_var: str) -> dict:
-    path = os.environ.get(env_var)
-    assert path, f"{env_var} is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
 def _sales() -> list[dict]:
-    base = os.environ.get("BENCH_FIXTURES")
-    assert base, "BENCH_FIXTURES is not set"
-    return json.loads(Path(base, "expected", "sales.json").read_text(encoding="utf-8"))
+    return read_fixture_json("expected", "sales.json")
 
 
 def _workbook():
-    path = os.environ.get("BENCH_OUTPUT")
-    assert path, "BENCH_OUTPUT is not set -- the agent did not export a workbook"
     # The harness saves the artifact as `artifact.bin`; load from bytes so openpyxl does not reject it
     # on the extension (it only validates content for a file-like object).
-    wb = openpyxl.load_workbook(io.BytesIO(Path(path).read_bytes()), data_only=False)
+    wb = openpyxl.load_workbook(io.BytesIO(output().read_bytes()), data_only=False)
     assert len(wb.worksheets) == 1, f"expected a single-worksheet workbook, got {len(wb.worksheets)}"
     return wb.active
 
@@ -118,7 +108,7 @@ def _parse_sumif(formula, sheet_title: str) -> tuple[str, str, str]:
 # === checks ===
 
 def test_skill_seeded_from_repo() -> None:
-    rest = _load_json("BENCH_STATE")["rest"]
+    rest = state()["rest"]
     assert len(rest) == 1, f"expected one captured rest path, got {list(rest)}"
     payload = next(iter(rest.values()))
     rows = payload.get("data") if isinstance(payload, dict) else None
@@ -130,7 +120,7 @@ def test_skill_seeded_from_repo() -> None:
 
 
 def test_skill_loaded_and_read() -> None:
-    calls = _load_json("BENCH_STATE").get("tool_calls", [])
+    calls = state().get("tool_calls", [])
     loaded = [
         c for c in calls
         if c.get("name") == "archestra__load_skill"
@@ -216,7 +206,7 @@ def test_submitted_team_bonuses() -> None:
         bonus = row["units"] * row["unit_price"] * row["commission_pct"]
         expected[row["team"]] = expected.get(row["team"], 0.0) + bonus
 
-    submitted = _load_json("BENCH_RESULT")["team_bonuses"]
+    submitted = result()["team_bonuses"]
     teams = [item["team"] for item in submitted]
     assert len(teams) == len(set(teams)), f"duplicate team in submission: {teams}"
     assert set(teams) == set(expected), f"submitted teams {set(teams)} != expected {set(expected)}"

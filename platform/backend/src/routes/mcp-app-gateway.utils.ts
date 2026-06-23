@@ -1,6 +1,9 @@
 import {
   getArchestraAppResourceUri,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  OAUTH_TOKEN_ID_PREFIX,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 } from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,10 +27,14 @@ import {
   AppToolModel,
   AppVersionModel,
   McpToolCallModel,
+  MemberModel,
+  OAuthAccessTokenModel,
   TeamTokenModel,
+  ToolModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { appConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
   type AppSdkTool,
   injectAppSdk,
@@ -150,14 +157,21 @@ export async function createAppServer(
             // Owned apps get the Apps SDK (window.archestra) injected at serve
             // time; the stored HTML stays pure UI. The bootstrap carries the
             // viewer identity and the assigned-tool descriptors.
-            text: await injectAppSdk(head.html, {
-              user: viewer ? { id: viewer.id, name: viewer.name } : null,
-              tools: await buildAppSdkTools(appId, tokenAuth),
-              appId,
-              version: head.version,
-              captureScreenshot:
-                viewer != null && current?.authorId === viewer.id,
-            }),
+            text: await injectAppSdk(
+              head.html,
+              {
+                user: viewer ? { id: viewer.id, name: viewer.name } : null,
+                tools: await buildAppSdkTools(appId, tokenAuth),
+                appId,
+                version: head.version,
+                captureScreenshot:
+                  viewer != null && current?.authorId === viewer.id,
+              },
+              // An external client renders in a foreign host whose sandbox CSP
+              // may refuse cross-origin assets, so serve a self-contained
+              // resource; Archestra's own session render keeps linked assets.
+              { selfContained: !tokenAuth.isSessionAuth },
+            ),
             _meta: {
               ui: {
                 // Owned apps always render under the platform CSP — never a
@@ -285,6 +299,68 @@ export async function validateAppGatewayToken(
 }
 
 /**
+ * Resolve a shareable-App connector OAuth access token to its viewer. The native
+ * connector flow mints an audience-bound token (see the token endpoint), and the
+ * connector accepts it only when bound to its own canonical URI and resolving a
+ * single viewer. Unlike the personal-token path, an OAuth token is not
+ * organization-scoped, so the viewer is confirmed a member of the app's
+ * organization here — `userHasAppAccess` trusts the caller's org for an
+ * org-scoped app, so the membership check is what holds the org boundary.
+ */
+export async function validateAppConnectorOAuthToken(params: {
+  token: string;
+  appId: string;
+  connectorResourceUri: string;
+}): Promise<AppGatewayTokenAuth> {
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+    OAuthAccessTokenModel.hashTokenForLookup(params.token),
+  );
+  if (
+    !accessToken ||
+    accessToken.refreshTokenRevoked ||
+    accessToken.expiresAt < new Date()
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+  // Audience binding alone is not authorization: a client can bind any token to
+  // the connector by passing the resource, so a token consented to a lesser
+  // scope (e.g. `openid profile`) must not reach the connector without the mcp
+  // scope the user actually consented to. Parallels the gateway scope check.
+  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
+    return { ok: false, reason: "invalid" };
+  }
+  // The token's audience must equal this connector's own canonical URI: an
+  // unbound token, a gateway token, or another app's token is rejected.
+  if (
+    accessToken.referenceId !==
+    appConnectorAudienceRef(params.connectorResourceUri)
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+  // A token with no acting user (client credentials) carries no viewer.
+  if (!accessToken.userId) {
+    return { ok: false, reason: "no_viewer" };
+  }
+  const app = await AppModel.findById(params.appId);
+  if (!app) {
+    return { ok: false, reason: "invalid" };
+  }
+  const membership = await MemberModel.getByUserId(
+    accessToken.userId,
+    app.organizationId,
+  );
+  if (!membership) {
+    return { ok: false, reason: "invalid" };
+  }
+  return {
+    ok: true,
+    userId: accessToken.userId,
+    organizationId: app.organizationId,
+    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+  };
+}
+
+/**
  * The app endpoint's tool list (assigned upstream tools + the App Data Store
  * built-ins), RBAC-filtered for the viewing user. Shared by the MCP
  * tools/list handler and the SDK bootstrap.
@@ -341,25 +417,58 @@ function buildAppLaunchTool(appId: string, app: App): McpListTool {
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {
   const upstream = await AppToolModel.getToolsForApp(appId);
-  const upstreamTools: McpListTool[] = upstream.map((tool) => {
-    const meta = tool.meta as {
-      annotations?: McpListTool["annotations"];
-      _meta?: McpListTool["_meta"];
-    } | null;
-    return {
-      name: tool.name,
-      title: tool.name,
-      description: tool.description ?? undefined,
-      inputSchema: normalizeToolInputSchema(tool.parameters),
-      annotations: meta?.annotations ?? {},
-      _meta: meta?._meta ?? {},
-    };
-  });
+  // Trim the runtime list to the app's bound environment so it never offers a
+  // tool the call-time gate would refuse. UX hygiene only — the hard fence is
+  // gateAppToolCall.
+  const app = await AppModel.findById(appId);
+  const inEnvIds = await ToolModel.filterToolIdsInEnvironment(
+    upstream.map((tool) => tool.id),
+    app?.environmentId ?? null,
+  );
+  const upstreamTools: McpListTool[] = upstream
+    .filter((tool) => inEnvIds.has(tool.id))
+    .map((tool) => {
+      const meta = tool.meta as {
+        annotations?: McpListTool["annotations"];
+        _meta?: McpListTool["_meta"];
+      } | null;
+      return {
+        name: tool.name,
+        title: tool.name,
+        description: tool.description ?? undefined,
+        inputSchema: normalizeToolInputSchema(tool.parameters),
+        annotations: meta?.annotations ?? {},
+        _meta: meta?._meta ?? {},
+      };
+    });
 
-  const builtInTools = getArchestraMcpTools().filter((tool) => {
-    const shortName = archestraMcpBranding.getToolShortName(tool.name);
-    return shortName !== null && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName);
-  });
+  const builtInTools = getArchestraMcpTools()
+    .filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      return (
+        shortName !== null && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)
+      );
+    })
+    .map((tool): McpListTool => {
+      // The runtime LLM completion stays in tools/list (so an app's own
+      // tools/call is still relayed by a foreign host) but is marked app-only,
+      // so the host's model can't invoke it to spend the viewer's metered LLM
+      // budget directly. Other built-ins (the data store) stay model-visible.
+      if (
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_APP_LLM_COMPLETE_SHORT_NAME
+      ) {
+        return withAppOnlyVisibility(tool);
+      }
+      return tool;
+    });
 
   return [...upstreamTools, ...builtInTools];
+}
+
+/** Mark a tool callable by the app's own code but invisible to the host model. */
+function withAppOnlyVisibility(tool: McpListTool): McpListTool {
+  const meta = (tool._meta ?? {}) as Record<string, unknown>;
+  const ui = (meta.ui ?? {}) as Record<string, unknown>;
+  return { ...tool, _meta: { ...meta, ui: { ...ui, visibility: ["app"] } } };
 }

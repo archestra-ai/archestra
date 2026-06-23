@@ -7,8 +7,8 @@ use super::toml_util::{self, TomlTable};
 use super::types::{EnvConfig, Mcp, PlatformConfig, SkillRef, ToolExposureMode};
 
 // Empty by default: lanes mimic a regular Archestra user who sets no custom system prompt, so the
-// agent runs on Archestra's stock chat instructions. Submission guidance is appended to the user
-// message instead (see SUBMIT_INSTRUCTION in run.rs).
+// agent runs on Archestra's stock chat instructions. Submission guidance is appended to the
+// final-stage user message instead (see SUBMIT_INSTRUCTION in run.rs).
 const DEFAULT_SYSTEM_PROMPT: &str = "";
 
 #[derive(Debug, thiserror::Error)]

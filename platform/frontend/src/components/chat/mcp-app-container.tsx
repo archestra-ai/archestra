@@ -7,12 +7,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
+import { useApps } from "@/components/chat/apps-context";
 import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
@@ -103,7 +102,7 @@ export function McpAppSection({
   appVersion?: number | null;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
   toolName: string;
-  /** Stable identifier for this canvas, used to pin it to the sidebar. */
+  /** Stable identifier for this app, used to select it in the panel. */
   toolCallId?: string;
   toolInput?: Record<string, unknown>;
   /** Tool result for the iframe; omitted for owned apps (management payloads are not app data) */
@@ -133,15 +132,14 @@ export function McpAppSection({
   const effectiveResourceState =
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
-  const { selectedCanvasId, select, showInSidebar, portalTarget } =
-    usePinnedCanvas();
+  const { selectedToolCallId, select, showInSidebar, portalTarget } = useApps();
 
   const parsedToolName = parseFullToolName(toolName);
   const shortToolName = parsedToolName.toolName ?? toolName;
-  const isSelected = !!toolCallId && selectedCanvasId === toolCallId;
+  const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const sidebarHostingActive = portalTarget !== null;
-  // When the sidebar canvas tab is open, every inline canvas is replaced by a
-  // placeholder; only the *selected* canvas's iframe lives in the sidebar.
+  // When the sidebar Apps tab is open, every inline app is replaced by a
+  // placeholder; only the *selected* app's iframe lives in the sidebar.
   const renderInSidebar = sidebarHostingActive && isSelected;
   const renderPlaceholder = sidebarHostingActive;
 
@@ -191,11 +189,31 @@ export function McpAppSection({
     return null;
   }
 
-  const canvas = (
+  const diagnosticsBadge =
+    errorCount > 0 || logCount > 0 ? (
+      <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
+        {errorCount > 0 && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+            {errorCount === 1
+              ? "1 runtime error"
+              : `${errorCount} runtime errors`}{" "}
+            in this app
+          </div>
+        )}
+        {logCount > 0 && (
+          <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
+            {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  const appSurface = (
     <McpAppErrorBoundary>
       <McpAppContainer
         displayMode={displayMode}
         onClose={() => setDisplayMode("inline")}
+        diagnostics={diagnosticsBadge}
         size={size}
         inlineCeiling={inlineCeiling}
         onShowInSidebar={
@@ -203,23 +221,6 @@ export function McpAppSection({
         }
         fillContainer={renderInSidebar}
       >
-        {(errorCount > 0 || logCount > 0) && (
-          <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
-            {errorCount > 0 && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-                {errorCount === 1
-                  ? "1 runtime error"
-                  : `${errorCount} runtime errors`}{" "}
-                in this app
-              </div>
-            )}
-            {logCount > 0 && (
-              <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
-                {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
-              </div>
-            )}
-          </div>
-        )}
         <McpAppRuntime
           toolResourceUri={uiResourceUri}
           endpoint={
@@ -250,20 +251,22 @@ export function McpAppSection({
   if (renderPlaceholder) {
     return (
       <>
-        <SidebarCanvasPlaceholder
+        <SidebarAppPlaceholder
           label={shortToolName}
           isSelected={isSelected}
           onSelect={handleSelect}
         />
-        {renderInSidebar && portalTarget && createPortal(canvas, portalTarget)}
+        {renderInSidebar &&
+          portalTarget &&
+          createPortal(appSurface, portalTarget)}
       </>
     );
   }
 
-  return canvas;
+  return appSurface;
 }
 
-function SidebarCanvasPlaceholder({
+function SidebarAppPlaceholder({
   label,
   isSelected,
   onSelect,
@@ -317,6 +320,7 @@ function McpAppContainer({
   displayMode,
   onClose,
   children,
+  diagnostics,
   size,
   inlineCeiling,
   onShowInSidebar,
@@ -325,16 +329,21 @@ function McpAppContainer({
   displayMode: McpUiDisplayMode;
   onClose: () => void;
   children: React.ReactNode;
+  /**
+   * Diagnostics badge rendered above the app. Kept out of `children` so the
+   * fill/fullscreen `[&>div]:!h-full` stretch only hits the app surface — a
+   * badge stretched to full height would shove the app below the fold.
+   */
+  diagnostics?: React.ReactNode;
   size: { width: number; height: number } | null;
   /** Viewport-derived max height for the inline card; reacts to window resize. */
   inlineCeiling: number;
-  /** Inline-mode action: send this canvas to the sidebar. */
+  /** Inline-mode action: send this app to the sidebar. */
   onShowInSidebar?: () => void;
-  /** When true, the canvas fills its parent container (used when portaled to sidebar). */
+  /** When true, the app fills its parent container (used when portaled to sidebar). */
   fillContainer?: boolean;
 }) {
   const isFullscreen = displayMode === "fullscreen";
-  const containerRef = useRef<HTMLDivElement>(null);
   const [bounds, setBounds] = useState<{
     top: number;
     left: number;
@@ -379,7 +388,6 @@ function McpAppContainer({
 
   return (
     <div
-      ref={containerRef}
       className={cn(
         "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group",
         isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",
@@ -451,6 +459,8 @@ function McpAppContainer({
           )}
         </div>
       )}
+
+      {diagnostics && <div className="shrink-0">{diagnostics}</div>}
 
       <div
         style={

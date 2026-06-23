@@ -15,8 +15,8 @@ import {
   Cable,
   Database,
   FolderKanban,
-  FolderOpen,
   Github,
+  Inbox,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -25,6 +25,7 @@ import {
   PencilRuler,
   Route,
   Slack,
+  Sparkles,
   Star,
 } from "lucide-react";
 import Link from "next/link";
@@ -40,7 +41,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -57,6 +57,7 @@ import { useFeature } from "@/lib/config/config.query";
 
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useOnce } from "@/lib/hooks/use-once";
 import { cn } from "@/lib/utils";
 
 interface NavSubItem {
@@ -100,17 +101,11 @@ const chatsNavItems: NavItem[] = [
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
   },
-  {
-    title: "My Files",
-    url: "/my-files",
-    icon: FolderOpen,
-    customIsActive: (pathname: string) => pathname.startsWith("/my-files"),
-  },
 ];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects", "/my-files"];
+  const chatPrefixes = ["/chat", "/projects"];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -191,7 +186,7 @@ function SidebarModeToggle({
   );
 
   return (
-    <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
+    <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
       {segment("chats", "Chats", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
     </div>
@@ -213,24 +208,26 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/skills"),
         subItems: [
           {
-            title: "Skills",
-            url: "/agents/skills",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/skills"),
-          },
-          {
-            title: "Scheduled",
+            title: "Scheduled Tasks",
             url: "/scheduled-tasks",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/scheduled-tasks"),
           },
-          {
-            title: "Triggers",
-            url: "/agents/triggers",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/triggers"),
-          },
         ],
+      },
+      {
+        title: "Skills",
+        url: "/agents/skills",
+        icon: Sparkles,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/skills"),
+      },
+      {
+        title: "Messaging Channels",
+        url: "/agents/triggers",
+        icon: Inbox,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/agents/triggers"),
       },
     ],
   },
@@ -316,7 +313,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Database,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/knowledge") &&
-          !pathname.startsWith("/knowledge/files") &&
           !pathname.startsWith("/knowledge/connectors"),
         subItems: [
           {
@@ -324,12 +320,6 @@ const contentNavGroups: NavGroup[] = [
             url: "/knowledge/connectors",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/knowledge/connectors"),
-          },
-          {
-            title: "Files",
-            url: "/knowledge/files",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/files"),
           },
         ],
       },
@@ -617,17 +607,18 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  // Projects and My Files are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
+  // Projects are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
   const projectsEnabled = useFeature("projectsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
+  const chatListFadeIn = useOnce();
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
 
-  // Projects and My Files exist only when the projects feature is on.
+  // Projects exist only when the projects feature is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter(
-        (item) => item.title === "New Chat" || projectsEnabled,
+        (item) => item.title !== "Projects" || projectsEnabled,
       ),
     [projectsEnabled],
   );
@@ -641,6 +632,9 @@ export function AppSidebar() {
         items: group.items
           .filter((item) => {
             if (item.title === "Connect" && !showConnect) return false;
+            // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
+            // var. It's a top-level item now, so gate it here (not in subItems).
+            if (item.url === "/agents/skills" && !skillsEnabled) return false;
             return true;
           })
           .map((item) =>
@@ -648,7 +642,6 @@ export function AppSidebar() {
               ? {
                   ...item,
                   subItems: item.subItems.filter((sub) => {
-                    if (sub.url === "/agents/skills") return skillsEnabled;
                     // With projects on, schedules are managed per-project on the
                     // project detail page, so the standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;
@@ -674,35 +667,43 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
+        {isAuthenticated && permissionMap && (
+          <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+        )}
       </SidebarHeader>
       <SidebarContent>
-        {isAuthenticated && permissionMap && (
-          <>
-            <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
-            {sidebarMode === "chats" ? (
-              <>
-                <NavPrimary
-                  items={filteredChatsNavItems}
-                  groups={[]}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                  permissionMap={permissionMap}
-                />
-                {/* Recents scrolls within its own region so the community
-                    links below (NavSecondary, mt-auto) stay pinned to the
-                    bottom on the chats tab instead of being pushed off-screen. */}
-                <SidebarGroup className="min-h-0 flex-1 overflow-hidden pt-0">
-                  <SidebarGroupLabel>Recents</SidebarGroupLabel>
-                  <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
-                    <SidebarMenu>
-                      <SidebarMenuItem>
-                        <ChatSidebarSection slots={15} flat />
-                      </SidebarMenuItem>
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </>
-            ) : (
+        {isAuthenticated &&
+          permissionMap &&
+          (sidebarMode === "chats" ? (
+            <>
+              <NavPrimary
+                items={filteredChatsNavItems}
+                groups={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+              {/* The chat list (Pinned + Recents, labeled inside
+                    ChatSidebarSection) and the community links below it scroll
+                    together within this region, while the nav above stays
+                    pinned. The fade hints there is more content below. */}
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                  <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
+                  <NavSecondary
+                    items={[]}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                    permissionMap={permissionMap}
+                    showCommunityLinks={showCommunityLinks}
+                    starCount={formattedStarCount}
+                    className="mt-2.5"
+                  />
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </>
+          ) : (
+            <>
               <NavPrimary
                 items={[]}
                 groups={filteredNavGroups}
@@ -710,18 +711,17 @@ export function AppSidebar() {
                 searchParams={searchParams}
                 permissionMap={permissionMap}
               />
-            )}
-            <NavSecondary
-              items={[]}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              showCommunityLinks={showCommunityLinks}
-              starCount={formattedStarCount}
-              className="mt-auto"
-            />
-          </>
-        )}
+              <NavSecondary
+                items={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                showCommunityLinks={showCommunityLinks}
+                starCount={formattedStarCount}
+                className="mt-auto"
+              />
+            </>
+          ))}
         {!isAuthenticated && showCommunityLinks && (
           <NavSecondary
             items={[]}

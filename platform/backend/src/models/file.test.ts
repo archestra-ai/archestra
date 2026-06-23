@@ -1,12 +1,47 @@
 import { ConversationModel, FileModel, ProjectModel } from "@/models";
+import { FileNameExistsError } from "@/models/file";
 import { expect, test } from "@/test";
 
-test("listForUser returns the user's own files and excludes project files", async ({
+/** Insert a db-backed row directly (orchestration is FileStore's job). */
+function insert(params: {
+  organizationId: string;
+  userId: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  filename: string;
+}) {
+  return FileModel.insertRow({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    projectId: params.projectId ?? null,
+    conversationId: params.conversationId ?? null,
+    filename: params.filename,
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    storageProvider: "db",
+    data: Buffer.from("hi"),
+    objectKey: null,
+  });
+}
+
+test("listNoProjectByConversation returns the user's no-project files in that conversation only", async ({
   makeUser,
   makeOrganization,
+  makeAgent,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const convA = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  const convB = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
   const project = await ProjectModel.create({
     organizationId: org.id,
     userId: user.id,
@@ -14,32 +49,33 @@ test("listForUser returns the user's own files and excludes project files", asyn
     description: null,
   });
 
-  const own = await FileModel.create({
+  const inA = await insert({
     organizationId: org.id,
     userId: user.id,
-    projectId: null,
-    conversationId: null,
+    conversationId: convA.id,
     filename: "mine.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
-  await FileModel.create({
+  // another conversation's file and a project file must both be excluded
+  await insert({
     organizationId: org.id,
     userId: user.id,
+    conversationId: convB.id,
+    filename: "other.txt",
+  });
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: convA.id,
     projectId: project.id,
-    conversationId: null,
     filename: "proj.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
 
-  const mine = await FileModel.listForUser({
+  const inConvA = await FileModel.listNoProjectByConversation({
     organizationId: org.id,
     userId: user.id,
+    conversationId: convA.id,
   });
-  expect(mine.map((r) => r.id)).toEqual([own.id]);
+  expect(inConvA.map((r) => r.id)).toEqual([inA.id]);
 
   const projFiles = await FileModel.listByProject({
     organizationId: org.id,
@@ -63,25 +99,17 @@ test("listByConversation returns only the caller's files in that conversation", 
     agentId: agent.id,
   });
 
-  const mine = await FileModel.create({
+  const mine = await insert({
     organizationId: org.id,
     userId: me.id,
-    projectId: null,
     conversationId: conv.id,
     filename: "mine.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
-  await FileModel.create({
+  await insert({
     organizationId: org.id,
     userId: other.id,
-    projectId: null,
     conversationId: conv.id,
     filename: "theirs.txt",
-    mimeType: "text/plain",
-    sizeBytes: 2,
-    data: Buffer.from("hi"),
   });
 
   const listed = await FileModel.listByConversation({
@@ -91,4 +119,84 @@ test("listByConversation returns only the caller's files in that conversation", 
   });
   expect(listed.map((r) => r.filename)).toEqual(["mine.txt"]);
   expect(listed[0].id).toBe(mine.id);
+});
+
+test("insertRow rejects a duplicate filename in the same conversation", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const conv = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: conv.id,
+    filename: "dup.txt",
+  });
+  await expect(
+    insert({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv.id,
+      filename: "dup.txt",
+    }),
+  ).rejects.toBeInstanceOf(FileNameExistsError);
+});
+
+test("insertRow allows the same filename in two different conversations", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const convA = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  const convB = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: convA.id,
+    filename: "report.txt",
+  });
+  await expect(
+    insert({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: convB.id,
+      filename: "report.txt",
+    }),
+  ).resolves.toBeTruthy();
+});
+
+test("insertRow rejects a duplicate filename for a user's headless (no-conversation) files", async ({
+  makeUser,
+  makeOrganization,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  // conversationId omitted → null: the orphan index keeps these unique per user.
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    filename: "dup.txt",
+  });
+  await expect(
+    insert({ organizationId: org.id, userId: user.id, filename: "dup.txt" }),
+  ).rejects.toBeInstanceOf(FileNameExistsError);
 });

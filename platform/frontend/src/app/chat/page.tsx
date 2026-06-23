@@ -1,22 +1,15 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
+import type { ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
-  Download,
-  FileText,
-  Globe,
   MicIcon,
-  MoreVertical,
-  PanelRight,
   PaperclipIcon,
   Plus,
-  Share2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -35,17 +28,18 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
-  deriveCanvasesFromMessages,
+  deriveAppsFromMessages,
 } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
+import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
-import { PinnedCanvasProvider } from "@/components/chat/pinned-canvas-context";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -56,12 +50,11 @@ import {
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
+import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,12 +65,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -85,8 +72,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -123,7 +108,6 @@ import {
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
-  getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
@@ -137,9 +121,8 @@ import {
 import {
   agentRequiresPerUserConnect,
   deriveModelSource,
-  getSavedAgent,
-  saveAgent,
 } from "@/lib/chat/use-chat-preferences";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -156,10 +139,7 @@ import { cn } from "@/lib/utils";
 import {
   buildCreateConversationInput,
   resolveChatModelState,
-  resolveInitialAgentSelection,
-  resolveInitialAgentState,
   resolvePreferredModelForProvider,
-  shouldResetInitialChatState,
 } from "./chat-initial-state";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
@@ -288,8 +268,8 @@ export function ChatPageContent({
   // is re-opened via the header toggle.
   const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("files");
 
-  // Independent of artifact/browser open state — toggled when the canvas tab is selected.
-  const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
+  // Independent of artifact/browser open state — toggled when the Apps tab is selected.
+  const [isAppsTabOpen, setIsAppsTabOpen] = useState(false);
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
@@ -310,145 +290,35 @@ export function ChatPageContent({
   // for a new chat ("member" level).
   const { data: memberDefault } = useMemberDefaultModel();
 
-  // State for initial chat (when no conversation exists yet)
-  const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
-  const [initialModel, setInitialModel] = useState<string>("");
-  const [initialApiKeyId, setInitialApiKeyId] = useState<string | null>(null);
-  const previousRouteConversationIdRef = useRef<string | undefined>(
-    routeConversationId,
-  );
-  // Track which agentId URL param has been consumed (so we don't re-apply the same one after user clears selection,
-  // but do apply a new one when navigating from a different agent page)
-  const urlParamsConsumedRef = useRef<string | null>(null);
-
-  // Resolve which agent to use on page load (URL param > localStorage > first available).
-  // Stores the resolved agent in a ref so the model init effect can read it synchronously.
-  const resolvedAgentRef = useRef<(typeof internalAgents)[number] | null>(null);
-
-  const applyInitialAgentSelection = useCallback(
-    (agent: (typeof internalAgents)[number]) => {
-      setInitialAgentId(agent.id);
-      resolvedAgentRef.current = agent;
-
-      const resolved = resolveInitialAgentState({
-        agent,
-        modelsByProvider,
-        chatApiKeys,
-        organization: organization
-          ? {
-              defaultModelId: organization.defaultModelId,
-              defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-            }
-          : null,
-        memberDefault: memberDefault ?? null,
-      });
-
-      if (resolved) {
-        setInitialModel(resolved.modelId);
-        setInitialApiKeyId(resolved.apiKeyId);
-      } else {
-        setInitialModel("");
-        setInitialApiKeyId(null);
-      }
-    },
-    [modelsByProvider, chatApiKeys, organization, memberDefault],
-  );
-
-  useEffect(() => {
-    if (internalAgents.length === 0) return;
-    // Wait for organization data to avoid race condition where agents load
-    // before org, causing the org default to be skipped
-    if (isOrgLoading) return;
-
-    // Process URL agentId param, but only if it's a new value (not one we already consumed).
-    // This allows navigating from different agent pages while preventing re-application
-    // after the user manually changes the agent.
-    const urlAgentId = searchParams.get("agentId");
-    if (urlAgentId && urlAgentId !== urlParamsConsumedRef.current) {
-      const matchingAgent = internalAgents.find((a) => a.id === urlAgentId);
-      if (matchingAgent) {
-        applyInitialAgentSelection(matchingAgent);
-        urlParamsConsumedRef.current = urlAgentId;
-        return;
-      }
-    }
-
-    // Priority: org default > localStorage > member default > first available.
-    // Org default always wins when set (admin-configured for the whole org).
-    // localStorage only overrides when no org default is configured and the
-    // user can change agents; otherwise a stale hidden picker value can trap
-    // restricted users on a previously swapped agent.
-    // Also skip if a URL param was consumed but state hasn't flushed yet.
-    if (!initialAgentId && !urlParamsConsumedRef.current) {
-      if (isAgentPickerPermissionLoading) return;
-
-      const selectedAgent = resolveInitialAgentSelection({
-        agents: internalAgents,
-        organizationDefaultAgentId: organization?.defaultAgentId,
-        savedAgentId: getSavedAgent(),
-        memberDefaultAgentId: defaultAgentId,
-        canUseSavedAgent: canSeeAgentPicker === true,
-      });
-      if (!selectedAgent) return;
-
-      applyInitialAgentSelection(selectedAgent);
-      saveAgent(selectedAgent.id);
-    }
-  }, [
-    applyInitialAgentSelection,
-    initialAgentId,
-    searchParams,
-    internalAgents,
+  // Shared new-chat initialization (agent/model/key resolution + persistence).
+  const {
+    agentId: initialAgentId,
+    modelId: initialModel,
+    apiKeyId: initialApiKeyId,
+    provider: initialProvider,
+    modelSource: initialModelSource,
+    setApiKeyId: setInitialApiKeyId,
+    onAgentChange: handleInitialAgentChange,
+    onModelChange: handleInitialModelChange,
+    onProviderChange: handleInitialProviderChange,
+    onResetModelOverride: handleResetModelOverride,
+  } = useInitialChatModelState({
+    agents: internalAgents,
+    organization: organization ?? null,
     defaultAgentId,
-    organization?.defaultAgentId,
-    isOrgLoading,
-    canSeeAgentPicker,
-    isAgentPickerPermissionLoading,
-  ]);
-
-  // Initialize model and API key once agent is resolved.
-  // Priority: agent config > org default > first available.
-  // Uses modelInitializedRef instead of checking initialModel to avoid a race condition:
-  // ModelSelector's auto-select fires before this effect and sets initialModel, which would
-  // cause an early return and skip the proper priority chain (org default, etc.).
-  const modelInitializedRef = useRef(false);
-  useEffect(() => {
-    if (!initialAgentId) return;
-    if (modelInitializedRef.current) return;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: memberDefault ?? null,
-    });
-
-    if (!resolved) return; // No models available yet
-
-    setInitialModel(resolved.modelId);
-    if (resolved.apiKeyId) {
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-  }, [
-    initialAgentId,
     modelsByProvider,
     chatApiKeys,
-    organization?.defaultModelId,
-    organization?.defaultLlmApiKeyId,
-    organization,
-    memberDefault,
-  ]);
+    memberDefault: memberDefault ?? null,
+    urlAgentId: searchParams.get("agentId"),
+    canUseSavedAgent: canSeeAgentPicker === true,
+    isPermissionResolving: isAgentPickerPermissionLoading,
+    isOrgLoading,
+    routeConversationId,
+  });
 
-  // Persist the user's (model, key) pick as their member default so the next
-  // new chat reuses it — the "member" level of the resolution chain. No-ops on
-  // an incomplete pair.
+  // Persist the user's (model, key) pick as their member default for the
+  // existing-conversation handlers below (the initial handlers persist via the
+  // hook). No-ops on an incomplete pair.
   const updateMemberDefaultModelMutation = useUpdateMemberDefaultModel();
   const updateMemberDefaultModelMutateRef = useRef(
     updateMemberDefaultModelMutation.mutate,
@@ -466,76 +336,6 @@ export function ChatPageContent({
     [],
   );
 
-  // Model change for the initial (no conversation) state. The picked model is
-  // scoped to the selected key, so the pair is persisted as the member default.
-  const initialApiKeyIdRef = useRef(initialApiKeyId);
-  initialApiKeyIdRef.current = initialApiKeyId;
-  const handleInitialModelChange = useCallback(
-    (modelId: string) => {
-      setInitialModel(modelId);
-      persistMemberDefaultModel(modelId, initialApiKeyIdRef.current);
-    },
-    [persistMemberDefaultModel],
-  );
-
-  // Handle API key change - preselect best model for the new key's provider
-  const handleInitialProviderChange = useCallback(
-    (newProvider: SupportedProvider, apiKeyId: string) => {
-      const preferredModel = resolvePreferredModelForProvider({
-        provider: newProvider,
-        modelsByProvider,
-      });
-      if (preferredModel) {
-        setInitialModel(preferredModel.modelId);
-        persistMemberDefaultModel(preferredModel.modelId, apiKeyId);
-      }
-    },
-    [modelsByProvider, persistMemberDefaultModel],
-  );
-
-  // Reset to the agent/org default model (shown when on a custom model).
-  // Resolves without the member default — reset deliberately drops the user's
-  // personal override to fall back to the agent/org default.
-  const handleResetModelOverride = useCallback(() => {
-    modelInitializedRef.current = false;
-
-    const resolved = resolveChatModelState({
-      agent: resolvedAgentRef.current,
-      modelsByProvider,
-      chatApiKeys,
-      organization: organization
-        ? {
-            defaultModelId: organization.defaultModelId,
-            defaultLlmApiKeyId: organization.defaultLlmApiKeyId,
-          }
-        : null,
-      memberDefault: null,
-    });
-
-    if (resolved) {
-      setInitialModel(resolved.modelId);
-      setInitialApiKeyId(resolved.apiKeyId);
-    }
-    modelInitializedRef.current = true;
-
-    // Clear the saved member default so the reset sticks for future new chats.
-    updateMemberDefaultModelMutateRef.current({
-      modelId: null,
-      chatApiKeyId: null,
-    });
-  }, [modelsByProvider, chatApiKeys, organization]);
-
-  // Derive provider from initial model for API key filtering
-  const initialProvider = useMemo((): SupportedProvider | undefined => {
-    if (!initialModel) return undefined;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === initialModel)) {
-        return provider as SupportedProvider;
-      }
-    }
-    return undefined;
-  }, [initialModel, modelsByProvider]);
-
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
   // Check if user has any API keys (including system keys for keyless providers
@@ -545,21 +345,6 @@ export function ChatPageContent({
 
   useEffect(() => {
     setConversationId(routeConversationId);
-
-    const previousRouteConversationId = previousRouteConversationIdRef.current;
-    previousRouteConversationIdRef.current = routeConversationId;
-
-    if (
-      shouldResetInitialChatState({
-        previousRouteConversationId,
-        routeConversationId,
-      })
-    ) {
-      setInitialAgentId(null);
-      setInitialModel("");
-      setInitialApiKeyId(null);
-      modelInitializedRef.current = false;
-    }
 
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
@@ -696,23 +481,6 @@ export function ChatPageContent({
   }, [
     conversation?.modelId,
     conversation?.agentId,
-    internalAgents,
-    organization?.defaultModelId,
-  ]);
-
-  // Same derivation for the initial (no conversation) chat.
-  const initialModelSource = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === initialAgentId) as
-      | (Record<string, unknown> & { modelId?: string | null })
-      | undefined;
-    return deriveModelSource({
-      selectedModelId: initialModel,
-      agentModelId: agent?.modelId,
-      orgModelId: organization?.defaultModelId,
-    });
-  }, [
-    initialModel,
-    initialAgentId,
     internalAgents,
     organization?.defaultModelId,
   ]);
@@ -881,7 +649,6 @@ export function ChatPageContent({
         : null,
       // Reset deliberately drops the user's personal override.
       memberDefault: null,
-      chatModels,
     });
 
     if (resolved) {
@@ -904,7 +671,6 @@ export function ChatPageContent({
     modelsByProvider,
     chatApiKeys,
     organization,
-    chatModels,
   ]);
 
   // Create conversation mutation (requires agentId)
@@ -982,15 +748,15 @@ export function ChatPageContent({
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
   );
-  // Derive the MCP App canvas list from the conversation itself so the sidebar
-  // selector is deterministic and survives transient section unmounts (the
-  // previous mount-effect registry could empty when a single canvas's section
-  // briefly unmounted).
+  // Derive the MCP App list from the conversation itself so the panel selector
+  // is deterministic and survives transient section unmounts (the previous
+  // mount-effect registry could empty when a single app's section briefly
+  // unmounted).
   const { getToolShortName: getArchestraToolShortName } =
     useArchestraMcpIdentity();
-  const mcpCanvases = useMemo(
+  const mcpApps = useMemo(
     () =>
-      deriveCanvasesFromMessages(
+      deriveAppsFromMessages(
         messages,
         chatSession?.earlyToolUiStarts ?? {},
         getArchestraToolShortName,
@@ -1528,19 +1294,19 @@ export function ChatPageContent({
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
-    isArtifactOpen || isBrowserPanelVisible || isCanvasTabOpen;
+    isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen;
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
   useEffect(() => {
-    if (isCanvasTabOpen) {
-      setActiveRightTab("canvas");
+    if (isAppsTabOpen) {
+      setActiveRightTab("apps");
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
       setActiveRightTab("files");
     }
-  }, [isArtifactOpen, isBrowserPanelVisible, isCanvasTabOpen]);
+  }, [isArtifactOpen, isBrowserPanelVisible, isAppsTabOpen]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
@@ -1548,7 +1314,7 @@ export function ChatPageContent({
       if (tab === "files") {
         setIsArtifactOpen(true);
         setIsBrowserPanelOpen(false);
-        setIsCanvasTabOpen(false);
+        setIsAppsTabOpen(false);
         if (conversationId) {
           localStorage.setItem(
             conversationStorageKeys(conversationId).artifactOpen,
@@ -1559,7 +1325,7 @@ export function ChatPageContent({
       } else if (tab === "browser") {
         setIsBrowserPanelOpen(true);
         setIsArtifactOpen(false);
-        setIsCanvasTabOpen(false);
+        setIsAppsTabOpen(false);
         if (conversationId) {
           localStorage.setItem(
             conversationStorageKeys(conversationId).artifactOpen,
@@ -1568,8 +1334,8 @@ export function ChatPageContent({
         }
         localStorage.setItem(BROWSER_OPEN_KEY, "true");
       } else {
-        // canvas tab — doesn't own artifact/browser visibility
-        setIsCanvasTabOpen(true);
+        // apps tab — doesn't own artifact/browser visibility
+        setIsAppsTabOpen(true);
         setIsArtifactOpen(false);
         setIsBrowserPanelOpen(false);
         if (conversationId) {
@@ -1587,7 +1353,7 @@ export function ChatPageContent({
   const closeRightPanel = useCallback(() => {
     setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
-    setIsCanvasTabOpen(false);
+    setIsAppsTabOpen(false);
     if (conversationId) {
       localStorage.setItem(
         conversationStorageKeys(conversationId).artifactOpen,
@@ -1614,19 +1380,6 @@ export function ChatPageContent({
     closeRightPanel,
     openRightPanelTab,
   ]);
-
-  // Auto-open the sidebar on the MCP App tab when the active conversation has
-  // a pinned canvas — fires once per conversation switch.
-  const autoOpenedForConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!conversationId || typeof window === "undefined") return;
-    if (autoOpenedForConversationRef.current === conversationId) return;
-    const key = conversationStorageKeys(conversationId).pinnedCanvas;
-    if (localStorage.getItem(key)) {
-      autoOpenedForConversationRef.current = conversationId;
-      openRightPanelTab("canvas");
-    }
-  }, [conversationId, openRightPanelTab]);
 
   const browserAutoOpenConversationRef = useRef<string | undefined>(undefined);
   const seenBrowserToolCallIdsRef = useRef<Set<string>>(new Set());
@@ -1771,21 +1524,6 @@ export function ChatPageContent({
     conversation?.title,
     conversation?.agent?.name,
   ]);
-
-  // Handle initial agent change (when no conversation exists)
-  const handleInitialAgentChange = useCallback(
-    (agentId: string) => {
-      setInitialAgentId(agentId);
-      saveAgent(agentId);
-
-      // Resolve model/key for the new agent using the same priority chain
-      const selectedAgent = internalAgents.find((a) => a.id === agentId);
-      if (selectedAgent) {
-        applyInitialAgentSelection(selectedAgent);
-      }
-    },
-    [applyInitialAgentSelection, internalAgents],
-  );
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
@@ -2033,7 +1771,9 @@ export function ChatPageContent({
 
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    return <NoApiKeySetup />;
+    // Reset to a clean /chat URL after a key is added so no stale conversation
+    // param lingers; the keys query refetch then reveals the composer.
+    return <NoApiKeySetup onKeyAdded={() => router.push("/chat")} />;
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
@@ -2102,141 +1842,37 @@ export function ChatPageContent({
   }
 
   return (
-    <PinnedCanvasProvider
-      conversationId={conversationId}
-      canvases={mcpCanvases}
-      onShowInSidebar={() => openRightPanelTab("canvas" as RightPanelTab)}
+    <AppsProvider
+      apps={mcpApps}
+      onShowInSidebar={() => openRightPanelTab("apps" as RightPanelTab)}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex flex-col h-full min-h-0">
             <StreamTimeoutWarning status={status} messages={messages} />
 
-            <div
-              className={cn(
-                "sticky top-0 z-10 bg-background border-b p-2",
-                !conversationId && "hidden",
-              )}
-            >
-              <div className="relative flex items-center justify-between gap-2">
-                {/* Left side - conversation title */}
-                {conversationId && conversation && (
-                  <div className="flex items-center flex-shrink min-w-0">
-                    <TruncatedTooltip
-                      content={getConversationDisplayTitle(
-                        conversation.title,
-                        conversation.messages,
-                      )}
-                    >
-                      <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                        {headerAnimatingTitles.has(conversation.id) ? (
-                          <TypingText
-                            text={getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )}
-                            typingSpeed={35}
-                            showCursor
-                            cursorClassName="bg-muted-foreground"
-                          />
-                        ) : (
-                          getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
-                          )
-                        )}
-                      </h1>
-                    </TruncatedTooltip>
-                  </div>
-                )}
-                {/* Right side - desktop: panel toggle */}
-                <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleRightPanel}
-                    className="h-8 w-8"
-                    title={isRightPanelOpen ? "Close panel" : "Open panel"}
-                    aria-pressed={isRightPanelOpen}
-                  >
-                    <PanelRight className="h-4 w-4" />
-                    <span className="sr-only">
-                      {isRightPanelOpen ? "Close panel" : "Open panel"}
-                    </span>
-                  </Button>
-                </div>
-                {/* Right side - mobile: 3-dot dropdown */}
-                <div className="flex md:hidden items-center gap-2 flex-shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="More options"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">More options</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canManageShare && (
-                        <DropdownMenuItem
-                          onSelect={() => setIsShareDialogOpen(true)}
-                        >
-                          {isShared ? (
-                            <>
-                              <Users className="h-4 w-4 text-primary" />
-                              <span className="text-primary">Shared</span>
-                            </>
-                          ) : (
-                            <>
-                              <Share2 className="h-4 w-4" />
-                              Share
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {conversationId && messages.length > 0 && (
-                        <DropdownMenuItem onSelect={handleExportMarkdown}>
-                          <Download className="h-4 w-4" />
-                          Export Markdown
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          if (isArtifactOpen) {
-                            closeRightPanel();
-                          } else {
-                            openRightPanelTab("files");
-                          }
-                        }}
-                      >
-                        <FileText className="h-4 w-4" />
-                        {isArtifactOpen ? "Hide Files" : "Show Files"}
-                      </DropdownMenuItem>
-                      {showBrowserButton && (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (isBrowserPanelVisible) {
-                              closeRightPanel();
-                            } else {
-                              openRightPanelTab("browser");
-                            }
-                          }}
-                          disabled={isPlaywrightSetupVisible}
-                        >
-                          <Globe className="h-4 w-4" />
-                          {isBrowserPanelVisible
-                            ? "Hide Browser"
-                            : "Show Browser"}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
+            <ConversationHeader
+              conversationId={conversationId}
+              conversation={conversation}
+              messageCount={messages.length}
+              isTitleAnimating={
+                !!conversation && headerAnimatingTitles.has(conversation.id)
+              }
+              canManageShare={canManageShare}
+              isShared={isShared}
+              onShare={() => setIsShareDialogOpen(true)}
+              onExportMarkdown={handleExportMarkdown}
+              panel={{
+                isOpen: isRightPanelOpen,
+                isArtifactOpen,
+                isBrowserVisible: isBrowserPanelVisible,
+                showBrowserButton,
+                isPlaywrightSetupVisible,
+                onToggle: toggleRightPanel,
+                onClose: closeRightPanel,
+                onOpenTab: openRightPanelTab,
+              }}
+            />
 
             {/* Mobile: Inline artifact/browser panel below header */}
             {isRightPanelOpen && (
@@ -2584,42 +2220,6 @@ export function ChatPageContent({
             onTabChange={openRightPanelTab}
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-            headerActions={
-              conversationId && messages.length > 0 ? (
-                <div className="flex items-center gap-1">
-                  {canManageShare && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsShareDialogOpen(true)}
-                      className="text-xs h-7"
-                    >
-                      {isShared ? (
-                        <>
-                          <Users className="h-3 w-3 mr-1 text-primary" />
-                          <span className="text-primary">Shared</span>
-                        </>
-                      ) : (
-                        <>
-                          <Share2 className="h-3 w-3 mr-1" />
-                          Share
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleExportMarkdown}
-                    className="text-xs h-7"
-                    title="Download chat as Markdown"
-                  >
-                    <Download className="h-3 w-3 mr-1" />
-                    Markdown
-                  </Button>
-                </div>
-              ) : undefined
-            }
             artifact={conversation?.artifact}
             conversationId={conversationId}
             agentId={browserToolsAgentId}
@@ -2703,7 +2303,7 @@ export function ChatPageContent({
           />
         </StandardDialog>
       </div>
-    </PinnedCanvasProvider>
+    </AppsProvider>
   );
 }
 
@@ -2732,49 +2332,4 @@ type ChatMessagePart =
 // so the message is well-formed and the backend can inject the skill
 function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
   return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
-}
-
-// =========================================================================
-// No API Key Setup — shown when user has no API keys configured
-// =========================================================================
-
-const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
-  isPrimary: true,
-};
-
-function NoApiKeySetup() {
-  const router = useRouter();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  return (
-    <div className="flex h-full w-full items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect an LLM provider to start chatting
-          </p>
-        </div>
-        <Button
-          data-testid={E2eTestId.QuickstartAddApiKeyButton}
-          onClick={() => setIsDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add API Key
-        </Button>
-      </div>
-      <CreateLlmProviderApiKeyDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        title="Add API Key"
-        description="Add an LLM provider API key to start chatting"
-        defaultValues={DEFAULT_FORM_VALUES}
-        showConsoleLink
-        onSuccess={() => {
-          // Navigate to clean /chat URL so there's no stale conversation param
-          router.push("/chat");
-        }}
-      />
-    </div>
-  );
 }

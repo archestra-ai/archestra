@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Cohere, OpenAi } from "@/types";
-import { stringifyTextContent } from "./openai-translator-utils";
+import {
+  normalizeOpenAiContentParts,
+  stringifyTextContent,
+} from "./openai-translator-utils";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -50,7 +53,7 @@ export function openaiToCohere(req: OpenAiRequest): {
     if (message.role === "user") {
       messages.push({
         role: "user",
-        content: stringifyTextContent(message.content),
+        content: userContentToCohereContent(message.content),
       });
       continue;
     }
@@ -189,4 +192,28 @@ export function mapCohereFinishReason(
   if (reason === "TOOL_CALL") return "tool_calls";
   if (reason === "ERROR") return "content_filter";
   return "stop";
+}
+
+type CohereUserContent = Cohere.Types.UserMessage["content"];
+
+// Converts an OpenAI user-message `content` into Cohere content, forwarding
+// images as `image_url` blocks instead of dropping them. Cohere accepts both
+// base64 data URIs and web URLs, so the url passes through unchanged. Audio and
+// file parts are dropped since Cohere models no such user content block.
+function userContentToCohereContent(content: unknown): CohereUserContent {
+  if (typeof content === "string") return content;
+
+  const blocks: Array<Record<string, unknown>> = [];
+  for (const part of normalizeOpenAiContentParts(content)) {
+    if (part.kind === "text") {
+      blocks.push({ type: "text", text: part.text });
+    } else if (part.kind === "image") {
+      blocks.push({ type: "image_url", image_url: { url: part.url } });
+    }
+  }
+
+  // Cohere requires non-empty content; fall back to text-only when nothing
+  // convertible remained.
+  if (blocks.length === 0) return stringifyTextContent(content);
+  return blocks as unknown as CohereUserContent;
 }

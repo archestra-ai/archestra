@@ -352,4 +352,56 @@ describe("llmOauthClientsRoutes", () => {
       "https://chat.example.com/oauth/callback2",
     ]);
   });
+
+  test("creates an authorization_code client with an additive proxy grant", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      name: "Chat Proxy",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Chat Interface",
+        grantType: "authorization_code",
+        redirectUris: ["https://chat.example.com/oauth/callback"],
+        allowedLlmProxyIds: [proxy.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().grantType).toBe("authorization_code");
+    expect(response.json().allowedLlmProxyIds).toEqual([proxy.id]);
+    // provider keys never apply to authorization_code clients.
+    expect(response.json().providerApiKeys).toEqual([]);
+  });
+
+  test("validates the proxy grant on an authorization_code client", async ({
+    makeAgent,
+  }) => {
+    // A non-llm_proxy agent in the grant list is rejected.
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Not A Proxy",
+      agentType: "mcp_gateway",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Chat Interface",
+        grantType: "authorization_code",
+        redirectUris: ["https://chat.example.com/oauth/callback"],
+        allowedLlmProxyIds: [gateway.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("LLM proxy not found");
+  });
 });

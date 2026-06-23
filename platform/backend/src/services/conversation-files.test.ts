@@ -1,11 +1,10 @@
 import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import FileModel from "@/models/file";
 import SkillSandboxModel from "@/models/skill-sandbox";
-import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { expect, test } from "@/test";
 
 test("conversationFilesService.list groups generated + attachments with basenamed names and content URLs", async ({
@@ -29,7 +28,7 @@ test("conversationFilesService.list groups generated + attachments with basename
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const artifact = await FileModel.create({
+  const artifact = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -56,7 +55,6 @@ test("conversationFilesService.list groups generated + attachments with basename
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
 
@@ -78,8 +76,8 @@ test("conversationFilesService.list groups generated + attachments with basename
       createdAt: attachment.createdAt.toISOString(),
     },
   ]);
-  // the conversation's own output is a PFS row too — deduped out of myFiles
-  expect(result.myFiles).toEqual([]);
+  // a personal chat has no project, so no project files section
+  expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
 });
 
@@ -112,13 +110,12 @@ test("conversationFilesService.list drops attachments from a different org", asy
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
   expect(result.attachments).toEqual([]);
 });
 
-test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs, owner-only", async ({
+test("personal chat: projectFiles is empty even when the user has files in other chats", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -138,7 +135,7 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-  const ownOutput = await FileModel.create({
+  const ownOutput = await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -149,30 +146,25 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
     sizeBytes: 1,
     data: Buffer.from("a"),
   });
-  // sandbox uploads (my_file pulls included) are not PFS rows — never listed
-  await SkillSandboxReplayEventModel.appendUpload({
-    sandboxId: convSandbox.id,
-    userId: user.id,
-    path: "/home/sandbox/from-pfs.csv",
-    mimeType: "text/csv",
-    originalName: "q2.csv",
-    sizeBytes: 4,
-    data: Buffer.from("a,b\n"),
-    origin: "my_file",
-  });
 
-  // a PFS file produced in some OTHER conversation
+  // a personal file produced in some OTHER conversation. No-project files are
+  // conversation-scoped, and a personal chat has no project files section, so
+  // it must not surface here.
+  const otherConv = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: org.id,
+  });
   const otherSandbox = await SkillSandboxModel.create({
     organizationId: org.id,
     userId: user.id,
-    conversationId: null,
+    conversationId: otherConv.id,
     defaultCwd: "/home/sandbox",
   });
-  const elsewhere = await FileModel.create({
+  await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
-    conversationId: null,
+    conversationId: otherConv.id,
     sandboxId: otherSandbox.id,
     filename: "elsewhere.txt",
     mimeType: "text/plain",
@@ -183,32 +175,14 @@ test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs,
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
   expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-  expect(result.myFiles).toEqual([
-    {
-      id: elsewhere.id,
-      name: "elsewhere.txt",
-      mimeType: "text/plain",
-      contentUrl: `/api/skill-sandbox/artifacts/${elsewhere.id}`,
-      createdAt: elsewhere.createdAt.toISOString(),
-    },
-  ]);
-
-  // a non-owner reading the shared chat must not see the owner's personal PFS
-  const viewer = await makeUser({ email: "files-viewer@test.com" });
-  const viewerResult = await conversationFilesService.list({
-    conversationId: conv.id,
-    organizationId: org.id,
-    conversationOwnerUserId: user.id,
-    requestingUserId: viewer.id,
-  });
-  expect(viewerResult.myFiles).toEqual([]);
+  expect(result.projectFiles).toEqual([]);
+  expect(result.projectName).toBeNull();
 });
 
-test("project chat: myFiles is the project's files, for any reader", async ({
+test("project chat: projectFiles is every project file (any author, any chat), for any reader with access", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -246,7 +220,8 @@ test("project chat: myFiles is the project's files, for any reader", async ({
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const projectFile = await FileModel.create({
+  // a project file with no originating conversation
+  const looseFile = await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -257,34 +232,71 @@ test("project chat: myFiles is the project's files, for any reader", async ({
     sizeBytes: 2,
     data: Buffer.from("in"),
   });
-  // the owner's personal file must stay invisible in a project chat
-  await FileModel.create({
+  // a project file authored in a DIFFERENT conversation of the project — it
+  // must still appear in this chat's project files section.
+  const otherConv = await ConversationModel.create({
+    userId: owner.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+  const otherChatSandbox = await SkillSandboxModel.create({
     organizationId: org.id,
     userId: owner.id,
-    projectId: null,
-    conversationId: null,
-    sandboxId: ownerSandbox.id,
-    filename: "personal.txt",
+    conversationId: otherConv.id,
+    defaultCwd: "/home/sandbox",
+  });
+  const fromOtherChat = await fileStore.put({
+    organizationId: org.id,
+    userId: owner.id,
+    projectId: project.id,
+    conversationId: otherConv.id,
+    sandboxId: otherChatSandbox.id,
+    filename: "other-chat.txt",
     mimeType: "text/plain",
     sizeBytes: 3,
     data: Buffer.from("out"),
+  });
+  // a file generated in THIS chat: it surfaces under `generated`, not duplicated
+  // into projectFiles.
+  const thisChatSandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: member.id,
+    conversationId: conv.id,
+    defaultCwd: "/home/sandbox",
+    isDefault: true,
+  });
+  const ownOutput = await fileStore.put({
+    organizationId: org.id,
+    userId: member.id,
+    projectId: project.id,
+    conversationId: conv.id,
+    sandboxId: thisChatSandbox.id,
+    filename: "mine.txt",
+    mimeType: "text/plain",
+    sizeBytes: 1,
+    data: Buffer.from("m"),
   });
 
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: member.id,
     requestingUserId: member.id,
   });
-  expect(result.myFiles).toEqual([
-    {
-      id: projectFile.id,
-      name: "result.txt",
-      mimeType: "text/plain",
-      contentUrl: `/api/skill-sandbox/artifacts/${projectFile.id}`,
-      createdAt: projectFile.createdAt.toISOString(),
-    },
-  ]);
+
+  expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
+  // every project file except this chat's own output, regardless of author or
+  // originating conversation
+  expect(result.projectFiles.map((f) => f.id).sort()).toEqual(
+    [looseFile.id, fromOtherChat.id].sort(),
+  );
+  expect(result.projectFiles).toContainEqual({
+    id: looseFile.id,
+    name: "result.txt",
+    mimeType: "text/plain",
+    contentUrl: `/api/skill-sandbox/artifacts/${looseFile.id}`,
+    createdAt: looseFile.createdAt.toISOString(),
+  });
   expect(result.projectName).toBe("filespanel");
 });
 
@@ -310,7 +322,7 @@ test("project chat: a requester without project access sees no project files", a
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  await FileModel.create({
+  await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -322,7 +334,8 @@ test("project chat: a requester without project access sees no project files", a
     data: Buffer.from("hi"),
   });
   // the outsider owns a chat in the project but the project is unshared (e.g.
-  // access was revoked) — the project's files must stay out of reach.
+  // access was revoked) — the project's files must stay out of reach because
+  // resolveProjectFileScope fails closed.
   const conv = await ConversationModel.create({
     userId: outsider.id,
     organizationId: org.id,
@@ -333,14 +346,13 @@ test("project chat: a requester without project access sees no project files", a
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: outsider.id,
     requestingUserId: outsider.id,
   });
-  expect(result.myFiles).toEqual([]);
+  expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
 });
 
-test("projects off: myFiles is empty and projectName null, generated still shown", async ({
+test("projects off: projectFiles is empty and projectName null, generated still shown", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -364,7 +376,7 @@ test("projects off: myFiles is empty and projectName null, generated still shown
       isDefault: true,
     });
     // this chat's own output — still surfaces under `generated`
-    const ownOutput = await FileModel.create({
+    const ownOutput = await fileStore.put({
       organizationId: org.id,
       userId: user.id,
       projectId: null,
@@ -375,33 +387,14 @@ test("projects off: myFiles is empty and projectName null, generated still shown
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
-    // a PFS file from another conversation — would normally appear in myFiles
-    const otherSandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/home/sandbox",
-    });
-    await FileModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      projectId: null,
-      conversationId: null,
-      sandboxId: otherSandbox.id,
-      filename: "elsewhere.txt",
-      mimeType: "text/plain",
-      sizeBytes: 1,
-      data: Buffer.from("b"),
-    });
 
     const result = await conversationFilesService.list({
       conversationId: conv.id,
       organizationId: org.id,
-      conversationOwnerUserId: user.id,
       requestingUserId: user.id,
     });
     expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-    expect(result.myFiles).toEqual([]);
+    expect(result.projectFiles).toEqual([]);
     expect(result.projectName).toBeNull();
   } finally {
     (config.projects as { enabled: boolean }).enabled = original;

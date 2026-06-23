@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-17
+lastUpdated: 2026-06-19
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -58,7 +58,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `admin` |
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
-| Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -100,7 +99,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -168,11 +166,6 @@ The following table lists all available permissions that can be assigned to cust
 | `identityProvider:delete` | Remove identity providers |
 | `invitation:create` | Send invitations to new users |
 | `invitation:cancel` | Cancel pending invitations |
-| `knowledgeFile:read` | View uploaded Knowledge Files |
-| `knowledgeFile:create` | Upload Knowledge Files |
-| `knowledgeFile:update` | Modify Knowledge File visibility and agent access |
-| `knowledgeFile:delete` | Delete Knowledge Files |
-| `knowledgeFile:admin` | View all Knowledge Files, bypassing visibility restrictions |
 | `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
 | `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `knowledgeSource:read` | View Knowledge Bases and Connectors |

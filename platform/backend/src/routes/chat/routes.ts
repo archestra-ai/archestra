@@ -6,7 +6,6 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   isModelSelectionComplete,
-  ResourceVisibilityScopeSchema,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -18,13 +17,16 @@ import {
   generateId,
   generateText,
   hasToolCall,
+  type ModelMessage,
   NoSuchToolError,
   stepCountIs,
+  type streamText,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -43,6 +45,10 @@ import {
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
+import {
+  repeatCeilingStopCondition,
+  type ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
@@ -54,7 +60,6 @@ import {
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
-import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
@@ -82,6 +87,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
@@ -137,25 +143,14 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
-import {
-  type ChatStreamTextConfig,
-  streamTextWithRecovery,
-} from "./stream-probe";
 import { repairHarmonyToolName } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
-const PromoteChatAttachmentResultSchema = z.object({
-  filename: z.string(),
-  status: z.enum([
-    "created",
-    "duplicate",
-    "unsupported",
-    "too_large",
-    "extraction_failed",
-    "failed",
-  ]),
-  fileId: z.string().optional(),
-});
+// The chat route always builds a `messages` (not `prompt`) config, so the
+// `runAgentStream` config is narrowed to require it.
+type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
+  messages: ModelMessage[];
+};
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -277,6 +272,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Flag to prevent duplicate message persistence if both onError and onFinish fire
       let messagesPersisted = false;
+      const claimMessagesPersisted = (): boolean => {
+        if (messagesPersisted || !conversationId) {
+          return false;
+        }
+        messagesPersisted = true;
+        return true;
+      };
 
       // Handle broken pipe gracefully when the client navigates away
       // The stream continues running but writing to a closed response should not crash
@@ -459,7 +461,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
-          { mcpTools, toolUiResourceUris, systemPrompt, toolSelection },
+          {
+            mcpTools,
+            toolUiResourceUris,
+            systemPrompt,
+            toolSelection,
+            repeatTracker,
+          },
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
@@ -534,7 +542,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Render-loop diagnostics from owned MCP App renders ride the last
             // user message's metadata; inject them (delimited, framed as
-            // untrusted) so the model can fix the app via update_app. No-op
+            // untrusted) so the model can fix the app via edit_app. No-op
             // when absent or when the apps feature is off.
             const messagesForLLM =
               await injectAppDiagnostics(messagesWithSkill);
@@ -605,10 +613,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
-                const shouldPersist = !messagesPersisted && !!conversationId;
-                if (shouldPersist) {
-                  messagesPersisted = true;
-                }
+                const shouldPersist = claimMessagesPersisted();
                 (async () => {
                   if (shouldPersist) {
                     try {
@@ -792,16 +797,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
-                // Flipped once streamTextWithRecovery returns the committed
-                // result. The probe drains discarded retry attempts before this,
-                // so their onStepFinish callbacks must not emit usage events.
+                // Flipped once runAgentStream returns the committed result. The
+                // probe drains discarded retry attempts before this, so their
+                // onStepFinish callbacks must not emit usage events.
                 let hasCommittedResult = false;
 
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(),
+                  stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   // Repair tool names that carry a leaked harmony sentinel token
                   // (e.g. `archestra__run_command<|channel|>commentary`) before
@@ -918,27 +923,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                const result = await streamTextWithRecovery({
+                const { result } = await runAgentStream({
                   config: streamTextConfig,
-                  conversationId,
-                  onEmptyResponseExhausted: async () => {
-                    // Persist before the throw — nothing has merged yet, so the
-                    // stream onError/onFinish won't fire to do it.
-                    if (!messagesPersisted && conversationId) {
-                      messagesPersisted = true;
-                      try {
-                        await persistNewMessages(
-                          conversationId,
-                          messages,
-                          "onExecuteError",
-                        );
-                      } catch (persistError) {
-                        logger.error(
-                          { persistError, conversationId },
-                          "Failed to persist messages during empty-response error",
-                        );
+                  recovery: {
+                    logContext: { conversationId },
+                    onEmptyResponseExhausted: async () => {
+                      // Persist before the throw — nothing has merged yet, so the
+                      // stream onError/onFinish won't fire to do it.
+                      if (claimMessagesPersisted()) {
+                        try {
+                          await persistNewMessages(
+                            conversationId,
+                            messages,
+                            "onExecuteError",
+                          );
+                        } catch (persistError) {
+                          logger.error(
+                            { persistError, conversationId },
+                            "Failed to persist messages during empty-response error",
+                          );
+                        }
                       }
-                    }
+                    },
                   },
                 });
                 // The committed result's steps finish after this point; allow
@@ -1021,11 +1027,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       error instanceof Error ? error.message : String(error);
                     // Claim persistence before the async work below starts,
                     // otherwise onFinish can race and also persist (duplicates).
-                    const shouldPersist =
-                      !messagesPersisted && !!conversationId;
-                    if (shouldPersist) {
-                      messagesPersisted = true;
-                    }
+                    const shouldPersist = claimMessagesPersisted();
 
                     (async () => {
                       logger.error(
@@ -1512,7 +1514,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversationFiles,
         description:
-          "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).",
+          "List files for a conversation: this chat's own outputs, user attachments, and — for a project chat — every file in the project (metadata only).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(ConversationFilesResponseSchema),
@@ -1532,7 +1534,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
-          conversationOwnerUserId: conversation.userId,
           requestingUserId: user.id,
         }),
       );
@@ -1600,56 +1601,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       reply.raw.end(attachment.fileData);
       return reply;
-    },
-  );
-
-  fastify.post(
-    "/api/chat/attachments/:id/promote-to-knowledge-file",
-    {
-      schema: {
-        operationId: RouteId.PromoteChatAttachmentToKnowledgeFile,
-        description:
-          "Promote a conversation attachment into a reusable Knowledge File",
-        tags: ["Chat"],
-        params: z.object({ id: UuidIdSchema }),
-        body: z.object({
-          visibility: ResourceVisibilityScopeSchema.default("personal"),
-          teamIds: z.array(z.string()).default([]),
-          agentIds: z.array(z.string()).default([]),
-        }),
-        response: constructResponseSchema(PromoteChatAttachmentResultSchema),
-      },
-    },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
-      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
-      if (!attachment) {
-        throw new ApiError(404, "Attachment not found");
-      }
-      if (attachment.organizationId !== organizationId) {
-        throw new ApiError(404, "Attachment not found");
-      }
-
-      const conversation = await findReadableConversationById({
-        conversationId: attachment.conversationId,
-        userId: user.id,
-        organizationId,
-      });
-      if (!conversation) {
-        throw new ApiError(404, "Attachment not found");
-      }
-
-      const result = await fileUploadManager.uploadKnowledgeFile({
-        organizationId,
-        userId: user.id,
-        name: attachment.originalName,
-        mimeType: attachment.mimeType,
-        contentBuffer: attachment.fileData,
-        visibility: body.visibility,
-        teamIds: body.teamIds,
-        agentIds: body.agentIds,
-      });
-
-      return reply.send(result);
     },
   );
 
@@ -2000,6 +1951,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const runningRunId = conversation
         ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
         : null;
+
+      // The conversation owns its no-project files, so they must die with it
+      // rather than linger as unreachable orphans (the FK is SET NULL). Purge
+      // them BEFORE the delete, while they still carry the conversation id, and
+      // only when the owner-scoped lookup above confirmed the caller owns it.
+      if (conversation) {
+        await fileStore.purgeConversationFiles({
+          organizationId,
+          conversationId: id,
+        });
+      }
 
       // The delete is the source of truth. Do not stop the stream or tear down
       // browser runtime before it succeeds: a failed delete must leave the
@@ -2719,11 +2681,12 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   return { firstUserMessage, firstAssistantMessage };
 }
 
-export function buildChatStopConditions() {
+export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
-    stepCountIs(500),
+    stepCountIs(MAX_AGENT_STEPS),
     hasToolCall(getChatStopToolNames().swapAgentToolName),
     hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
+    repeatCeilingStopCondition(repeatTracker),
   ];
 }
 
@@ -3404,11 +3367,36 @@ async function forkConversation(params: {
     throw new ApiError(404, "Agent not found");
   }
 
+  // A chat started from a (shared) chat in a project belongs to that project,
+  // just like one started from the project composer. Carry the source's
+  // project over to the fork — but only when the forker can still access it.
+  // Conversation shares are independent of project shares, so a conversation
+  // can be shared without its project being shared; in that case drop the link
+  // rather than attaching the fork to a project the user cannot see (which
+  // would leave it invisible and unmanageable to them).
+  let projectId: string | null = null;
+  if (params.sourceConversation.projectId) {
+    const project = await ProjectModel.findById(
+      params.sourceConversation.projectId,
+    );
+    if (
+      project &&
+      (await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      projectId = project.id;
+    }
+  }
+
   const newConversation = await ConversationModel.create({
     userId: params.userId,
     organizationId: params.organizationId,
     agentId: agent.id,
     modelId: params.sourceConversation.modelId,
+    projectId,
   });
 
   if (params.sourceConversation.messages.length > 0) {

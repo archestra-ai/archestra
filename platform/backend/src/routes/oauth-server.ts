@@ -9,6 +9,8 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import { AgentModel } from "@/models";
+import { APP_CONNECTOR_PATH_PREFIX } from "@/services/apps/app-connector-resource";
+import { ApiError } from "@/types";
 import { getPublicRequestOrigin } from "./request-origin";
 
 /**
@@ -51,6 +53,15 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "/.well-known/oauth-protected-resource",
         "",
       );
+
+      // An MCP App connector's discovery is dark when the feature is off, so it
+      // does not reveal that an app exists.
+      if (
+        resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX) &&
+        !config.apps.enabled
+      ) {
+        throw new ApiError(404, "Not found");
+      }
 
       // Check if the profile has an external IdP configured
       const authorizationServers = [baseUrl];
@@ -165,6 +176,12 @@ export default oauthServerRoutes;
 async function extractProfileIdFromResourcePath(
   resourcePath: string,
 ): Promise<string | null> {
+  // A shareable-App connector resolves only against Archestra's own
+  // authorization server, never a profile's external IdP — so its app id is not
+  // an agent id to look up.
+  if (resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX)) {
+    return null;
+  }
   const segments = resourcePath.split("/").filter(Boolean);
   const lastSegment = segments.at(-1);
   if (!lastSegment) return null;

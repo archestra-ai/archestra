@@ -38,11 +38,19 @@ const TextBlockParamSchema = z.object({
 
 const ImageBlockParamSchema = z.object({
   type: z.enum(["image"]),
-  source: z.object({
-    type: z.enum(["base64"]),
-    media_type: z.string(),
-    data: z.string(),
-  }),
+  // Anthropic accepts either an inline base64 source or a URL source it fetches
+  // itself. https://platform.claude.com/docs/en/build-with-claude/vision
+  source: z.union([
+    z.object({
+      type: z.enum(["base64"]),
+      media_type: z.string(),
+      data: z.string(),
+    }),
+    z.object({
+      type: z.enum(["url"]),
+      url: z.string(),
+    }),
+  ]),
   cache_control: z.any().nullable().optional(),
 });
 

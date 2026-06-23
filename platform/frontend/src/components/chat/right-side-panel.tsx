@@ -1,11 +1,10 @@
 "use client";
 
-import { format } from "date-fns";
-import { FileText, Globe, Pin, PinOff, X } from "lucide-react";
+import { AppWindow, FileText, Globe, PanelRightClose } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
-import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type RightPanelTab = "files" | "browser" | "canvas";
+export type RightPanelTab = "files" | "browser" | "apps";
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -25,8 +24,6 @@ interface RightSidePanelProps {
   onTabChange: (tab: RightPanelTab) => void;
   onClose: () => void;
   canShowBrowser: boolean;
-  /** Optional action(s) rendered in the tab row, between the tabs and the close button. */
-  headerActions?: React.ReactNode;
 
   // Artifact props
   artifact?: string | null;
@@ -51,7 +48,6 @@ export function RightSidePanel({
   onTabChange,
   onClose,
   canShowBrowser,
-  headerActions,
   artifact,
   conversationId,
   agentId,
@@ -60,25 +56,18 @@ export function RightSidePanel({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
-  const {
-    canvases,
-    pinnedCanvasId,
-    selectedCanvasId,
-    setPinned,
-    select,
-    setPortalTarget,
-  } = usePinnedCanvas();
+  const { apps, selectedToolCallId, select, setPortalTarget } = useApps();
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
 
-  // Activate the portal target only while the canvas tab is showing — when the
-  // user switches to artifact/browser or closes the panel, the canvas falls
-  // back to inline rendering in the chat.
+  // Activate the portal target only while the Apps tab is showing — when the
+  // user switches to artifact/browser or closes the panel, the app falls back
+  // to inline rendering in the chat.
   useEffect(() => {
-    const shouldHostCanvas = isOpen && resolvedTab === "canvas";
-    setPortalTarget(shouldHostCanvas ? portalDivRef.current : null);
+    const shouldHostApp = isOpen && resolvedTab === "apps";
+    setPortalTarget(shouldHostApp ? portalDivRef.current : null);
     return () => {
       setPortalTarget(null);
     };
@@ -111,21 +100,21 @@ export function RightSidePanel({
                   Browser
                 </TabsTrigger>
               )}
-              <TabsTrigger value="canvas" className="text-xs px-3">
-                MCP App
+              <TabsTrigger value="apps" className="text-xs px-3">
+                <AppWindow className="h-3 w-3" />
+                Apps
               </TabsTrigger>
             </TabsList>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {headerActions}
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8"
               onClick={onClose}
               title="Close panel"
             >
-              <X className="h-4 w-4" />
+              <PanelRightClose className="h-4 w-4" />
               <span className="sr-only">Close panel</span>
             </Button>
           </div>
@@ -152,77 +141,35 @@ export function RightSidePanel({
               hideHeader
             />
           )}
-          {/* Canvas tab content: selector + portal target. */}
-          {resolvedTab === "canvas" && (
+          {/* Apps tab content: selector + portal target. */}
+          {resolvedTab === "apps" && (
             <div className="flex flex-col h-full">
-              {canvases.length > 0 ? (
+              {apps.length > 0 ? (
                 <div className="flex items-center gap-2 border-b px-2 py-2">
                   <Select
-                    value={selectedCanvasId ?? undefined}
+                    value={selectedToolCallId ?? undefined}
                     onValueChange={(value) => select(value)}
                   >
                     <SelectTrigger className="flex-1 h-8 text-xs">
-                      <SelectValue placeholder="Choose an MCP App" />
+                      <SelectValue placeholder="Choose an App" />
                     </SelectTrigger>
                     <SelectContent>
-                      {canvases.map((canvas) => (
-                        <SelectItem
-                          key={canvas.toolCallId}
-                          value={canvas.toolCallId}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{canvas.label}</span>
-                            <span className="text-[10px] text-muted-foreground ml-auto whitespace-nowrap tabular-nums">
-                              {format(canvas.createdAt, "HH:mm:ss")}
-                            </span>
-                          </div>
+                      {apps.map((app) => (
+                        <SelectItem key={app.toolCallId} value={app.toolCallId}>
+                          <span className="truncate">{app.label}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    variant={
-                      pinnedCanvasId && pinnedCanvasId === selectedCanvasId
-                        ? "secondary"
-                        : "ghost"
-                    }
-                    size="icon"
-                    className="h-8 w-8"
-                    disabled={!selectedCanvasId}
-                    onClick={() => {
-                      if (!selectedCanvasId) return;
-                      setPinned(
-                        pinnedCanvasId === selectedCanvasId
-                          ? null
-                          : selectedCanvasId,
-                      );
-                    }}
-                    title={
-                      pinnedCanvasId === selectedCanvasId
-                        ? "Unpin as default"
-                        : "Pin as default for this conversation"
-                    }
-                    aria-label={
-                      pinnedCanvasId === selectedCanvasId
-                        ? "Unpin as default"
-                        : "Pin as default"
-                    }
-                  >
-                    {pinnedCanvasId === selectedCanvasId ? (
-                      <PinOff className="h-4 w-4" />
-                    ) : (
-                      <Pin className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               ) : null}
               <div ref={portalDivRef} className="flex-1 min-h-0 relative">
-                {canvases.length === 0 && (
+                {apps.length === 0 && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
-                    <Pin className="h-6 w-6 mb-2 opacity-50" />
-                    <p className="font-medium">No MCP Apps in this chat</p>
+                    <AppWindow className="h-6 w-6 mb-2 opacity-50" />
+                    <p className="font-medium">No Apps in this chat</p>
                     <p className="mt-1">
-                      MCP Apps from tool calls in this conversation will appear
+                      Apps from tool calls in this conversation will appear
                       here.
                     </p>
                   </div>

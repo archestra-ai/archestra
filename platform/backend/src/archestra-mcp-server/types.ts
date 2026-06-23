@@ -1,3 +1,4 @@
+import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 
 /**
@@ -51,6 +52,13 @@ export interface ArchestraContext {
   scheduleTriggerRunId?: string;
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
+  /**
+   * Bridge for asking the user a structured question mid-execution (the chat
+   * elicitation round-trip). Present only when a chat stream is driving the
+   * call; absent in headless executions, where a built-in tool must degrade to
+   * a typed `no_viewer` outcome rather than block.
+   */
+  elicitation?: ChatMcpElicitationBridge;
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
   /**

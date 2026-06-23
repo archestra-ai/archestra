@@ -92,6 +92,8 @@ pub struct AgentCreate {
     pub system_prompt: Option<String>,
     #[serde(rename = "toolExposureMode")]
     pub tool_exposure_mode: ToolExposureMode,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub teams: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -381,6 +383,36 @@ impl EvalClient {
         )
     }
 
+    pub async fn create_team(&self, name: &str) -> Result<String, ClientError> {
+        let body = require_dict(
+            self.request(
+                Method::POST,
+                "/api/teams",
+                None,
+                Some(&serde_json::json!({"name": name})),
+            )
+            .await?,
+            "POST /api/teams",
+        )?;
+        require_str_field(&body, "id", "POST /api/teams")
+    }
+
+    /// Create a project. Files produced in its conversations are owned by the project rather than the
+    /// author, so lanes sharing one backend stay isolated even when they save identically named files.
+    pub async fn create_project(&self, name: &str) -> Result<String, ClientError> {
+        let body = require_dict(
+            self.request(
+                Method::POST,
+                "/api/projects",
+                None,
+                Some(&serde_json::json!({"name": name})),
+            )
+            .await?,
+            "POST /api/projects",
+        )?;
+        require_str_field(&body, "id", "POST /api/projects")
+    }
+
     pub async fn list_skills(
         &self,
         search: Option<&str>,
@@ -548,12 +580,19 @@ impl EvalClient {
         title: Option<&str>,
         model_id: Option<&str>,
         chat_api_key_id: Option<&str>,
+        project_id: Option<&str>,
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let mut body = serde_json::Map::new();
         body.insert(
             "agentId".to_string(),
             JsonValue::String(agent_id.to_string()),
         );
+        if let Some(project_id) = project_id {
+            body.insert(
+                "projectId".to_string(),
+                JsonValue::String(project_id.to_string()),
+            );
+        }
         if let Some(title) = title {
             body.insert("title".to_string(), JsonValue::String(title.to_string()));
         }
@@ -598,14 +637,133 @@ impl EvalClient {
             .unwrap_or_default())
     }
 
+    /// All persisted LLM-proxy interactions for a chat session (the chat route sets the interaction
+    /// `sessionId` to the conversation id), in chronological order. Used post-run to recover the
+    /// effective prompt the model received. Pages the capped API and waits out the write race: the
+    /// proxy persists each row in a `finally` after the chat stream ends, so a naive single fetch
+    /// can miss the last call.
+    pub async fn fetch_session_interactions(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<JsonValue>, ClientError> {
+        const PAGE: usize = 100;
+        const MAX_REFETCH: usize = 5;
+        // The total can keep growing while we page (the proxy is still flushing rows), so settle on a
+        // stable count, page it fully, then re-verify the count did not move under us; retry if it did.
+        for _ in 0..MAX_REFETCH {
+            let total = self.stable_interaction_total(session_id).await?;
+            let mut all: Vec<JsonValue> = Vec::with_capacity(total);
+            while all.len() < total {
+                let (page, _) = self.interactions_page(session_id, PAGE, all.len()).await?;
+                if page.is_empty() {
+                    return Err(ContractError(format!(
+                        "GET /api/interactions: pagination gap for session {session_id}: got {} of {total} rows",
+                        all.len()
+                    ))
+                    .into());
+                }
+                all.extend(page);
+            }
+            let (_, total_after) = self.interactions_page(session_id, 1, 0).await?;
+            if total_after == all.len() {
+                return Ok(all);
+            }
+        }
+        Err(ContractError(format!(
+            "GET /api/interactions: interaction count for session {session_id} never stabilized"
+        ))
+        .into())
+    }
+
+    /// Poll the interaction count with the cheapest possible query until it holds steady across several
+    /// consecutive samples, so a row the proxy is still flushing (it persists each in a `finally` after
+    /// the stream ends) is not missed by a single lucky-quiet read.
+    async fn stable_interaction_total(&self, session_id: &str) -> Result<usize, ClientError> {
+        const NEEDED_STABLE: usize = 3;
+        const MAX_ATTEMPTS: usize = 20;
+        const INTERVAL: Duration = Duration::from_millis(300);
+        let (_, mut prev) = self.interactions_page(session_id, 1, 0).await?;
+        let mut stable = 1;
+        for _ in 0..MAX_ATTEMPTS {
+            sleep(INTERVAL).await;
+            let (_, current) = self.interactions_page(session_id, 1, 0).await?;
+            if current == prev {
+                stable += 1;
+                if stable >= NEEDED_STABLE {
+                    return Ok(current);
+                }
+            } else {
+                stable = 1;
+                prev = current;
+            }
+        }
+        Ok(prev)
+    }
+
+    async fn interactions_page(
+        &self,
+        session_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<JsonValue>, usize), ClientError> {
+        let params = [
+            ("sessionId".to_string(), session_id.to_string()),
+            ("limit".to_string(), limit.to_string()),
+            ("offset".to_string(), offset.to_string()),
+            ("sortBy".to_string(), "createdAt".to_string()),
+            ("sortDirection".to_string(), "asc".to_string()),
+        ];
+        // Post-run enrichment polls this endpoint repeatedly while many rollouts hammer the same
+        // backend, so a transient transport failure (timeout / dropped connection, surfaced as
+        // status 0) is expected under load. Retry those with linear backoff so one slow poll does
+        // not abort the whole interaction capture; genuine HTTP errors propagate immediately.
+        // Up to this many retries on top of the initial request (so 5 total attempts at worst).
+        const MAX_TRANSIENT_RETRIES: u32 = 4;
+        const RETRY_BACKOFF: Duration = Duration::from_millis(500);
+        let mut attempt = 0u32;
+        let body = loop {
+            match self
+                .request(Method::GET, "/api/interactions", Some(&params), None)
+                .await
+            {
+                Ok(body) => break body,
+                Err(e) if e.status == 0 && attempt < MAX_TRANSIENT_RETRIES => {
+                    attempt += 1;
+                    sleep(RETRY_BACKOFF * attempt).await;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
+        let data = body
+            .get("data")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .ok_or_else(|| {
+                ContractError(format!(
+                    "GET /api/interactions: missing `data` array: {body}"
+                ))
+            })?;
+        let total = body
+            .get("pagination")
+            .and_then(|p| p.get("total"))
+            .and_then(JsonValue::as_u64)
+            .ok_or_else(|| {
+                ContractError(format!(
+                    "GET /api/interactions: missing `pagination.total`: {body}"
+                ))
+            })? as usize;
+        Ok((data, total))
+    }
+
     pub async fn stream_chat_records(
         &self,
         conversation_id: &str,
         prior_messages: &[JsonValue],
         text: &str,
         files: &[FilePart],
+        turn_id: &str,
     ) -> Result<impl Stream<Item = chat_stream::ChatStreamRecord> + use<'_>, ClientError> {
-        let body = build_chat_body(conversation_id, prior_messages, text, files);
+        let body = build_chat_body(conversation_id, prior_messages, text, files, turn_id);
         let url = self.url("/api/chat", None);
         let mut req = self
             .http
@@ -973,6 +1131,7 @@ fn build_chat_body(
     prior_messages: &[JsonValue],
     text: &str,
     files: &[FilePart],
+    turn_id: &str,
 ) -> JsonValue {
     let mut parts = vec![serde_json::json!({
         "type": "text",
@@ -982,10 +1141,12 @@ fn build_chat_body(
         parts.push(file.to_data_url_part());
     }
     // Resend the persisted history verbatim (keeping each message's backend id, so
-    // persistNewMessages dedupes them) and append only the new user turn with a fresh id.
+    // persistNewMessages dedupes them) and append the new user turn. `turn_id` is
+    // stable across a stage's attempts so a retried turn reuses the same id and is
+    // deduped backend-side rather than persisted twice.
     let mut messages = prior_messages.to_vec();
     messages.push(serde_json::json!({
-        "id": uuid::Uuid::new_v4().to_string(),
+        "id": turn_id,
         "role": "user",
         "parts": parts,
     }));
@@ -1003,11 +1164,12 @@ mod tests {
 
     #[test]
     fn test_chat_body_pins_temperature() {
-        let body = build_chat_body("conv-1", &[], "hello", &[]);
+        let body = build_chat_body("conv-1", &[], "hello", &[], "turn-1");
         assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
         assert_eq!(body["id"], "conv-1");
         assert_eq!(body["trigger"], "submit-message");
         assert_eq!(body["messages"][0]["parts"][0]["text"], "hello");
+        assert_eq!(body["messages"][0]["id"], "turn-1");
     }
 
     // The backend rejects snake_case keys; every multi-word field must serialize as camelCase.
@@ -1034,6 +1196,7 @@ mod tests {
             agent_type: "agent".into(),
             system_prompt: None,
             tool_exposure_mode: ToolExposureMode::SearchAndRunOnly,
+            teams: vec![],
         };
         let v = serde_json::to_value(&agent).unwrap();
         assert_eq!(v["toolExposureMode"], "search_and_run_only");

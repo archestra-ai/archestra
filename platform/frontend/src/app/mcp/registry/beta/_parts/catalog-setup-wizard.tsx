@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   parseFullToolName,
 } from "@archestra/shared";
@@ -328,7 +327,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             {needsRegistryHandoff ? (
               <Button asChild>
                 <Link
-                  href={`${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${item.id}`}
+                  href={`/mcp/registry/beta?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${item.id}`}
                 >
                   Install
                 </Link>

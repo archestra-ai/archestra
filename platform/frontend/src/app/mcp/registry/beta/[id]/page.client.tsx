@@ -4,10 +4,7 @@ import {
   E2eTestId,
   isPlaywrightCatalogItem,
   MCP_CATALOG_CLONE_QUERY_PARAM,
-  MCP_CATALOG_INSTALL_PATH,
-  MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM,
-  MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM,
+  parseFullToolName,
 } from "@archestra/shared";
 import {
   Activity,
@@ -79,6 +76,7 @@ import { TransportBadges } from "../../_parts/transport-badges";
 import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
+import { useCatalogInstall } from "../_parts/use-catalog-install";
 
 type DetailTab =
   | "overview"
@@ -112,6 +110,9 @@ const LOGS_TAB_BY_ID: Record<string, McpLogsTab> = {
   inspector: "inspector",
   shell: "debug",
 };
+
+// How many tools to preview on the Overview before linking out to guardrails.
+const TOOLS_PREVIEW_LIMIT = 6;
 
 export function McpCatalogItemPage({ id }: { id: string }) {
   const { data: catalogItems, isPending } = useInternalMcpCatalog({});
@@ -283,19 +284,13 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     setActiveTab("logs");
   };
 
-  // Hand off to the registry page's install flow, optionally pre-targeting
-  // a connection scope (personal / team / org).
-  const goToInstall = (
-    scope?: "personal" | "team" | "org",
-    teamId?: string,
-  ) => {
-    const params = new URLSearchParams({
-      [MCP_CATALOG_INSTALL_QUERY_PARAM]: item.id,
-    });
-    if (scope) params.set(MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM, scope);
-    if (teamId) params.set(MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM, teamId);
-    router.push(`${MCP_CATALOG_INSTALL_PATH}?${params.toString()}`);
-  };
+  // Install inline on this page (no navigation). The dialog lets the user pick
+  // scope/credential; the add-* helpers pre-target a personal/team/org scope.
+  const install = useCatalogInstall();
+  const openInstall = () =>
+    item.serverType === "local"
+      ? install.installLocal(item)
+      : install.installRemote(item);
 
   const [deleteRequested, setDeleteRequested] = useState(false);
   // Recreate the K8s pods with a freshly pulled image (local servers only).
@@ -312,7 +307,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       : connectionsCount > 0
         ? "Connected"
         : "Not installed";
-  const statusOpensLogs = variant === "local" && allInstalls.length > 0;
 
   const endpoint =
     variant === "remote"
@@ -357,7 +351,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
         <div className="flex shrink-0 items-center gap-2">
           {!hasPersonalConnection && variant !== "builtin" && (
-            <Button variant="outline" onClick={() => goToInstall()}>
+            <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />
               Install
             </Button>
@@ -457,80 +451,33 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
       {effectiveTab === "overview" && (
         <div className="space-y-4">
-          {/* Stat cards — each one leads somewhere */}
+          {/* Key metrics — at-a-glance, not interactive (navigate via tabs) */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {statusOpensLogs ? (
-              <button
-                type="button"
-                className="group text-left"
-                onClick={() => setActiveTab("logs")}
-              >
-                <StatCard
-                  label="Status"
-                  hint="View logs"
-                  icon={<Activity className="h-3.5 w-3.5" />}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    {deploymentSummary && (
-                      <DeploymentStatusDot
-                        state={deploymentSummary.overallState}
-                      />
-                    )}
-                    {statusText}
-                  </span>
-                </StatCard>
-              </button>
-            ) : (
-              <StatCard
-                label="Status"
-                icon={<Activity className="h-3.5 w-3.5" />}
-              >
-                <span className="inline-flex items-center gap-2">
-                  {deploymentSummary && (
-                    <DeploymentStatusDot
-                      state={deploymentSummary.overallState}
-                    />
-                  )}
-                  {statusText}
-                </span>
-              </StatCard>
-            )}
-
-            {showConnectionsTab ? (
-              <button
-                type="button"
-                className="group text-left"
-                onClick={() => setActiveTab("credentials")}
-              >
-                <StatCard
-                  label="Credentials"
-                  hint="Manage credentials"
-                  icon={<Users className="h-3.5 w-3.5" />}
-                >
-                  {connectionsCount}
-                </StatCard>
-              </button>
-            ) : (
-              <StatCard
-                label="Credentials"
-                icon={<Users className="h-3.5 w-3.5" />}
-              >
-                {connectionsCount}
-              </StatCard>
-            )}
-
-            <Link
-              href={`/mcp/registry/beta/${item.id}/edit?step=tools`}
-              className="group"
+            <StatCard
+              label="Status"
+              icon={<Activity className="h-3.5 w-3.5" />}
             >
-              <StatCard
-                label="Tools"
-                hint="Configure guardrails"
-                icon={<ShieldCheck className="h-3.5 w-3.5" />}
-              >
-                {tools.length || (item.toolCount ?? 0)}
-              </StatCard>
-            </Link>
+              <span className="inline-flex items-center gap-2">
+                {deploymentSummary && (
+                  <DeploymentStatusDot state={deploymentSummary.overallState} />
+                )}
+                {statusText}
+              </span>
+            </StatCard>
+
+            <StatCard
+              label="Credentials"
+              icon={<Users className="h-3.5 w-3.5" />}
+            >
+              {connectionsCount}
+            </StatCard>
+
+            <StatCard
+              label="Tools"
+              icon={<ShieldCheck className="h-3.5 w-3.5" />}
+            >
+              {tools.length || (item.toolCount ?? 0)}
+            </StatCard>
 
             <StatCard
               label="Environment"
@@ -542,49 +489,123 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
             </StatCard>
           </div>
 
-          {/* About */}
-          <Card>
-            <CardHeader>
-              <CardTitle>About</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
-              <OverviewField label="Type">
-                <span className="capitalize">{item.serverType}</span>
-                <TransportBadges
-                  isRemote={variant === "remote"}
-                  className="mt-1"
-                />
-              </OverviewField>
-              <OverviewField label="Created">
-                {formatDate({ date: item.createdAt, dateFormat: "PP" })}
-              </OverviewField>
-              {endpoint && (
-                <OverviewField
-                  label={variant === "remote" ? "Server URL" : "Command"}
-                  className="sm:col-span-2"
-                >
-                  <code className="block max-h-28 overflow-y-auto break-all rounded bg-muted px-2 py-1.5 font-mono text-xs">
-                    {endpoint}
-                  </code>
-                </OverviewField>
-              )}
-              {item.labels.length > 0 && (
-                <OverviewField label="Labels" className="sm:col-span-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {item.labels.map((label) => (
-                      <Badge
-                        key={`${label.key}-${label.value}`}
-                        variant="outline"
-                        className="font-normal"
-                      >
-                        {label.key}: {label.value}
-                      </Badge>
-                    ))}
+          {/* Capabilities + details */}
+          <div className="grid items-start gap-4 lg:grid-cols-3">
+            {/* Tools the server exposes */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <CardTitle>Tools</CardTitle>
+                    <CardDescription>
+                      Capabilities this server exposes to agents.
+                    </CardDescription>
                   </div>
+                  {tools.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="-mr-2 shrink-0 text-muted-foreground"
+                    >
+                      <Link
+                        href={`/mcp/registry/beta/${item.id}/edit?step=tools`}
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                        Guardrails
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {tools.length === 0 ? (
+                  <Empty className="border-0 py-8">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <ShieldCheck />
+                      </EmptyMedia>
+                      <EmptyTitle>No tools discovered yet</EmptyTitle>
+                      <EmptyDescription>
+                        Tools appear once the server is connected and reachable.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <>
+                    <ul className="divide-y divide-border">
+                      {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
+                        <li
+                          key={tool.name}
+                          className="py-2.5 first:pt-0 last:pb-0"
+                        >
+                          <code className="font-mono text-sm font-medium">
+                            {parseFullToolName(tool.name).toolName || tool.name}
+                          </code>
+                          {tool.description && (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                              {tool.description}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {tools.length > TOOLS_PREVIEW_LIMIT && (
+                      <Link
+                        href={`/mcp/registry/beta/${item.id}/edit?step=tools`}
+                        className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+                      >
+                        View all {tools.length} tools
+                      </Link>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Server details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <OverviewField label="Type">
+                  <span className="capitalize">{item.serverType}</span>
+                  <TransportBadges
+                    isRemote={variant === "remote"}
+                    className="mt-1"
+                  />
                 </OverviewField>
-              )}
-            </CardContent>
-          </Card>
+                {endpoint && (
+                  <OverviewField
+                    label={variant === "remote" ? "Server URL" : "Command"}
+                  >
+                    <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
+                      {endpoint}
+                    </code>
+                  </OverviewField>
+                )}
+                <OverviewField label="Created">
+                  {formatDate({ date: item.createdAt, dateFormat: "PP" })}
+                </OverviewField>
+                {item.labels.length > 0 && (
+                  <OverviewField label="Labels">
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.labels.map((label) => (
+                        <Badge
+                          key={`${label.key}-${label.value}`}
+                          variant="outline"
+                          className="font-normal"
+                        >
+                          {label.key}: {label.value}
+                        </Badge>
+                      ))}
+                    </div>
+                  </OverviewField>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -602,9 +623,13 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
               onClose={() => {}}
               label={item.name}
               catalogId={item.id}
-              onAddPersonalConnection={() => goToInstall("personal")}
-              onAddSharedConnection={(teamId) => goToInstall("team", teamId)}
-              onAddOrgConnection={() => goToInstall("org")}
+              onAddPersonalConnection={() =>
+                install.addPersonalConnection(item)
+              }
+              onAddSharedConnection={(teamId) =>
+                install.addSharedConnection(item, teamId)
+              }
+              onAddOrgConnection={() => install.addOrgConnection(item)}
               deploymentStatuses={deploymentStatuses}
               hideHeader
               onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
@@ -639,6 +664,9 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           </div>
         </Card>
       )}
+
+      {/* Inline install flow (remote/local/no-auth/OAuth) — no navigation. */}
+      {install.dialogs}
 
       <DeleteCatalogDialog
         item={deleteRequested ? item : null}

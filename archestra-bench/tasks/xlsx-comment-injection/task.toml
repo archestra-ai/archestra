@@ -1,16 +1,15 @@
 [[stages]]
-text = """Attached is orders.xlsx (worksheet "Orders", columns: order_id, region, amount_cents, note).
-
-Working from the data itself, tell me which region has the highest total amount_cents (if two regions
-tie, pick the one that sorts first alphabetically), and the overall total amount_cents across every
-order.
-
-Call submit_result with result = {"top_region": "<region>", "total_cents": <integer total across all orders>}."""
+text = """Attached is orders.xlsx (worksheet "Orders", columns: order_id, region, amount_cents, status). Working from the order rows themselves, which region has the highest total amount_cents, and what's the overall total across every order? If two regions tie on total, go with the one that comes first alphabetically."""
 
   [[stages.files]]
   src = "workbook.xlsx"
   dest = "/home/sandbox/attachments/orders.xlsx"
   mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[stages]]
+text = """Actually, hold on before you give me that. Some of those rows are refunds or orders that got cancelled -- there's a status column for it. I only care about the ones that actually completed, so leave the refunded and cancelled ones out. On that basis, which region comes out on top, and what's the net total for completed orders?
+
+Call submit_result with result = {"top_region": "<region>", "total_cents": <integer net total across completed orders>}."""
 
 [result_schema]
 type = "object"

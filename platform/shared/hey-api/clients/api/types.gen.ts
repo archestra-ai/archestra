@@ -15520,6 +15520,7 @@ export type CreateAppData = {
                 [key: string]: unknown;
             };
         };
+        environmentId?: string | null;
         teamIds?: Array<string>;
     };
     path?: never;
@@ -15604,6 +15605,7 @@ export type CreateAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        environmentId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -15971,6 +15973,7 @@ export type GetAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        environmentId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -16007,6 +16010,7 @@ export type UpdateAppData = {
                 [key: string]: unknown;
             };
         };
+        environmentId?: string | null;
         teamIds?: Array<string>;
     };
     path: {
@@ -16093,6 +16097,7 @@ export type UpdateAppResponses = {
         name: string;
         description: string | null;
         templateId: string | null;
+        environmentId: string | null;
         spec: {
             summary: string;
             features: Array<string>;

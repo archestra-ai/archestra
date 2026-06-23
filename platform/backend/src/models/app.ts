@@ -169,7 +169,15 @@ class AppModel {
   static async update(params: {
     id: string;
     patch?: Partial<
-      Pick<App, "name" | "description" | "scope" | "templateId" | "spec">
+      Pick<
+        App,
+        | "name"
+        | "description"
+        | "scope"
+        | "templateId"
+        | "spec"
+        | "environmentId"
+      >
     >;
     version?: VersionPayload;
     teamIds?: string[];

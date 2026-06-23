@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -141,5 +142,73 @@ describe("PATCH /api/apps/:appId", () => {
       payload: { name: "Ghost" },
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  test("re-binds the app's environment and back to the default", async ({
+    makeApp,
+  }) => {
+    const prod = await EnvironmentModel.create({
+      organizationId,
+      name: "production",
+    });
+    const created = await makeApp({ organizationId, scope: "org" });
+
+    const bound = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { environmentId: prod.id },
+    });
+    expect(bound.statusCode).toBe(200);
+    expect(bound.json().environmentId).toBe(prod.id);
+
+    const back = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { environmentId: null },
+    });
+    expect(back.statusCode).toBe(200);
+    expect(back.json().environmentId).toBeNull();
+  });
+
+  test("editing an app bound to a restricted environment does not require deploy-to-restricted when the binding is unchanged", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const restricted = await EnvironmentModel.create({
+      organizationId,
+      name: "restricted-prod",
+      restricted: true,
+    });
+    // The admin (current `user`) binds the app to the restricted environment.
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Restricted App",
+        scope: "org",
+        environmentId: restricted.id,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const appId = created.json().id;
+
+    // An app admin who lacks environment:deploy-to-restricted renames the app;
+    // the form echoes the unchanged environmentId. The unchanged binding must
+    // not be re-authorized, so the edit succeeds rather than 403.
+    const role = await makeCustomRole(organizationId, {
+      permission: { app: ["admin"] },
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, organizationId, { role: role.role });
+    user = editor;
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${appId}`,
+      payload: { name: "Renamed", environmentId: restricted.id },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().name).toBe("Renamed");
   });
 });

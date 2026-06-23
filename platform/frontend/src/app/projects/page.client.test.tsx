@@ -207,7 +207,7 @@ describe("ProjectsPageClient", () => {
     render(<ProjectsPageClient />);
 
     expect(screen.getByText("Pinned")).toBeInTheDocument();
-    expect(screen.queryByText("All projects")).not.toBeInTheDocument();
+    expect(screen.getByText("All projects")).toBeInTheDocument();
     expect(screen.queryByLabelText("Pinned project")).not.toBeInTheDocument();
     expect(screen.getByText("Pinned project")).toBeInTheDocument();
     expect(screen.getByText("Plain project")).toBeInTheDocument();

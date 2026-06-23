@@ -142,6 +142,7 @@ function ProjectsList() {
             />
           )}
           <ProjectSection
+            title={pinnedProjects.length > 0 ? "All projects" : undefined}
             projects={unpinnedProjects}
             onTogglePin={(project) =>
               pinProjectMutation.mutate({

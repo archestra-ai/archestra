@@ -1,4 +1,15 @@
-import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  and,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
@@ -301,6 +312,129 @@ class McpServerModel {
     }
 
     return Array.from(serversMap.values());
+  }
+
+  /**
+   * Installed servers the caller may view that provide an MCP Apps UI — a
+   * discovered tool whose `_meta.ui.resourceUri` (or legacy `ui/resourceUri`)
+   * names a `ui://` resource. Drives the external half of the unified Apps
+   * listing (mcp-apps.md FR-27). The built-in Archestra catalog is excluded so
+   * its own UI tools never masquerade as external apps. One entry per installed
+   * server; the primary resource is the lowest-named UI tool's uri. Access
+   * filtering mirrors {@link findAll}.
+   */
+  static async findUiCapableForCaller(params: {
+    userId: string;
+    isMcpServerAdmin: boolean;
+    search?: string;
+  }): Promise<
+    Array<{
+      mcpServerId: string;
+      name: string;
+      description: string | null;
+      scope: ResourceVisibilityScope;
+      ownerId: string | null;
+      resourceUri: string;
+    }>
+  > {
+    const { userId, isMcpServerAdmin, search } = params;
+
+    let accessibleIds: string[] | null = null;
+    if (!isMcpServerAdmin) {
+      const [teamIds, personalIds, orgIds] = await Promise.all([
+        McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+        McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        McpServerModel.getOrgScopedMcpServerIds(),
+      ]);
+      accessibleIds = [...new Set([...teamIds, ...personalIds, ...orgIds])];
+      if (accessibleIds.length === 0) return [];
+    }
+
+    const searchTerm = search?.trim();
+    // An MCP App UI resource must use the ui:// scheme; a tool whose
+    // _meta.ui.resourceUri is some other URI is not an app and must not surface
+    // here. Canonical key first, then the legacy flat key.
+    const toolMeta = schema.toolsTable.meta;
+    const uiResourceUri = sql<string | null>`coalesce(
+      case when ${toolMeta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->'ui'->>'resourceUri' end,
+      case when ${toolMeta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->>'ui/resourceUri' end
+    )`;
+    const rows = await db
+      .select({
+        mcpServerId: schema.mcpServersTable.id,
+        serverName: schema.mcpServersTable.name,
+        scope: schema.mcpServersTable.scope,
+        ownerId: schema.mcpServersTable.ownerId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        catalogDescription: schema.internalMcpCatalogTable.description,
+        toolName: schema.toolsTable.name,
+        resourceUri: uiResourceUri,
+      })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          sql`${uiResourceUri} IS NOT NULL`,
+          accessibleIds
+            ? inArray(schema.mcpServersTable.id, accessibleIds)
+            : undefined,
+          searchTerm
+            ? or(
+                ilike(schema.internalMcpCatalogTable.name, `%${searchTerm}%`),
+                ilike(
+                  schema.internalMcpCatalogTable.description,
+                  `%${searchTerm}%`,
+                ),
+                ilike(schema.mcpServersTable.name, `%${searchTerm}%`),
+              )
+            : undefined,
+        ),
+      );
+
+    // One entry per server; keep the lowest-named UI tool's resource as primary.
+    const byServer = new Map<
+      string,
+      {
+        mcpServerId: string;
+        name: string;
+        description: string | null;
+        scope: ResourceVisibilityScope;
+        ownerId: string | null;
+        resourceUri: string;
+        primaryToolName: string;
+      }
+    >();
+    for (const row of rows) {
+      if (!row.resourceUri) continue;
+      const existing = byServer.get(row.mcpServerId);
+      if (!existing || row.toolName < existing.primaryToolName) {
+        byServer.set(row.mcpServerId, {
+          mcpServerId: row.mcpServerId,
+          name: row.catalogName ?? row.serverName,
+          description: row.catalogDescription ?? null,
+          scope: row.scope,
+          ownerId: row.ownerId,
+          resourceUri: row.resourceUri,
+          primaryToolName: row.toolName,
+        });
+      }
+    }
+    return Array.from(byServer.values()).map((entry) => ({
+      mcpServerId: entry.mcpServerId,
+      name: entry.name,
+      description: entry.description,
+      scope: entry.scope,
+      ownerId: entry.ownerId,
+      resourceUri: entry.resourceUri,
+    }));
   }
 
   static async findById(

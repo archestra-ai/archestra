@@ -17,6 +17,11 @@ import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
+import {
+  REPEAT_CALL_TERMINATION_NOTICE,
+  repeatCeilingStopCondition,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import logger from "@/logging";
 import { AgentModel, McpServerModel } from "@/models";
 import {
@@ -195,6 +200,10 @@ export async function executeA2AMessage(
   }
 
   try {
+    // One tracker per run, shared between the breaker (records each call) and the
+    // stop condition below (terminates the run once repeats hit the ceiling).
+    const repeatTracker = new ToolCallRepeatTracker();
+
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
@@ -211,6 +220,7 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      repeatTracker,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -271,7 +281,10 @@ export async function executeA2AMessage(
       model,
       system: systemPrompt,
       tools: mcpTools,
-      stopWhen: stepCountIs(MAX_AGENT_STEPS),
+      stopWhen: [
+        stepCountIs(MAX_AGENT_STEPS),
+        repeatCeilingStopCondition(repeatTracker),
+      ],
       abortSignal,
     };
     const config: Parameters<typeof streamText>[0] =
@@ -351,6 +364,16 @@ export async function executeA2AMessage(
         throw new Error(
           "A2A execution failed: no response UIMessage generated",
         );
+      }
+
+      // The repeat-call ceiling stops the loop on a tool-call step, so the model
+      // never took a turn to produce assistant text and `finalText` is empty.
+      // Headless callers read only `text`, so surface why the run ended.
+      if (
+        finalText.trim() === "" &&
+        repeatTracker.hasReachedTerminationCeiling()
+      ) {
+        finalText = REPEAT_CALL_TERMINATION_NOTICE;
       }
     } catch (streamError) {
       const capturedStreamError = getCapturedStreamError();

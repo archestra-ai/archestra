@@ -35,6 +35,7 @@ export { default as mcpOauthClientsRoutes } from "./mcp-oauth-clients";
 export { default as mcpProxyRoutes } from "./mcp-proxy";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
+export { default as mcpServerProxyRoutes } from "./mcp-server-proxy";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
 export { default as oauthRoutes } from "./oauth";

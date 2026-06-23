@@ -1343,6 +1343,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.GetExternalApp]: { app: ["read"] },
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
@@ -1388,6 +1389,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+  [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 };
@@ -1422,6 +1424,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/apps": { app: ["read"] },
   "/apps/[id]": { app: ["read"] },
   "/apps/[id]/run": { app: ["read"] },
+  "/apps/server/[mcpServerId]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

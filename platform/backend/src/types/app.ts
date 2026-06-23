@@ -46,6 +46,42 @@ export const AppUiPermissionsSchema = z
   .strict();
 export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
 
+/**
+ * Unified Apps-surface listing item. The Apps page lists owned apps and
+ * external UI-providing installed MCP servers as one entity, distinguished by
+ * `source`. `executionModel` and `cspOrigin` are the machine-readable trust
+ * disclosure (mcp-apps.md FR-29): owned apps run as the viewer under the
+ * platform-pinned CSP; external apps run server-scoped under the server's own
+ * declared CSP. `GET /api/apps/:appId` still returns {@link SelectAppSchema}.
+ */
+const AppListItemBaseSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable(),
+  scope: AppScopeSchema,
+  authorId: z.string().nullable(),
+  executionModel: z.enum(["viewer-scoped", "server-scoped"]),
+  cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+});
+
+export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
+  source: z.literal("owned"),
+  id: z.string(),
+  latestVersion: z.number().int(),
+});
+
+export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
+  source: z.literal("external"),
+  mcpServerId: z.string(),
+  resourceUri: z.string(),
+});
+
+export const AppListItemSchema = z.discriminatedUnion("source", [
+  OwnedAppListItemSchema,
+  ExternalAppListItemSchema,
+]);
+export type AppListItem = z.infer<typeof AppListItemSchema>;
+export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
+
 // drizzle-derived schemas (internal: model layer reads/writes through these).
 export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   scope: AppScopeSchema,

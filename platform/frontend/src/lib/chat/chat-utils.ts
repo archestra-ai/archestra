@@ -34,7 +34,6 @@ export function conversationStorageKeys(conversationId: string) {
   return {
     artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
-    pinnedCanvas: `archestra-chat-pinned-canvas-${conversationId}`,
   };
 }
 

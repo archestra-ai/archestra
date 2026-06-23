@@ -632,4 +632,166 @@ describe("appRoutes /api/apps", () => {
       await AppRenderDiagnosticsModel.getForUser(personalApp.id, other.id),
     ).toBeNull();
   });
+
+  test("lists external UI-providing servers alongside owned apps, with trust disclosure", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const owned = await makeApp({
+      organizationId: org.id,
+      scope: "org",
+      name: "My Owned App",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Get Time",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "get-time",
+      meta: { _meta: { ui: { resourceUri: "ui://get-time/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().data as Array<Record<string, unknown>>;
+
+    expect(
+      items.find((i) => i.source === "owned" && i.id === owned.id),
+    ).toMatchObject({
+      source: "owned",
+      executionModel: "viewer-scoped",
+      cspOrigin: "platform-pinned",
+    });
+    expect(
+      items.find((i) => i.source === "external" && i.mcpServerId === server.id),
+    ).toMatchObject({
+      source: "external",
+      name: "Get Time",
+      resourceUri: "ui://get-time/app.html",
+      executionModel: "server-scoped",
+      cspOrigin: "author-declared",
+    });
+  });
+
+  test("excludes installed servers without a ui:// tool from the unified listing", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Plain",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "noop",
+      meta: { _meta: {} },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    expect(
+      items.some((i) => i.source === "external" && i.mcpServerId === server.id),
+    ).toBe(false);
+  });
+
+  test("GET /api/apps/external/:id resolves a ui server and 404s for unknown or non-ui servers", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Get Time",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "get-time",
+      meta: { _meta: { ui: { resourceUri: "ui://gt/app.html" } } },
+    });
+
+    const ok = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${server.id}`,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({
+      source: "external",
+      mcpServerId: server.id,
+      resourceUri: "ui://gt/app.html",
+    });
+
+    const unknown = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${crypto.randomUUID()}`,
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const plainCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Plain",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const plain = await makeMcpServer({
+      catalogId: plainCatalog.id,
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: plainCatalog.id,
+      name: "noop",
+      meta: { _meta: {} },
+    });
+    const notUi = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${plain.id}`,
+    });
+    expect(notUi.statusCode).toBe(404);
+  });
 });

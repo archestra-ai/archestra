@@ -15467,24 +15467,25 @@ export type GetAppsResponses = {
      */
     200: {
         data: Array<{
-            id: string;
-            organizationId: string;
-            authorId: string | null;
-            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string | null;
-            templateId: string | null;
-            spec: {
-                summary: string;
-                features: Array<string>;
-                data?: string | null;
-                ui?: string | null;
-                tools: Array<string>;
-            } | null;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            executionModel: 'viewer-scoped' | 'server-scoped';
+            cspOrigin: 'platform-pinned' | 'author-declared';
+            source: 'owned';
+            id: string;
             latestVersion: number;
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: string | null;
+        } | {
+            name: string;
+            description: string | null;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            executionModel: 'viewer-scoped' | 'server-scoped';
+            cspOrigin: 'platform-pinned' | 'author-declared';
+            source: 'external';
+            mcpServerId: string;
+            resourceUri: string;
         }>;
         pagination: {
             currentPage: number;
@@ -15619,6 +15620,99 @@ export type CreateAppResponses = {
 };
 
 export type CreateAppResponse = CreateAppResponses[keyof CreateAppResponses];
+
+export type GetExternalAppData = {
+    body?: never;
+    path: {
+        mcpServerId: string;
+    };
+    query?: never;
+    url: '/api/apps/external/{mcpServerId}';
+};
+
+export type GetExternalAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetExternalAppError = GetExternalAppErrors[keyof GetExternalAppErrors];
+
+export type GetExternalAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        description: string | null;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        executionModel: 'viewer-scoped' | 'server-scoped';
+        cspOrigin: 'platform-pinned' | 'author-declared';
+        source: 'external';
+        mcpServerId: string;
+        resourceUri: string;
+    };
+};
+
+export type GetExternalAppResponse = GetExternalAppResponses[keyof GetExternalAppResponses];
 
 export type GetAppTemplatesData = {
     body?: never;
@@ -45689,6 +45783,24 @@ export type AddMcpServerInstallationRequestNoteResponses = {
 };
 
 export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallationRequestNoteResponses[keyof AddMcpServerInstallationRequestNoteResponses];
+
+export type McpServerProxyPostData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        mcpServerId: string;
+    };
+    query?: never;
+    url: '/api/mcp/server/{mcpServerId}';
+};
+
+export type McpServerProxyPostResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type GetMcpServersData = {
     body?: never;

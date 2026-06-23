@@ -40,3 +40,37 @@ export function AppRuntimeFrame({ appId }: { appId: string }) {
     </div>
   );
 }
+
+// Mounts an external UI-providing MCP server's app against the server-scoped MCP
+// endpoint (POST /api/mcp/server/:id). No app version / diagnostics — those are
+// owned-app concepts; this runs the installed server's own UI resource.
+export function ExternalAppRuntimeFrame({
+  mcpServerId,
+  resourceUri,
+}: {
+  mcpServerId: string;
+  resourceUri: string;
+}) {
+  const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
+  const [resourceState, setResourceState] = useState<
+    "unknown" | "renderable" | "empty"
+  >("unknown");
+
+  return (
+    <div className="h-full w-full">
+      <McpAppRuntime
+        toolResourceUri={resourceUri}
+        endpoint={{ kind: "server", mcpServerId }}
+        displayMode={displayMode}
+        onDisplayModeChange={setDisplayMode}
+        onSizeChange={() => {}}
+        onResourceStateChange={setResourceState}
+      />
+      {resourceState === "empty" && (
+        <p className="p-4 text-sm text-muted-foreground">
+          This app has no visible content yet.
+        </p>
+      )}
+    </div>
+  );
+}

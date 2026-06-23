@@ -8,6 +8,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardDescription,
@@ -72,50 +73,82 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {apps.map((app) => (
-              <Card key={app.id} className="group relative">
-                <Link
-                  href={`/apps/${app.id}`}
-                  className="absolute inset-0"
-                  aria-label={`Open ${app.name}`}
-                />
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="truncate">{app.name}</CardTitle>
-                    <ResourceVisibilityBadge
-                      scope={app.scope}
-                      teams={undefined}
-                      authorId={app.authorId}
-                      authorName={undefined}
-                      currentUserId={session?.user?.id}
-                    />
-                  </div>
-                  {app.description ? (
-                    <CardDescription className="line-clamp-2">
-                      {app.description}
-                    </CardDescription>
+            {apps.map((app) => {
+              // The Apps surface lists two kinds: owned apps (open the detail
+              // page) and external UI-providing servers (open the standalone
+              // server run page). The source badge + caption are the FR-29
+              // trust disclosure so the two execution models aren't conflated.
+              const key = app.source === "external" ? app.mcpServerId : app.id;
+              const href =
+                app.source === "external"
+                  ? `/apps/server/${app.mcpServerId}/run`
+                  : `/apps/${app.id}`;
+              return (
+                <Card key={key} className="group relative">
+                  <Link
+                    href={href}
+                    className="absolute inset-0"
+                    aria-label={`Open ${app.name}`}
+                  />
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="truncate">{app.name}</CardTitle>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            app.source === "external"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              : ""
+                          }
+                        >
+                          {app.source === "external" ? "External" : "Owned"}
+                        </Badge>
+                        <ResourceVisibilityBadge
+                          scope={app.scope}
+                          teams={undefined}
+                          authorId={app.authorId}
+                          authorName={undefined}
+                          currentUserId={session?.user?.id}
+                        />
+                      </div>
+                    </div>
+                    {app.description ? (
+                      <CardDescription className="line-clamp-2">
+                        {app.description}
+                      </CardDescription>
+                    ) : null}
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {app.executionModel === "viewer-scoped"
+                        ? "Runs as you · no direct network"
+                        : "Runs as the server · declares its own network"}
+                    </p>
+                  </CardHeader>
+                  {app.source === "owned" ? (
+                    <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
+                      <PermissionButton
+                        permissions={{ app: ["delete"] }}
+                        variant="ghost"
+                        size="icon"
+                        className="pointer-events-auto relative z-10 h-8 w-8 text-muted-foreground hover:text-destructive"
+                        aria-label={`Delete ${app.name}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (
+                            confirm(
+                              `Delete "${app.name}"? This cannot be undone.`,
+                            )
+                          )
+                            deleteApp.mutate(app.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </PermissionButton>
+                    </div>
                   ) : null}
-                </CardHeader>
-                <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
-                  <PermissionButton
-                    permissions={{ app: ["delete"] }}
-                    variant="ghost"
-                    size="icon"
-                    className="pointer-events-auto relative z-10 h-8 w-8 text-muted-foreground hover:text-destructive"
-                    aria-label={`Delete ${app.name}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (
-                        confirm(`Delete "${app.name}"? This cannot be undone.`)
-                      )
-                        deleteApp.mutate(app.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </PermissionButton>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </LoadingWrapper>

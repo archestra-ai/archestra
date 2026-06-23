@@ -1,8 +1,12 @@
 // Per-run guard against a model re-issuing the identical tool call forever.
-// The agent loop only stops at MAX_AGENT_STEPS (agents/agent-run-stream.ts),
-// so a model stuck repeating one call burns hundreds of steps silently. This
-// tracker detects consecutive identical (toolName + arguments) calls within a
-// single run so the tool layer can nudge the model instead of re-executing.
+// Without a ceiling the agent loop only stops at MAX_AGENT_STEPS
+// (agents/agent-run-stream.ts), so a model stuck repeating one call burns
+// hundreds of steps silently. This tracker counts consecutive identical
+// (toolName + arguments) calls within a single run so the tool layer can nudge
+// the model, and — once the repeats cross a ceiling — so the run's stop policy
+// can terminate the loop instead of nudging into the void.
+
+import type { StopCondition, ToolSet } from "ai";
 
 /**
  * Consecutive identical tool calls that execute normally before the tracker
@@ -12,11 +16,38 @@
  */
 export const MAX_IDENTICAL_TOOL_CALLS = 3;
 
+/**
+ * Consecutive identical calls at which the breaker stops nudging and the run is
+ * terminated (via {@link repeatCeilingStopCondition}). A model still repeating
+ * after several nudges will not recover, so stopping here caps wasted compute
+ * instead of letting it run to MAX_AGENT_STEPS. Named constant, not config.
+ * @public exported for tests and the stop-condition wiring.
+ */
+export const REPEAT_CALL_TERMINATION_CEILING = 6;
+
+/**
+ * Caller-facing result text for a headless run that the ceiling stopped on a
+ * tool-call step. The model never got a turn to produce assistant text, so
+ * `stream.text` is empty; surfaces a reason in its place. Interactive chat does
+ * not need this — it renders the breaker's terminal tool-result part directly.
+ */
+export const REPEAT_CALL_TERMINATION_NOTICE =
+  "The run was stopped because the agent repeatedly issued the same tool call with identical arguments without making progress.";
+
+/**
+ * How the breaker should respond to a recorded call:
+ * `none` — under threshold, execute normally; `nudge` — skip and nudge;
+ * `terminate` — skip, emit a terminal message, and stop the run.
+ */
+export type RepeatSeverity = "none" | "nudge" | "terminate";
+
 interface RepeatRecord {
   /** How many times this exact call has occurred consecutively (>= 1). */
   count: number;
   /** True once the consecutive count exceeds MAX_IDENTICAL_TOOL_CALLS. */
   shouldNudge: boolean;
+  /** Escalation tier for this call, derived from the consecutive count. */
+  severity: RepeatSeverity;
 }
 
 /**
@@ -43,11 +74,40 @@ export class ToolCallRepeatTracker {
       this.lastFingerprint = fingerprint;
       this.consecutiveCount = 1;
     }
+    const severity = severityFor(this.consecutiveCount);
     return {
       count: this.consecutiveCount,
-      shouldNudge: this.consecutiveCount > MAX_IDENTICAL_TOOL_CALLS,
+      shouldNudge: severity !== "none",
+      severity,
     };
   }
+
+  /**
+   * Whether the current consecutive streak has reached the termination ceiling.
+   * Read by {@link repeatCeilingStopCondition} at each step boundary; the SDK
+   * evaluates stop conditions after the step's tool call has been recorded, so
+   * the streak this reads already includes the call that hit the ceiling.
+   */
+  hasReachedTerminationCeiling(): boolean {
+    return this.consecutiveCount >= REPEAT_CALL_TERMINATION_CEILING;
+  }
+}
+
+/**
+ * Stop condition bound to one run's tracker: terminates the agent loop once the
+ * run's repeated-call streak reaches the ceiling. Added to a caller's `stopWhen`
+ * array alongside `stepCountIs(MAX_AGENT_STEPS)`, the same termination channel.
+ */
+export function repeatCeilingStopCondition(
+  tracker: ToolCallRepeatTracker,
+): StopCondition<ToolSet> {
+  return () => tracker.hasReachedTerminationCeiling();
+}
+
+function severityFor(count: number): RepeatSeverity {
+  if (count >= REPEAT_CALL_TERMINATION_CEILING) return "terminate";
+  if (count > MAX_IDENTICAL_TOOL_CALLS) return "nudge";
+  return "none";
 }
 
 /**

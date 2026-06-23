@@ -45,6 +45,10 @@ import {
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
+import {
+  repeatCeilingStopCondition,
+  type ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
@@ -456,7 +460,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
-          { mcpTools, toolUiResourceUris, systemPrompt, toolSelection },
+          {
+            mcpTools,
+            toolUiResourceUris,
+            systemPrompt,
+            toolSelection,
+            repeatTracker,
+          },
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
@@ -795,7 +805,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   model,
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(),
+                  stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   // Repair tool names that carry a leaked harmony sentinel token
                   // (e.g. `archestra__run_command<|channel|>commentary`) before
@@ -2660,11 +2670,12 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   return { firstUserMessage, firstAssistantMessage };
 }
 
-export function buildChatStopConditions() {
+export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
     stepCountIs(MAX_AGENT_STEPS),
     hasToolCall(getChatStopToolNames().swapAgentToolName),
     hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
+    repeatCeilingStopCondition(repeatTracker),
   ];
 }
 

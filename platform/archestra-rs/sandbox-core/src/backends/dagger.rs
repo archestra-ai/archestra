@@ -1136,6 +1136,50 @@ mod tests {
         std::fs::remove_file(&script).ok();
     }
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn shutdown_does_not_reap_a_child_that_refuses_to_exit() {
+        // Characterises the teardown-reap limitation behind the dagger zombie.
+        // `DaggerSessionProc::shutdown` (dagger-sdk =0.21.5) only broadcasts to
+        // our in-process reader tasks and then *awaits* the child's voluntary
+        // exit — it sends no signal and never closes the child's stdin. Against a
+        // `dagger session` that keeps running (the reconnect-loop shape), it
+        // blocks and never reaps the process. Only dropping the proc force-kills
+        // it via kill_on_drop, and the post-ready teardown path calls shutdown(),
+        // not drop — so retiring a session does not, on its own, guarantee its
+        // CLI child dies.
+        let script = write_fake_session("#!/bin/sh\nsleep 120\n");
+        let mut cmd = build_session_command(&script, Path::new("/"), None);
+        let child = cmd.spawn().unwrap();
+        let pid = child.id().expect("a spawned child has a pid");
+        let proc: DaggerSessionProc = child.into();
+
+        // shutdown() blocks on the child's own exit, which never comes.
+        let returned = tokio::time::timeout(Duration::from_secs(2), proc.shutdown()).await;
+        assert!(
+            returned.is_err(),
+            "shutdown() returned for a child that never exits — SDK reaping semantics changed"
+        );
+        assert!(
+            !process_finished(pid),
+            "shutdown() left the child alive: it does not forcibly reap"
+        );
+
+        // Dropping the proc IS the forceful reaper (kill_on_drop); the post-ready
+        // teardown path never reaches a drop while shutdown() is still pending.
+        drop(proc);
+        let mut reaped = false;
+        for _ in 0..100 {
+            if process_finished(pid) {
+                reaped = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(reaped, "child {pid} should be reaped once the proc is dropped");
+        std::fs::remove_file(&script).ok();
+    }
+
     #[test]
     fn runtime_target_host_builds_a_kube_pod_address_for_an_environment() {
         assert_eq!(runtime_target_host(&RuntimeTarget::Default), None);

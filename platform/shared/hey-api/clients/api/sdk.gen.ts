@@ -5064,7 +5064,7 @@ export const getProject = <ThrowOnError extends boolean = false>(options: Option
  *
  * Authorization:
  *
- * `project:update`: Edit project descriptions and sharing
+ * `project:update`: Edit project descriptions, instructions, and sharing
  */
 export const updateProject = <ThrowOnError extends boolean = false>(options: Options<UpdateProjectData, ThrowOnError>) => (options.client ?? client).patch<UpdateProjectResponses, UpdateProjectErrors, ThrowOnError>({
     url: '/api/projects/{id}',
@@ -5084,7 +5084,7 @@ export const updateProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `project:update`: Edit project descriptions and sharing
+ * `project:update`: Edit project descriptions, instructions, and sharing
  */
 export const setProjectShare = <ThrowOnError extends boolean = false>(options: Options<SetProjectShareData, ThrowOnError>) => (options.client ?? client).put<SetProjectShareResponses, SetProjectShareErrors, ThrowOnError>({
     url: '/api/projects/{id}/share',

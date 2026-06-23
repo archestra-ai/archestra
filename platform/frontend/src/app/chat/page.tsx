@@ -75,8 +75,8 @@ import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
-  clearOAuthReauthChatResume,
-  getOAuthReauthChatResume,
+  clearOAuthPendingChatResume,
+  getOAuthPendingChatResume,
 } from "@/lib/auth/oauth-session";
 import {
   clearSsoSignInRedirectPath,
@@ -1713,11 +1713,11 @@ export function ChatPageContent({
   ]);
 
   useEffect(() => {
-    const pendingReauthResume = getOAuthReauthChatResume();
+    const pendingChatResume = getOAuthPendingChatResume();
     if (
       oauthReauthResumeTriggeredRef.current ||
-      !pendingReauthResume ||
-      pendingReauthResume.conversationId !== conversationId ||
+      !pendingChatResume ||
+      pendingChatResume.conversationId !== conversationId ||
       !sendMessage ||
       status !== "ready"
     ) {
@@ -1725,10 +1725,10 @@ export function ChatPageContent({
     }
 
     oauthReauthResumeTriggeredRef.current = true;
-    clearOAuthReauthChatResume();
+    clearOAuthPendingChatResume();
     sendMessage({
       role: "user",
-      parts: [{ type: "text", text: pendingReauthResume.message }],
+      parts: [{ type: "text", text: pendingChatResume.message }],
       metadata: { createdAt: new Date().toISOString() },
     });
   }, [conversationId, sendMessage, status]);

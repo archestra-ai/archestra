@@ -77,12 +77,14 @@ export { default as conversationAttachmentsTable } from "./conversation-attachme
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
+export { default as conversationFileTouchesTable } from "./conversation-file-touch";
 export {
   conversationShareTeamsTable,
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
+export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as hookFilesTable } from "./hook-file";
@@ -94,7 +96,6 @@ export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
 export { default as kbDocumentsTable } from "./kb-document";
-export { default as kbUploadedFilesTable } from "./kb-uploaded-file";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,

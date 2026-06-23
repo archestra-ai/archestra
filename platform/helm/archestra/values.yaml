@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.68" # x-release-please-version
+  imageTag: "1.2.71" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -248,6 +248,22 @@ archestra:
     # Optionally tell Node to write heap snapshots as it approaches the heap limit.
     # Set to a positive integer such as 1 to enable during targeted investigations.
     heapSnapshotsNearHeapLimit: 0
+
+  # Persistent "My Files" file storage. provider "db" (default) keeps bytes in
+  # Postgres; "filesystem" stores them on a PVC. When filesystem, the chart
+  # creates a PVC unless `existingClaim` names a pre-provisioned one.
+  fileStorage:
+    provider: db
+    filesystem:
+      mountPath: /data/archestra_results
+      size: 50Gi
+      # "" uses the cluster default StorageClass.
+      storageClassName: ""
+      # multi-replica / HPA needs ReadWriteMany.
+      accessModes:
+        - ReadWriteOnce
+      # set to reuse a pre-provisioned PVC instead of a chart-created one.
+      existingClaim: ""
 
   # Init containers configuration
   initContainers:

@@ -167,7 +167,7 @@ export async function validateAssignment(
 
 /**
  * Resolve a declarative tool-name list (the `tools` param of the
- * `create_app`/`update_app` chat tools) to assignable tool rows — clean or
+ * `scaffold_app` chat tool) to assignable tool rows — clean or
  * fail, never a silent partial set. Names resolve strictly within the caller's
  * organization (`ToolModel.findAppAssignableToolsByNames`; a global lookup
  * would let a caller attach another org's tool row), built-ins are rejected,
@@ -180,6 +180,8 @@ export async function validateAssignment(
 export async function resolveAppToolsByName(params: {
   organizationId: string;
   toolNames: readonly string[];
+  /** Requesting agent's environment; tools are resolved within it only. */
+  environmentId: string | null;
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
 > {
@@ -197,6 +199,7 @@ export async function resolveAppToolsByName(params: {
   const rows = await ToolModel.findAppAssignableToolsByNames(
     params.organizationId,
     requested,
+    params.environmentId,
   );
   const byName = new Map<string, typeof rows>();
   for (const row of rows) {

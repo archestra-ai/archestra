@@ -1,9 +1,9 @@
 import {
-  FileModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectShareModel,
 } from "@/models";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   Project,
@@ -11,27 +11,9 @@ import type {
   ProjectDetail,
   ProjectListItem,
   ProjectShareVisibility,
-  SandboxArtifactRow,
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
-
-/** Map a stored file row to the wire shape the file surfaces use. */
-function toFileListItem(
-  row: SandboxArtifactRow,
-  projectName: string | null,
-): SandboxFileListItem {
-  return {
-    id: row.id,
-    filename: row.filename,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    createdAt: row.createdAt,
-    downloadable: true,
-    projectId: row.projectId,
-    projectName,
-  };
-}
 
 /**
  * Projects: named collections of chats that own a set of result files
@@ -44,6 +26,7 @@ class ProjectService {
     userId: string;
     name: string;
     description: string | null;
+    icon?: string | null;
   }): Promise<Project> {
     const name = params.name.trim();
     const invalid = validateProjectName(name);
@@ -56,10 +39,14 @@ class ProjectService {
         userId: params.userId,
         name,
         description: params.description,
+        icon: params.icon ?? null,
       });
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
-        throw new ApiError(409, `a project named "${name}" already exists`);
+        throw new ApiError(
+          409,
+          `a project named "${name}" already exists in this organization`,
+        );
       }
       throw error;
     }
@@ -77,6 +64,7 @@ class ProjectService {
       id: p.id,
       name: p.name,
       description: p.description,
+      icon: p.icon,
       isOwner: p.userId === params.userId,
       conversationCount: counts.get(p.id) ?? 0,
       visibility: p.visibility,
@@ -99,6 +87,7 @@ class ProjectService {
       id: project.id,
       name: project.name,
       description: project.description,
+      icon: project.icon,
       isOwner,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
@@ -108,14 +97,44 @@ class ProjectService {
     };
   }
 
-  async updateDescription(params: {
+  /** Update owner-editable fields (name/description/icon); only provided keys change. */
+  async update(params: {
     id: string;
     organizationId: string;
     userId: string;
-    description: string | null;
+    name?: string;
+    description?: string | null;
+    icon?: string | null;
   }): Promise<void> {
     await this.requireOwned(params);
-    await ProjectModel.updateDescription(params);
+    const fields: {
+      name?: string;
+      description?: string | null;
+      icon?: string | null;
+    } = {};
+    if (params.name !== undefined) {
+      const name = params.name.trim();
+      const invalid = validateProjectName(name);
+      if (invalid) {
+        throw new ApiError(400, `project name is invalid: ${invalid}`);
+      }
+      fields.name = name;
+    }
+    if (params.description !== undefined)
+      fields.description = params.description;
+    if (params.icon !== undefined) fields.icon = params.icon;
+    if (Object.keys(fields).length === 0) return;
+    try {
+      await ProjectModel.update({ id: params.id, fields });
+    } catch (error) {
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(
+          409,
+          `a project named "${fields.name}" already exists`,
+        );
+      }
+      throw error;
+    }
   }
 
   /** Upsert (or remove, when visibility is null) the project's share. */
@@ -140,13 +159,21 @@ class ProjectService {
     });
   }
 
-  /** Chats SET NULL and survive; the project's files are deleted with it (FK cascade). */
+  /**
+   * Chats SET NULL and survive; the project's file rows are deleted with it (FK
+   * cascade). Externally-stored bytes (filesystem provider) live outside Postgres,
+   * so purge them first — the cascade would otherwise orphan them on disk.
+   */
   async delete(params: {
     id: string;
     organizationId: string;
     userId: string;
   }): Promise<void> {
     await this.requireOwned(params);
+    await fileStore.purgeProjectBytes({
+      organizationId: params.organizationId,
+      projectId: params.id,
+    });
     await ProjectModel.delete(params.id);
   }
 
@@ -160,31 +187,15 @@ class ProjectService {
     userId: string;
   }): Promise<SandboxFileListItem[]> {
     const project = await this.requireReadable(params);
-    const rows = await FileModel.listByProject({
+    return fileStore.search({
       organizationId: params.organizationId,
-      projectId: project.id,
+      userId: params.userId,
+      scope: {
+        kind: "project",
+        projectId: project.id,
+        projectName: project.name,
+      },
     });
-    return rows.map((r) => toFileListItem(r, project.name));
-  }
-
-  /**
-   * Files of EVERY project the user can access (owned or shared), tagged by
-   * project — merged into the My Files page next to the user's own files.
-   */
-  async listSharedProjectFiles(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<SandboxFileListItem[]> {
-    const projects = await ProjectShareModel.listAccessibleProjects(params);
-    if (projects.length === 0) return [];
-    const names = new Map(projects.map((p) => [p.id, p.name]));
-    const rows = await FileModel.listByProjects({
-      organizationId: params.organizationId,
-      projectIds: projects.map((p) => p.id),
-    });
-    return rows.map((r) =>
-      toFileListItem(r, r.projectId ? (names.get(r.projectId) ?? null) : null),
-    );
   }
 
   async listConversations(params: {

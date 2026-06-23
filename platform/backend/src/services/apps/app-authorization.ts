@@ -1,7 +1,34 @@
 import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import { TeamModel } from "@/models";
+import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
+
+/**
+ * Dedupe the requested team ids and assert every one belongs to the caller's
+ * org, throwing `ApiError(400)` otherwise. Shared by the REST app routes and the
+ * `publish_app` MCP tool so neither can assign an app to a foreign-org team or
+ * insert app_team rows for ids that do not exist.
+ */
+export async function resolveOrgTeamIds(
+  teamIds: string[] | undefined,
+  organizationId: string,
+): Promise<string[]> {
+  const unique = [...new Set(teamIds ?? [])];
+  if (unique.length === 0) return [];
+  const teams = await TeamModel.findByIds(unique);
+  const inOrg = new Set(
+    teams.filter((t) => t.organizationId === organizationId).map((t) => t.id),
+  );
+  const invalid = unique.filter((id) => !inOrg.has(id));
+  if (invalid.length > 0) {
+    throw new ApiError(
+      400,
+      `Unknown team(s) for this organization: ${invalid.join(", ")}`,
+    );
+  }
+  return unique;
+}
 
 /**
  * Shared app write-authorization, used by both the create/update/delete

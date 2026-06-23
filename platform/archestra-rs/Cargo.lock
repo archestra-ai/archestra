@@ -246,9 +246,9 @@ checksum = "6d765eb1c0bda10d31e0ea185f5ee15da532d60b0912d2bd1441783439e749c5"
 
 [[package]]
 name = "dagger-sdk"
-version = "0.21.0"
+version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6b020f5d3b3536e29f54867a7cf14a36d03417ab2f3b37bc8df012fba156e20"
+checksum = "eb0a873c1c64c1fc7e164f3959366f81dd822fdc95bf31a15b799f64a44d560f"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -1240,9 +1240,9 @@ dependencies = [
 
 [[package]]
 name = "napi"
-version = "3.9.0"
+version = "3.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1d395473824516f38dd1071a1a37bc57daa7be65b293ebba4ead5f7abb017a2"
+checksum = "ad513ff22558f1830b595ea6eb4091da48145d09a222ce157e781896f78be0b9"
 dependencies = [
  "bitflags 2.11.1",
  "ctor",
@@ -1289,9 +1289,9 @@ dependencies = [
 
 [[package]]
 name = "napi-sys"
-version = "3.2.1"
+version = "3.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb602b84d7c1edae45e50bbf1374696548f36ae179dfa667f577e384bb90c2b"
+checksum = "1f5bcdf71abd3a50d00b49c1c2c75251cb3c913777d6139cd37dabc093a5e400"
 dependencies = [
  "libloading",
 ]
@@ -1652,9 +1652,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.3"
+version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+checksum = "f1292b7759ae1cb9ec195452d1390a074f0cd8541ab7a5a8c31cd6db45d4a6ba"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -1675,9 +1675,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "reqwest"

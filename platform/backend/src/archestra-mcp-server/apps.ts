@@ -1,24 +1,28 @@
 import {
-  TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
+import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
+  AgentModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
   AppTeamModel,
+  AppToolModel,
   AppVersionModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
@@ -29,7 +33,9 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
+  resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
+import { buildAppCapabilityContext } from "@/services/apps/app-capability-context";
 import {
   capDiagnosticEntries,
   DIAGNOSTICS_BLOCK_CLOSE,
@@ -40,17 +46,18 @@ import {
 } from "@/services/apps/app-diagnostics";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
-  APP_PLATFORM_CSP_RESOURCE_DOMAINS,
   buildValidatedVersionPayload,
+  validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
 import {
-  APP_DESCRIPTION_MAX_LENGTH,
-  APP_HTML_MAX_BYTES,
-  APP_NAME_MAX_LENGTH,
-  APP_TEMPLATE_ID_MAX_LENGTH,
+  type App,
+  type AppRenderDiagnostics,
   AppScopeSchema,
-  AppUiPermissionsSchema,
+  type AppSpec,
+  AppSpecSchema,
+  RefineAppToolSchema,
+  ScaffoldAppSchema,
 } from "@/types/app";
 import { archestraMcpBranding } from "./branding";
 import {
@@ -61,73 +68,15 @@ import {
   successResult,
 } from "./helpers";
 
-const htmlField = z
-  .string()
-  .min(1)
-  .refine((value) => Buffer.byteLength(value, "utf8") <= APP_HTML_MAX_BYTES, {
-    message: `html exceeds the ${APP_HTML_MAX_BYTES}-byte limit`,
-  })
-  .describe(
-    "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe).",
-  );
-
 const toolsField = z
   .array(z.string().min(1))
   .max(50)
   .optional()
   .describe(
-    "Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged.",
+    "Upstream MCP tool names to assign to the new app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Omitted leaves the app with no assigned tools.",
   );
 
-const templateIds = getAppTemplates()
-  .map((t) => t.id)
-  .join(", ");
-
-// Single source of truth for the authoring guidance shared by create_app and
-// update_app — the tool descriptions are the only channel the authoring model
-// has for the SDK/CSP/stylesheet contract, and previously each tool restated it
-// in drifting prose. The CDN allowlist is derived from the policy that actually
-// enforces it (APP_PLATFORM_CSP) so the two can never disagree.
-const APP_AUTHORING_CONTRACT = `Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra — never import an SDK, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself (that glue is provided; hand-rolling it breaks the app). window.archestra exists synchronously; await archestra.ready (a promise) before the first call. Every archestra method below is async — await it; archestra.user is the one plain property:
-- archestra.user — the authenticated viewer ({id, name}), readable synchronously after ready, so no login flow is needed.
-- archestra.storage.user.{get,set,list,delete} (all async) persist state private to each viewer (favorites, drafts, settings — the right default); archestra.storage.shared.* is one store all viewers share. Values are plain JSON (top-level null is not storable; use delete to clear a key). get(key) resolves to an entry {value, revision, owner} or null when absent; list() resolves to [{key, value, revision, owner}] (NOT an array of keys) in no guaranteed order — sort client-side. set(key, value) resolves to {revision, owner}. For multi-user writes use optimistic concurrency: pass set(key, value, {ifRevision}) with the revision you last read — a stale write rejects with {code: "conflict"} (re-read and retry). set(key, value, {owned: true}) claims a new shared key for the viewer so only they (or the app's author/admins) may overwrite it; an unauthorized write rejects with {code: "forbidden"}. Generate ids for new records with crypto.randomUUID().
-- archestra.tools.call(name, args) (async) calls an assigned tool as the viewing user with their credentials — pass name exactly as archestra.tools.list() returns it (the full assigned name, e.g. github__list_issues) — and it rejects with {code: "auth_required", url} when that tool's server still needs connecting (render the url as a link and let the user retry). archestra.tools.list() returns the assigned tools.
-- archestra.llm.complete(prompt, {system, jsonMode}) (async) runs ONE host LLM completion as the viewer (using the org's configured model — the app cannot choose one) and resolves to the model's text; use it to summarize, classify, extract, or generate over data the app ALREADY HAS (tool results, stored values, user input). jsonMode steers the model to return a single JSON value you then JSON.parse. It rejects with {code: "llm_quota"} when usage limits are reached and {code: "llm_unavailable"} otherwise. archestra.llm.prompt\`...\` is a tagged-template helper that builds a prompt string (pure, no call). This is NOT a data source — it cannot fetch anything; the tools-only rule below still governs all external data.
-- archestra.ui.openLink(url) and archestra.ui.requestDisplayMode(mode) reach the host; archestra.context is the running app's {appId, version} (a plain property, readable after ready).
-TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access (connect-src 'none'): fetch/XHR/WebSocket to any external API WILL FAIL and there is no per-app CSP override. The one exception is static assets (scripts, styles, fonts, images) from the platform CDN allowlist (${APP_PLATFORM_CSP_RESOURCE_DOMAINS.join(", ")}) — use it for client-side libraries, never as a data channel. A platform stylesheet is also injected: style against its theme variables (e.g. --color-text-primary/-secondary, --color-background-primary/-secondary, --color-border-primary, --color-accent, --border-radius-md, --font-sans/-mono; light/dark aware) and its .arch-* components (.arch-card, .arch-btn with --primary/--ghost, .arch-input, .arch-badge, .arch-spinner, .arch-tabs) — write only app-specific CSS, never a full theme, and never <link> the platform stylesheet yourself.`;
-
-// Authoring-loop guidance, honest about what is and isn't available outside the
-// interactive chat surface (preview_app_tool needs human approval; render
-// diagnostics only exist once a browser has rendered the app).
-const APP_BUILD_LOOP_GUIDANCE = `Tool-calling apps follow a fixed order: assign the tool (tools param on create_app/update_app), then — interactively — call preview_app_tool with the new app's id to observe the tool's real output shape before writing code that parses it (it needs human approval, and you cannot preview a tool that is not assigned yet, so create the app first; a minimal scaffold is fine). In non-interactive contexts preview is unavailable — code defensively against the tool's documented schema instead. After create/update/edit, call get_app_diagnostics to read the diagnostics from the most recent render of the current version (a render happens when the app is shown inline in chat or at its run page); if the current version has not been rendered yet it returns no_render_observed, and any runtime errors will instead arrive on the user's next message.`;
-
-const CreateAppSchema = z.strictObject({
-  name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
-  description: z
-    .string()
-    .max(APP_DESCRIPTION_MAX_LENGTH)
-    .optional()
-    .describe("Optional description."),
-  html: htmlField
-    .optional()
-    .describe(
-      "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead.",
-    ),
-  scope: AppScopeSchema.optional().describe(
-    "Visibility scope. Defaults to personal (owned by the calling user).",
-  ),
-  templateId: z
-    .string()
-    .max(APP_TEMPLATE_ID_MAX_LENGTH)
-    .optional()
-    .describe(
-      `Template to scaffold from when html is omitted (one of: ${templateIds}); the result returns the seeded HTML for editing. With html present it is recorded as provenance only.`,
-    ),
-  uiPermissions: AppUiPermissionsSchema.optional().describe(
-    "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
-  ),
-  tools: toolsField,
-});
+const ScaffoldAppToolSchema = ScaffoldAppSchema.extend({ tools: toolsField });
 
 const ListAppsSchema = z.strictObject({
   name: z.string().optional().describe("Filter by name (substring match)."),
@@ -217,22 +166,6 @@ const GetAppDiagnosticsOutputSchema = z.object({
     ),
 });
 
-const UpdateAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
-  name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
-  description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).nullable().optional(),
-  scope: AppScopeSchema.optional(),
-  html: htmlField
-    .optional()
-    .describe(
-      "New HTML; supplying it forks a new immutable version (no-op if unchanged).",
-    ),
-  tools: toolsField,
-  uiPermissions: AppUiPermissionsSchema.optional().describe(
-    "New iframe permissions; part of the version envelope, so it requires html too.",
-  ),
-});
-
 const DeleteAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
 });
@@ -247,7 +180,7 @@ const AppSummaryOutputSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      "Soft save-time validation warnings about the html (the save succeeded); fix them via update_app.",
+      "Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app.",
     ),
 });
 
@@ -262,7 +195,52 @@ const ReadAppOutputSchema = z.object({
     .describe("The stored HTML, pre-injection (no SDK/base CSS)."),
 });
 
-// create/update additionally echo the assignment set when `tools` was given
+const ValidateAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to validate."),
+});
+
+const PublishAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id to publish."),
+  scope: z
+    .enum(["team", "org"])
+    .describe(
+      "Publish to specific teams or to the whole organization. Promotes the app out of personal scope.",
+    ),
+  teamIds: z
+    .array(z.string().uuid())
+    .optional()
+    .describe("Target team ids — required when scope is team."),
+});
+
+const PublishAppOutputSchema = z.object({
+  id: z.string(),
+  scope: AppScopeSchema,
+  runUrl: z.string().describe("Standalone run page for the published app."),
+});
+
+const ValidateAppOutputSchema = z.object({
+  id: z.string(),
+  version: z.number().describe("The head version that was validated."),
+  ok: z.boolean().describe("True when there are no error-severity findings."),
+  findings: z.array(
+    z.object({
+      severity: z.enum(["error", "warning"]),
+      message: z.string(),
+    }),
+  ),
+  live: z
+    .object({
+      status: z.enum(["no_render_observed", "clean", "errors"]),
+      version: z.number(),
+      entries: z.array(z.object({ type: z.string(), message: z.string() })),
+      renderedAt: z.string().nullable(),
+    })
+    .describe(
+      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen — view it in the sidebar, then re-run.",
+    ),
+});
+
+// scaffold_app additionally echoes the assignment set when `tools` was given
 const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
   tools: z
     .array(z.string())
@@ -272,16 +250,34 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
     ),
 });
 
+const RefineAppOutputSchema = z.object({
+  id: z.string(),
+  spec: AppSpecSchema.describe(
+    "The persisted spec when one was given, else the base spec seeded for the model.",
+  ),
+  capability: z.object({
+    tools: z.array(z.object({ name: z.string(), description: z.string() })),
+    sdkSummary: z.string(),
+  }),
+  answers: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+    )
+    .optional()
+    .describe("The user's answers to the clarifying questions, if any."),
+  persisted: z
+    .boolean()
+    .describe("Whether a spec was persisted on the app head by this call."),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: TOOL_CREATE_APP_SHORT_NAME,
-    title: "Create App",
-    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). ${APP_AUTHORING_CONTRACT}
-
-${APP_BUILD_LOOP_GUIDANCE}
-
-Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When viewed in chat the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
-    schema: CreateAppSchema,
+    shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
+    title: "Scaffold App",
+    description:
+      "Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML; build it up with edit_app.",
+    schema: ScaffoldAppToolSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
@@ -299,7 +295,6 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
       }
       let payload: VersionPayload;
       let warnings: string[];
-      let seededFromTemplate: boolean;
       try {
         // Creating a shared (org) app needs the matching authority; a plain
         // member may only create personal apps they author.
@@ -310,11 +305,8 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           authorId: context.userId,
           resourceTeamIds: [],
         });
-        const resolved = resolveCreateAppHtml({
-          html: args.html,
-          templateId: args.templateId,
-        });
-        seededFromTemplate = resolved.seededFromTemplate;
+        // Scaffold always seeds the single default template.
+        const resolved = resolveCreateAppHtml({});
         const validated = await buildValidatedVersionPayload({
           html: resolved.html,
           uiPermissions: args.uiPermissions,
@@ -331,6 +323,9 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
       const toolsResolution = await resolveToolsParam({
         organizationId: context.organizationId,
         tools: args.tools,
+        environmentId: await AgentModel.findEnvironmentId(
+          context.agentId ?? context.agent.id,
+        ),
       });
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
@@ -342,7 +337,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           scope,
           name: args.name,
           description: args.description ?? null,
-          templateId: args.templateId ?? null,
+          templateId: DEFAULT_APP_TEMPLATE_ID,
         },
         payload,
       });
@@ -361,22 +356,20 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           // concurrently). The app exists; tell the model how to repair.
           logger.warn(
             { err: error, appId: app.id },
-            "create_app: tool assignment failed after creation",
+            "scaffold_app: tool assignment failed after creation",
           );
           return errorResult(
-            `Created app "${app.name}" (${app.id}), but assigning its tools failed. Retry via update_app with the tools param.`,
+            `Created app "${app.name}" (${app.id}), but assigning its tools failed. Delete it and scaffold again with the tools param.`,
           );
         }
       }
 
-      // Scaffold-then-edit: when the template seeded the html, return it so
-      // the model can immediately update_app without a read-back round-trip.
-      const seededHtmlNote = seededFromTemplate
-        ? `\nSeeded from template "${args.templateId}"; current HTML (edit via update_app):\n${payload.html}`
-        : "";
+      // Return the seeded html so the model can build it up with edit_app
+      // without a read-back round-trip.
+      const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${payload.html}`;
       const warningsNote =
         warnings.length > 0
-          ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
+          ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
           : "";
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
@@ -390,6 +383,134 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           ...(warnings.length > 0 ? { warnings } : {}),
         },
         `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${toolsParts.note}${warningsNote}${seededHtmlNote}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_REFINE_APP_SHORT_NAME,
+    title: "Refine App",
+    description:
+      "Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user's real assignable MCP tools to ground the spec in; once a spec is persisted, build the HTML with edit_app.",
+    schema: RefineAppToolSchema,
+    outputSchema: RefineAppOutputSchema,
+    async handler({ args, context, toolName }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required to refine an app.");
+      }
+      if (args.questions && args.questions.length > 3) {
+        return errorResult("refine_app accepts at most 3 questions.");
+      }
+
+      const { userId, organizationId } = context;
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId,
+        userId,
+        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      try {
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      const capability = await buildAppCapabilityContext({
+        userId,
+        organizationId,
+        agentId: context.agentId ?? context.agent.id,
+      });
+
+      // Seed the model from the app's current spec, or derive a minimal one from
+      // source so a legacy app (no spec yet) still has a starting point.
+      const baseSpec = app.spec ?? (await deriveAppSpec(app));
+
+      // Ask the user, when questions were given and a viewer is present.
+      let answers:
+        | Record<string, string | number | boolean | string[]>
+        | undefined;
+      let noViewer = false;
+      if (args.questions && args.questions.length > 0) {
+        const outcome = context.elicitation
+          ? await context.elicitation.elicit({
+              toolName,
+              message: "A few questions to refine your app:",
+              requestedSchema: buildQuestionsSchema(args.questions),
+            })
+          : ({ status: "no_viewer" } as const);
+
+        switch (outcome.status) {
+          case "no_viewer":
+            noViewer = true;
+            break;
+          case "answered":
+            switch (outcome.result.action) {
+              case "accept":
+                answers = outcome.result.content;
+                break;
+              default:
+                return structuredSuccessResult(
+                  {
+                    id: app.id,
+                    spec: baseSpec,
+                    capability: {
+                      tools: capability.tools,
+                      sdkSummary: capability.sdkSummary,
+                    },
+                    persisted: false,
+                  },
+                  `The user declined to answer the refine questions. Ask them directly in chat instead, then call refine_app again with a spec.`,
+                );
+            }
+            break;
+        }
+      }
+
+      let persisted = false;
+      if (args.spec) {
+        const updated = await AppModel.update({
+          id: args.appId,
+          patch: { spec: args.spec },
+        });
+        if (!updated) {
+          return errorResult(
+            `Failed to persist the spec for app ${args.appId}.`,
+          );
+        }
+        persisted = true;
+      }
+
+      const spec = args.spec ?? baseSpec;
+      const answersNote = answers
+        ? `\nUser answers:\n${JSON.stringify(answers, null, 2)}`
+        : "";
+      const noViewerNote = noViewer
+        ? "\nNo interactive viewer was available, so the questions could not be asked."
+        : "";
+      const guidance = persisted
+        ? "Spec persisted on the app head. Build the HTML with edit_app."
+        : "Consolidate the answers and the listed capability tools into an AppSpec, then call refine_app again with `spec` to persist it.";
+      return structuredSuccessResult(
+        {
+          id: app.id,
+          spec,
+          capability: {
+            tools: capability.tools,
+            sdkSummary: capability.sdkSummary,
+          },
+          ...(answers ? { answers } : {}),
+          persisted,
+        },
+        `${guidance}${answersNote}${noViewerNote}`,
       );
     },
   }),
@@ -504,169 +625,10 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
     },
   }),
   defineArchestraTool({
-    shortName: TOOL_UPDATE_APP_SHORT_NAME,
-    title: "Update App",
-    description: `Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. Use this for a full rewrite — pass the complete revised HTML, not a diff. For a small, targeted change to existing HTML, prefer edit_app (str_replace edits) instead of re-streaming the whole document; use read_app first if the current HTML is not in context. Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. ${APP_AUTHORING_CONTRACT}
-
-${APP_BUILD_LOOP_GUIDANCE}
-
-When viewed in chat the app's head version is rendered inline automatically; its standalone page is /apps/<id>/run.`,
-    schema: UpdateAppSchema,
-    outputSchema: AppMutationOutputSchema,
-    async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const app = await AppModel.findByIdForCaller({
-        id: args.appId,
-        organizationId: context.organizationId,
-        userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(
-          context.userId,
-          context.organizationId,
-        ),
-      });
-      if (!app) {
-        return errorResult(`No app found with id ${args.appId}.`);
-      }
-      // These chat tools can't assign teams; re-scoping to team is UI/REST-only.
-      if (args.scope === "team") {
-        return errorResult(
-          "Re-scoping an app to a team must be done via the Apps UI so teams can be assigned.",
-        );
-      }
-
-      try {
-        const resourceTeamIds = await AppTeamModel.getTeamsForApp(app.id);
-        // Authority to modify the app as it is today...
-        await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
-          resourceTeamIds,
-        });
-        // ...and, if re-scoping, authority for the destination scope too (so a
-        // personal app can't be promoted to org without admin).
-        if (args.scope !== undefined && args.scope !== app.scope) {
-          await assertCallerMayModifyApp({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            scope: args.scope,
-            authorId: app.authorId,
-            resourceTeamIds,
-          });
-        }
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
-
-      // Resolve the tools list before any mutation, so a bad list fails the
-      // whole update instead of landing a partial one. [] clears assignments.
-      const toolsResolution = await resolveToolsParam({
-        organizationId: context.organizationId,
-        tools: args.tools,
-      });
-      if (!toolsResolution.ok) return errorResult(toolsResolution.error);
-      const resolvedTools = toolsResolution.tools;
-
-      const patch: {
-        name?: string;
-        description?: string | null;
-        scope?: typeof app.scope;
-      } = {};
-      if (args.name !== undefined) patch.name = args.name;
-      if (args.description !== undefined) patch.description = args.description;
-      if (args.scope !== undefined) patch.scope = args.scope;
-
-      // Permissions are part of the immutable version envelope, so they can
-      // only change together with new html (no silent partial-version merge).
-      if (args.html === undefined && args.uiPermissions !== undefined) {
-        return errorResult(
-          "Changing uiPermissions requires supplying html (they are part of the app version).",
-        );
-      }
-      let version: VersionPayload | undefined;
-      let warnings: string[] = [];
-      if (args.html !== undefined) {
-        // Permissions are versioned with the html. When omitted, an html-only
-        // edit inherits the current head's value rather than silently dropping
-        // it; a supplied field replaces it.
-        const head = await AppVersionModel.findByAppAndVersion(
-          app.id,
-          app.latestVersion,
-        );
-        try {
-          const validated = await buildValidatedVersionPayload({
-            html: args.html,
-            uiPermissions:
-              args.uiPermissions !== undefined
-                ? args.uiPermissions
-                : (head?.uiPermissions ?? null),
-          });
-          version = validated.payload;
-          warnings = validated.warnings;
-        } catch (error) {
-          if (error instanceof ApiError) return errorResult(error.message);
-          throw error;
-        }
-      }
-
-      let updated: Awaited<ReturnType<typeof AppModel.update>>;
-      try {
-        updated = await AppModel.update({
-          id: args.appId,
-          ...(Object.keys(patch).length > 0 ? { patch } : {}),
-          ...(version ? { version } : {}),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
-        throw error;
-      }
-      if (!updated) {
-        return errorResult(`Failed to update app ${args.appId}.`);
-      }
-
-      if (resolvedTools !== undefined) {
-        try {
-          await replaceAppToolAssignments(updated.id, resolvedTools);
-        } catch (error) {
-          // Prevalidation makes this a rare race; the metadata/html change
-          // above already persisted, so be explicit about the partial state.
-          logger.warn(
-            { err: error, appId: updated.id },
-            "update_app: tool assignment failed after update",
-          );
-          return errorResult(
-            `Updated app "${updated.name}", but replacing its tools failed. Retry via update_app with the tools param.`,
-          );
-        }
-      }
-
-      const warningsNote =
-        warnings.length > 0
-          ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
-          : "";
-      const toolsParts = toolsResultParts(resolvedTools);
-      return structuredSuccessResult(
-        {
-          id: updated.id,
-          name: updated.name,
-          description: updated.description,
-          scope: updated.scope,
-          latestVersion: updated.latestVersion,
-          ...toolsParts.structured,
-          ...(warnings.length > 0 ? { warnings } : {}),
-        },
-        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${toolsParts.note}${warningsNote}`,
-      );
-    },
-  }),
-  defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. Supplying new HTML forks a new immutable version; assigned tools and metadata are unchanged. For a full rewrite use update_app instead. ${APP_BUILD_LOOP_GUIDANCE}`,
+    description:
+      "Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. A successful edit forks a new immutable version; assigned tools and metadata are unchanged.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -767,6 +729,163 @@ When viewed in chat the app's head version is rendered inline automatically; its
           ...(warnings.length > 0 ? { warnings } : {}),
         },
         `${summary} Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${warningsNote}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_VALIDATE_APP_SHORT_NAME,
+    title: "Validate App",
+    description:
+      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root or <script>/<link> hosts outside the CDN allowlist as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet (open it in the sidebar, then re-run). Fix any errors with edit_app before publishing.",
+    schema: ValidateAppSchema,
+    outputSchema: ValidateAppOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId: context.organizationId,
+        userId: context.userId,
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      const head = await AppVersionModel.findByAppAndVersion(
+        app.id,
+        app.latestVersion,
+      );
+      if (!head) {
+        return errorResult(
+          `App ${args.appId} has no version ${app.latestVersion}.`,
+        );
+      }
+
+      const findings = await validateAppHtmlStatic(head.html);
+      const staticHasError = findings.some(
+        (finding) => finding.severity === "error",
+      );
+      const safeName = (await escapeAngleBrackets(app.name))
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const snapshot = await waitForHeadRenderSnapshot({
+        appId: app.id,
+        userId: context.userId,
+        head: app.latestVersion,
+        abortSignal: context.abortSignal,
+      });
+      const { live, section } = await buildLiveValidation({
+        snapshot,
+        head: app.latestVersion,
+      });
+
+      const ok = !staticHasError && live.status !== "errors";
+      const warns =
+        findings.length > 0 ? ` (${findings.length} warning(s))` : "";
+      const headline = staticHasError
+        ? `App "${safeName}" version ${app.latestVersion} has static validation errors that must be fixed with edit_app.`
+        : live.status === "errors"
+          ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
+          : live.status === "no_render_observed"
+            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}, but no live render has been observed yet — confirm it renders (open it in the sidebar) before relying on this result.`
+            : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
+      const findingLines = findings.length
+        ? `\n${findings
+            .map((finding) => `[${finding.severity}] ${finding.message}`)
+            .join("\n")}`
+        : "";
+      return structuredSuccessResult(
+        { id: app.id, version: app.latestVersion, ok, findings, live },
+        `${headline}${findingLines}${section}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_PUBLISH_APP_SHORT_NAME,
+    title: "Publish App",
+    description:
+      "Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Returns the app's standalone run page. Validate the app first; publishing does not change its HTML.",
+    schema: PublishAppSchema,
+    outputSchema: PublishAppOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required to publish an app.");
+      }
+      const { userId, organizationId } = context;
+      if (args.scope === "team" && (args.teamIds?.length ?? 0) === 0) {
+        return errorResult(
+          "Publishing to a team requires at least one team id in teamIds.",
+        );
+      }
+      if (args.scope === "org" && (args.teamIds?.length ?? 0) > 0) {
+        return errorResult(
+          "teamIds is only valid when publishing to a team; omit it for org scope.",
+        );
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId,
+        userId,
+        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+
+      let teamIds: string[];
+      try {
+        // Validate the requested teams exist in the caller's org before any auth
+        // or write, so a foreign-org or unknown team id can never reach app_team.
+        teamIds =
+          args.scope === "team"
+            ? await resolveOrgTeamIds(args.teamIds, organizationId)
+            : [];
+        // Authorize BOTH the app's current scope and the destination, exactly as
+        // the REST re-scope path does. The source check is what stops a team
+        // admin from demoting or hijacking an org-scoped app they can merely see
+        // into a team they administer; the destination check stops redirecting an
+        // app to teams they don't administer.
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: args.scope,
+          authorId: app.authorId,
+          resourceTeamIds: teamIds,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      const updated = await AppModel.update({
+        id: args.appId,
+        patch: { scope: args.scope },
+        teamIds,
+      });
+      if (!updated) {
+        return errorResult(`Failed to publish app ${args.appId}.`);
+      }
+
+      const runUrl = `/apps/${updated.id}/run`;
+      const audience =
+        updated.scope === "org"
+          ? "the whole organization"
+          : "the selected team(s)";
+      return structuredSuccessResult(
+        { id: updated.id, scope: updated.scope, runUrl },
+        `Published "${updated.name}" to ${audience}. Standalone run page: ${runUrl}`,
       );
     },
   }),
@@ -876,7 +995,7 @@ When viewed in chat the app's head version is rendered inline automatically; its
     shortName: TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
     title: "Get App Diagnostics",
     description:
-      "Check how the app's current version rendered for you. After create_app/update_app/edit_app, call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; if the current version has not been rendered yet it waits briefly for one to settle. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — when that persists, the diagnostics instead arrive on the user's next message).",
+      "Check how the app's current version rendered for you. After scaffold_app/edit_app, call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; if the current version has not been rendered yet it waits briefly for one to settle. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — when that persists, the diagnostics instead arrive on the user's next message).",
     schema: GetAppDiagnosticsSchema,
     outputSchema: GetAppDiagnosticsOutputSchema,
     async handler({ args, context }) {
@@ -902,26 +1021,14 @@ When viewed in chat the app's head version is rendered inline automatically; its
       const safeName = (await escapeAngleBrackets(app.name))
         .replace(/\s+/g, " ")
         .trim();
-      const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
-      let snapshot = await AppRenderDiagnosticsModel.getForUser(
-        app.id,
-        context.userId,
-      );
-      // Wait briefly for a render of the current head to land, so the agent gets
-      // a definitive answer in one call instead of busy-retrying.
-      while (
-        (!snapshot || snapshot.version < head) &&
-        Date.now() < deadline &&
-        !context.abortSignal?.aborted
-      ) {
-        await delay(GET_APP_DIAGNOSTICS_POLL_MS);
-        snapshot = await AppRenderDiagnosticsModel.getForUser(
-          app.id,
-          context.userId,
-        );
-      }
+      const snapshot = await waitForHeadRenderSnapshot({
+        appId: app.id,
+        userId: context.userId,
+        head,
+        abortSignal: context.abortSignal,
+      });
 
-      if (!snapshot || snapshot.version < head) {
+      if (!snapshot) {
         return structuredSuccessResult(
           {
             status: "no_render_observed",
@@ -1075,6 +1182,64 @@ function applyStrReplaceEdits(
   return working;
 }
 
+/**
+ * Derive a minimal, deterministic AppSpec from an app's source for the refine
+ * step to seed the model from when the app has no spec yet (legacy apps). No
+ * model calls: `summary` is the head `<title>` text (else the app name),
+ * `tools` are the app's currently assigned tool names; the rest is left empty.
+ */
+async function deriveAppSpec(app: App): Promise<AppSpec> {
+  const head = await AppVersionModel.findByAppAndVersion(
+    app.id,
+    app.latestVersion,
+  );
+  const title = head ? extractTitle(head.html) : null;
+  const assignedTools = await AppToolModel.getToolsForApp(app.id);
+  return {
+    summary: title ?? app.name,
+    features: [],
+    tools: assignedTools.map((tool) => tool.name).sort(),
+  };
+}
+
+function extractTitle(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const text = match?.[1]?.trim();
+  return text ? text : null;
+}
+
+/**
+ * Build the JSON Schema the elicitation viewer renders the refine questions
+ * from. A question with `options` is a single-select enum; without, free text.
+ */
+function buildQuestionsSchema(
+  questions: NonNullable<z.infer<typeof RefineAppToolSchema>["questions"]>,
+): {
+  type: "object";
+  properties: Record<
+    string,
+    { type: "string"; description: string; enum?: string[] }
+  >;
+  required: string[];
+} {
+  const properties: Record<
+    string,
+    { type: "string"; description: string; enum?: string[] }
+  > = {};
+  for (const question of questions) {
+    properties[question.id] = {
+      type: "string",
+      description: question.prompt,
+      ...(question.options ? { enum: question.options } : {}),
+    };
+  }
+  return {
+    type: "object",
+    properties,
+    required: questions.map((question) => question.id),
+  };
+}
+
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
 
 // get_app_diagnostics waits this long for a render of the head to settle,
@@ -1085,6 +1250,90 @@ const GET_APP_DIAGNOSTICS_POLL_MS = 500;
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Wait briefly for a render of the app's head version to land server-side. The
+ * sidebar posts a render snapshot on a settle timer (including the clean case),
+ * so an authoring tool gets a definitive answer in one call instead of
+ * busy-retrying. Returns the snapshot once it covers the head version, or null
+ * if none settles within the window (caller reports no_render_observed).
+ */
+async function waitForHeadRenderSnapshot(params: {
+  appId: string;
+  userId: string;
+  head: number;
+  abortSignal?: AbortSignal;
+}): Promise<AppRenderDiagnostics | null> {
+  const { appId, userId, head, abortSignal } = params;
+  const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
+  let snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+  while (
+    (!snapshot || snapshot.version < head) &&
+    Date.now() < deadline &&
+    !abortSignal?.aborted
+  ) {
+    await delay(GET_APP_DIAGNOSTICS_POLL_MS);
+    snapshot = await AppRenderDiagnosticsModel.getForUser(appId, userId);
+  }
+  return snapshot && snapshot.version >= head ? snapshot : null;
+}
+
+type LiveValidation = {
+  status: "no_render_observed" | "clean" | "errors";
+  version: number;
+  entries: { type: string; message: string }[];
+  renderedAt: string | null;
+};
+
+/**
+ * Turn the head render snapshot into validate_app's `live` field plus a text
+ * section. Render diagnostics are untrusted iframe output, so they are NOT
+ * merged into the (trusted) static findings — error-class renders set the
+ * result via `live.status` and the text frames the entries in the untrusted
+ * diagnostics block, mirroring get_app_diagnostics. No snapshot reaching the
+ * head version reads as no_render_observed, never as "clean".
+ */
+async function buildLiveValidation(params: {
+  snapshot: AppRenderDiagnostics | null;
+  head: number;
+}): Promise<{ live: LiveValidation; section: string }> {
+  const { snapshot, head } = params;
+  if (!snapshot) {
+    return {
+      live: {
+        status: "no_render_observed",
+        version: head,
+        entries: [],
+        renderedAt: null,
+      },
+      section: `\nLive render: no render of version ${head} has been observed for you yet — open the app in the sidebar, then re-run validate_app to capture runtime diagnostics.`,
+    };
+  }
+  const renderedAt = snapshot.renderedAt.toISOString();
+  if (snapshot.entries.length === 0) {
+    return {
+      live: {
+        status: "clean",
+        version: snapshot.version,
+        entries: [],
+        renderedAt,
+      },
+      section: `\nLive render: version ${snapshot.version} rendered clean (no runtime errors or CSP violations) at ${renderedAt}.`,
+    };
+  }
+  const capped = await capDiagnosticEntries(snapshot.entries);
+  const entries = await Promise.all(
+    capped.map(async (entry) => ({
+      type: entry.type,
+      message: await escapeAngleBrackets(entry.message),
+    })),
+  );
+  const diagnosticLines = await formatDiagnosticEntryLines(snapshot.entries);
+  return {
+    live: { status: "errors", version: snapshot.version, entries, renderedAt },
+    section: `\nLive render: version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} runtime diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${diagnosticLines}\n${DIAGNOSTICS_BLOCK_CLOSE}`,
+  };
+}
 
 /**
  * Frame a previewed tool's result as untrusted data for the authoring model:
@@ -1158,13 +1407,14 @@ function countOccurrences(haystack: string, needle: string): number {
 type ResolvedTools = Array<{ id: string; name: string }>;
 
 /**
- * Resolve the declarative `tools` param shared by create_app/update_app —
- * before any mutation, so a bad list fails the whole call. `undefined` means
+ * Resolve the declarative `tools` param of scaffold_app — before the app is
+ * created, so a bad list fails the whole call. `undefined` means
  * "leave assignments untouched"; `[]` clears them.
  */
 async function resolveToolsParam(params: {
   organizationId: string;
   tools: string[] | undefined;
+  environmentId: string | null;
 }): Promise<
   { ok: true; tools: ResolvedTools | undefined } | { ok: false; error: string }
 > {
@@ -1172,6 +1422,7 @@ async function resolveToolsParam(params: {
   const resolution = await resolveAppToolsByName({
     organizationId: params.organizationId,
     toolNames: params.tools,
+    environmentId: params.environmentId,
   });
   if ("error" in resolution) {
     return { ok: false, error: resolution.error.message };

@@ -34,8 +34,72 @@ export function conversationStorageKeys(conversationId: string) {
   return {
     artifactOpen: `archestra-chat-artifact-open-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
-    pinnedCanvas: `archestra-chat-pinned-canvas-${conversationId}`,
   };
+}
+
+/**
+ * localStorage key for the new-chat composer's prompt draft. Deliberately a
+ * single, agent-independent key: the draft is the message the user is
+ * composing, so switching the selected agent must NOT swap (and thereby drop)
+ * what they have typed.
+ */
+export const NEW_CHAT_DRAFT_STORAGE_KEY = "archestra_chat_draft_new";
+
+/**
+ * Resolves the prompt-draft localStorage key for the prompt input: a
+ * conversation-scoped key when editing an existing conversation, otherwise the
+ * shared new-chat key. Keeping this in one place ensures the draft survives an
+ * agent change on a new chat (the key does not depend on the agent).
+ */
+export function chatDraftStorageKey(
+  conversationId: string | null | undefined,
+): string {
+  return conversationId
+    ? conversationStorageKeys(conversationId).draft
+    : NEW_CHAT_DRAFT_STORAGE_KEY;
+}
+
+/** The Storage surface the draft migration needs (a subset of `localStorage`). */
+type DraftStorage = Pick<
+  Storage,
+  "length" | "key" | "getItem" | "setItem" | "removeItem"
+>;
+
+/**
+ * One-time migration of pre-upgrade new-chat drafts. Earlier builds keyed the
+ * new-chat draft by agent (`archestra_chat_draft_new_<agentId>`); this build
+ * uses a single agent-independent key. Without migrating, an unsent draft
+ * written before the upgrade would be ignored — and then cleared — on the next
+ * new chat. Adopt one legacy draft into the shared key when it is empty, then
+ * remove every legacy key so the migration effectively runs once. Idempotent.
+ */
+export function migrateLegacyNewChatDraft(storage: DraftStorage): void {
+  const legacyPrefix = `${NEW_CHAT_DRAFT_STORAGE_KEY}_`;
+  const legacyKeys: string[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key?.startsWith(legacyPrefix)) {
+      legacyKeys.push(key);
+    }
+  }
+  if (legacyKeys.length === 0) {
+    return;
+  }
+
+  // Only adopt a legacy draft when the user has not started a new shared draft.
+  if (!storage.getItem(NEW_CHAT_DRAFT_STORAGE_KEY)) {
+    for (const key of legacyKeys) {
+      const value = storage.getItem(key);
+      if (value) {
+        storage.setItem(NEW_CHAT_DRAFT_STORAGE_KEY, value);
+        break;
+      }
+    }
+  }
+
+  for (const key of legacyKeys) {
+    storage.removeItem(key);
+  }
 }
 
 /**

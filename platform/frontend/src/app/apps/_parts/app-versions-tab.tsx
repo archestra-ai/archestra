@@ -4,7 +4,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { useAppVersions } from "@/lib/app.query";
 
 // Read-only history of an app's immutable versions, newest first. Editing the
-// HTML (via the create_app/update_app surfaces) forks a new version.
+// HTML (via the scaffold_app/edit_app surfaces) forks a new version.
 export function AppVersionsTab({ appId }: { appId: string }) {
   const { data: versions, isPending } = useAppVersions(appId);
 

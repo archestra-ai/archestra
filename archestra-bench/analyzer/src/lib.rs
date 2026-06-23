@@ -19,6 +19,7 @@ use eyre::{Context, Result, bail};
 use futures::stream::{self, StreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use nitpicker_agent::prelude::AgentProgress;
+use serde::Serialize;
 
 use analyze::to_provider;
 use runmeta::{RolloutId, RunMeta, load_run_meta, metrics_block};
@@ -58,7 +59,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
     }
 }
 
-/// One discovered benchmark rollout with its trajectory already rendered to the markdown fed to map.
+/// One discovered benchmark rollout with its trajectory rendered to markdown in full — the same
+/// untruncated text is both persisted as `trajectory.md` and fed to the map-phase LLM.
 #[derive(Debug)]
 struct Rollout {
     id: RolloutId,
@@ -162,6 +164,78 @@ fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
     Ok(rollouts)
 }
 
+/// Deterministic report order shared by `analyze` and `prepare_run_dir`: failures first (so the
+/// reader sees the struggles), then by rollout id. Factored out so the two orderings cannot drift.
+fn rollout_order(
+    a_is_pass: bool,
+    a_id: &RolloutId,
+    b_is_pass: bool,
+    b_id: &RolloutId,
+) -> std::cmp::Ordering {
+    a_is_pass.cmp(&b_is_pass).then_with(|| a_id.cmp(b_id))
+}
+
+/// One rollout in the [`PrepareManifest`]: its identity, outcome, the one-line outcome summary the
+/// map prompt embeds, and the path to its rendered trajectory.
+#[derive(Debug, Serialize)]
+pub struct PreparedRollout {
+    /// `RolloutId` rendered as `<env>/<task>__<lane>`.
+    pub id: String,
+    pub outcome: String,
+    pub outcome_summary: String,
+    pub trajectory_md: PathBuf,
+}
+
+/// The deterministic inputs an external analyzer (e.g. the Claude trajectory-analysis skill) needs:
+/// the same metrics block the reduce phase reads and the rollouts in the same failures-first order,
+/// each pointing at its rendered `trajectory.md`.
+#[derive(Debug, Serialize)]
+pub struct PrepareManifest {
+    pub metrics_block: String,
+    pub rollouts: Vec<PreparedRollout>,
+}
+
+/// Render every rollout's `trajectory.md` and build the deterministic manifest, reusing the exact
+/// discovery, rendering, metrics, and ordering of [`analyze`] — no LLM, no network. Lets a
+/// different reducer (e.g. Claude subagents) run the map-reduce over identical inputs.
+pub fn prepare_run_dir(run_dir: &Path) -> Result<PrepareManifest> {
+    let mut rollouts = discover_rollouts(run_dir)?;
+
+    // Persist the full rendered trajectory next to its source jsonl (same side effect as `analyze`),
+    // so external tooling reads the complete, untruncated trajectory.
+    for rollout in &rollouts {
+        let md_path = rollout.dir.join("trajectory.md");
+        std::fs::write(&md_path, &rollout.markdown)
+            .wrap_err_with(|| format!("writing rendered trajectory to {}", md_path.display()))?;
+    }
+
+    rollouts.sort_by(|a, b| rollout_order(a.meta.is_pass(), &a.id, b.meta.is_pass(), &b.id));
+
+    // Metrics cover every discovered rollout: unlike `analyze`, `prepare` has no map phase, so there
+    // is nothing to exclude. The block is byte-identical to an `analyze` run only when that run also
+    // mapped every rollout (no map failures).
+    let metric_pairs: Vec<(RolloutId, RunMeta)> = rollouts
+        .iter()
+        .map(|r| (r.id.clone(), r.meta.clone()))
+        .collect();
+    let metrics = metrics_block(&metric_pairs);
+
+    let rollouts = rollouts
+        .into_iter()
+        .map(|r| PreparedRollout {
+            id: r.id.to_string(),
+            outcome: r.meta.outcome.clone(),
+            outcome_summary: r.meta.summarize_outcome(),
+            trajectory_md: r.dir.join("trajectory.md"),
+        })
+        .collect();
+
+    Ok(PrepareManifest {
+        metrics_block: metrics,
+        rollouts,
+    })
+}
+
 /// Run the map-reduce analysis described by `cfg`. The caller (the unified CLI) owns tracing init.
 pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
     if cfg.concurrency == 0 {
@@ -192,8 +266,8 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         format!("● {total} rollouts in {}", cfg.run_dir.display()),
     );
 
-    // Persist the rendered trajectory we feed the map phase next to its source jsonl, so the map
-    // input is inspectable after the fact. `trajectory.md` is never re-discovered (glob wants jsonl).
+    // Persist the full rendered trajectory next to its source jsonl, so the rollout is inspectable
+    // after the fact in full. `trajectory.md` is never re-discovered (glob wants jsonl).
     for rollout in &rollouts {
         let md_path = rollout.dir.join("trajectory.md");
         std::fs::write(&md_path, &rollout.markdown)
@@ -274,7 +348,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     // Failures first, then by rollout id — deterministic regardless of map completion order.
     analyzed.sort_by(|(a_id, a_meta, _), (b_id, b_meta, _)| {
-        a_meta.is_pass().cmp(&b_meta.is_pass()).then(a_id.cmp(b_id))
+        rollout_order(a_meta.is_pass(), a_id, b_meta.is_pass(), b_id)
     });
 
     let metric_pairs: Vec<(RolloutId, RunMeta)> = analyzed
@@ -287,7 +361,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         .into_iter()
         .map(|(id, meta, analysis)| (id, meta.outcome, analysis))
         .collect();
-    let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses);
+    let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses, run_dir_rel.as_deref());
     if !excluded.is_empty() {
         let names = excluded
             .iter()
@@ -506,5 +580,51 @@ mod tests {
         );
         let err = discover_rollouts(run.path()).unwrap_err();
         assert!(err.to_string().contains("disagrees with its directory"));
+    }
+
+    #[test]
+    fn prepare_run_dir_renders_md_and_builds_ordered_manifest() {
+        let run = tempfile::tempdir().unwrap();
+        // Written passing-first so the assertion proves the failures-first sort actually reorders.
+        write_rollout(
+            run.path(),
+            "basic",
+            "pi",
+            "glm",
+            r#"{"env_id":"basic","task_id":"pi","lane":"glm","provider":"anthropic","model":"m","outcome":"passed","turn_count":3,"tool_call_count":4}"#,
+        );
+        write_rollout(
+            run.path(),
+            "basic",
+            "tau",
+            "kimi",
+            r#"{"env_id":"basic","task_id":"tau","lane":"kimi","provider":"anthropic","model":"m","outcome":"failed"}"#,
+        );
+
+        let manifest = prepare_run_dir(run.path()).unwrap();
+
+        // trajectory.md is rendered next to each source jsonl, byte-identical to the full
+        // trajectory rendering.
+        let glm_dir = run.path().join("basic/pi__glm");
+        let expected =
+            format_to_markdown(&load_trajectory(&glm_dir.join("trajectory.jsonl")).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(glm_dir.join("trajectory.md")).unwrap(),
+            expected
+        );
+        assert!(run.path().join("basic/tau__kimi/trajectory.md").exists());
+
+        // Failures first, then by id.
+        let ids: Vec<&str> = manifest.rollouts.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec!["basic/tau__kimi", "basic/pi__glm"]);
+
+        // Each PreparedRollout carries its outcome and a path to its rendered trajectory.
+        let failing = manifest
+            .rollouts
+            .iter()
+            .find(|r| r.id == "basic/tau__kimi")
+            .unwrap();
+        assert_eq!(failing.outcome, "failed");
+        assert!(failing.trajectory_md.ends_with("basic/tau__kimi/trajectory.md"));
     }
 }

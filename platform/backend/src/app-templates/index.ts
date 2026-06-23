@@ -1,11 +1,12 @@
-import { ApiError, type AppTemplate } from "@/types";
-import { blankTemplate } from "./blank";
-import { formTemplate } from "./form";
+import type { AppTemplate } from "@/types";
+import { defaultTemplate } from "./default";
 
-// Curated starters surfaced by GET /api/app-templates and offered in the create
-// dialog. Create paths resolve `templateId` server-side via
-// resolveCreateAppHtml; on an app row the id is stored as provenance.
-const APP_TEMPLATES: readonly AppTemplate[] = [blankTemplate, formTemplate];
+// The single opinionated starter surfaced by GET /api/app-templates and seeded
+// by the create paths. Its id is stored on the app row as provenance.
+const APP_TEMPLATES: readonly AppTemplate[] = [defaultTemplate];
+
+/** Provenance recorded on an app row seeded from the default template. */
+export const DEFAULT_APP_TEMPLATE_ID = defaultTemplate.id;
 
 export function getAppTemplates(): AppTemplate[] {
   return [...APP_TEMPLATES];
@@ -13,27 +14,16 @@ export function getAppTemplates(): AppTemplate[] {
 
 /**
  * Resolve the initial HTML for a new app. Explicit `html` always wins
- * (`templateId` is then provenance only); otherwise the template seeds the
- * first version. Shared by REST `POST /api/apps` and the `create_app` tool.
- * Update paths never re-template an existing app.
+ * (`templateId` is then provenance only); otherwise the single default template
+ * seeds the first version. Shared by REST `POST /api/apps` and the `scaffold_app`
+ * tool (which always omits html). Update paths never re-template an existing app.
  */
-export function resolveCreateAppHtml(input: {
-  html?: string;
-  templateId?: string;
-}): { html: string; seededFromTemplate: boolean } {
+export function resolveCreateAppHtml(input: { html?: string }): {
+  html: string;
+  seededFromTemplate: boolean;
+} {
   if (input.html !== undefined) {
     return { html: input.html, seededFromTemplate: false };
   }
-  if (input.templateId !== undefined) {
-    const template = APP_TEMPLATES.find((t) => t.id === input.templateId);
-    if (!template) {
-      const known = APP_TEMPLATES.map((t) => t.id).join(", ");
-      throw new ApiError(
-        400,
-        `Unknown templateId "${input.templateId}". Available templates: ${known}.`,
-      );
-    }
-    return { html: template.html, seededFromTemplate: true };
-  }
-  throw new ApiError(400, "Either html or templateId is required.");
+  return { html: defaultTemplate.html, seededFromTemplate: true };
 }

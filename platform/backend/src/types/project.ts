@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ConversationOriginSchema } from "./conversation";
 
 /** Who a shared project is visible to (no share row = owner only). */
 export const ProjectShareVisibilitySchema = z.enum(["organization", "team"]);
@@ -13,6 +14,8 @@ export const InsertProjectSchema = createInsertSchema(
   schema.projectsTable,
 ).omit({
   id: true,
+  // generated from the name by ProjectModel.create, never caller-supplied.
+  slug: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -30,6 +33,8 @@ export const ProjectListItemSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
+  /** Emoji or base64 image data URL; null = use the default project icon. */
+  icon: z.string().nullable(),
   isOwner: z.boolean(),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
@@ -50,6 +55,8 @@ export const ProjectConversationItemSchema = z.object({
   title: z.string().nullable(),
   authorUserId: z.string(),
   authorName: z.string().nullable(),
+  /** `schedule_trigger` marks a chat created by a scheduled run. */
+  origin: ConversationOriginSchema,
   lastMessageAt: z.date(),
   createdAt: z.date(),
   /** True when the caller is not the chat's author (view-only). */

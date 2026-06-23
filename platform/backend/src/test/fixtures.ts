@@ -812,7 +812,16 @@ async function makeInteraction(
   overrides: Partial<
     Pick<
       InsertInteraction,
-      "request" | "response" | "type" | "model" | "inputTokens" | "outputTokens"
+      | "request"
+      | "response"
+      | "type"
+      | "model"
+      | "inputTokens"
+      | "outputTokens"
+      | "cost"
+      | "baselineCost"
+      | "toonCostSavings"
+      | "cacheSavings"
     >
   > = {},
 ) {

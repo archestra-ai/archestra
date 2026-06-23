@@ -2,23 +2,29 @@ import {
   getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_EDIT_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
+  TOOL_READ_FILE_FULL_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_RESULT_FULL_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -161,6 +167,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(result.result.capabilities.extensions).toEqual({
       [MCP_APPS_EXTENSION_ID]: {},
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
+      [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
     });
   });
 
@@ -1017,18 +1024,23 @@ describe("MCP Gateway (stateless mode)", () => {
         .result.tools.map((tool: { name: string }) => tool.name);
       expect(toolNames.sort()).toEqual(
         [
+          TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
+          TOOL_EDIT_FILE_FULL_NAME,
           TOOL_LIST_SKILLS_FULL_NAME,
           TOOL_LOAD_SKILL_FULL_NAME,
+          TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
           TOOL_SAVE_RESULT_FULL_NAME,
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
-          getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_REFINE_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
+          getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
           getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
@@ -1038,6 +1050,86 @@ describe("MCP Gateway (stateless mode)", () => {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
       (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+    }
+  });
+
+  test("hides the Projects file tools from tools/list when the Projects feature is off, keeping sandbox-runtime tools top-level", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    const originalProjectsEnabled = config.projects.enabled;
+    // Runtime on, Projects off: run_command/upload_file/download_file stay
+    // top-level; the persistent-files tools follow the Projects flag and drop.
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    (config.projects as { enabled: boolean }).enabled = false;
+
+    try {
+      const org = await makeOrganization();
+      const adminUser = await makeUser();
+      await makeMember(adminUser.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        toolExposureMode: "search_and_run_only",
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const token = await UserTokenModel.create(adminUser.id, org.id);
+
+      const initResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+      expect(initResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/list",
+          params: {},
+          id: 2,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const toolNames: string[] = response
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name);
+
+      // Sandbox-runtime tools stay top-level (runtime flag on).
+      expect(toolNames).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      expect(toolNames).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+      // Persistent-files tools are gated by the Projects flag — absent here.
+      expect(toolNames).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_READ_FILE_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_SAVE_RESULT_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
+      expect(toolNames).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+      (config.projects as { enabled: boolean }).enabled =
+        originalProjectsEnabled;
     }
   });
 

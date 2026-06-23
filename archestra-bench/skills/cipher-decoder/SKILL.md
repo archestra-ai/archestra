@@ -1,19 +1,23 @@
 ---
 name: cipher-decoder
-description: Decode ciphertext produced by the in-house chained-hex cipher. Use when a task hands you a hex-encoded blob and asks for its plaintext; run the bundled decoder rather than guessing the scheme.
+description: Decode an encoded message using the bundled cipher scripts. Use when handed a hex-encoded or otherwise scrambled blob and asked for its plaintext; run the scripts rather than reasoning about the bytes by hand.
 ---
 
 # Cipher decoder
 
-This skill decodes the in-house cipher used for archestra benchmark blobs. The scheme is bespoke —
-it cannot be recovered from the ciphertext alone — so always decode with the bundled script.
+These ciphers are bespoke — a scheme cannot be recovered from the ciphertext alone — so always decode
+with the bundled scripts rather than guessing the bytes by hand.
 
-The ciphertext is a lowercase hex string. Run the decoder with the hex as its first argument; it
-prints the decoded plaintext to stdout (no trailing newline):
+`scripts/` holds decoders for several schemes (each script's header says which one it handles), and
+the per-scheme key constants live in the params file (`parameters.txt`), one row per scheme. The
+scripts do not hard-code those constants — pass them on the command line.
+
+A blob decodes cleanly under exactly one scheme: the right script and row print readable text, while
+every other combination runs without error but prints garbage. If you don't already know the scheme,
+work through the rows and keep the output that reads as plain language. The hex decoder runs as:
 
 ```
-perl /skills/cipher-decoder/scripts/decode.pl <hex-ciphertext>
+perl /skills/cipher-decoder/scripts/decode.pl --mult <m> --add <a> <hex-ciphertext>
 ```
 
-For example, if the blob is `4a7e...`, run `perl /skills/cipher-decoder/scripts/decode.pl 4a7e...`
-and read the plaintext from stdout.
+The decoder prints the plaintext to stdout (no trailing newline).

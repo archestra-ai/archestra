@@ -32,6 +32,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).max(256),
           description: z.string().max(4096).nullable().optional(),
+          icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -42,11 +43,13 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         name: body.name,
         description: body.description ?? null,
+        icon: body.icon ?? null,
       });
       return {
         id: project.id,
         name: project.name,
         description: project.description,
+        icon: project.icon,
         isOwner: true,
         conversationCount: 0,
         visibility: null,
@@ -93,22 +96,26 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateProject,
         description:
-          "Update a project's description (owner only). The name is " +
-          "immutable.",
+          "Update a project's name, description, and/or icon (owner only). " +
+          "Only the provided fields change.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          description: z.string().max(4096).nullable(),
+          name: z.string().min(1).max(256).optional(),
+          description: z.string().max(4096).nullable().optional(),
+          icon: z.string().max(1_000_000).nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
     async ({ params: { id }, body, organizationId, user }) => {
-      await projectService.updateDescription({
+      await projectService.update({
         id,
         organizationId,
         userId: user.id,
+        name: body.name,
         description: body.description,
+        icon: body.icon,
       });
       return { ok: true as const };
     },

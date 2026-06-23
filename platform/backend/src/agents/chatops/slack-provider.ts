@@ -15,7 +15,7 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import logger from "@/logging";
-import { AgentModel, ChatOpsChannelBindingModel, UserModel } from "@/models";
+import { AgentModel, ChatOpsChannelBindingModel } from "@/models";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -33,8 +33,8 @@ import type {
   UpdateApprovalRequestOptions,
 } from "@/types";
 import {
-  autoProvisionUser,
   buildWelcomeMessage,
+  ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
 import {
@@ -970,38 +970,37 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    let user = await UserModel.findByEmail(senderEmail.toLowerCase());
-    if (!user) {
-      // Auto-provision: create user + member from slash command
-      const displayName =
-        (await this.getUserName(userId)) || body.user_name || "Unknown User";
-      const { invitationId } = await autoProvisionUser({
+    // Auto-provision: create user + member from slash command
+    let displayName = "";
+    const provisioned = await ensureProvisionedUser({
+      email: senderEmail,
+      resolveDisplayName: async () => {
+        displayName =
+          (await this.getUserName(userId)) || body.user_name || "Unknown User";
+        return displayName;
+      },
+      provider: "slack",
+    });
+    if (!provisioned) {
+      return {
+        response_type: "ephemeral",
+        text: "Something went wrong while setting up your account. Please try again.",
+      };
+    }
+
+    // Send welcome DM (fire-and-forget) — skip when SSO is enabled
+    if (provisioned.invitationId !== null && !(await isSsoConfigured())) {
+      const welcome = buildWelcomeMessage({
+        invitationId: provisioned.invitationId,
         email: senderEmail,
         name: displayName,
-        provider: "slack",
       });
-      user = await UserModel.findByEmail(senderEmail.toLowerCase());
-      if (!user) {
-        return {
-          response_type: "ephemeral",
-          text: "Something went wrong while setting up your account. Please try again.",
-        };
-      }
-
-      // Send welcome DM (fire-and-forget) — skip when SSO is enabled
-      if (!(await isSsoConfigured())) {
-        const welcome = buildWelcomeMessage({
-          invitationId,
-          email: senderEmail,
-          name: displayName,
-        });
-        this.sendDirectMessage({
-          userId,
-          text: welcome.text,
-          actionUrl: welcome.actionUrl,
-          actionLabel: welcome.actionLabel,
-        }).catch(() => {});
-      }
+      this.sendDirectMessage({
+        userId,
+        text: welcome.text,
+        actionUrl: welcome.actionUrl,
+        actionLabel: welcome.actionLabel,
+      }).catch(() => {});
     }
 
     switch (commandAction) {

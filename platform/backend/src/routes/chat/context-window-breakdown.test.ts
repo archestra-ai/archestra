@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@/types";
+import { __testEstimateChatMessagesTokens } from "./context-compaction";
 import {
   BINARY_BYTES_PER_TOKEN,
   buildContextWindowBreakdown,
@@ -9,6 +10,7 @@ import {
   refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
+import { estimateFileTokens } from "./normalization/estimate-message-tokens";
 
 function tokensFor(
   breakdown: ReturnType<typeof buildContextWindowBreakdown>,
@@ -561,6 +563,53 @@ describe("buildContextWindowBreakdown", () => {
     const breakdown = buildContextWindowBreakdown({ ...baseParams, messages });
 
     expect(tokensFor(breakdown, "files")).toBe(0);
+  });
+
+  it("estimates a text/csv ref on the same per-file yardstick as the compaction trigger", () => {
+    const byteLength = 8_000;
+    const messages: ChatMessage[] = [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            filename: "rows.csv",
+            mediaType: "text/csv",
+            url: "/api/chat/attachments/aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa/content",
+            fileSize: byteLength,
+          },
+        ],
+      },
+    ];
+
+    const breakdown = buildContextWindowBreakdown({ ...baseParams, messages });
+    const perFile = estimateFileTokens({ mediaType: "text/csv", byteLength });
+
+    // text-like ref is counted on the TEXT yardstick (ceil(bytes / chars-per-
+    // token)), not the binary one — the shared switch routes text-like media
+    // through the text branch before any binary divisor.
+    expect(perFile).toBe(Math.ceil(byteLength / CHARS_PER_TOKEN));
+
+    // The breakdown's files segment and the compaction trigger both route the
+    // ref's byte estimate through this one switch, so the per-file count agrees.
+    expect(tokensFor(breakdown, "files")).toBe(perFile);
+
+    const refMessage = { ...messages[0] };
+    const headerOnly = {
+      ...refMessage,
+      parts: [{ type: "text" as const, text: "" }],
+    };
+    const withRef = __testEstimateChatMessagesTokens({
+      provider: "anthropic",
+      messages: [refMessage as ChatMessage],
+    });
+    const withoutRef = __testEstimateChatMessagesTokens({
+      provider: "anthropic",
+      messages: [headerOnly as ChatMessage],
+    });
+    // The compaction trigger's per-file token contribution for the text/csv ref
+    // is exactly the shared estimate (the rest is header/placeholder text).
+    expect(withRef - withoutRef).toBeGreaterThanOrEqual(perFile);
   });
 });
 

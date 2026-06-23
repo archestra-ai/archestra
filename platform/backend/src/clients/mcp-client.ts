@@ -395,7 +395,6 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
-    const _targetMcpServer = await McpServerModel.findById(targetMcpServerId);
     const effectiveEnterpriseManagedConfig =
       catalogItem.enterpriseManagedConfig ?? null;
     if (
@@ -841,8 +840,9 @@ class McpClient {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
-            const targetServer =
-              await McpServerModel.findById(targetMcpServerId);
+            const [targetServer] = await McpServerModel.findByIdsBasic([
+              targetMcpServerId,
+            ]);
             if (
               targetServer?.ownerId &&
               !targetServer.teamId &&
@@ -1335,7 +1335,13 @@ class McpClient {
       }
     | { error: CommonToolResult }
   > {
-    const mcpServer = await McpServerModel.findById(targetMcpServerId);
+    // Resolving secrets only needs the base server row (id + secretId).
+    // findById() additionally performs a 4-table join and a per-server
+    // mcp_server_user lookup, which turns into an N+1 when several tool calls
+    // in the same turn target the same server. Use the lightweight lookup.
+    const [mcpServer] = await McpServerModel.findByIdsBasic([
+      targetMcpServerId,
+    ]);
     if (!mcpServer) {
       return {
         error: await this.createErrorResult(
@@ -1367,9 +1373,10 @@ class McpClient {
     return result;
   }
 
-  private async fetchSecretsForLoadedMcpServer(
-    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
-  ): Promise<{
+  private async fetchSecretsForLoadedMcpServer(mcpServer: {
+    id: string;
+    secretId: string | null;
+  }): Promise<{
     secrets: Record<string, unknown>;
     secretId?: string;
     serverState: CachedServerState;
@@ -1434,7 +1441,10 @@ class McpClient {
           ),
         };
       }
-      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
+      // Only the display name is needed here, so avoid the heavier findById().
+      const [mcpServer] = await McpServerModel.findByIdsBasic([
+        tool.mcpServerId,
+      ]);
       logger.info(
         {
           toolName: toolCall.name,
@@ -1454,9 +1464,9 @@ class McpClient {
     if (tool.credentialResolutionMode === "enterprise_managed") {
       const explicitTargetMcpServerId = tool.mcpServerId;
       if (explicitTargetMcpServerId) {
-        const mcpServer = await McpServerModel.findById(
+        const [mcpServer] = await McpServerModel.findByIdsBasic([
           explicitTargetMcpServerId,
-        );
+        ]);
         return {
           targetMcpServerId: explicitTargetMcpServerId,
           mcpServerName: mcpServer?.name || fallbackName,
@@ -2861,6 +2871,88 @@ class McpClient {
   }
 
   /**
+   * Connect directly to ONE installed server by id with its own credentials,
+   * run a single operation, then close. Powers the server-scoped Apps run path
+   * (POST /api/mcp/server/:id), which has no agent/owner context — access is
+   * gated by the route (mcpServerInstallation:read) before this is reached. No
+   * OAuth auto-refresh (adequate for UI-providing servers, typically no/PAT
+   * auth); a future catalog-scoped path can add it.
+   */
+  private async withDirectServerClient<T>(
+    mcpServerId: string,
+    run: (client: Client) => Promise<T>,
+  ): Promise<T> {
+    const [server] = await McpServerModel.findByIdsBasic([mcpServerId]);
+    if (!server) {
+      throw new Error(`MCP server not found: ${mcpServerId}`);
+    }
+    if (!server.catalogId) {
+      throw new Error(`MCP server ${mcpServerId} has no catalog`);
+    }
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      server.catalogId,
+    );
+    if (!catalogItem) {
+      throw new Error(`Catalog not found for MCP server ${mcpServerId}`);
+    }
+    const { secrets } = await this.fetchSecretsForLoadedMcpServer({
+      id: mcpServerId,
+      secretId: server.secretId,
+    });
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+      server.secretId ?? undefined,
+    );
+    const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
+      capabilities: {},
+    });
+    try {
+      await this.raceWithTimeout(
+        client.connect(transport),
+        30000,
+        new McpServerConnectionTimeoutError(),
+      );
+      return await run(client);
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /** Read a UI (`ui://`) resource directly from one installed server. */
+  async readResourceForServer(params: {
+    mcpServerId: string;
+    uri: string;
+  }): Promise<unknown> {
+    return this.withDirectServerClient(params.mcpServerId, (client) =>
+      this.raceWithTimeout(
+        client.readResource({ uri: params.uri }),
+        30000,
+        "Read resource timeout",
+      ),
+    );
+  }
+
+  /** Call a tool directly on one installed server (server-scoped run path). */
+  async callToolForServer(params: {
+    mcpServerId: string;
+    name: string;
+    arguments?: Record<string, unknown>;
+  }): Promise<unknown> {
+    return this.withDirectServerClient(params.mcpServerId, (client) =>
+      this.raceWithTimeout(
+        client.callTool({
+          name: params.name,
+          arguments: params.arguments ?? {},
+        }),
+        60000,
+        "Tool call timeout",
+      ),
+    );
+  }
+
+  /**
    * Disconnect from an MCP server
    */
   async disconnect(clientId: string): Promise<void> {
@@ -3418,9 +3510,9 @@ class McpClient {
     );
   }
 
-  private toCachedServerState(
-    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
-  ): CachedServerState {
+  private toCachedServerState(mcpServer: {
+    secretId: string | null;
+  }): CachedServerState {
     return {
       secretId: mcpServer.secretId ?? null,
       credentialFingerprint: null,

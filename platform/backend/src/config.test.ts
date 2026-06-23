@@ -18,17 +18,16 @@ import config, {
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
   parseAuditLogRetentionDays,
-  parseBlobStorageProvider,
   parseBodyLimit,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
+  parseFileStorageFilesystemRoot,
+  parseFileStorageProvider,
   parseMetricsPort,
   parseProcessType,
-  parseS3BlobStorageAuthMethod,
-  parseS3BlobStorageBucket,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -1196,63 +1195,55 @@ describe("parseConnectorSyncMaxDuration", () => {
   });
 });
 
-describe("parseBlobStorageProvider", () => {
-  test("defaults to database storage", () => {
-    expect(parseBlobStorageProvider(undefined)).toBe("db");
-    expect(parseBlobStorageProvider("")).toBe("db");
+describe("parseFileStorageProvider", () => {
+  test("defaults to db when unset", () => {
+    expect(parseFileStorageProvider(undefined)).toBe("db");
   });
 
-  test("accepts s3 case-insensitively", () => {
-    expect(parseBlobStorageProvider("s3")).toBe("s3");
-    expect(parseBlobStorageProvider(" S3 ")).toBe("s3");
+  test("returns filesystem (case/space-insensitive)", () => {
+    expect(parseFileStorageProvider(" FileSystem ")).toBe("filesystem");
   });
 
-  test("falls back to database storage for unsupported values", () => {
-    expect(parseBlobStorageProvider("gcs")).toBe("db");
-    expect(parseBlobStorageProvider("local")).toBe("db");
+  test("falls back to db for any unknown value", () => {
+    expect(parseFileStorageProvider("s3")).toBe("db");
   });
 });
 
-describe("parseS3BlobStorageAuthMethod", () => {
-  test("defaults to IRSA", () => {
-    expect(parseS3BlobStorageAuthMethod(undefined)).toBe("irsa");
-    expect(parseS3BlobStorageAuthMethod("")).toBe("irsa");
+describe("parseFileStorageFilesystemRoot", () => {
+  test("ignores the root when provider is db", () => {
+    expect(parseFileStorageFilesystemRoot({ provider: "db", value: "" })).toBe(
+      "",
+    );
   });
 
-  test("accepts static access key auth case-insensitively", () => {
-    expect(parseS3BlobStorageAuthMethod("static")).toBe("static");
-    expect(parseS3BlobStorageAuthMethod(" STATIC ")).toBe("static");
-  });
-
-  test("falls back to IRSA for unsupported values", () => {
-    expect(parseS3BlobStorageAuthMethod("iam-user")).toBe("irsa");
-    expect(parseS3BlobStorageAuthMethod("profile")).toBe("irsa");
-  });
-});
-
-describe("parseS3BlobStorageBucket", () => {
-  test("allows empty bucket when database storage is enabled", () => {
-    expect(parseS3BlobStorageBucket({ provider: "db", value: "" })).toBe("");
-  });
-
-  test("trims configured S3 bucket", () => {
+  test("trims a configured absolute root for the filesystem provider", () => {
     expect(
-      parseS3BlobStorageBucket({
-        provider: "s3",
-        value: " archestra-files ",
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "  /data/archestra_results  ",
       }),
-    ).toBe("archestra-files");
+    ).toBe("/data/archestra_results");
   });
 
-  test("requires bucket when S3 storage is enabled", () => {
+  test("requires a root when provider is filesystem", () => {
     expect(() =>
-      parseS3BlobStorageBucket({ provider: "s3", value: "" }),
+      parseFileStorageFilesystemRoot({ provider: "filesystem", value: " " }),
     ).toThrow(
-      "ARCHESTRA_KNOWLEDGE_BASE_FILE_UPLOAD_S3_BUCKET is required when S3 blob storage is enabled",
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
+    );
+  });
+
+  test("rejects a relative root for the filesystem provider", () => {
+    expect(() =>
+      parseFileStorageFilesystemRoot({
+        provider: "filesystem",
+        value: "relative/dir",
+      }),
+    ).toThrow(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
     );
   });
 });
-
 describe("parseProcessType", () => {
   test("should return 'all' when undefined", () => {
     expect(parseProcessType(undefined)).toBe("all");

@@ -132,6 +132,10 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
   }'
 ```
 
+## Environment
+
+An LLM proxy can be assigned a deployment environment. Its inference is then attributed to that environment, so usage counts against that environment's cost limits. Unassigned proxies use the Default environment. See [Environments](/docs/platform-environments).
+
 ## Supported Providers
 
 For the full list of supported LLM providers, see [Supported LLM Providers](/docs/platform-supported-llm-providers).

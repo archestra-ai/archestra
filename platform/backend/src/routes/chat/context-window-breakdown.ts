@@ -18,24 +18,15 @@ import {
 } from "@archestra/shared";
 import { getTokenizer, type Tokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
+import {
+  estimateFileTokens,
+  TOKEN_ESTIMATE,
+} from "./normalization/estimate-message-tokens";
 
-// ---------------------------------------------------------------------------
-// Token-estimation constants — must stay in sync with context-compaction.ts.
-// Both files implement the same heuristic so the visualizer total matches what
-// triggers auto-compaction. Do not change one without changing the other.
-// ---------------------------------------------------------------------------
-
-/** Characters per token for text content (provider-independent approximation). */
-export const CHARS_PER_TOKEN = 4;
-/** Bytes per token for PDF binary payloads. */
-export const PDF_BYTES_PER_TOKEN = 12;
-/** Bytes per token for non-PDF, non-text binary payloads (images, audio, etc.). */
-export const BINARY_BYTES_PER_TOKEN = 4;
-/**
- * Images are billed by dimensions, not byte size. Without this ceiling a
- * multi-MB image would estimate at ~1 M tokens and spuriously inflate the bar.
- */
-export const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
+export const CHARS_PER_TOKEN = TOKEN_ESTIMATE.charsPerToken;
+export const PDF_BYTES_PER_TOKEN = TOKEN_ESTIMATE.pdfBytesPerToken;
+export const BINARY_BYTES_PER_TOKEN = TOKEN_ESTIMATE.binaryBytesPerToken;
+export const IMAGE_TOKEN_MAX_ESTIMATE = TOKEN_ESTIMATE.imageTokenMaxEstimate;
 
 // Keep the streamed payload bounded: ship the biggest contributors per category
 // and fold the rest into a single "Other" row so totals still reconcile.
@@ -338,18 +329,7 @@ function estimateFilePartTokens(part: ChatMessagePart): number {
     return 0;
   }
 
-  if (isTextLikeMediaType(mediaType)) {
-    return Math.ceil(byteLength / CHARS_PER_TOKEN);
-  }
-  if (mediaType === "application/pdf") {
-    return Math.ceil(byteLength / PDF_BYTES_PER_TOKEN);
-  }
-  // Images are billed by dimensions, not bytes; cap to avoid inflating the bar.
-  const estimate = Math.ceil(byteLength / BINARY_BYTES_PER_TOKEN);
-  if (mediaType.startsWith("image/")) {
-    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
-  }
-  return estimate;
+  return estimateFileTokens({ mediaType, byteLength });
 }
 
 /**
@@ -371,15 +351,6 @@ function dataUrlByteLength(url: unknown): number {
   return meta.includes(";base64")
     ? Math.floor((payload.length * 3) / 4)
     : payload.length;
-}
-
-function isTextLikeMediaType(mediaType: string): boolean {
-  return (
-    mediaType.startsWith("text/") ||
-    mediaType === "application/json" ||
-    mediaType === "application/xml" ||
-    mediaType === "application/csv"
-  );
 }
 
 function safeJson(value: unknown): string {

@@ -65,4 +65,4 @@ When auto-compaction frees tokens, a note appears in the panel showing how many 
 
 ### File Attachments
 
-Chat attachments are scoped to their conversation. Users with `knowledgeFile:create` can save a sent attachment to [Knowledge Files](/docs/platform-knowledge-bases#files), choose visibility, and select the agents or MCP Gateways that can retrieve it later.
+Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.

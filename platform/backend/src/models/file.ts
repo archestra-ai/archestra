@@ -1,8 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { getFileBytesStorage } from "@/skills-sandbox/file-storage";
-import type { PersistedFile, SandboxArtifactRow } from "@/types";
+import type {
+  PersistedFile,
+  SandboxArtifactRow,
+  SkillSandboxFileStorageProvider,
+} from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 type PersistedFileMeta = {
@@ -25,38 +27,38 @@ const artifactColumns = {
 } as const;
 
 /**
- * Persistent user files (`files` table). A file is owned by its author
- * (`user_id`) unless `project_id` is set, in which case it belongs to the
- * project. Bytes go through the `FileBytesStorage` interface (Postgres-only
- * today).
+ * Row CRUD for persistent user files (`files` table). Bytes live behind the
+ * object-store seam; the orchestration that writes bytes then inserts the
+ * row (with rollback) lives in `FileStore`, so this model is pure data access.
  */
 class FileModel {
-  static async create(params: {
+  /**
+   * Insert one row whose bytes have already been persisted by `FileStore`. A
+   * duplicate filename in the owner scope (the partial unique indexes) surfaces
+   * as {@link FileNameExistsError}.
+   */
+  static async insertRow(params: {
     organizationId: string;
     /** Author — whoever produced the file. */
     userId: string;
     /** Owning project; null = the author's own file. */
     projectId: string | null;
     conversationId: string | null;
-    /** Producing sandbox — provenance only; omit when none (save_result). */
+    /** Producing sandbox — provenance only. */
     sandboxId?: string | null;
     filename: string;
     mimeType: string;
     sizeBytes: number;
-    data: Buffer;
+    storageProvider: SkillSandboxFileStorageProvider;
+    /** Bytes when storageProvider = 'db'; null when objectKey is set. */
+    data: Buffer | null;
+    objectKey: string | null;
   }): Promise<PersistedFile> {
-    const fileId = randomUUID();
-    const stored = await getFileBytesStorage().put({
-      fileId,
-      filename: params.filename,
-      data: params.data,
-    });
     let row: PersistedFile | undefined;
     try {
       [row] = await db
         .insert(schema.filesTable)
         .values({
-          id: fileId,
           organizationId: params.organizationId,
           userId: params.userId,
           projectId: params.projectId,
@@ -65,24 +67,54 @@ class FileModel {
           filename: params.filename,
           mimeType: params.mimeType,
           sizeBytes: params.sizeBytes,
-          data: stored.dbData,
-          storageProvider: stored.provider,
-          objectKey: stored.objectKey,
+          data: params.data,
+          storageProvider: params.storageProvider,
+          objectKey: params.objectKey,
         })
         .returning();
     } catch (error) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
+      if (isUniqueViolation(error)) {
+        throw new FileNameExistsError(params.filename);
+      }
       throw error;
     }
-    if (!row) {
-      await getFileBytesStorage()
-        .delete(stored)
-        .catch(() => {});
-      throw new Error("failed to insert file");
-    }
+    if (!row) throw new Error("failed to insert file");
     return normalizeByteaField(row, "data");
+  }
+
+  /**
+   * Swap a file's storage pointer + content metadata in place (edit_file),
+   * keeping the same id and filename. Byte I/O is the caller's job
+   * ({@link FileStore.update} writes the new bytes and purges the old); this is
+   * the row write only. Org-scoped as defense-in-depth. Returns null if the row
+   * no longer exists.
+   */
+  static async updateContent(params: {
+    id: string;
+    organizationId: string;
+    storageProvider: PersistedFile["storageProvider"];
+    objectKey: string | null;
+    data: Buffer | null;
+    mimeType: string;
+    sizeBytes: number;
+  }): Promise<PersistedFile | null> {
+    const [row] = await db
+      .update(schema.filesTable)
+      .set({
+        data: params.data,
+        storageProvider: params.storageProvider,
+        objectKey: params.objectKey,
+        mimeType: params.mimeType,
+        sizeBytes: params.sizeBytes,
+      })
+      .where(
+        and(
+          eq(schema.filesTable.id, params.id),
+          eq(schema.filesTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning();
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   static async findById(id: string): Promise<PersistedFile | null> {
@@ -93,22 +125,30 @@ class FileModel {
     return row ? normalizeByteaField(row, "data") : null;
   }
 
-  /** The user's own files (newest first), metadata only: project files excluded. */
-  static async listForUser(params: {
+  /**
+   * A user's headless (no-project, no-conversation) file by name. The orphan
+   * unique index makes the match at most one. Used so a headless `save_result`
+   * with `overwrite` can replace the file it created on a previous run instead
+   * of dead-ending on the orphan name collision.
+   */
+  static async findOrphanByName(params: {
     organizationId: string;
     userId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
-      .select(artifactColumns)
+    filename: string;
+  }): Promise<PersistedFile | null> {
+    const [row] = await db
+      .select()
       .from(schema.filesTable)
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.userId, params.userId),
+          eq(schema.filesTable.filename, params.filename),
           isNull(schema.filesTable.projectId),
+          isNull(schema.filesTable.conversationId),
         ),
-      )
-      .orderBy(desc(schema.filesTable.createdAt));
+      );
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /** Files belonging to one project (newest first), any author; org-scoped. */
@@ -128,22 +168,51 @@ class FileModel {
       .orderBy(desc(schema.filesTable.createdAt));
   }
 
-  /** Files belonging to any of the given projects (newest first); org-scoped. */
-  static async listByProjects(params: {
+  /**
+   * The user's no-project files in one conversation (newest first), metadata
+   * only. This is the personal "My Files" scope after no-project files became
+   * conversation-scoped: a chat sees only its own files, never another
+   * conversation's. Project files are excluded (they use {@link listByProject}).
+   */
+  static async listNoProjectByConversation(params: {
     organizationId: string;
-    projectIds: string[];
+    userId: string;
+    conversationId: string;
   }): Promise<SandboxArtifactRow[]> {
-    if (params.projectIds.length === 0) return [];
     return db
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
-          inArray(schema.filesTable.projectId, params.projectIds),
+          eq(schema.filesTable.conversationId, params.conversationId),
+          eq(schema.filesTable.userId, params.userId),
+          isNull(schema.filesTable.projectId),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));
+  }
+
+  /**
+   * Every no-project file produced in one conversation (any author), with the
+   * storage pointer needed to purge external bytes. Used to clean up a
+   * conversation's files when it is deleted — project files (which outlive the
+   * conversation) are excluded.
+   */
+  static async listNoProjectFilesForConversation(params: {
+    organizationId: string;
+    conversationId: string;
+  }): Promise<SandboxArtifactRow[]> {
+    return db
+      .select(artifactColumns)
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.conversationId, params.conversationId),
+          isNull(schema.filesTable.projectId),
+        ),
+      );
   }
 
   /** Files the user authored in one conversation, newest first. */
@@ -194,3 +263,21 @@ class FileModel {
 }
 
 export default FileModel;
+
+/** A file with this name already exists in the owner scope (user or project). */
+export class FileNameExistsError extends Error {
+  constructor(filename: string) {
+    super(`a file named "${filename}" already exists`);
+    this.name = "FileNameExistsError";
+  }
+}
+
+// === internal ===
+
+/** Postgres unique_violation, as surfaced by the pg and PGlite drivers. */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = (error as { code?: string }).code;
+  const cause = (error as { cause?: { code?: string } }).cause;
+  return code === "23505" || cause?.code === "23505";
+}

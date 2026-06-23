@@ -20,7 +20,7 @@ tasks derived from real Archestra workflows, each one permanent regression prote
 start the harness-owned benchmark MCP (submit_result) in-process
   -> for each environment:
        boot a fresh backend on a new port over a fresh, migrated database
-         (reusing the dev stack's shared Postgres + Dagger engine)
+         (on a dedicated bench Postgres the runner provisions; reusing the dev stack's Dagger engine)
        -> seed: provider key + models, the env's web-pinned skills, its remote MCPs,
                 the benchmark MCP; create the env's agent and lock its tool surface
        -> for each task x model:
@@ -107,6 +107,10 @@ read-only against backend state), and a set of sandbox tasks including —
   count grows without bound, so there is no fixed offline fixture).
 - `lena-png-size` — report the size in KiB (floored) of scikit-image's pinned `lena.png`; the verifier
   checks against recorded ground truth.
+- `purchase-ledger` — clean a transaction CSV into a saved file in one chat, then in a fresh
+  conversation (a `new_conversation` stage) rediscover it from persistent storage via `search_files`
+  and report the completed-purchase total; exercises cross-conversation persistent "My Files". The
+  verifier recomputes the total from the fixture.
 - `ai-sre-fk-drain` — triage a zip of unsorted incident logs (a reconstructed real incident) and
   name the root cause of a crash-looping backend: a foreign-key violation when a conversation is
   deleted mid-drain; the verifier exact-matches a closed-set component/failure-class plus the `runId`
@@ -128,10 +132,11 @@ tool and skill catalog is the subject under test; `tools = ["create_skill"]`) wi
 ## Lifecycle: fresh backend over shared infra
 
 The harness does not run its own Tilt stack. It reuses the developer's already-running stack's
-shared Postgres and Dagger code-runtime engine, and stands up only what must be isolated per env: a
-fresh database (migrated from scratch) plus a second backend **process** on a new port. The backend
-reads `process.env` directly, so benchmark overrides (fresh DB URL, new API/metrics ports, shared
-Dagger host) take effect without a git worktree, a second Tilt, or any edit to `platform/.env`. The
+Dagger code-runtime engine, provisions a dedicated bench Postgres of its own (so DB traffic skips
+Tilt's port-forward), and stands up only what must be isolated per env: a fresh database (migrated
+from scratch) plus a second backend **process** on a new port. The backend reads `process.env`
+directly, so benchmark overrides (fresh DB URL, new API/metrics ports, shared Dagger host) take
+effect without a git worktree, a second Tilt, or any edit to `platform/.env`. The
 second backend runs the already-built `dist/server.mjs` the main stack keeps fresh, so it never
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
@@ -210,8 +215,14 @@ not the raw per-token SSE chunks), `run.json`,
 ## Prerequisites
 
 - A running Archestra dev stack (`tilt up` with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`) providing the
-  shared Postgres (host-reachable on `localhost:5432`) and the Dagger engine (`tcp://127.0.0.1:1234`),
-  with the backend built (`dist/server.mjs`).
+  Dagger engine (`tcp://127.0.0.1:1234`), with the backend built (`dist/server.mjs`).
+- Docker, so the runner can provision the dedicated bench Postgres (`dev/docker-compose.bench-pg.yml`,
+  host-reachable on `localhost:5544`). This bypasses the dev stack's slow kubectl port-forward, but on
+  macOS the host→Colima-VM path still crosses Colima's network proxy, which can drop a burst of idle
+  pooled connections under concurrent load (`withDbRetry` absorbs almost all; the occasional leak is a
+  retry-able flake). For the cleanest connection path, set `ARCHESTRA_BENCH_DATABASE_URL` to a **native
+  host Postgres** (e.g. Postgres.app or `brew install postgresql@18 pgvector`), skipping docker and the
+  VM entirely; the same override also points the bench at any Postgres you manage.
 - A real provider key in the environment for each lane you run (e.g. `OPENROUTER_API_KEY`,
   `KIMI_API_KEY`, `ZAI_API_KEY`; see each lane's `api_key_env` in `lanes.toml`).
 - A Rust toolchain to build `archestra-bench`, and local `uv` for the ephemeral verifier environments.

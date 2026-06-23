@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-05-06
+lastUpdated: 2026-06-18
 ---
 
 <!--
@@ -27,9 +27,20 @@ Use this page to choose the gateway authentication method for your client, then 
 
 ## Gateway Authentication
 
-The MCP Gateway supports five client authentication paths. They do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+The MCP Gateway supports six client authentication methods. Choose based on who is calling and whether the request should carry a specific user's identity — that identity is what enables per-user **Resolve at call time**.
 
-- **OAuth 2.1**, **OAuth client credentials**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
+| Method | Most relevant for | Acting user | Notes |
+| --- | --- | --- | --- |
+| OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
+| OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered client scoped to an explicit gateway list. |
+| OAuth authorization code (manually registered) | A pre-approved server app acting for whoever is signed in — e.g. an agentic chat backend | Yes | Confidential client (secret + PKCE); enables per-user resolution. |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token (`arch_<token>`); team and org tokens don't identify one user. |
+| ID-JAG | Clients signed in through a corporate IdP (enterprise-managed authorization) | Yes | RFC 8693 token exchange; the IdP issues a JWT Archestra validates. |
+| JWKS | Callers presenting an external IdP JWT directly | Yes | Validated against the profile's IdP; no Archestra token issued. |
+
+These do not all present the same token to `POST /v1/mcp/<gateway-id>`:
+
+- **OAuth 2.1**, **OAuth client credentials**, **OAuth authorization code (manually registered)**, and **ID-JAG** all end with an Archestra-issued OAuth access token being sent to the gateway
 - **JWKS** sends an external IdP JWT directly to the gateway
 - **Bearer token** sends a static platform-managed token directly to the gateway.
 
@@ -68,7 +79,28 @@ The client exchanges its credentials for a short-lived (1-hour) bearer token at 
 
 It then sends that token to the gateway like any other OAuth access token (`Authorization: Bearer <token>`). The token is rejected by any gateway not on the client's list, and by gateways in another organization.
 
-Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — for gateways consumed by applications, assign tools to a shared connection rather than **Resolve at call time**.
+Because there is no acting user, per-user dynamic credential resolution does not apply to these tokens — assign tools to a shared connection rather than **Resolve at call time**. To let a pre-registered application act with the user's identity instead, use the authorization code grant below.
+
+### OAuth Authorization Code (On behalf of users)
+
+When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
+
+Create it under **MCPs > Credentials > OAuth Clients**, choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+
+The application runs the standard browser flow:
+
+- `GET /api/auth/oauth2/authorize` with `response_type=code`, `scope=mcp` (add `offline_access` for a refresh token), the registered `redirect_uri`, and a PKCE challenge.
+- `POST /api/auth/oauth2/token` with `grant_type=authorization_code`, `client_id`, `client_secret`, and the PKCE verifier.
+
+The result is a normal user OAuth access token, sent to the gateway as `Authorization: Bearer <token>`. Only the registered application can complete the flow. By default the signed-in user reaches only the gateways their own permissions already allow.
+
+#### Gateway access grant
+
+Optionally, assign one or more gateways to the client as an **access grant**. Any user who authenticates through the client may then reach those gateways **in addition to** their own role-based access — even gateways they otherwise couldn't reach. The grant is additive (it never removes access) and admin-controlled (only admins register clients and set the list).
+
+This lets you gate a gateway behind a specific trusted app: restrict the gateway so it isn't reachable on its own (assign it to a team with no members — an org-wide gateway is open to all members), then grant it through the client. The gateway is then reachable only by users who come through that app. Leave the grant empty for pure identity passthrough, where access stays governed entirely by each user's permissions.
+
+To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_ENABLED=false`. This disables Dynamic Client Registration and CIMD auto-registration (above), so the gateway accepts OAuth flows only from clients you registered explicitly — both `client_credentials` and `authorization_code`.
 
 ### Bearer Token
 

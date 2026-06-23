@@ -81,6 +81,60 @@ describe("AppModel.update", () => {
   });
 });
 
+describe("AppModel spec", () => {
+  const spec = {
+    summary: "A todo app",
+    features: ["add", "complete"],
+    tools: ["archestra__app_data_get"],
+  };
+
+  test("snapshots the spec onto version 1 at create", async ({ makeApp }) => {
+    const app = await makeApp({ spec });
+    expect(app.spec).toEqual(spec);
+    const v1 = await AppVersionModel.findByAppAndVersion(app.id, 1);
+    expect(v1?.spec).toEqual(spec);
+  });
+
+  test("a spec-only edit updates the head without forking", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({ spec });
+    const nextSpec = { ...spec, summary: "A better todo app" };
+    const updated = await AppModel.update({
+      id: app.id,
+      patch: { spec: nextSpec },
+    });
+    expect(updated?.spec).toEqual(nextSpec);
+    expect(updated?.latestVersion).toBe(1);
+  });
+
+  test("snapshots the head spec onto a forked version", async ({ makeApp }) => {
+    const app = await makeApp({ spec });
+    const updated = await AppModel.update({
+      id: app.id,
+      version: { html: "<h1>v2</h1>", uiPermissions: null },
+    });
+    expect(updated?.latestVersion).toBe(2);
+    const v2 = await AppVersionModel.findByAppAndVersion(app.id, 2);
+    expect(v2?.spec).toEqual(spec);
+  });
+
+  test("a spec set in the same edit as an html fork lands on the new version", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({ spec });
+    const nextSpec = { ...spec, features: ["add", "complete", "filter"] };
+    const updated = await AppModel.update({
+      id: app.id,
+      patch: { spec: nextSpec },
+      version: { html: "<h1>v2</h1>", uiPermissions: null },
+    });
+    expect(updated?.latestVersion).toBe(2);
+    const v2 = await AppVersionModel.findByAppAndVersion(app.id, 2);
+    expect(v2?.spec).toEqual(nextSpec);
+  });
+});
+
 describe("AppModel.delete (soft)", () => {
   test("hides the app and frees its name for re-use", async ({ makeApp }) => {
     const app = await makeApp({ name: "Reusable", scope: "org" });

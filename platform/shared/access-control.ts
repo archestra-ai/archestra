@@ -53,7 +53,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeFile: ["read", "create", "update", "delete", "admin"],
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
 
   // Other
@@ -119,7 +118,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeFile: ["read", "create", "update", "delete"],
   knowledgeSource: ["read", "create", "update", "delete", "query"],
 
   // Other
@@ -191,7 +189,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   githubAppConfig: [],
 
   // Knowledge
-  knowledgeFile: ["read"],
   knowledgeSource: ["read", "query"],
 
   // Other
@@ -426,12 +423,6 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
-  "knowledgeFile:read": "View uploaded Knowledge Files",
-  "knowledgeFile:create": "Upload Knowledge Files",
-  "knowledgeFile:update": "Modify Knowledge File visibility and agent access",
-  "knowledgeFile:delete": "Delete Knowledge Files",
-  "knowledgeFile:admin":
-    "View all Knowledge Files, bypassing visibility restrictions",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -656,7 +647,13 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
-    mcpServerInstallation: ["update"],
+    // Re-authentication re-supplies credentials for a connection the caller can
+    // already install, so it is gated like installation (:create), not :update.
+    // The handler does scope-aware authorization (owner-only for personal,
+    // team-admin for team, etc.) for the finer-grained check. Requiring :update
+    // here locked out members — who have :create but not :update — with a bare
+    // 403 the moment their OAuth token expired and they tried to re-authenticate.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
     mcpServerInstallation: ["update"],
@@ -801,10 +798,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
-  },
-  [RouteId.PromoteChatAttachmentToKnowledgeFile]: {
-    chat: ["read"],
-    knowledgeFile: ["create"],
   },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
@@ -995,6 +988,18 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["update"],
   },
   [RouteId.DeleteLimit]: {
+    llmLimit: ["delete"],
+  },
+  [RouteId.ListDefaultUserLimits]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.CreateDefaultUserLimit]: {
+    llmLimit: ["create"],
+  },
+  [RouteId.UpdateDefaultUserLimit]: {
+    llmLimit: ["update"],
+  },
+  [RouteId.DeleteDefaultUserLimit]: {
     llmLimit: ["delete"],
   },
   [RouteId.GetOptimizationRules]: {
@@ -1282,15 +1287,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorRuns]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorRun]: { knowledgeSource: ["read"] },
 
-  // Knowledge File Routes
-  [RouteId.GetKnowledgeFiles]: { knowledgeFile: ["read"] },
-  [RouteId.UploadKnowledgeFiles]: { knowledgeFile: ["create"] },
-  [RouteId.GetKnowledgeFile]: { knowledgeFile: ["read"] },
-  [RouteId.GetKnowledgeFileContent]: { knowledgeFile: ["read"] },
-  [RouteId.UpdateKnowledgeFile]: { knowledgeFile: ["update"] },
-  [RouteId.DeleteKnowledgeFile]: { knowledgeFile: ["delete"] },
-  [RouteId.GetKnowledgeFileUploadConfig]: { knowledgeFile: ["read"] },
-
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.CreateSkill]: { skill: ["create"] },
@@ -1316,7 +1312,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // URL, so a role allowed to produce an artifact can also fetch it.
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
-  [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
   [RouteId.CreateProject]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
@@ -1347,6 +1342,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.GetExternalApp]: { app: ["read"] },
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
@@ -1392,6 +1388,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+  [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 };
@@ -1404,9 +1401,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
-
-  // My Files
-  "/my-files": { sandbox: ["execute"] },
 
   // Projects
   "/projects": { project: ["read"] },
@@ -1426,6 +1420,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/apps": { app: ["read"] },
   "/apps/[id]": { app: ["read"] },
   "/apps/[id]/run": { app: ["read"] },
+  "/apps/server/[mcpServerId]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
@@ -1457,7 +1452,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
-  "/knowledge/files": { knowledgeFile: ["read"] },
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings

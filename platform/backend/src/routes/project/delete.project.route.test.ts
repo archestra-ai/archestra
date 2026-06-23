@@ -1,5 +1,6 @@
 import { FileModel } from "@/models";
 import { projectService } from "@/services/project";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
 
 describe("projectService.delete (file cascade)", () => {
@@ -16,7 +17,7 @@ describe("projectService.delete (file cascade)", () => {
       name: "doomed",
       description: null,
     });
-    const file = await FileModel.create({
+    const file = await fileStore.put({
       organizationId,
       userId: owner.id,
       projectId: project.id,

@@ -83,6 +83,7 @@ export const RouteId = {
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
+  McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -315,7 +316,6 @@ export const RouteId = {
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
   GetChatAttachmentContent: "getChatAttachmentContent",
-  PromoteChatAttachmentToKnowledgeFile: "promoteChatAttachmentToKnowledgeFile",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -373,6 +373,12 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+
+  // Per-environment default user limits
+  ListDefaultUserLimits: "listDefaultUserLimits",
+  CreateDefaultUserLimit: "createDefaultUserLimit",
+  UpdateDefaultUserLimit: "updateDefaultUserLimit",
+  DeleteDefaultUserLimit: "deleteDefaultUserLimit",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -524,13 +530,6 @@ export const RouteId = {
   GetConnectorRun: "getConnectorRun",
 
   // Knowledge File Routes
-  GetKnowledgeFiles: "getKnowledgeFiles",
-  UploadKnowledgeFiles: "uploadKnowledgeFiles",
-  GetKnowledgeFile: "getKnowledgeFile",
-  GetKnowledgeFileContent: "getKnowledgeFileContent",
-  UpdateKnowledgeFile: "updateKnowledgeFile",
-  DeleteKnowledgeFile: "deleteKnowledgeFile",
-  GetKnowledgeFileUploadConfig: "getKnowledgeFileUploadConfig",
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
@@ -559,7 +558,6 @@ export const RouteId = {
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
-  GetSkillSandboxFiles: "getSkillSandboxFiles",
   CreateProject: "createProject",
   GetProjects: "getProjects",
   GetProject: "getProject",
@@ -592,6 +590,7 @@ export const RouteId = {
 
   // MCP App Routes
   GetApps: "getApps",
+  GetExternalApp: "getExternalApp",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",

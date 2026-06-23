@@ -165,6 +165,60 @@ describe("chat MCP elicitation", () => {
     );
   });
 
+  test("elicit() streams a form request and returns the answered outcome", async () => {
+    vi.useFakeTimers();
+    const writer = { write: vi.fn() };
+    const bridge = createChatMcpElicitationBridge({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+    });
+    bridge.setWriter(writer);
+
+    cacheManagerMocks.getAndDelete
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        conversationId: "00000000-0000-4000-8000-000000000001",
+        action: "accept",
+        content: { features: ["search"] },
+      });
+
+    const outcomePromise = bridge.elicit({
+      toolName: "archestra__refine_app",
+      message: "What should the app do?",
+      requestedSchema: {
+        type: "object",
+        properties: { features: { type: "array" } },
+      },
+    });
+
+    expect(writer.write).toHaveBeenCalledWith({
+      type: "data-mcp-elicitation",
+      data: expect.objectContaining({
+        conversationId: "00000000-0000-4000-8000-000000000001",
+        toolName: "archestra__refine_app",
+        message: "What should the app do?",
+        mode: "form",
+        requestedSchema: expect.objectContaining({ type: "object" }),
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(outcomePromise).resolves.toEqual({
+      status: "answered",
+      result: { action: "accept", content: { features: ["search"] } },
+    });
+  });
+
+  test("elicit() returns no_viewer when no chat stream writer is attached", async () => {
+    const bridge = createChatMcpElicitationBridge({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+    });
+
+    await expect(
+      bridge.elicit({ toolName: "archestra__refine_app", message: "Hi?" }),
+    ).resolves.toEqual({ status: "no_viewer" });
+    expect(cacheManagerMocks.getAndDelete).not.toHaveBeenCalled();
+  });
+
   test("stores user responses for the pending elicitation id", async () => {
     cacheManagerMocks.set.mockResolvedValue(undefined);
 

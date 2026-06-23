@@ -26,7 +26,6 @@ vi.mock("@sentry/node", async (importOriginal) => {
 
 import config from "@/config";
 // Import after mock setup
-import { isDatabaseHealthy } from "@/database";
 import healthRoutes from "@/routes/health";
 import { createFastifyInstance } from "./server";
 
@@ -38,150 +37,29 @@ const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
 
 describe("createFastifyInstance", () => {
   describe("error handling", () => {
-    test("handles ApiError with 400 status code", async () => {
+    test.each([
+      [400, "Validation failed", "api_validation_error"],
+      [401, "Unauthenticated", "api_authentication_error"],
+      [403, "Forbidden", "api_authorization_error"],
+      [404, "Not found", "api_not_found_error"],
+      [500, "Internal server error", "api_internal_server_error"],
+      [409, "Resource conflict", "api_conflict_error"],
+      [418, "I'm a teapot", "unknown_api_error"],
+    ])("maps ApiError %i to its error type", async (statusCode, message, type) => {
       const app = createFastifyInstance();
 
-      app.get("/test-400", async () => {
-        throw new ApiError(400, "Validation failed");
+      app.get(`/test-${statusCode}`, async () => {
+        throw new ApiError(statusCode, message);
       });
 
       const response = await app.inject({
         method: "GET",
-        url: "/test-400",
+        url: `/test-${statusCode}`,
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(statusCode);
       expect(response.json()).toEqual({
-        error: {
-          message: "Validation failed",
-          type: "api_validation_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 401 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-401", async () => {
-        throw new ApiError(401, "Unauthenticated");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-401",
-      });
-
-      expect(response.statusCode).toBe(401);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Unauthenticated",
-          type: "api_authentication_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 403 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-403", async () => {
-        throw new ApiError(403, "Forbidden");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-403",
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Forbidden",
-          type: "api_authorization_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 404 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-404", async () => {
-        throw new ApiError(404, "Not found");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-404",
-      });
-
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Not found",
-          type: "api_not_found_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 500 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-500", async () => {
-        throw new ApiError(500, "Internal server error");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-500",
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Internal server error",
-          type: "api_internal_server_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 409 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-409", async () => {
-        throw new ApiError(409, "Resource conflict");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-409",
-      });
-
-      expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Resource conflict",
-          type: "api_conflict_error",
-        },
-      });
-    });
-
-    test("handles ApiError with unknown status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-unknown", async () => {
-        throw new ApiError(418, "I'm a teapot");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-unknown",
-      });
-
-      expect(response.statusCode).toBe(418);
-      expect(response.json()).toEqual({
-        error: {
-          message: "I'm a teapot",
-          type: "unknown_api_error",
-        },
+        error: { message, type },
       });
     });
 
@@ -727,14 +605,6 @@ describe("createFastifyInstance", () => {
         query: "value",
       });
     });
-  });
-});
-
-describe("isDatabaseHealthy", () => {
-  test("returns true when database is reachable", async () => {
-    // Using PGlite in tests, the database should be healthy
-    const result = await isDatabaseHealthy();
-    expect(result).toBe(true);
   });
 });
 

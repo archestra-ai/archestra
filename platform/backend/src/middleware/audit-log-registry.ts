@@ -6,6 +6,7 @@ import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
+import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
@@ -323,6 +324,18 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/limits/:id": {
     resourceType: "limit",
     fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
+
+  // Default user limits (per-environment + org-wide)
+  "/api/default-user-limits": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
+  },
+  "/api/default-user-limits/:id": {
+    resourceType: "defaultUserLimit",
+    fetchById: (id, orgId) =>
+      EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
 
   // Optimization Rules

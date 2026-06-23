@@ -14,7 +14,7 @@ async function makeProject(params: {
 }
 
 describe("ProjectModel", () => {
-  test("create/find/updateDescription/delete round-trip", async ({
+  test("create/find/update/delete round-trip", async ({
     makeUser,
     makeOrganization,
   }) => {
@@ -46,13 +46,14 @@ describe("ProjectModel", () => {
       }),
     ).toBeNull();
 
-    await ProjectModel.updateDescription({
+    await ProjectModel.update({
       id: project.id,
-      description: "all the things",
+      fields: { description: "all the things", icon: "🔬", name: "research-2" },
     });
-    expect((await ProjectModel.findById(project.id))?.description).toBe(
-      "all the things",
-    );
+    const updated = await ProjectModel.findById(project.id);
+    expect(updated?.description).toBe("all the things");
+    expect(updated?.icon).toBe("🔬");
+    expect(updated?.name).toBe("research-2");
 
     await ProjectModel.delete(project.id);
     expect(await ProjectModel.findById(project.id)).toBeNull();
@@ -72,6 +73,30 @@ describe("ProjectModel", () => {
         name: "p",
       }),
     ).rejects.toBeInstanceOf(ProjectNameExistsError);
+  });
+
+  test("generates a url-safe slug, deduped within an org", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser({ email: "slug-other@test.com" });
+    const first = await makeProject({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "Quarterly Report",
+    });
+    expect(first.slug).toBe("quarterly-report");
+    // a different member may reuse the display name (names are unique per user),
+    // but the slug — the shared folder — must stay distinct within the org.
+    const second = await makeProject({
+      organizationId: org.id,
+      userId: other.id,
+      name: "Quarterly Report",
+    });
+    expect(second.slug).not.toBe(first.slug);
+    expect(second.slug.startsWith("quarterly-report-")).toBe(true);
   });
 
   test("deleting a project nulls its conversations", async ({

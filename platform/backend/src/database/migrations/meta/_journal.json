@@ -2059,6 +2059,76 @@
       "when": 1781803268096,
       "tag": "0293_dynamic_tool_access",
       "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "7",
+      "when": 1781839440184,
+      "tag": "0294_projects_and_scheduled_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1781872377363,
+      "tag": "0295_conversation_file_touches",
+      "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1781891433454,
+      "tag": "0296_filesystem_file_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "7",
+      "when": 1781899258905,
+      "tag": "0297_remove_knowledge_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1781966151604,
+      "tag": "0298_cloudy_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "7",
+      "when": 1781979715500,
+      "tag": "0299_backfill_orphaned_schedule_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "7",
+      "when": 1782058452626,
+      "tag": "0300_rainy_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "7",
+      "when": 1782117226973,
+      "tag": "0301_smiling_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "7",
+      "when": 1782141505231,
+      "tag": "0302_coerce_all_tools_agents_to_progressive",
+      "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1782168863366,
+      "tag": "0303_minor_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

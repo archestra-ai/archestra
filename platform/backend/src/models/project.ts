@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { urlSlugify } from "@archestra/shared";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertProject, Project } from "@/types";
+import type { ConversationOrigin, InsertProject, Project } from "@/types";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -9,10 +11,14 @@ import type { InsertProject, Project } from "@/types";
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {
+    const slug = await ProjectModel.generateUniqueSlug({
+      name: project.name,
+      organizationId: project.organizationId,
+    });
     try {
       const [row] = await db
         .insert(schema.projectsTable)
-        .values(project)
+        .values({ ...project, slug })
         .returning();
       if (!row) throw new Error("failed to insert project");
       return row;
@@ -51,14 +57,30 @@ class ProjectModel {
     return row ?? null;
   }
 
-  static async updateDescription(params: {
+  /**
+   * Update the owner-editable fields. Only the keys present in `fields` are
+   * written, so a caller can change name, description, and/or icon
+   * independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   */
+  static async update(params: {
     id: string;
-    description: string | null;
+    fields: {
+      name?: string;
+      description?: string | null;
+      icon?: string | null;
+    };
   }): Promise<void> {
-    await db
-      .update(schema.projectsTable)
-      .set({ description: params.description, updatedAt: new Date() })
-      .where(eq(schema.projectsTable.id, params.id));
+    try {
+      await db
+        .update(schema.projectsTable)
+        .set({ ...params.fields, updatedAt: new Date() })
+        .where(eq(schema.projectsTable.id, params.id));
+    } catch (error) {
+      if (isUniqueViolation(error) && params.fields.name !== undefined) {
+        throw new ProjectNameExistsError(params.fields.name);
+      }
+      throw error;
+    }
   }
 
   static async delete(id: string): Promise<void> {
@@ -94,6 +116,7 @@ class ProjectModel {
       title: string | null;
       authorUserId: string;
       authorName: string | null;
+      origin: ConversationOrigin;
       lastMessageAt: Date;
       createdAt: Date;
     }[]
@@ -104,6 +127,7 @@ class ProjectModel {
         title: schema.conversationsTable.title,
         authorUserId: schema.conversationsTable.userId,
         authorName: schema.usersTable.name,
+        origin: schema.conversationsTable.origin,
         lastMessageAt: schema.conversationsTable.lastMessageAt,
         createdAt: schema.conversationsTable.createdAt,
       })
@@ -114,6 +138,31 @@ class ProjectModel {
       )
       .where(eq(schema.conversationsTable.projectId, projectId))
       .orderBy(desc(schema.conversationsTable.lastMessageAt));
+  }
+
+  // === internal ===
+
+  /**
+   * A URL-safe slug for the project's filesystem folder, unique within the org.
+   * Derived from the name; on a base-slug collision a short random suffix keeps
+   * it distinct (the unique index is the final guard against a create race).
+   */
+  private static async generateUniqueSlug(params: {
+    name: string;
+    organizationId: string;
+  }): Promise<string> {
+    const baseSlug = urlSlugify(params.name) || "project";
+    const [existing] = await db
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          eq(schema.projectsTable.slug, baseSlug),
+        ),
+      )
+      .limit(1);
+    return existing ? `${baseSlug}-${randomUUID().slice(0, 6)}` : baseSlug;
   }
 }
 

@@ -160,6 +160,71 @@ describe("Anthropic request logging", () => {
   });
 });
 
+describe("Anthropic anthropic-beta forwarding", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Drive a real /messages request and return the headers the handler actually
+  // hands the upstream client (the strip/forward decision's observable effect).
+  async function forwardedHeaders(agentId: string, model: string) {
+    let captured: Record<string, string> | undefined;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(((
+      _apiKey: string | undefined,
+      options: unknown,
+    ) => {
+      captured = (options as { defaultHeaders?: Record<string, string> })
+        ?.defaultHeaders;
+      return createAnthropicTestClient() as never;
+    }) as never);
+
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    try {
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agentId}/v1/messages`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "pdfs-2024-09-25",
+          "x-api-key": "test-anthropic-key",
+          // Loopback-only override that marks the upstream as a custom base URL.
+          "x-archestra-provider-base-url": "http://localhost:9/v1",
+        },
+        payload: {
+          model,
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+    } finally {
+      await app.close();
+    }
+    return captured;
+  }
+
+  test("strips anthropic-beta for a non-Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Strip Agent" });
+    const headers = await forwardedHeaders(agent.id, "kimi-k2");
+    expect(headers?.["anthropic-beta"]).toBeUndefined();
+  });
+
+  test("forwards anthropic-beta for a Claude model on a custom base URL", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Beta Forward Agent" });
+    const headers = await forwardedHeaders(agent.id, "claude-opus-4-20250514");
+    expect(headers?.["anthropic-beta"]).toBe("pdfs-2024-09-25");
+  });
+});
+
 describe("Anthropic cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(

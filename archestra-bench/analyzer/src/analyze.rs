@@ -6,13 +6,16 @@ use std::sync::Arc;
 
 use archestra_bench_core::Provider;
 use eyre::{Context, Result, bail, eyre};
-use nitpicker_agent::llm::Completion;
+use nitpicker_agent::llm::{Completion, FinishReason};
 use nitpicker_agent::prelude::*;
 use rig_core::completion::Message;
 
 use crate::runmeta::RolloutId;
 
-const MAP_MAX_TOKENS: u64 = 4096;
+/// Output budget for one map summary. A reasoning map model spends part of this on hidden thinking,
+/// so size it well above the prose a summary needs — a too-tight cap silently cuts the completion
+/// off mid-sentence (see `finalize_analysis`, which marks that case).
+const MAP_MAX_TOKENS: u64 = 8192;
 /// Hard cap on each per-rollout analysis so a runaway summary cannot blow the reducer's context.
 const MAP_ANALYSIS_CAP_CHARS: usize = 6000;
 /// Compact the reduce agent's context before it overruns the reduce model's window. nitpicker
@@ -67,6 +70,10 @@ pub fn build_map_prompt(rollout: &RolloutId, outcome_summary: &str, trajectory_m
          report, judging the product, attributing blame to a component, or proposing fixes — a later\n\
          repo-grounded phase does all of that and is far better informed than you are. It needs only\n\
          your short, factual observations, so do not speculate about causes or solutions.\n\
+         Record only what is observable: what the agent sent, what the tool or harness replied\n\
+         verbatim, and how many times it repeated. Do NOT name a culprit or invent a mechanism —\n\
+         write `submit_result rejected {{\"stars\":\"3864\"}} and the agent re-sent the identical\n\
+         value 3x`, never `the dispatcher stringified the number`.\n\
          Rollout: {rollout}\n\n\
          The benchmarked model is fixed and out of our control, so look at the agent's experience of\n\
          the loop and tools, not the model's raw intelligence. Tasks are often under-specified ON\n\
@@ -88,7 +95,9 @@ pub fn build_map_prompt(rollout: &RolloutId, outcome_summary: &str, trajectory_m
          tool publishes a generic object schema but enforces per-field types server-side, so a first\n\
          rejection of a stringified number/boolean is a harness schema-visibility quirk — note that it\n\
          happened, do not dramatize it as the agent being unable to type JSON.\n\n\
-         Keep it short: a handful of bullets, no fix proposals, no multi-section document, no tables.\n\n\
+         Keep it short — many of these summaries are concatenated into one reduce context, so each\n\
+         must stay small: at most ~6 bullets of one or two sentences, and a single line for a clean\n\
+         rollout. No fix proposals, no multi-section document, no tables.\n\n\
          {UNTRUSTED_BOUNDARY}\n\
          ----------------------------------------\n\
          Run summary: {outcome_summary}\n\n\
@@ -221,16 +230,43 @@ pub fn build_reduce_message(analyses_rel_path: &str, run_dir_rel: Option<&str>) 
     )
 }
 
-/// Assemble the document the reduce agent reads: metrics first, then per-rollout analyses in the
-/// caller-provided (deterministic) order.
-pub fn build_analyses_doc(metrics: &str, analyses: &[(RolloutId, String, String)]) -> String {
+/// Assemble the document the reduce agent reads: an optional pointer to the raw trajectories, then
+/// metrics, then per-rollout analyses in the caller-provided (deterministic) order. `trajectory_dir`
+/// is the run dir relative to the reduce agent's sandbox root; when present the header lets the agent
+/// open a rollout's raw `trajectory.md` to check any summary it doubts. Omitted when the run dir is
+/// unreachable from the sandbox (the agent could not open the files anyway).
+pub fn build_analyses_doc(
+    metrics: &str,
+    analyses: &[(RolloutId, String, String)],
+    trajectory_dir: Option<&str>,
+) -> String {
     let mut doc = String::new();
+    if let Some(dir) = trajectory_dir {
+        doc.push_str(&format!(
+            "> Raw rendered trajectory for every rollout below is at \
+             `{dir}/<env>/<task>__<lane>/trajectory.md` (the heading of each analysis is its \
+             `<env>/<task>__<lane>`). These summaries can be wrong — open the raw trajectory to \
+             confirm any surprising or self-contradictory claim before relying on it.\n\n"
+        ));
+    }
     doc.push_str(metrics);
     doc.push_str("\n\n# Per-trajectory analyses\n\n");
     for (id, outcome, analysis) in analyses {
         doc.push_str(&format!("## {id} — {outcome}\n\n{analysis}\n\n"));
     }
     doc
+}
+
+/// Cap the summary, then flag a model-side cut. A `MaxTokens` finish means the completion stopped
+/// mid-thought, leaving a half-sentence that *looks* complete; mark it so the reduce phase treats
+/// the summary as partial instead of trusting a truncated claim. Distinct from the length cap, which
+/// is our own deliberate trim of an over-long but complete answer.
+fn finalize_analysis(text: String, finish_reason: &FinishReason, cap: usize) -> String {
+    let mut analysis = truncate_chars(text, cap);
+    if *finish_reason == FinishReason::MaxTokens {
+        analysis.push_str("\n[INCOMPLETE — map model hit its output token cap; summary is cut off]");
+    }
+    analysis
 }
 
 fn truncate_chars(mut s: String, max: usize) -> String {
@@ -262,7 +298,11 @@ pub async fn map_one(
         additional_params: None,
     };
     let response = client.completion(completion).await?;
-    Ok(truncate_chars(response.text(), MAP_ANALYSIS_CAP_CHARS))
+    Ok(finalize_analysis(
+        response.text(),
+        &response.finish_reason,
+        MAP_ANALYSIS_CAP_CHARS,
+    ))
 }
 
 /// Reduce phase: write the analyses doc into a temp working dir under `explore_root` (so the
@@ -348,11 +388,35 @@ mod tests {
             (cid("basic", "a", "x"), "failed".into(), "first".into()),
             (cid("basic", "b", "y"), "passed".into(), "second".into()),
         ];
-        let doc = build_analyses_doc(metrics, &analyses);
+        let doc = build_analyses_doc(metrics, &analyses, None);
         let a = doc.find("first").unwrap();
         let b = doc.find("second").unwrap();
         assert!(a < b, "analyses must appear in provided order");
         assert!(doc.contains("## basic/a__x — failed"));
+        // Without a reachable trajectory dir the header pointer is omitted.
+        assert!(!doc.contains("trajectory.md"));
+    }
+
+    #[test]
+    fn analyses_doc_heads_with_trajectory_pointer_when_reachable() {
+        let analyses = vec![(cid("basic", "a", "x"), "failed".into(), "body".into())];
+        let doc = build_analyses_doc("## Run metrics\n", &analyses, Some("experiments/run-1"));
+        let ptr = doc
+            .find("experiments/run-1/<env>/<task>__<lane>/trajectory.md")
+            .expect("trajectory pointer present");
+        // The pointer must lead the document, before the metrics and analyses it annotates.
+        assert!(ptr < doc.find("Run metrics").unwrap());
+    }
+
+    #[test]
+    fn finalize_marks_a_token_capped_completion_but_not_a_clean_one() {
+        let clean = finalize_analysis("done".into(), &FinishReason::Stop, 6000);
+        assert_eq!(clean, "done");
+        let cut = finalize_analysis("half a thoug".into(), &FinishReason::MaxTokens, 6000);
+        assert!(cut.contains("[INCOMPLETE"), "token-capped summary must be flagged");
+        // The flag survives even when the body also overflows our own char cap.
+        let both = finalize_analysis("a".repeat(6100), &FinishReason::MaxTokens, 6000);
+        assert!(both.contains("[analysis truncated]") && both.contains("[INCOMPLETE"));
     }
 
     #[test]

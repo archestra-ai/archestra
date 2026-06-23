@@ -245,6 +245,7 @@ mod tests {
             stages: vec![Stage {
                 text: "go".to_string(),
                 files: vec![],
+                new_conversation: false,
             }],
             result_schema: serde_json::json!({"type": "object"}),
             verifier: Verifier {

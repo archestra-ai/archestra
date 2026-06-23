@@ -3,7 +3,7 @@ title: "Microsoft Entra ID SSO + OBO"
 category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Microsoft Entra ID — SSO sign-in plus On-Behalf-Of token exchange for downstream MCP tool calls"
-order: 7
+order: 8
 lastUpdated: 2026-05-07
 ---
 

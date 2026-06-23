@@ -2,7 +2,6 @@ import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deriveContextWindowState } from "./chat.hook";
 import { ChatProvider, useGlobalChat } from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
@@ -1201,102 +1200,6 @@ describe("context window breakdown state", () => {
 
     expect(sessionA.current?.contextWindow).toBeNull();
     expect(sessionB.current?.contextWindow).toBeNull();
-  });
-});
-
-describe("deriveContextWindowState", () => {
-  const baseBreakdown = {
-    provider: "anthropic",
-    model: "claude-sonnet-4-6",
-    contextLength: 200_000,
-    usedTokens: 84_200,
-    freeTokens: 115_800,
-    usedPercent: 42.1,
-    estimatedInputCostUsd: null,
-    segments: [],
-  };
-
-  it("returns all-null when session is null", () => {
-    expect(deriveContextWindowState(null)).toEqual({
-      tokensUsed: null,
-      maxTokens: null,
-      breakdown: null,
-    });
-  });
-
-  it("returns all-null when session is undefined", () => {
-    expect(deriveContextWindowState(undefined)).toEqual({
-      tokensUsed: null,
-      maxTokens: null,
-      breakdown: null,
-    });
-  });
-
-  it("uses contextTokensUsed as tokensUsed (estimate / usage priority)", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: 50_000,
-      tokenUsage: { inputTokens: 99, outputTokens: 10, totalTokens: 109 },
-      contextWindow: null,
-    });
-    expect(result.tokensUsed).toBe(50_000);
-  });
-
-  it("falls back to tokenUsage.totalTokens when contextTokensUsed is null", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: null,
-      tokenUsage: {
-        inputTokens: undefined,
-        outputTokens: 10,
-        totalTokens: 120,
-      },
-      contextWindow: null,
-    });
-    expect(result.tokensUsed).toBe(120);
-  });
-
-  it("returns null tokensUsed when both contextTokensUsed and tokenUsage are absent", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: null,
-      tokenUsage: null,
-      contextWindow: null,
-    });
-    expect(result.tokensUsed).toBeNull();
-  });
-
-  it("sources maxTokens from the breakdown contextLength", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: null,
-      tokenUsage: null,
-      contextWindow: baseBreakdown,
-    });
-    expect(result.maxTokens).toBe(200_000);
-  });
-
-  it("returns null maxTokens when breakdown contextLength is null", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: null,
-      tokenUsage: null,
-      contextWindow: { ...baseBreakdown, contextLength: null },
-    });
-    expect(result.maxTokens).toBeNull();
-  });
-
-  it("returns null maxTokens when breakdown is absent", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: 1000,
-      tokenUsage: null,
-      contextWindow: null,
-    });
-    expect(result.maxTokens).toBeNull();
-  });
-
-  it("passes the full breakdown through", () => {
-    const result = deriveContextWindowState({
-      contextTokensUsed: null,
-      tokenUsage: null,
-      contextWindow: baseBreakdown,
-    });
-    expect(result.breakdown).toEqual(baseBreakdown);
   });
 });
 

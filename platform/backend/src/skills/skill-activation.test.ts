@@ -1,4 +1,13 @@
-import { buildUserSystemPromptContext } from "@archestra/shared";
+import {
+  buildUserSystemPromptContext,
+  getArchestraToolFullName,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
+} from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import {
   buildSkillActivationPromptContext,
@@ -85,10 +94,18 @@ describe("formatSkillActivation", () => {
       canRunSandbox: true,
     });
 
-    expect(result).toContain("load_skill");
-    expect(result).toContain("run_command");
-    expect(result).toContain("download_file");
-    expect(result).toContain("upload_file");
+    expect(result).toContain(
+      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME),
+    );
+    expect(result).toContain(
+      archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME),
+    );
+    expect(result).toContain(
+      archestraMcpBranding.getToolName(TOOL_DOWNLOAD_FILE_SHORT_NAME),
+    );
+    expect(result).toContain(
+      archestraMcpBranding.getToolName(TOOL_UPLOAD_FILE_SHORT_NAME),
+    );
     // nudge to use the skill's own modules instead of re-implementing them.
     expect(result).toContain("before re-implementing");
     expect(result).not.toMatch(/not executed/i);
@@ -107,10 +124,54 @@ describe("formatSkillActivation", () => {
       canRunSandbox: false,
     });
 
-    expect(result).toContain("load_skill");
+    expect(result).toContain(
+      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME),
+    );
     expect(result).not.toContain("run_command");
     expect(result).not.toContain("download_file");
     expect(result).not.toContain("upload_file");
+  });
+
+  test("renders the white-labeled tool prefix, not the default", async () => {
+    const originalWhiteLabeling = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+
+    try {
+      const result = formatSkillActivation({
+        skill: {
+          name: "Research",
+          content: "Body",
+          compatibility: null,
+          allowedTools: null,
+          templated: false,
+        },
+        files: [{ path: "scripts/run.py", kind: "script" }],
+        canRunSandbox: true,
+      });
+
+      const brandedRunCommand = getArchestraToolFullName(
+        TOOL_RUN_COMMAND_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+      expect(brandedRunCommand).not.toBe(
+        getArchestraToolFullName(TOOL_RUN_COMMAND_SHORT_NAME),
+      );
+      expect(result).toContain(brandedRunCommand);
+      expect(result).not.toContain(
+        getArchestraToolFullName(TOOL_RUN_COMMAND_SHORT_NAME),
+      );
+    } finally {
+      archestraMcpBranding.syncFromOrganization(null);
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = originalWhiteLabeling;
+    }
   });
 
   test("omits sandbox guidance when the skill has no resource files", () => {

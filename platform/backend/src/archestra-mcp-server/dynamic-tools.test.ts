@@ -2,6 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
@@ -299,6 +300,49 @@ describe("isDynamicallyAvailableArchestraTool", () => {
       });
 
       expect(available).toBe(false);
+    });
+
+    test("a persistent-files tool is available when both the runtime and Projects features are on", async () => {
+      const available = await isDynamicallyAvailableArchestraTool({
+        toolName: TOOL_READ_FILE_FULL_NAME,
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+
+      expect(available).toBe(true);
+    });
+
+    test("a persistent-files tool is unavailable when the Projects feature is off, even with the runtime on", async () => {
+      const originalProjects = config.projects.enabled;
+      (config.projects as { enabled: boolean }).enabled = false;
+      try {
+        const available = await isDynamicallyAvailableArchestraTool({
+          toolName: TOOL_READ_FILE_FULL_NAME,
+          agentId: agent.id,
+          userId,
+          organizationId,
+        });
+        expect(available).toBe(false);
+      } finally {
+        (config.projects as { enabled: boolean }).enabled = originalProjects;
+      }
+    });
+
+    test("a sandbox runtime tool stays available when the Projects feature is off", async () => {
+      const originalProjects = config.projects.enabled;
+      (config.projects as { enabled: boolean }).enabled = false;
+      try {
+        const available = await isDynamicallyAvailableArchestraTool({
+          toolName: TOOL_RUN_COMMAND_FULL_NAME,
+          agentId: agent.id,
+          userId,
+          organizationId,
+        });
+        expect(available).toBe(true);
+      } finally {
+        (config.projects as { enabled: boolean }).enabled = originalProjects;
+      }
     });
   });
 

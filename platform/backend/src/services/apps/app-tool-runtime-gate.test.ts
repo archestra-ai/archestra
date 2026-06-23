@@ -1,10 +1,15 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  type ArchestraToolShortName,
   CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
@@ -128,15 +133,28 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     makeTool,
     makeAppTool,
   });
-  const management = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-    toolInput: {},
-    ...BASE,
-  });
-  expect(management.allowed).toBe(false);
+  // Every authoring/management tool is rejected from the app surface — only the
+  // reserved app built-ins below are dispatchable as an app.
+  const authoringTools: ArchestraToolShortName[] = [
+    TOOL_SCAFFOLD_APP_SHORT_NAME,
+    TOOL_REFINE_APP_SHORT_NAME,
+    TOOL_EDIT_APP_SHORT_NAME,
+    TOOL_VALIDATE_APP_SHORT_NAME,
+    TOOL_PUBLISH_APP_SHORT_NAME,
+  ];
+  for (const shortName of authoringTools) {
+    const management = await gateAppToolCall({
+      appId,
+      organizationId,
+      userId,
+      toolName: getArchestraToolFullName(shortName),
+      toolInput: {},
+      ...BASE,
+    });
+    expect(management.allowed, `${shortName} must not be app-callable`).toBe(
+      false,
+    );
+  }
 
   const dataStore = await gateAppToolCall({
     appId,

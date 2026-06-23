@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
   getArchestraAppResourceUri,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -17,6 +18,10 @@ import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { AppDataModel, TeamTokenModel, UserTokenModel } from "@/models";
+import {
+  appConnectorAudienceRef,
+  buildConnectorResourceUri,
+} from "@/services/apps/app-connector-resource";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
@@ -104,6 +109,20 @@ const JSON_RPC_HEADERS = {
   "content-type": "application/json",
   accept: "application/json, text/event-stream",
 };
+
+// The OAuth path validates the token's audience against the connector URI the
+// route derives from the request origin, so pin the host and bind tokens to the
+// matching canonical URI.
+const bearerLocal = (token: string) => ({
+  ...bearer(token),
+  host: "localhost",
+});
+const sha256 = (value: string) =>
+  createHash("sha256").update(value).digest("base64url");
+const connectorRef = (appId: string) =>
+  appConnectorAudienceRef(
+    buildConnectorResourceUri("http://localhost", appId) as string,
+  );
 
 describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
   let app: FastifyInstance;
@@ -278,7 +297,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
   });
 
   // An app runtime has no agentId, so the agent-assignment check is skipped;
-  // dispatch must still refuse Archestra management tools (create_app, …) even
+  // dispatch must still refuse Archestra management tools (scaffold_app, …) even
   // when the session user has RBAC for them.
   test("refuses a non-data Archestra management tool from the app runtime", async ({
     makeApp,
@@ -298,8 +317,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         jsonrpc: "2.0",
         method: "tools/call",
         params: {
-          name: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
-          arguments: { name: "Sneaky", html: "<p/>", scope: "org" },
+          name: getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+          arguments: { name: "Sneaky", scope: "org" },
         },
         id: 1,
       },
@@ -364,11 +383,13 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // the stored HTML and the per-viewer context, and served its output back.
     expect(content.text).toContain("<h1>hello app</h1>");
     expect(content.text.startsWith("<!--app-envelope-->")).toBe(true);
+    // Session (Archestra's own) render links the assets — no inline bundle.
     expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
       "<h1>hello app</h1>",
       expect.stringContaining(`"id":"${user.id}"`),
       expect.any(String),
       expect.any(String),
+      undefined,
     );
     expect(content.mimeType).toContain("text/html");
   });
@@ -632,6 +653,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
 
     expect(response.statusCode).toBe(401);
+    // No valid token → RFC 9728 challenge so the client can discover the AS.
+    expect(response.headers["www-authenticate"]).toContain("resource_metadata");
   });
 
   test("a user token cannot reach an app its viewer may not see", async ({
@@ -683,5 +706,280 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
     (config.apps as { enabled: boolean }).enabled = true;
     expect(response.statusCode).toBe(404);
+  });
+
+  test("accepts an audience-bound OAuth token and hides llm_complete from the model", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const tools = response.json().result.tools as Array<{
+      name: string;
+      _meta?: { ui?: { visibility?: string[] } };
+    }>;
+    expect(tools.map((t) => t.name)).toContain("open");
+    // The runtime LLM completion stays listed but app-only, so a foreign host's
+    // model can't invoke it; the data store stays model-visible.
+    const llm = tools.find((t) => t.name === "archestra__llm_complete");
+    expect(llm?._meta?.ui?.visibility).toEqual(["app"]);
+    const dataGet = tools.find((t) => t.name === "archestra__app_data_get");
+    expect(dataGet).toBeDefined();
+    expect(dataGet?._meta?.ui?.visibility).not.toEqual(["app"]);
+  });
+
+  test("resources/read over a bearer connection serves a self-contained resource", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    vi.mocked(prepareAppEnvelope).mockClear();
+    const created = await makeApp({ html: "<h1>hello app</h1>" });
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/read",
+        params: { uri: getArchestraAppResourceUri(created.id) },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // An external (bearer) render must inline the assets — no cross-origin
+    // subresource a strict host CSP would refuse. The envelope is invoked with
+    // the inline asset bytes and a null sdkUrl (the SDK reads an inlined global,
+    // never fetches it).
+    expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
+      "<h1>hello app</h1>",
+      expect.stringContaining('"sdkUrl":null'),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        extAppsGlobal: expect.stringContaining("__ARCHESTRA_EXT_APPS__"),
+        shim: expect.any(String),
+        baseCss: expect.any(String),
+      }),
+    );
+  });
+
+  test("rejects an OAuth token bound to another app's connector (wrong audience)", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const otherApp = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(otherApp.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain("resource_metadata");
+  });
+
+  test("rejects an unbound OAuth token (no audience)", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("rejects an audience-bound OAuth token lacking the mcp scope", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    // Correctly audience-bound to this connector, but consented only to a lesser
+    // scope — audience binding is not consent, so the connector must reject it.
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["openid", "profile"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toContain("resource_metadata");
+  });
+
+  test("rejects an expired audience-bound OAuth token", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("rejects an audience-bound OAuth token whose refresh token was revoked", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthRefreshToken,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const refresh = await makeOAuthRefreshToken(client.clientId, user.id, {
+      revoked: new Date(),
+    });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+      refreshId: refresh.id,
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("rejects an audience-bound OAuth token whose viewer is not a member of the app's org", async ({
+    makeApp,
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const created = await makeApp();
+    // A valid, correctly-bound token, but the viewer never joined the app's org.
+    const outsider = await makeUser();
+    const client = await makeOAuthClient({ userId: outsider.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, outsider.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: bearerLocal(rawToken),
+      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+    });
+
+    expect(response.statusCode).toBe(401);
   });
 });

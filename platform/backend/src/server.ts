@@ -373,6 +373,13 @@ export const createFastifyInstance = () =>
     disableRequestLogging: true,
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
+    // Some path params are opaque, base64url-encoded handles longer than
+    // Fastify's 100-char default (e.g. skill-sandbox artifact `obj_` refs that
+    // encode a scope + object key). Without this, such a request fails to match
+    // its route and falls through to the auth hook, surfacing as a 403.
+    routerOptions: {
+      maxParamLength: 4096,
+    },
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)

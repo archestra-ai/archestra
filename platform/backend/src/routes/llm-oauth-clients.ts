@@ -13,6 +13,7 @@ import {
 import {
   ApiError,
   constructResponseSchema,
+  LlmOauthClientGrantTypeSchema,
   LlmOauthClientSchema,
   LlmOauthClientWithSecretSchema,
 } from "@/types";
@@ -22,13 +23,57 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
   providerApiKeyId: z.string().uuid(),
 });
 
-const CreateLlmOauthClientBodySchema = z.object({
-  name: z.string().min(1).max(256),
-  allowedLlmProxyIds: z.array(z.string().uuid()).min(1),
-  providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).min(1),
-});
+/**
+ * Both grant types share one body shape. `grantType` defaults to
+ * `client_credentials` so existing callers keep working unchanged.
+ * - client_credentials: requires `allowedLlmProxyIds` (the sole authority) and
+ *   `providerApiKeys`; `redirectUris` is ignored.
+ * - authorization_code: requires `redirectUris`. `allowedLlmProxyIds` is optional
+ *   here and acts as an additive, admin-controlled grant (users who authenticate
+ *   through the client may reach those proxies on top of their own RBAC).
+ *   `providerApiKeys` never apply — the acting user's own keys resolve at call
+ *   time.
+ */
+const LlmOauthClientBodySchema = z
+  .object({
+    name: z.string().min(1).max(256),
+    grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
+    allowedLlmProxyIds: z.array(z.string().uuid()).optional(),
+    providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
+    redirectUris: z.array(z.string().url()).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.grantType === "authorization_code") {
+      if (!value.redirectUris || value.redirectUris.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["redirectUris"],
+          message:
+            "At least one redirect URI is required for authorization_code clients",
+        });
+      }
+      return;
+    }
+    if (!value.allowedLlmProxyIds || value.allowedLlmProxyIds.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["allowedLlmProxyIds"],
+        message:
+          "At least one LLM proxy is required for client_credentials clients",
+      });
+    }
+    if (!value.providerApiKeys || value.providerApiKeys.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["providerApiKeys"],
+        message:
+          "At least one provider API key is required for client_credentials clients",
+      });
+    }
+  });
 
-const UpdateLlmOauthClientBodySchema = CreateLlmOauthClientBodySchema;
+const CreateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
+const UpdateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
 
 const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -68,12 +113,22 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      await validateLlmOauthClientConfig({ ...body, organizationId });
+      await validateLlmOauthClientConfig({
+        organizationId,
+        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
+        // provider keys only apply to client_credentials clients.
+        providerApiKeys:
+          body.grantType === "client_credentials"
+            ? (body.providerApiKeys ?? [])
+            : [],
+      });
       const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
+        grantType: body.grantType,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         providerApiKeys: body.providerApiKeys,
+        redirectUris: body.redirectUris,
       });
       return reply.send({ ...oauthClient, clientSecret });
     },
@@ -92,13 +147,22 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId }, reply) => {
-      await validateLlmOauthClientConfig({ ...body, organizationId });
+      await validateLlmOauthClientConfig({
+        organizationId,
+        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
+        // provider keys only apply to client_credentials clients.
+        providerApiKeys:
+          body.grantType === "client_credentials"
+            ? (body.providerApiKeys ?? [])
+            : [],
+      });
       const oauthClient = await LlmOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
         allowedLlmProxyIds: body.allowedLlmProxyIds,
         providerApiKeys: body.providerApiKeys,
+        redirectUris: body.redirectUris,
       });
       if (!oauthClient) {
         throw new ApiError(404, "LLM OAuth client not found");

@@ -7,7 +7,11 @@ import {
   predefinedPermissionsMap,
   requiredEndpointPermissionsMap,
 } from "./access-control";
-import { internalResources, type Resource } from "./permission.types";
+import {
+  type Action,
+  internalResources,
+  type Resource,
+} from "./permission.types";
 import { ADMIN_ROLE_NAME } from "./roles";
 import { RouteId } from "./routes";
 
@@ -92,6 +96,44 @@ describe("access-control", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
       expect(required?.sandbox).toContain("execute");
+    });
+  });
+
+  describe("MCP server re-authentication route", () => {
+    // Returns true when `rolePermissions` covers every resource:action pair the
+    // route's RBAC middleware gate demands. Mirrors what hasPermission() does
+    // for the requiredEndpointPermissionsMap entry before the handler runs.
+    const roleSatisfiesRoute = (
+      rolePermissions: Partial<Record<Resource, Action[]>>,
+      routeId: RouteId,
+    ): boolean => {
+      const required = requiredEndpointPermissionsMap[routeId] ?? {};
+      return Object.entries(required).every(([resource, actions]) =>
+        (actions as Action[]).every((action) =>
+          rolePermissions[resource as Resource]?.includes(action),
+        ),
+      );
+    };
+
+    // Re-authentication re-supplies credentials for a connection the caller can
+    // already install — it must not demand a stricter permission than install.
+    // The handler's own gate (mcp-server.ts) only requires mcpServerInstallation
+    // :create and then does scope-aware authorization; if the middleware gate
+    // asks for :update instead, members who installed a connection hit a bare
+    // 403 the moment their OAuth token expires and they try to re-authenticate.
+    test("requires the same install permission as InstallMcpServer", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.ReauthenticateMcpServer],
+      ).toEqual(requiredEndpointPermissionsMap[RouteId.InstallMcpServer]);
+    });
+
+    test("is satisfiable by the member role (members can install)", () => {
+      // Members can install (and therefore own) connections...
+      expect(memberPermissions.mcpServerInstallation).toContain("create");
+      // ...so the middleware gate must let them reach the re-auth handler.
+      expect(
+        roleSatisfiesRoute(memberPermissions, RouteId.ReauthenticateMcpServer),
+      ).toBe(true);
     });
   });
 });

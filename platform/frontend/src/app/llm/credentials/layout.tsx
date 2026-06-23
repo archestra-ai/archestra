@@ -24,7 +24,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/llm/credentials/oauth-clients": {
     title: "OAuth Clients",
     description:
-      "Register backend services and bots that authenticate to the Model Router with OAuth client credentials",
+      "Register applications that authenticate to LLM proxies with OAuth — as an application (client credentials) or on behalf of users (authorization code)",
   },
 };
 

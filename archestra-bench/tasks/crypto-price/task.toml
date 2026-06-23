@@ -1,5 +1,5 @@
 [[stages]]
-text = """From Yahoo Finance, take the USD price of Bitcoin (ticker BTC-USD) and Solana (ticker SOL-USD) at exactly 2026-06-01 16:00:00 UTC -- the Close of that 1-hour candle for each. Report how many SOL one BTC was worth at that moment: the BTC price divided by the SOL price. Submit your answer with result = {"btc_sol_ratio": <number>}."""
+text = """From Yahoo Finance, take the USD price of Bitcoin and Solana at 2026-06-01 16:00 UTC -- the Close of that 1-hour candle for each. Report how many SOL one BTC was worth at that moment: the Bitcoin price divided by the Solana price. Submit your answer with result = {"btc_sol_ratio": <number>}."""
 
 [result_schema]
 type = "object"

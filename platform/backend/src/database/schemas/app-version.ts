@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AppSpec } from "@/types/app-spec";
 import appsTable from "./app";
 
 /**
@@ -40,6 +41,11 @@ const appVersionsTable = pgTable(
     uiPermissions: jsonb("ui_permissions").$type<McpUiResourcePermissions>(),
     /** sha256 of the canonical payload (html + permissions); suppresses no-op forks. */
     contentHash: text("content_hash").notNull(),
+    /**
+     * Snapshot of the app's spec when this html was forked (null for legacy or
+     * spec-less forks). Provenance only — not part of `contentHash`.
+     */
+    spec: jsonb("spec").$type<AppSpec>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

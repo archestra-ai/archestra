@@ -279,13 +279,41 @@ describe("applyPromptCacheBreakpoints", () => {
     });
   });
 
-  it("uses a 1h TTL for a Bedrock Sonnet 4.5+ inference profile", () => {
+  it("uses a 1h TTL for Bedrock Claude 4.5 inference profiles", () => {
     const [result] = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      model: "us.anthropic.claude-opus-4-5-20251101-v1:0",
+      messages: [userMessage("a")],
+    });
+    expect(bedrockCachePoint(result)).toEqual({ type: "default", ttl: "1h" });
+  });
+
+  it("keeps the 5m default for Bedrock Claude 4.6 inference profiles", () => {
+    const [opus46] = applyPromptCacheBreakpoints({
       provider: "bedrock",
       model: "us.anthropic.claude-opus-4-6-v1:0",
       messages: [userMessage("a")],
     });
-    expect(bedrockCachePoint(result)).toEqual({ type: "default", ttl: "1h" });
+    expect(bedrockCachePoint(opus46)).toEqual({ type: "default" });
+
+    const [sonnet46] = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      model: "global.anthropic.claude-sonnet-4-6-v1:0",
+      messages: [userMessage("a")],
+    });
+    expect(bedrockCachePoint(sonnet46)).toEqual({ type: "default" });
+  });
+
+  it("uses a 1h TTL for Anthropic Claude 4.6 models", () => {
+    const [result] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(result)).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
   });
 
   it("keeps the 5m default for older models and when model is absent", () => {

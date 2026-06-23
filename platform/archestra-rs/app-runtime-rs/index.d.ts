@@ -34,6 +34,24 @@ export declare function escapeAngleBrackets(text: string): string
  */
 export declare function formatDiagnosticEntryLines(entries: Array<AppDiagnosticEntry>, maxEntries: number, maxMessageLen: number): string
 
+/**
+ * Trusted, platform-built assets the connector embeds directly into the
+ * resource when serving a strict foreign host (claude.ai) whose sandbox CSP
+ * refuses cross-origin `<script src>`/`<link href>`. Omitted keeps the linked
+ * form (Archestra's own render).
+ */
+export interface InlineAssets {
+  /**
+   * ext-apps guest bundle as an IIFE publishing the View SDK on
+   * `window.__ARCHESTRA_EXT_APPS__`.
+   */
+  extAppsGlobal: string
+  /** The Apps SDK microframework (same bytes served at the SDK path). */
+  shim: string
+  /** The platform baseline stylesheet (same bytes served at the CSS path). */
+  baseCss: string
+}
+
 /** Union and dedup two already-capped entry lists, capping the total. */
 export declare function mergeDiagnosticEntries(existing: Array<AppDiagnosticEntry>, incoming: Array<AppDiagnosticEntry>, maxEntries: number, dedupPrefixLen: number): Array<AppDiagnosticEntry>
 
@@ -43,10 +61,12 @@ export declare function mergeDiagnosticEntries(existing: Array<AppDiagnosticEntr
  * per-viewer context (identity + assigned-tool descriptors). `baseOrigin`
  * prefixes the served asset URLs so they resolve in a foreign host's
  * opaque-origin iframe (empty keeps them path-relative); `csp` is the pinned
- * Content-Security-Policy injected as a `<meta>` (empty omits it). See the core
- * crate for the trust boundary on these inputs.
+ * Content-Security-Policy injected as a `<meta>` (empty omits it). When
+ * `inlineAssets` is provided the stylesheet and SDK are embedded in the
+ * document instead of linked (`baseOrigin` is then unused for assets). See the
+ * core crate for the trust boundary on these inputs.
  */
-export declare function prepareAppEnvelope(html: string, contextJson: string, baseOrigin: string, csp: string): string
+export declare function prepareAppEnvelope(html: string, contextJson: string, baseOrigin: string, csp: string, inlineAssets?: InlineAssets | undefined | null): string
 
 /**
  * Scan authored app HTML for save-time policy violations. Returns a rejection

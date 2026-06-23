@@ -1,8 +1,4 @@
-import {
-  type ChatMessage,
-  ChatMessageMetadataSchema,
-  type ChatMessagePart,
-} from "@archestra/shared";
+import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
 import config from "@/config";
 import {
   DIAGNOSTICS_BLOCK_CLOSE,
@@ -10,6 +6,7 @@ import {
   DIAGNOSTICS_UNTRUSTED_PREAMBLE,
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
+import { spliceText } from "./augment-last-user-message";
 
 // Per-message cap on how many apps' diagnostics ride one attachment (the
 // per-app entry cap + sanitization live in the shared formatter).
@@ -22,7 +19,7 @@ const UUID_PATTERN =
  * When the last user message carries `metadata.appDiagnostics` (runtime
  * errors / CSP violations the chat UI captured from owned MCP App renders),
  * append a clearly-delimited, explicitly-untrusted diagnostics block to that
- * message's text so the model can fix the app via `update_app` without the
+ * message's text so the model can fix the app via `edit_app` without the
  * user pasting errors by hand.
  *
  * Mirrors `injectSkillActivation`: returns a shallow copy for the LLM; the
@@ -73,24 +70,6 @@ export async function injectAppDiagnostics(
   ].join("\n");
 
   const next = [...messages];
-  next[lastUserIndex] = appendText(userMessage, block);
+  next[lastUserIndex] = spliceText(userMessage, block, "append");
   return next;
-}
-
-/** Append `block` to the message's last text part (adding one if absent). */
-function appendText(message: ChatMessage, block: string): ChatMessage {
-  const parts: ChatMessagePart[] = message.parts ? [...message.parts] : [];
-  const textIndex = parts.findLastIndex((part) => part.type === "text");
-
-  if (textIndex === -1) {
-    return { ...message, parts: [...parts, { type: "text", text: block }] };
-  }
-
-  const textPart = parts[textIndex];
-  const existing = typeof textPart.text === "string" ? textPart.text : "";
-  parts[textIndex] = {
-    ...textPart,
-    text: existing ? `${existing}\n\n${block}` : block,
-  };
-  return { ...message, parts };
 }

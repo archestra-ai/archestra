@@ -76,6 +76,46 @@ the run's ordered tool calls (`{name, input}`), so the isolated verifier can ass
 runtime placeholders `{{cell}}` (a per-cell unique slug, so mutating tasks don't collide across a
 multi-model matrix on one backend) and `{{agent_id}}`, substituted at run time.
 
+### Feature coverage
+
+Which Archestra capability each task is built to exercise. A task usually leans on one or two as its
+*point*; the table marks those, not every tool it might incidentally touch.
+
+| Task | Env | Sandbox | File in | File out | Skills | Web/live | Adversarial | State/persist |
+|------|-----|:-------:|:-------:|:--------:|:------:|:--------:|:-----------:|:-------------:|
+| `pi-gif-zip` | basic | ✓ | | ✓ | | | | |
+| `crypto-price` | basic | ✓ | | | | ✓ | | |
+| `median-salary` | basic | | | | | | trap | |
+| `nitpicker-version` | basic | | | | | ✓ | | |
+| `github-stars` | basic | ✓ | | | | ✓ | | |
+| `lena-png-size` | basic | ✓ | | | | ✓ | | |
+| `sqlite-orders` | basic | ✓ | ✓ | | | | | |
+| `cv-shortlist` | basic | ✓ | ✓ | | | | inj | |
+| `invoice-approval` | basic | ✓ | ✓ | | | | inj | |
+| `ai-sre-fk-drain` | basic | ✓ | ✓ | | | | trap | |
+| `ai-sre-cache-treadmill` | basic | ✓ | ✓ | | | | trap | |
+| `decode-cipher` | basic | ✓ | | | use | | | |
+| `xlsx-live-formulas` | basic | ✓ | | ✓ | use | | | |
+| `purchase-ledger` | basic | ✓ | | | | | trap | persist |
+| `author-skill` | archestra-api | ✓ | | | author | | | state |
+| `letter-count` | archestra-api | | | | | | | state |
+
+- **Sandbox** — needs code execution in the per-conversation sandbox.
+- **File in** — a file is staged into the sandbox as an attachment (PDF/DOCX/XLSX/SQLite/zip); the task
+  exercises reading non-text formats.
+- **File out** — the deliverable is a file the agent exports via `download_file` (graded as `BENCH_OUTPUT`).
+- **Skills** — `use`: a pinned skill gates the task (`decode-cipher` → cipher-decoder, `xlsx-live-formulas`
+  → sales-ledger); `author`: the task authors a skill.
+- **Web/live** — requires fetching live data off the box (a web page / public API).
+- **Adversarial** — the inputs contain a trap. `inj`: real embedded prompt-injection payloads the agent
+  must resist; `trap`: non-injection distractors (red-herring log lines, malformed/mixed rows) it must
+  not be fooled by.
+- **State/persist** — `state`: graded via the `[state].rest` backend snapshot (what the agent *did* to
+  Archestra); `persist`: a file carried across a `new_conversation` boundary via persistent storage.
+
+The three seeded remote MCP servers (DeepWiki, Microsoft Learn, Context7) are surface **distractors** —
+no task requires them, so MCP tool-use is not a graded capability here.
+
 ## Environments
 
 An environment is one `envs/<id>.toml` declaring `id` / `name`, an `[agent]` (name + system prompt),

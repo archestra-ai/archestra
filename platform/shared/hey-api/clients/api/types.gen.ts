@@ -53669,6 +53669,7 @@ export type GetProjectsResponses = {
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        pinnedAt: string | null;
         createdAt: string;
     }>;
 };
@@ -53763,6 +53764,7 @@ export type CreateProjectResponses = {
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        pinnedAt: string | null;
         createdAt: string;
     };
 };
@@ -53940,6 +53942,7 @@ export type GetProjectResponses = {
         isOwner: boolean;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;
     };
@@ -54308,6 +54311,176 @@ export type GetProjectConversationsResponses = {
 };
 
 export type GetProjectConversationsResponse = GetProjectConversationsResponses[keyof GetProjectConversationsResponses];
+
+export type UnpinProjectData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/pin';
+};
+
+export type UnpinProjectErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnpinProjectError = UnpinProjectErrors[keyof UnpinProjectErrors];
+
+export type UnpinProjectResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type UnpinProjectResponse = UnpinProjectResponses[keyof UnpinProjectResponses];
+
+export type PinProjectData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/pin';
+};
+
+export type PinProjectErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PinProjectError = PinProjectErrors[keyof PinProjectErrors];
+
+export type PinProjectResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
 
 export type GetScheduleTriggersData = {
     body?: never;

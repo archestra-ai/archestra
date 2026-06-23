@@ -689,6 +689,7 @@ export async function getChatMcpTools({
   blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
+  repeatTracker,
 }: {
   agentName: string;
   agentId: string;
@@ -727,6 +728,14 @@ export async function getChatMcpTools({
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Per-run repeated-tool-call tracker. Run entrypoints that own a `stopWhen`
+   * pass their own instance so the breaker records into the same tracker the
+   * run's `repeatCeilingStopCondition` reads (single source of truth). Callers
+   * with no stream (e.g. the tool-listing endpoint) and tests omit it and get a
+   * fresh internal tracker.
+   */
+  repeatTracker?: ToolCallRepeatTracker;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
@@ -742,8 +751,10 @@ export async function getChatMcpTools({
     // once per run, and every wrapper reads the tracker through this context.
     // Best-effort under concurrency: two overlapping no-abortSignal runs on the
     // same scope share this context, so a reset can clear the other's in-flight
-    // streak — fail-open (the breaker under-fires, never falsely fires).
-    cached.context.repeatTracker = new ToolCallRepeatTracker();
+    // streak — fail-open (the breaker under-fires, never falsely fires). When the
+    // caller owns the tracker, bind that instance so its stop condition reads the
+    // same streak the breaker records into.
+    cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
     logger.info(
       {
         agentId,
@@ -863,9 +874,10 @@ export async function getChatMcpTools({
       considerContextUntrusted,
       teams,
       userTeams,
-      // One tracker per run. On a cache hit the cached context's tracker is
-      // reset (see above) so repeat counts never carry across runs.
-      repeatTracker: new ToolCallRepeatTracker(),
+      // One tracker per run: the caller's instance when it owns a stop policy,
+      // otherwise a fresh one. On a cache hit it is rebound (see above) so
+      // repeat counts never carry across runs.
+      repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
     };
     const aiTools: Record<string, Tool> = {};
 

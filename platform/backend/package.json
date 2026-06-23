@@ -114,7 +114,7 @@
     "cheerio": "^1.2.0",
     "confluence.js": "^2.1.0",
     "croner": "^10.0.1",
-    "dompurify": "^3.4.0",
+    "dompurify": "^3.4.10",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.2",

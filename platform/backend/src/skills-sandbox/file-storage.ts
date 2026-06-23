@@ -15,9 +15,20 @@ import { resolveWithinRoot, safeSegment, UnsafePathError } from "./file-path";
  * inline (`db`) case and the row's external store.
  */
 
-/** The owner namespace an object belongs to; `label` is its human folder/prefix. */
+/**
+ * The owner namespace an object belongs to; `label` is its human folder/prefix.
+ * A user's no-project files are nested one level deeper by `conversationId`
+ * (`<email>/<conversationId>/<filename>`), so each conversation has its own
+ * folder and two conversations may reuse a filename. `conversationId` is null
+ * for a headless (no-conversation) write, which falls back to `<email>/<filename>`.
+ */
 export type OwnerScope =
-  | { kind: "user"; userId: string; label: string }
+  | {
+      kind: "user";
+      userId: string;
+      label: string;
+      conversationId: string | null;
+    }
   | { kind: "project"; projectId: string; label: string };
 
 /** An object a backend holds — may or may not have a `files` row behind it. */
@@ -108,8 +119,22 @@ export async function deleteRowBytes(blob: {
 // === internal ===
 
 /**
- * Bytes on a mounted filesystem, laid out `<root>/<label>/<name>` (the label is
- * the owner's email or project name). Writes are atomic + exclusive (temp file +
+ * The relative folder an owner scope's objects live under (each segment validated
+ * by {@link safeSegment}): `<email>/<conversationId>` for a user's no-project
+ * conversation files, `<email>` for a headless (no-conversation) user write, and
+ * `<project-slug>` for project files.
+ */
+function scopeFolder(scope: OwnerScope): string {
+  const owner = safeSegment(scope.label);
+  if (scope.kind === "user" && scope.conversationId) {
+    return `${owner}/${safeSegment(scope.conversationId)}`;
+  }
+  return owner;
+}
+
+/**
+ * Bytes on a mounted filesystem, laid out `<root>/<folder>/<name>` (the folder is
+ * the owner's email — optionally `/conversationId` — or project slug). Writes are atomic + exclusive (temp file +
  * `link`), reads refuse symlinks (`O_NOFOLLOW`), and every path is confined to
  * the root.
  *
@@ -125,10 +150,10 @@ export class FilesystemObjectStore implements EnumerableObjectStore {
     overwrite?: boolean;
   }): Promise<{ key: string }> {
     const root = this.getRoot();
-    const folder = safeSegment(params.scope.label);
+    const folder = scopeFolder(params.scope);
     const filename = safeSegment(params.name);
     const key = `${folder}/${filename}`;
-    const finalPath = resolveWithinRoot(root, folder, filename);
+    const finalPath = resolveWithinRoot(root, ...folder.split("/"), filename);
     const dir = path.dirname(finalPath);
     await fs.mkdir(dir, { recursive: true });
     // the owner folder itself must not be a symlink escaping the root.
@@ -206,11 +231,11 @@ export class FilesystemObjectStore implements EnumerableObjectStore {
     const root = this.getRoot();
     let folder: string;
     try {
-      folder = safeSegment(scope.label);
+      folder = scopeFolder(scope);
     } catch {
       return [];
     }
-    const dir = resolveWithinRoot(root, folder);
+    const dir = resolveWithinRoot(root, ...folder.split("/"));
     try {
       await this.assertRealWithinRoot(root, dir);
     } catch {

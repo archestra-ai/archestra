@@ -1681,17 +1681,68 @@ class ToolModel {
     return row?.tool ?? null;
   }
 
-  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  /**
+   * Whether a tool belongs to (is assignable/callable within) `environmentId`,
+   * reusing the canonical {@link toolInEnvironmentPredicate} so the app
+   * assignment fence and call-time fence never drift from the agent isolation
+   * rules: null = org default, and the built-in Archestra/Playwright catalogs
+   * plus delegation tools are exempt.
+   */
+  static async isToolInEnvironment(
+    toolId: string,
+    environmentId: string | null,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.id, toolId),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Of `toolIds`, the subset that belongs to `environmentId` — the batch form of
+   * {@link isToolInEnvironment}, used to trim an app's runtime tool list to its
+   * bound environment (UX hygiene; the call-time gate is the hard fence).
+   */
+  static async filterToolIdsInEnvironment(
+    toolIds: string[],
+    environmentId: string | null,
+  ): Promise<Set<string>> {
+    if (toolIds.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, toolIds),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
+   * App-owner counterpart of {@link getMcpToolsAssignedToAgent}. Includes the
+   * tool `id` so the runtime gate can apply the environment fence
+   * ({@link isToolInEnvironment}) against the resolved tool.
+   */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
     appId: string,
-  ): Promise<McpToolAssignment[]> {
+  ): Promise<(McpToolAssignment & { id: string })[]> {
     if (toolNames.length === 0) {
       return [];
     }
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
@@ -1726,6 +1777,7 @@ class ToolModel {
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
@@ -1756,6 +1808,30 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /**
+   * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
+   * Powers the server-scoped Apps run path: building `tools/list` and gating
+   * `tools/call` on `_meta.ui.visibility`.
+   */
+  static async findByCatalogIdWithMeta(catalogId: string): Promise<
+    Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown> | undefined;
+      meta: Record<string, unknown> | null;
+    }>
+  > {
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;

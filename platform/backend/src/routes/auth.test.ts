@@ -4,9 +4,11 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
+import db, { schema } from "@/database";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
@@ -1148,7 +1150,139 @@ describe("bindAppConnectorTokenAudience", () => {
     }
   });
 
-  test("refresh rejects an attempt to re-target a different connector", async ({
+  // A refresh cannot re-target: better-auth ignores the requested `resource` and
+  // inherits the original audience, and it has already rotated (revoked the old
+  // refresh token) by the time we run — so erroring on a mismatch would strand a
+  // working session for no gain. Honor the inherited binding instead.
+  test("refresh honors the inherited binding and never strands on a mismatched resource", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const mismatches: unknown[] = [
+      connB, // a different connector
+      [connB, connA], // a repeated connector array (refresh ignores `resource`)
+      `https://evil.example.com/api/mcp/app/${APP_A}`, // an untrusted origin
+    ];
+    for (const resource of mismatches) {
+      const client = await makeOAuthClient({ userId: user.id });
+      const rawToken = `tok-${crypto.randomUUID()}`;
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: sha256(rawToken),
+        referenceId: refA,
+      });
+      const result = await bindAppConnectorTokenAudience({
+        resource,
+        responseBody: JSON.stringify({ access_token: rawToken }),
+        grantType: "refresh_token",
+        tokenEndpointOrigin: ORIGIN,
+      });
+      expect(result.status).toBe("ok");
+      // The rotated token stays bound to the ORIGINAL connector; the requested
+      // resource is ignored (connector B would still reject this token).
+      const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+      expect(row?.referenceId).toBe(refA);
+    }
+  });
+
+  test("refresh of an originally-unbound token does not acquire a connector", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    // The original grant never bound a connector, so a refresh that names one
+    // cannot acquire it — the token stays unbound (and the connector rejects it).
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: connA,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "refresh_token",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("skip");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+
+  test("refresh stamps the inherited binding when the access token came back unbound", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+    makeOAuthRefreshToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    // The refresh token carries the original grant's connector audience, but the
+    // refreshed access token came back unbound — the binding must be recovered
+    // from the refresh token and stamped onto the access token.
+    const refresh = await makeOAuthRefreshToken(client.clientId, user.id);
+    await db
+      .update(schema.oauthRefreshTokensTable)
+      .set({ referenceId: refA })
+      .where(eq(schema.oauthRefreshTokensTable.id, refresh.id));
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+      refreshId: refresh.id,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: undefined,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "refresh_token",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("ok");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBe(refA);
+  });
+
+  // RFC 8707 permits repeated `resource` params (a JS array). A connector token
+  // binds to exactly one audience, so a connector named among repeated resources
+  // can't be honored on the initial grant — fail closed rather than mint an
+  // unbound token. Only the authorization_code path applies these checks.
+  test("authorization_code fails closed for a resource array naming a connector", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const arrays: unknown[] = [
+      [connA, connB], // two distinct connectors
+      [connA, connA], // the same connector twice
+      [connA, `${ORIGIN}/v1/mcp/some-agent`], // connector mixed with a gateway resource
+    ];
+    for (const resource of arrays) {
+      const client = await makeOAuthClient({ userId: user.id });
+      const rawToken = `tok-${crypto.randomUUID()}`;
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: sha256(rawToken),
+        referenceId: null,
+      });
+      const result = await bindAppConnectorTokenAudience({
+        resource,
+        responseBody: JSON.stringify({ access_token: rawToken }),
+        grantType: "authorization_code",
+        tokenEndpointOrigin: ORIGIN,
+      });
+      expect(result.status).toBe("error");
+      const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+      expect(row?.referenceId).toBeNull();
+    }
+  });
+
+  test("authorization_code with only non-connector resources leaves the token unbound", async ({
     makeUser,
     makeOAuthClient,
     makeOAuthAccessToken,
@@ -1158,15 +1292,144 @@ describe("bindAppConnectorTokenAudience", () => {
     const rawToken = `tok-${crypto.randomUUID()}`;
     await makeOAuthAccessToken(client.clientId, user.id, {
       token: sha256(rawToken),
-      referenceId: refA,
+      referenceId: null,
     });
     const { bindAppConnectorTokenAudience } = await import("./auth");
     const result = await bindAppConnectorTokenAudience({
-      resource: connB,
+      // No connector among them — not our concern, so it binds elsewhere or not
+      // at all (here: not at all).
+      resource: [`${ORIGIN}/v1/mcp/agent-a`, `${ORIGIN}/v1/mcp/agent-b`],
       responseBody: JSON.stringify({ access_token: rawToken }),
-      grantType: "refresh_token",
+      grantType: "authorization_code",
       tokenEndpointOrigin: ORIGIN,
     });
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("skip");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+});
+
+describe("getOAuthAccessTokenLifetimeSeconds — shareable-App connector tokens", () => {
+  const ORIGIN = "http://localhost:9000";
+  const APP_ORG_LIFETIME = 1111;
+  const FIRST_MEMBERSHIP_LIFETIME = 600;
+
+  const setOrgLifetime = (organizationId: string, seconds: number) =>
+    db
+      .update(schema.organizationsTable)
+      .set({ oauthAccessTokenLifetimeSeconds: seconds })
+      .where(eq(schema.organizationsTable.id, organizationId));
+
+  test("a connector token uses the app's org lifetime, not the viewer's first membership", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    // The viewer's only (→ first) membership is a different org with its own
+    // lifetime — the bug returned this for connector tokens.
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    // The app lives in an org the viewer is not a member of.
+    const appOrg = await makeOrganization();
+    await setOrgLifetime(appOrg.id, APP_ORG_LIFETIME);
+    const app = await makeApp({ organizationId: appOrg.id });
+    const connectorUri = buildConnectorResourceUri(ORIGIN, app.id) as string;
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+
+    // authorization_code: the connector is named by the requested `resource`.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: connectorUri,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
+
+    // refresh: better-auth inherits the audience ref onto the token, so `resource`
+    // is absent but the binding identifies the connector.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: undefined,
+        referenceId: appConnectorAudienceRef(connectorUri),
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
+
+    // A non-connector request still falls back to the viewer's first membership,
+    // proving the connector branch is what redirects to the app's org above.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: undefined,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(FIRST_MEMBERSHIP_LIFETIME);
+  });
+
+  test("a connector resource on an untrusted origin does not resolve an app org", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    const appOrg = await makeOrganization();
+    await setOrgLifetime(appOrg.id, APP_ORG_LIFETIME);
+    const app = await makeApp({ organizationId: appOrg.id });
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+    // Same app id, but an origin this server does not serve — must not bind to the
+    // app's org; falls back to the viewer's first membership.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: `https://evil.example.com/api/mcp/app/${app.id}`,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(FIRST_MEMBERSHIP_LIFETIME);
+  });
+
+  test("on refresh the lifetime follows the inherited binding, not a re-sent resource", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    // The token is bound (inherited) to appA's connector; the client re-sends a
+    // different connector (appB) on refresh. better-auth ignores the re-sent
+    // resource, so the lifetime must come from appA's org, not appB's.
+    const orgA = await makeOrganization();
+    await setOrgLifetime(orgA.id, APP_ORG_LIFETIME);
+    const appA = await makeApp({ organizationId: orgA.id });
+    const orgB = await makeOrganization();
+    await setOrgLifetime(orgB.id, APP_ORG_LIFETIME + 222);
+    const appB = await makeApp({ organizationId: orgB.id });
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: buildConnectorResourceUri(ORIGIN, appB.id) as string,
+        referenceId: appConnectorAudienceRef(
+          buildConnectorResourceUri(ORIGIN, appA.id) as string,
+        ),
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
   });
 });

@@ -15,7 +15,6 @@ import {
   Cable,
   Database,
   FolderKanban,
-  FolderOpen,
   Github,
   Inbox,
   type LucideIcon,
@@ -102,17 +101,11 @@ const chatsNavItems: NavItem[] = [
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
   },
-  {
-    title: "My Files",
-    url: "/my-files",
-    icon: FolderOpen,
-    customIsActive: (pathname: string) => pathname.startsWith("/my-files"),
-  },
 ];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects", "/my-files"];
+  const chatPrefixes = ["/chat", "/projects"];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -614,18 +607,18 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  // Projects and My Files are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
+  // Projects are gated behind the ARCHESTRA_PROJECTS_ENABLED env var.
   const projectsEnabled = useFeature("projectsEnabled") === true;
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
 
-  // Projects and My Files exist only when the projects feature is on.
+  // Projects exist only when the projects feature is on.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter(
-        (item) => item.title === "New Chat" || projectsEnabled,
+        (item) => item.title !== "Projects" || projectsEnabled,
       ),
     [projectsEnabled],
   );

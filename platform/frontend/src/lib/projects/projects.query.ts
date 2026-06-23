@@ -108,8 +108,6 @@ export function useCreateProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      // its files appear on the My Files page too
-      queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
     },
   });
 }

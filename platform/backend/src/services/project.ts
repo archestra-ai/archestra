@@ -198,28 +198,6 @@ class ProjectService {
     });
   }
 
-  /**
-   * Files of EVERY project the user can access (owned or shared), tagged by
-   * project — merged into the My Files page next to the user's own files.
-   */
-  async listSharedProjectFiles(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<SandboxFileListItem[]> {
-    const projects = await ProjectShareModel.listAccessibleProjects(params);
-    if (projects.length === 0) return [];
-    const perProject = await Promise.all(
-      projects.map((p) =>
-        fileStore.search({
-          organizationId: params.organizationId,
-          userId: params.userId,
-          scope: { kind: "project", projectId: p.id, projectName: p.name },
-        }),
-      ),
-    );
-    return perProject.flat();
-  }
-
   async listConversations(params: {
     id: string;
     organizationId: string;

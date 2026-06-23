@@ -210,11 +210,11 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__read_file 1`] = `
 {
-  "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, use the download URL or copy the file into the sandbox with upload_file and inspect it with run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
+  "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, use the download URL or copy the file into the sandbox with upload_file and inspect it with run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Read a persistent file (My Files) directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), use the download URL or upload_file + run_command. In a project chat only the project's files are visible. Requires \`sandbox:execute\`.",
+    "description": "Read a persistent file directly — no sandbox roundtrip. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can see them. Identify the file by \`id\` (from search_files / save_result) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), use the download URL or upload_file + run_command. Only this conversation's files are visible (in a project chat, the project's files). Requires \`sandbox:execute\`.",
     "properties": {
       "filename": {
         "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
@@ -343,11 +343,11 @@ exports[`skill and sandbox tool text > archestra__save_result 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "Search the user's persistent file storage (My Files): files exported with download_file across ALL conversations, plus files the user added by hand. Returns metadata only — each result carries a stable \`ref\`. To work on a found file, pass its \`ref\` to read_file (read its content), or to upload_file's my_file source (copy it into the sandbox). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
+  "description": "Search the persistent files of THIS conversation: files exported with download_file or written with save_result here. Returns metadata only — each result carries a stable \`ref\`. To work on a found file, pass its \`ref\` to read_file (read its content), or to upload_file's my_file source (copy it into the sandbox). In a project chat, searches the project's files instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Search the user's persistent file storage (My Files): files exported from sandboxes across ALL conversations. In a project chat, searches the project's files instead.",
+    "description": "Search this conversation's persistent files: files exported from its sandbox or written with save_result. In a project chat, searches the project's files instead.",
     "properties": {
       "query": {
         "description": "Case-insensitive substring matched against filenames. Omit to list everything.",

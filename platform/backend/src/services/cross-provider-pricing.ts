@@ -41,30 +41,30 @@ export function resolveCrossProviderPrices(params: {
 }): CrossProviderPrices | null {
   const { provider, modelId, underlyingModelName, modelsDevData } = params;
 
-  const target =
+  // Prefer the foundation-model id resolved from the profile's model ARN; fall
+  // back to parsing the inference-profile id (system/cross-region profiles
+  // encode it, application profiles do not).
+  const targets =
     provider === "bedrock"
-      ? // Prefer the foundation-model id resolved from the profile's model ARN;
-        // fall back to parsing the inference-profile id (system/cross-region
-        // profiles encode it, application profiles do not).
-        resolveBedrockTarget(underlyingModelName ?? modelId)
+      ? resolveBedrockTargets(underlyingModelName ?? modelId)
       : provider === "azure"
-        ? resolveAzureTarget(underlyingModelName ?? modelId)
-        : null;
+        ? toArray(resolveAzureTarget(underlyingModelName ?? modelId))
+        : [];
 
-  if (!target) {
-    return null;
+  // Targets are ordered by preference (e.g. a vendor's canonical entry, which
+  // has cache prices, before the region-keyed amazon-bedrock fallback).
+  for (const target of targets) {
+    const entry = findModelsDevModel({
+      modelsDevData,
+      modelsDevProviderId: target.modelsDevProviderId,
+      candidates: target.candidates,
+    });
+    if (entry?.cost) {
+      return modelsDevCostToPerToken(entry.cost);
+    }
   }
 
-  const entry = findModelsDevModel({
-    modelsDevData,
-    modelsDevProviderId: target.modelsDevProviderId,
-    candidates: target.candidates,
-  });
-  if (!entry?.cost) {
-    return null;
-  }
-
-  return modelsDevCostToPerToken(entry.cost);
+  return null;
 }
 
 // ============================================================================
@@ -100,25 +100,40 @@ const BEDROCK_VERSION_SUFFIX = /(?:-v\d+)?:\d+$/;
  */
 const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
 
-function resolveBedrockTarget(modelId: string): CrossProviderTarget | null {
+function resolveBedrockTargets(modelId: string): CrossProviderTarget[] {
   const withoutRegion = modelId.replace(BEDROCK_REGION_PREFIX, "");
   const firstDot = withoutRegion.indexOf(".");
   if (firstDot === -1) {
-    return null;
+    return [];
   }
 
+  const targets: CrossProviderTarget[] = [];
   const vendor = withoutRegion.slice(0, firstDot).toLowerCase();
-  const modelsDevProviderId = BEDROCK_VENDOR_TO_MODELS_DEV_PROVIDER[vendor];
-  if (!modelsDevProviderId) {
-    return null;
+  const rawModel = withoutRegion.slice(firstDot + 1);
+
+  // Strategy 1 (preferred): the vendor's canonical models.dev entry, which
+  // carries cache prices (notably Anthropic). Matched on the canonical model id
+  // (region + version + date stripped).
+  const canonicalProvider = BEDROCK_VENDOR_TO_MODELS_DEV_PROVIDER[vendor];
+  if (canonicalProvider) {
+    const canonical = rawModel.replace(BEDROCK_VERSION_SUFFIX, "");
+    targets.push({
+      modelsDevProviderId: canonicalProvider,
+      candidates: dedupe([canonical, canonical.replace(DATE_SUFFIX, "")]),
+    });
   }
 
-  const rawModel = withoutRegion.slice(firstDot + 1);
-  const canonical = rawModel.replace(BEDROCK_VERSION_SUFFIX, "");
-  return {
-    modelsDevProviderId,
-    candidates: dedupe([canonical, canonical.replace(DATE_SUFFIX, "")]),
-  };
+  // Strategy 2 (fallback): the `amazon-bedrock` entry, keyed by the Bedrock
+  // model id itself. Recovers input/output (and some cache_read, e.g. Nova) for
+  // vendors whose Bedrock id doesn't map cleanly to a canonical key (Meta,
+  // Amazon, DeepSeek, ...). Matched region-agnostically on the full id, so the
+  // version suffix is kept (amazon-bedrock keys retain it).
+  targets.push({
+    modelsDevProviderId: "amazon-bedrock",
+    candidates: dedupe([withoutRegion, withoutRegion.replace(DATE_SUFFIX, "")]),
+  });
+
+  return targets;
 }
 
 function resolveAzureTarget(modelName: string): CrossProviderTarget | null {
@@ -135,8 +150,10 @@ function resolveAzureTarget(modelName: string): CrossProviderTarget | null {
 
 /**
  * Look up a model in a specific models.dev provider entry. Tries the candidates
- * as exact keys first, then matches any key whose date-stripped form equals a
- * candidate (handles dated-vs-dateless registry keys).
+ * as exact keys first, then matches any key whose region-prefix-stripped and/or
+ * date-stripped form equals a candidate. Candidates are already region-stripped,
+ * so this handles dated-vs-dateless keys and the amazon-bedrock entry's
+ * region-prefixed keys (`us.meta.…` / `meta.…`) uniformly.
  */
 function findModelsDevModel(params: {
   modelsDevData: ModelsDevApiResponse;
@@ -158,12 +175,20 @@ function findModelsDevModel(params: {
 
   const candidateSet = new Set(candidates);
   for (const [key, model] of Object.entries(models)) {
-    if (candidateSet.has(key.replace(DATE_SUFFIX, ""))) {
+    const normalized = key.replace(BEDROCK_REGION_PREFIX, "");
+    if (
+      candidateSet.has(normalized) ||
+      candidateSet.has(normalized.replace(DATE_SUFFIX, ""))
+    ) {
       return model;
     }
   }
 
   return null;
+}
+
+function toArray<T>(value: T | null): T[] {
+  return value == null ? [] : [value];
 }
 
 function dedupe(values: string[]): string[] {

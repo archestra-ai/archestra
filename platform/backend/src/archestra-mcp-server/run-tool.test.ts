@@ -12,7 +12,11 @@ import {
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  AgentToolModel,
+  ConversationEnabledToolModel,
+  ToolModel,
+} from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   afterAll,
@@ -809,8 +813,10 @@ describe("run_tool", () => {
       vi.restoreAllMocks();
     });
 
-    // run_command is seeded into the (org-accessible) Archestra catalog but left
-    // unassigned, so every test below exercises the dynamic path.
+    // run_command is seeded into the (org-accessible) Archestra catalog. The
+    // create hook now auto-assigns the sandbox tools when the runtime flag is on,
+    // so we clear all assignments right after creation to keep run_command
+    // *unassigned* — every test below exercises the dynamic (unassigned) path.
     beforeEach(async ({ makeAgent }) => {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       dynamicAgent = await makeAgent({
@@ -818,6 +824,7 @@ describe("run_tool", () => {
         organizationId: mockContext.organizationId,
         accessAllTools: true,
       });
+      await AgentToolModel.deleteAllForAgent(dynamicAgent.id);
       dynamicContext = {
         ...mockContext,
         agent: { id: dynamicAgent.id, name: dynamicAgent.name },
@@ -1467,9 +1474,95 @@ describe("run_tool", () => {
         'Invalid tool_args for "final_answer__submit_result"',
       );
       expect(text).toContain('missing required parameter "result"');
+      // the empty call is echoed back and a filled skeleton shows the fix
+      expect(text).toContain(
+        'You sent: {"tool_name":"final_answer__submit_result","tool_args":{}}',
+      );
+      expect(text).toContain('"result": <object>');
       // the full schema is echoed for self-correction
       expect(text).toContain('"required"');
       expect(text).toContain('"additionalProperties"');
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
+    test("unpacks a declared nested object shape into the skeleton (no dispatch)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "search__query",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "object",
+              properties: {
+                field: { type: "string" },
+                limit: { type: "number" },
+              },
+              required: ["field", "limit"],
+            },
+          },
+          required: ["filter"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "search__query", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as any).text;
+      expect(text).toContain(
+        '"filter": {"field": <string>, "limit": <number>}',
+      );
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+
+    test("unpacks an array of objects with an enum member into the skeleton (no dispatch)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "tickets__bulk_update",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  status: { type: "string", enum: ["open", "closed"] },
+                },
+                required: ["id", "status"],
+              },
+            },
+          },
+          required: ["items"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "tickets__bulk_update", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as any).text;
+      expect(text).toContain('"items": [{"id": <string>, "status": "open"}]');
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
@@ -1501,9 +1594,13 @@ describe("run_tool", () => {
       );
 
       expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        'unexpected parameter "bogus"',
+      const text = (result.content[0] as any).text;
+      expect(text).toContain('unexpected parameter "bogus"');
+      // echo + skeleton hold for the unknown-key path too, not just missing-key
+      expect(text).toContain(
+        'You sent: {"tool_name":"github__search_repositories","tool_args":{"query":"x","bogus":1}}',
       );
+      expect(text).toContain('"query": <string>');
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 

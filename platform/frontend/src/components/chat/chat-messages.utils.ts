@@ -12,9 +12,9 @@ import {
   getToolErrorText,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
+import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
-import type { CanvasInfo } from "./pinned-canvas-context";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -132,28 +132,36 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
- * Derive the list of MCP App canvases for a conversation directly from its
- * messages (plus any early UI-start data from the active stream).
+ * Derive the list of MCP Apps for a conversation directly from its messages
+ * (plus any early UI-start data from the active stream).
  *
- * A tool call is a canvas when its output carries `_meta.ui.resourceUri`, when
- * the backend announced it via a `data-tool-ui-start` event (tracked in
+ * A tool call yields an app when its output carries `_meta.ui.resourceUri`,
+ * when the backend announced it via a `data-tool-ui-start` event (tracked in
  * `earlyToolUiStarts`) before the result arrived, or when it is an owned-app
  * management result (see {@link extractOwnedAppRender}). Deriving the registry
  * from the conversation — rather than from `McpAppSection` mount/unmount
- * effects — makes the sidebar selector deterministic: it matches what a page
+ * effects — makes the panel selector deterministic: it matches what a page
  * refresh reconstructs and never empties because a single section briefly
  * unmounts.
+ *
+ * Owned (Archestra-authored) apps are deduped by `appId`: repeated renders of
+ * the same app collapse to a single entry that tracks the latest render (its
+ * toolCallId and version), so the panel defaults to the newest version. External
+ * MCP-UI tool calls stay one entry per call — each is a distinct invocation.
  */
-export function deriveCanvasesFromMessages(
+export function deriveAppsFromMessages(
   messages: UIMessage[],
   earlyToolUiStarts: Record<
     string,
     { uiResourceUri?: string; toolName?: string }
   >,
   getToolShortName: (toolName: string) => ArchestraToolShortName | null,
-): CanvasInfo[] {
-  const canvases: CanvasInfo[] = [];
+): PanelApp[] {
+  const apps: PanelApp[] = [];
   const seen = new Set<string>();
+  // Maps an owned-app `appId` to its index in `apps`, so a later render of the
+  // same app replaces the earlier entry instead of appending a duplicate.
+  const ownedAppIndex = new Map<string, number>();
 
   for (const message of messages) {
     const createdAt = getMessageCreatedAt(message);
@@ -181,16 +189,27 @@ export function deriveCanvasesFromMessages(
 
       seen.add(toolCallId);
       const parsed = parseFullToolName(fullToolName);
-      canvases.push({
+      const entry: PanelApp = {
         toolCallId,
         label: ownedApp?.appName ?? (parsed.toolName || fullToolName),
-        serverName: parsed.serverName,
+        appId: ownedApp?.appId ?? null,
+        version: ownedApp?.latestVersion ?? null,
         createdAt: createdAt ?? 0,
-      });
+      };
+
+      if (ownedApp) {
+        const existing = ownedAppIndex.get(ownedApp.appId);
+        if (existing !== undefined) {
+          apps[existing] = entry;
+          continue;
+        }
+        ownedAppIndex.set(ownedApp.appId, apps.length);
+      }
+      apps.push(entry);
     }
   }
 
-  return canvases;
+  return apps;
 }
 
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */

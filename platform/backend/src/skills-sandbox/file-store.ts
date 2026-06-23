@@ -24,8 +24,16 @@ import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
 
 /** Which files a `search` lists — a single owner scope. */
 type FileSearchScope =
-  | { kind: "personal" }
+  | { kind: "conversation"; conversationId: string }
   | { kind: "project"; projectId: string; projectName: string | null };
+
+/**
+ * The scope a `my_file` resolution (by id or filename) is confined to: the
+ * current conversation for a no-project chat, or the project for a project chat.
+ */
+type MyFileScope =
+  | { kind: "conversation"; conversationId: string }
+  | { kind: "project"; projectId: string };
 
 /** The owner half of an untracked-object ref (ids only; ACL is checked from it). */
 type RefScope =
@@ -138,20 +146,7 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return null;
       if (!(await this.canAccessScope(parsed.scope, params))) return null;
-      // Bind the opaque key to the authorized scope: it must be an object that
-      // scope actually owns. Without this, a ref carrying the caller's own scope
-      // but a sibling folder's key (e.g. `other@x.com/secret`, no traversal)
-      // would read another tenant's file under the shared root. Enumeration is
-      // provider-agnostic and already skips symlinks.
-      const ownerScope =
-        parsed.scope.kind === "user"
-          ? await this.userScope(parsed.scope.userId)
-          : await this.projectScope(parsed.scope.projectId);
-      if (!ownerScope) return null;
-      const owned = (await store.enumerate(ownerScope)).some(
-        (o) => o.key === parsed.key,
-      );
-      if (!owned) return null;
+      if (!(await this.objectRefOwned(parsed, store))) return null;
       let data: Buffer;
       try {
         data = await store.read(parsed.key);
@@ -192,6 +187,9 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return false;
       if (!(await this.canAccessScope(parsed.scope, params))) return false;
+      // Same key→scope binding as `get`: a crafted ref carrying the caller's own
+      // scope but a sibling folder's key must NOT delete another scope's object.
+      if (!(await this.objectRefOwned(parsed, store))) return false;
       await store.remove(parsed.key).catch(() => {});
       return true;
     }
@@ -227,9 +225,35 @@ class FileStore {
   }
 
   /**
-   * List one owner scope (personal or project), optionally filtered by name.
-   * When an object store is configured, DB rows are merged with objects present
-   * in the store but not in the table (placed by hand), deduped by key.
+   * Delete a conversation's no-project files — both rows and external bytes —
+   * when the conversation is deleted. No-project files belong to their
+   * conversation, so they must not outlive it as unreachable orphans (the
+   * `conversation_id` FK is `SET NULL`, so there is no row cascade; project
+   * files, which outlive the conversation, are excluded). Must run BEFORE the
+   * conversation row is deleted, while the files still carry its id. Best-effort
+   * per file's bytes. Inline (`db`) rows just drop with the row.
+   */
+  async purgeConversationFiles(params: {
+    organizationId: string;
+    conversationId: string;
+  }): Promise<void> {
+    const rows = await FileModel.listNoProjectFilesForConversation(params);
+    await Promise.all(
+      rows.map(async (row) => {
+        await FileModel.deleteById(row.id);
+        await deleteRowBytes({
+          provider: row.storageProvider,
+          objectKey: row.objectKey,
+        }).catch(() => {});
+      }),
+    );
+  }
+
+  /**
+   * List one owner scope (a no-project conversation or a project), optionally
+   * filtered by name. For a project scope with an object store configured, DB
+   * rows are merged with objects present in the store but not in the table
+   * (placed by hand), deduped by key; no-project scopes have no such objects.
    */
   async search(params: {
     organizationId: string;
@@ -244,9 +268,10 @@ class FileStore {
             organizationId: params.organizationId,
             projectId: scope.projectId,
           })
-        : await FileModel.listForUser({
+        : await FileModel.listNoProjectByConversation({
             organizationId: params.organizationId,
             userId: params.userId,
+            conversationId: scope.conversationId,
           });
     const projectName = scope.kind === "project" ? scope.projectName : null;
     const projectId = scope.kind === "project" ? scope.projectId : null;
@@ -255,28 +280,34 @@ class FileStore {
       .filter((r) => !query || r.filename.toLowerCase().includes(query))
       .map((r) => toListItem(r, projectName));
 
+    // Hand-placed (rowless) objects are only surfaced for project scopes; the
+    // personal/no-project untracked path was dropped when no-project files
+    // became conversation-scoped (it would otherwise span conversations).
     const store = getObjectStore();
-    const ownerScope = store
-      ? await this.toOwnerScope(scope, params.userId)
-      : null;
-    if (store && ownerScope) {
-      const refScope = toRefScope(scope, params.userId);
-      const known = new Set<string>();
-      for (const r of rows) if (r.objectKey) known.add(r.objectKey);
-      for (const obj of await store.enumerate(ownerScope)) {
-        if (known.has(obj.key)) continue;
-        if (query && !obj.name.toLowerCase().includes(query)) continue;
-        items.push({
-          id: null,
-          downloadRef: encodeObjectRef(refScope, obj.key),
-          filename: obj.name,
-          mimeType: mimeFromExtension(obj.name),
-          sizeBytes: obj.size,
-          createdAt: obj.modifiedAt,
-          downloadable: true,
-          projectId,
-          projectName,
-        });
+    if (store && scope.kind === "project") {
+      const ownerScope = await this.projectScope(scope.projectId);
+      if (ownerScope) {
+        const refScope: RefScope = {
+          kind: "project",
+          projectId: scope.projectId,
+        };
+        const known = new Set<string>();
+        for (const r of rows) if (r.objectKey) known.add(r.objectKey);
+        for (const obj of await store.enumerate(ownerScope)) {
+          if (known.has(obj.key)) continue;
+          if (query && !obj.name.toLowerCase().includes(query)) continue;
+          items.push({
+            id: null,
+            downloadRef: encodeObjectRef(refScope, obj.key),
+            filename: obj.name,
+            mimeType: mimeFromExtension(obj.name),
+            sizeBytes: obj.size,
+            createdAt: obj.modifiedAt,
+            downloadable: true,
+            projectId,
+            projectName,
+          });
+        }
       }
     }
     return items;
@@ -319,33 +350,35 @@ class FileStore {
 
   /**
    * Resolve a `my_file` upload source (by row id, or by `filename` within the
-   * chat's flat scope) to its bytes. A duplicated filename is reported as
-   * ambiguous rather than picking one silently. With an object store, a
-   * hand-placed object (no row) is matched by filename too.
+   * chat's scope — the current conversation for a no-project chat, the project
+   * for a project chat) to its bytes. A duplicated filename is reported as
+   * ambiguous rather than picking one silently. For a project scope a
+   * hand-placed object (no row) is matched by ref/filename too; no-project
+   * (conversation) scopes have no hand-placed objects.
    */
   async resolveMyFileSource(params: {
     organizationId: string;
     userId: string;
     id?: string;
     filename?: string;
-    scope?: { projectId: string } | null;
+    scope: MyFileScope;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
     // A stable `obj_` ref (from search_files) addresses a hand-placed object
-    // directly — resolve it by ref, confined to the chat scope.
+    // directly — only project scopes surface those.
     if (params.id && parseObjectRef(params.id)) {
+      if (params.scope.kind !== "project") return { error: "not_found" };
       return this.resolveUntrackedByRef({
-        userId: params.userId,
+        projectId: params.scope.projectId,
         ref: params.id,
-        scope: params.scope ?? null,
       });
     }
     const row = await this.findMyFileRow(params);
     if (row === null) {
-      // no matching row — try a hand-placed object by filename.
+      // no matching row — for a project, try a hand-placed object by filename.
+      if (params.scope.kind !== "project") return { error: "not_found" };
       return this.resolveUntrackedByName({
-        userId: params.userId,
+        projectId: params.scope.projectId,
         filename: params.filename ?? "",
-        scope: params.scope ?? null,
       });
     }
     if ("error" in row) return row;
@@ -362,11 +395,25 @@ class FileStore {
     userId: string;
     id?: string;
     filename?: string;
-    scope?: { projectId: string } | null;
+    scope: MyFileScope;
   }): Promise<PersistedFile | MyFileResolutionError> {
     const row = await this.findMyFileRow(params);
     if (row === null) return { error: "not_found" };
     return row;
+  }
+
+  /**
+   * Resolve a headless (no-project, no-conversation) file by name, for a
+   * headless `save_result` overwrite — there is no conversation/project scope to
+   * resolve within, so this targets the orphan bucket directly.
+   */
+  async resolveOrphanRef(params: {
+    organizationId: string;
+    userId: string;
+    filename: string;
+  }): Promise<PersistedFile | MyFileResolutionError> {
+    const row = await FileModel.findOrphanByName(params);
+    return row ?? { error: "not_found" };
   }
 
   /**
@@ -386,6 +433,7 @@ class FileStore {
       const scope = await this.resolveScope({
         userId: file.userId,
         projectId: file.projectId,
+        conversationId: file.conversationId,
       });
       const { key } = await store.write({
         scope,
@@ -442,9 +490,9 @@ class FileStore {
     userId: string;
     id?: string;
     filename?: string;
-    scope?: { projectId: string } | null;
+    scope: MyFileScope;
   }): Promise<PersistedFile | MyFileResolutionError | null> {
-    const scope = params.scope ?? null;
+    const { scope } = params;
     if (params.id) {
       // a non-UUID id is never a row id (and would error the uuid column query).
       if (!UUID_RE.test(params.id)) return { error: "not_found" };
@@ -452,24 +500,31 @@ class FileStore {
       if (!file || file.organizationId !== params.organizationId) {
         return { error: "not_found" };
       }
-      if (scope) {
+      if (scope.kind === "project") {
         if (file.projectId !== scope.projectId)
           return { error: "outside_project" };
-      } else if (file.userId !== params.userId || file.projectId != null) {
+      } else if (
+        file.projectId != null ||
+        file.conversationId !== scope.conversationId ||
+        file.userId !== params.userId
+      ) {
+        // a no-project file authored by this user in this conversation only.
         return { error: "not_found" };
       }
       return file;
     }
     const filename = params.filename ?? "";
-    const candidates = scope
-      ? await FileModel.listByProject({
-          organizationId: params.organizationId,
-          projectId: scope.projectId,
-        })
-      : await FileModel.listForUser({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        });
+    const candidates =
+      scope.kind === "project"
+        ? await FileModel.listByProject({
+            organizationId: params.organizationId,
+            projectId: scope.projectId,
+          })
+        : await FileModel.listNoProjectByConversation({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            conversationId: scope.conversationId,
+          });
     const matches = candidates.filter((f) => f.filename === filename);
     if (matches.length > 1) return { error: "ambiguous" };
     if (matches.length === 1) {
@@ -487,17 +542,14 @@ class FileStore {
    * cross-scope read.
    */
   private async resolveUntrackedByRef(params: {
-    userId: string;
+    projectId: string;
     ref: string;
-    scope: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
     const parsed = parseObjectRef(params.ref);
     if (!parsed) return { error: "not_found" };
     const store = getObjectStore();
     if (!store) return { error: "not_found" };
-    const ownerScope: OwnerScope | null = params.scope
-      ? await this.projectScope(params.scope.projectId)
-      : await this.userScope(params.userId);
+    const ownerScope = await this.projectScope(params.projectId);
     if (!ownerScope) return { error: "not_found" };
     if (
       !(await store.enumerate(ownerScope)).some((o) => o.key === parsed.key)
@@ -524,17 +576,14 @@ class FileStore {
     }
   }
 
-  /** An untracked object matched by filename within the upload scope. */
+  /** An untracked object matched by filename within a project upload scope. */
   private async resolveUntrackedByName(params: {
-    userId: string;
+    projectId: string;
     filename: string;
-    scope: { projectId: string } | null;
   }): Promise<ResolvedMyFile | MyFileResolutionError> {
     const store = getObjectStore();
     if (!store) return { error: "not_found" };
-    const ownerScope: OwnerScope | null = params.scope
-      ? await this.projectScope(params.scope.projectId)
-      : await this.userScope(params.userId);
+    const ownerScope = await this.projectScope(params.projectId);
     if (!ownerScope) return { error: "not_found" };
     const match = (await store.enumerate(ownerScope)).find(
       (o) => o.name === params.filename,
@@ -557,6 +606,31 @@ class FileStore {
       if (error instanceof UnsafePathError) return { error: "not_found" };
       throw error;
     }
+  }
+
+  /**
+   * Bind an `obj_` ref's opaque key to the scope it claims: the key must be an
+   * object that scope actually owns (verified by enumeration), so a ref carrying
+   * the caller's own scope but a sibling folder's key (e.g. `other@x.com/secret`,
+   * no traversal) resolves to "not owned" rather than reaching another tenant's
+   * file under the shared root. Enumeration is provider-agnostic and skips
+   * symlinks. Only project refs are minted today (personal untracked objects were
+   * dropped with conversation scoping); the `user` scope arm is retained as
+   * defense-in-depth for a hand-crafted ref and enumerates the flat `<email>`
+   * folder.
+   */
+  private async objectRefOwned(
+    parsed: { scope: RefScope; key: string },
+    store: NonNullable<ReturnType<typeof getObjectStore>>,
+  ): Promise<boolean> {
+    const ownerScope =
+      parsed.scope.kind === "user"
+        ? await this.userScope(parsed.scope.userId)
+        : await this.projectScope(parsed.scope.projectId);
+    if (!ownerScope) return false;
+    return (await store.enumerate(ownerScope)).some(
+      (o) => o.key === parsed.key,
+    );
   }
 
   /** Can the caller reach an untracked object's owner scope? */
@@ -603,10 +677,15 @@ class FileStore {
     return file.userId === params.userId ? file : null;
   }
 
-  /** The owner scope a new file's bytes go under (only resolved for a store). */
+  /**
+   * The owner scope a new file's bytes go under (only resolved for a store). A
+   * no-project file is nested under its conversation (`<email>/<conversationId>`);
+   * a headless write (no conversation) falls back to the flat `<email>` folder.
+   */
   private async resolveScope(params: {
     userId: string;
     projectId: string | null;
+    conversationId: string | null;
   }): Promise<OwnerScope> {
     if (params.projectId) {
       const scope = await this.projectScope(params.projectId);
@@ -615,18 +694,9 @@ class FileStore {
       }
       return scope;
     }
-    const scope = await this.userScope(params.userId);
+    const scope = await this.userScope(params.userId, params.conversationId);
     if (!scope) throw new Error(`user ${params.userId} has no email`);
     return scope;
-  }
-
-  private async toOwnerScope(
-    scope: FileSearchScope,
-    userId: string,
-  ): Promise<OwnerScope | null> {
-    return scope.kind === "project"
-      ? this.projectScope(scope.projectId)
-      : this.userScope(userId);
   }
 
   // the folder is the project's immutable slug, so a rename never moves files.
@@ -635,9 +705,14 @@ class FileStore {
     return project ? { kind: "project", projectId, label: project.slug } : null;
   }
 
-  private async userScope(userId: string): Promise<OwnerScope | null> {
+  private async userScope(
+    userId: string,
+    conversationId: string | null = null,
+  ): Promise<OwnerScope | null> {
     const email = await UserModel.getEmailById(userId);
-    return email ? { kind: "user", userId, label: email } : null;
+    return email
+      ? { kind: "user", userId, label: email, conversationId }
+      : null;
   }
 
   private async readBytes(
@@ -682,12 +757,6 @@ function toListItem(
     projectId: row.projectId,
     projectName,
   };
-}
-
-function toRefScope(scope: FileSearchScope, userId: string): RefScope {
-  return scope.kind === "project"
-    ? { kind: "project", projectId: scope.projectId }
-    : { kind: "user", userId };
 }
 
 /** Opaque download handle for an untracked object: `obj_` + base64url({scope,key}). */

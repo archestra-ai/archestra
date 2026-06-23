@@ -211,8 +211,13 @@ export function modelsDevCostToPerToken(cost: ModelsDevCost | undefined): {
   cacheReadPricePerToken: string | null;
   cacheWritePricePerToken: string | null;
 } {
+  // Round to the `numeric(20, 12)` column precision so the per-token string is
+  // free of float-division noise (e.g. 0.8 / 1e6 = 8.000000000000001e-7) and
+  // matches exactly what the database stores.
   const perToken = (perMillion: number | undefined): string | null =>
-    perMillion !== undefined ? (perMillion / 1_000_000).toString() : null;
+    perMillion !== undefined
+      ? Number.parseFloat((perMillion / 1_000_000).toFixed(12)).toString()
+      : null;
 
   return {
     promptPricePerToken: perToken(cost?.input),

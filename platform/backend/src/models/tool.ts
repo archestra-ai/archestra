@@ -8,7 +8,9 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -1336,6 +1338,44 @@ class ToolModel {
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 
+  /**
+   * Assign the code-execution sandbox tools to a single agent based on the
+   * deployment's runtime/Projects flags. No-op when the sandbox runtime is off.
+   *
+   * - Runtime tools (run_command/upload_file/download_file): assigned when the
+   *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
+   * - Persistent-files (Projects) tools (search_files/read_file/save_result/
+   *   edit_file/delete_file): also require the Projects flag
+   *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
+   *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
+   *   avoids assigned-but-hidden rows.
+   *
+   * Called from `AgentModel.create` so new agents inherit the sandbox surface.
+   * With the runtime dark the sandbox tools are not even seeded, so there is
+   * nothing to assign.
+   */
+  static async assignSandboxToolsToAgent(
+    agentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    if (!config.skillsSandbox.enabled) return;
+
+    const shortNames: ArchestraToolShortName[] = [
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    if (config.projects.enabled) {
+      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
+    }
+
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      shortNames,
+    );
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
   private static async getToolIdsForOrgByShortNames(
     organizationId: string,
     shortNames: readonly ArchestraToolShortName[],
@@ -1412,9 +1452,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // sandbox tools (run_command / upload_file / download_file) are not
-    // auto-assigned — they require explicit per-agent assignment plus
-    // sandbox:execute, like the rest of the skill-execution surface.
+    // The sandbox runtime + Projects file tools are auto-assigned separately by
+    // `assignSandboxToolsToAgent` (flag-gated), not here. This default set is the
+    // always-on baseline only.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
@@ -1641,17 +1681,68 @@ class ToolModel {
     return row?.tool ?? null;
   }
 
-  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  /**
+   * Whether a tool belongs to (is assignable/callable within) `environmentId`,
+   * reusing the canonical {@link toolInEnvironmentPredicate} so the app
+   * assignment fence and call-time fence never drift from the agent isolation
+   * rules: null = org default, and the built-in Archestra/Playwright catalogs
+   * plus delegation tools are exempt.
+   */
+  static async isToolInEnvironment(
+    toolId: string,
+    environmentId: string | null,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.id, toolId),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Of `toolIds`, the subset that belongs to `environmentId` — the batch form of
+   * {@link isToolInEnvironment}, used to trim an app's runtime tool list to its
+   * bound environment (UX hygiene; the call-time gate is the hard fence).
+   */
+  static async filterToolIdsInEnvironment(
+    toolIds: string[],
+    environmentId: string | null,
+  ): Promise<Set<string>> {
+    if (toolIds.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, toolIds),
+          toolInEnvironmentPredicate(environmentId),
+        ),
+      );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
+   * App-owner counterpart of {@link getMcpToolsAssignedToAgent}. Includes the
+   * tool `id` so the runtime gate can apply the environment fence
+   * ({@link isToolInEnvironment}) against the resolved tool.
+   */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
     appId: string,
-  ): Promise<McpToolAssignment[]> {
+  ): Promise<(McpToolAssignment & { id: string })[]> {
     if (toolNames.length === 0) {
       return [];
     }
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
@@ -1686,6 +1777,7 @@ class ToolModel {
 
     return await db
       .select({
+        id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
@@ -1716,6 +1808,30 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /**
+   * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
+   * Powers the server-scoped Apps run path: building `tools/list` and gating
+   * `tools/call` on `_meta.ui.visibility`.
+   */
+  static async findByCatalogIdWithMeta(catalogId: string): Promise<
+    Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown> | undefined;
+      meta: Record<string, unknown> | null;
+    }>
+  > {
+    return db
+      .select({
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;

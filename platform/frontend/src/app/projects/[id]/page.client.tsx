@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
+} from "@archestra/shared";
 import {
   CalendarClock,
   Eye,
@@ -154,7 +158,7 @@ function ProjectDetail() {
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and files are kept — chats become ordinary conversations, the files stay in My Files."
+            description="Chats and files are kept — chats become ordinary conversations, and their files remain available in those conversations."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });
@@ -351,7 +355,6 @@ function ProjectFilesSidebar({
                 )}
               >
                 <FileSection
-                  title="Results"
                   items={items}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
@@ -402,8 +405,11 @@ function EditProjectDialog({
       description: project.description ?? "",
       icon: project.icon,
     },
+    mode: "onChange",
   });
   const icon = form.watch("icon");
+  const name = form.watch("name");
+  const description = form.watch("description");
   const initialVisibility: ProjectVisibility = project.visibility ?? "none";
   const [visibility, setVisibility] =
     useState<ProjectVisibility>(initialVisibility);
@@ -434,6 +440,9 @@ function EditProjectDialog({
 
   const isPending = updateProject.isPending || setShare.isPending;
   const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
+  const hasLengthError =
+    name.length > PROJECT_NAME_MAX_LENGTH ||
+    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
     if (teamSelectionMissing) return;
@@ -484,7 +493,8 @@ function EditProjectDialog({
             type="submit"
             disabled={
               isPending ||
-              !form.watch("name").trim().length ||
+              !name.trim().length ||
+              hasLengthError ||
               teamSelectionMissing
             }
           >
@@ -499,16 +509,41 @@ function EditProjectDialog({
           onChange={(next) => form.setValue("icon", next)}
           fallbackType="project"
         />
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Input
             placeholder="Project name"
-            {...form.register("name", { required: true, maxLength: 256 })}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name", {
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
           <Textarea
             placeholder="What is this project about?"
             rows={3}
-            {...form.register("description", { maxLength: 4096 })}
+            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.description}
+            {...form.register("description", {
+              maxLength: {
+                value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
           />
+          {form.formState.errors.description?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          )}
         </div>
       </div>
 
@@ -553,8 +588,7 @@ function EditProjectDialog({
 
       <p className="text-xs text-muted-foreground">
         People you share with can read every chat, start their own, and work
-        with the project's files through chats. Writing in a chat stays with its
-        author.
+        with the project's files through chats.
       </p>
     </StandardFormDialog>
   );

@@ -44,7 +44,14 @@ pub fn load_task(task_dir: &Path) -> Result<Task, TaskConfigError> {
     let mut stages = Vec::with_capacity(stage_rows.len());
     for (i, row) in stage_rows.iter().enumerate() {
         let row_ctx = format!("{ctx} [[stages]][{i}]");
-        stages.push(load_stage(row, &row_ctx, task_dir)?);
+        let stage = load_stage(row, &row_ctx, task_dir)?;
+        if i == 0 && stage.new_conversation {
+            return Err(TaskConfigError(format!(
+                "{row_ctx}: the first stage cannot set new_conversation; the initial conversation is \
+                 created automatically"
+            )));
+        }
+        stages.push(stage);
     }
 
     let schema = toml_util::table(&data, "result_schema", &ctx)?;
@@ -84,7 +91,12 @@ fn load_stage(row: &TomlTable, ctx: &str, task_dir: &Path) -> Result<Stage, Task
     let text = toml_util::req_str(row, "text", ctx)?;
     let text = expand_files(&text, task_dir, ctx)?;
     let files = load_staged_files(row, ctx, &task_dir.join("inputs"))?;
-    Ok(Stage { text, files })
+    let new_conversation = toml_util::opt_bool(row, "new_conversation", ctx, false)?;
+    Ok(Stage {
+        text,
+        files,
+        new_conversation,
+    })
 }
 
 fn expand_files(text: &str, task_dir: &Path, ctx: &str) -> Result<String, TaskConfigError> {
@@ -275,5 +287,61 @@ mod tests {
         assert!(validate_state_path("/other", "ctx").is_err());
         assert!(validate_state_path("http://host/api/x", "ctx").is_err());
         assert!(validate_state_path("//host/api/x", "ctx").is_err());
+    }
+
+    /// Write a minimal slug-named task dir (verifier + result_schema) with the given `[[stages]]`
+    /// TOML, returning the temp dir whose `sample-task` child is the loadable task dir.
+    fn write_task(stages_toml: &str) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("sample-task");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("verifier.py"), "def test_ok(): assert True\n").unwrap();
+        std::fs::write(
+            dir.join("task.toml"),
+            format!("{stages_toml}\n[result_schema]\ntype = \"object\"\n"),
+        )
+        .unwrap();
+        tmp
+    }
+
+    #[test]
+    fn stage_new_conversation_defaults_false() {
+        let tmp = write_task("[[stages]]\ntext = \"go\"\n");
+        let task = load_task(&tmp.path().join("sample-task")).unwrap();
+        assert_eq!(task.stages.len(), 1);
+        assert!(!task.stages[0].new_conversation);
+    }
+
+    #[test]
+    fn stage_new_conversation_parsed_on_later_stage() {
+        let tmp = write_task(
+            "[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = true\n",
+        );
+        let task = load_task(&tmp.path().join("sample-task")).unwrap();
+        assert!(!task.stages[0].new_conversation);
+        assert!(task.stages[1].new_conversation);
+    }
+
+    #[test]
+    fn stage_new_conversation_rejected_on_first_stage() {
+        let tmp = write_task("[[stages]]\ntext = \"a\"\nnew_conversation = true\n");
+        let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("first stage cannot set new_conversation"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn stage_new_conversation_rejects_non_bool() {
+        let tmp = write_task(
+            "[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = \"yes\"\n",
+        );
+        let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
+        assert!(
+            err.to_string().contains("new_conversation"),
+            "unexpected error: {err}"
+        );
     }
 }

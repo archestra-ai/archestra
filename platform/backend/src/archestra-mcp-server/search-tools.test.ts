@@ -346,6 +346,51 @@ describe("search_tools", () => {
     });
   });
 
+  test("on zero matches, hints the sandbox fallback when the sandbox is usable", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Sandbox Search Agent",
+        organizationId: org.id,
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "zzqqxyzznomatch", limit: 10 },
+        context,
+      );
+
+      const structuredContent =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structuredContent.matchCount).toBe(0);
+      expect(structuredContent.hint).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      expect(structuredContent.hint).toContain("fall back");
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
+  });
+
   test("excludes always-exposed tools but keeps authoring tools searchable", async ({
     makeAgent,
     makeMember,

@@ -11,6 +11,7 @@ import {
   getAppTemplates,
   resolveCreateAppHtml,
 } from "@/app-templates";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -20,6 +21,7 @@ import {
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
+  McpServerModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -32,15 +34,19 @@ import {
   resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   ApiError,
   type App,
+  type AppListItem,
+  AppListItemSchema,
   AppRenderDiagnosticEntrySchema,
   AppTemplateSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ExternalAppListItemSchema,
   SelectAppSchema,
   SelectAppVersionSchema,
   SelectToolSchema,
@@ -83,31 +89,116 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAppSchema),
+          createPaginatedResponseSchema(AppListItemSchema),
         ),
       },
     },
     async ({ query, user, organizationId }, reply) => {
+      // The Apps surface unifies two sources: owned apps (this org's app rows)
+      // and external UI-providing installed MCP servers. Both are access-filtered
+      // by their own model; we merge, sort, and paginate over the combined set.
+      // Cardinality is small (tens), so fetching all-then-slicing is fine.
+      const isMcpServerAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      );
       const accessibleAppIds = await AppTeamModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
       });
-      const filters = {
+      const ownedFilters = {
         organizationId,
         accessibleAppIds,
         ...(query.search ? { search: query.search } : {}),
       };
-      const [data, total] = await Promise.all([
-        AppModel.findByOrganization({
-          ...filters,
-          limit: query.limit,
-          offset: query.offset,
+      const [ownedCount, external] = await Promise.all([
+        AppModel.countByOrganization(ownedFilters),
+        McpServerModel.findUiCapableForCaller({
+          userId: user.id,
+          isMcpServerAdmin,
+          ...(query.search ? { search: query.search } : {}),
         }),
-        AppModel.countByOrganization(filters),
       ]);
+      const owned = await AppModel.findByOrganization({
+        ...ownedFilters,
+        limit: ownedCount,
+        offset: 0,
+      });
+
+      const items: AppListItem[] = [
+        ...owned.map((app) => ({
+          source: "owned" as const,
+          id: app.id,
+          name: app.name,
+          description: app.description,
+          scope: app.scope,
+          authorId: app.authorId,
+          latestVersion: app.latestVersion,
+          executionModel: "viewer-scoped" as const,
+          cspOrigin: "platform-pinned" as const,
+        })),
+        ...external.map((server) => ({
+          source: "external" as const,
+          mcpServerId: server.mcpServerId,
+          name: server.name,
+          description: server.description,
+          scope: server.scope,
+          authorId: server.ownerId,
+          resourceUri: server.resourceUri,
+          executionModel: "server-scoped" as const,
+          cspOrigin: "author-declared" as const,
+        })),
+      ];
+      items.sort((a, b) => a.name.localeCompare(b.name));
+
       return reply.send({
-        data,
-        pagination: calculatePaginationMeta(total, query),
+        data: items.slice(query.offset, query.offset + query.limit),
+        pagination: calculatePaginationMeta(items.length, query),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/apps/external/:mcpServerId",
+    {
+      schema: {
+        operationId: RouteId.GetExternalApp,
+        description:
+          "Resolve a single external UI-providing app entry by installed MCP server id (for the standalone run page).",
+        tags: ["Apps"],
+        params: z.object({ mcpServerId: UuidIdSchema }),
+        response: constructResponseSchema(ExternalAppListItemSchema),
+      },
+    },
+    async ({ params, user, organizationId }, reply) => {
+      const isMcpServerAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      );
+      const candidates = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin,
+      });
+      const match = candidates.find(
+        (server) => server.mcpServerId === params.mcpServerId,
+      );
+      if (!match) {
+        throw new ApiError(404, "Not found");
+      }
+      return reply.send({
+        source: "external",
+        mcpServerId: match.mcpServerId,
+        name: match.name,
+        description: match.description,
+        scope: match.scope,
+        authorId: match.ownerId,
+        resourceUri: match.resourceUri,
+        executionModel: "server-scoped",
+        cspOrigin: "author-declared",
       });
     },
   );
@@ -154,6 +245,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: user.id,
         resourceTeamIds: teamIds,
       });
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
       const { html, seededFromTemplate } = resolveCreateAppHtml({
         html: body.html,
       });
@@ -169,6 +265,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: body.name,
           description: body.description ?? null,
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
+          environmentId: body.environmentId ?? null,
         },
         payload,
         teamIds,
@@ -267,10 +364,31 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const patch: Partial<Pick<App, "name" | "description" | "scope">> = {};
+      // Re-binding the environment is authorized like the initial bind: org
+      // membership + the restricted-env permission. Only an actual change is
+      // re-authorized — editing other fields of an app bound to a restricted
+      // environment must not require deploy-to-restricted (the settings form
+      // echoes the unchanged environmentId). Existing tool assignments are not
+      // stripped here; out-of-environment ones are refused at call time.
+      if (
+        body.environmentId !== undefined &&
+        body.environmentId !== app.environmentId
+      ) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
+      const patch: Partial<
+        Pick<App, "name" | "description" | "scope" | "environmentId">
+      > = {};
       if (body.name !== undefined) patch.name = body.name;
       if (body.description !== undefined) patch.description = body.description;
       if (body.scope !== undefined) patch.scope = body.scope;
+      if (body.environmentId !== undefined)
+        patch.environmentId = body.environmentId;
 
       // Permissions ride the version envelope; an html-bearing edit inherits
       // the current head's value when the caller omits it.
@@ -574,11 +692,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // Internal helpers
 // =============================================================================
 
-/**
- * Dedupe team ids and verify every one belongs to the caller's organization, so
- * a cross-org team id can never become an access principal for an app. Throws
- * `ApiError(400)` on an unknown/foreign team. Returns the deduped list.
- */
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;
@@ -617,6 +730,34 @@ function isAssignmentError(
   result: ToolAssignmentError | "duplicate" | "updated" | null,
 ): result is ToolAssignmentError {
   return result !== null && result !== "duplicate" && result !== "updated";
+}
+
+/**
+ * Authorize binding an app to `environmentId` (null = org default). Mirrors the
+ * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
+ * the restricted-env permission are enforced by `assertCanAssignEnvironment`,
+ * which also gates a restricted *default* environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
 }
 
 export default appRoutes;

@@ -5,6 +5,7 @@ import {
   getChatMcpToolUiResourceUris,
 } from "@/clients/chat-mcp-client";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import { ConversationEnabledToolModel } from "@/models";
 import type { ToolExposureMode } from "@/types";
@@ -35,6 +36,8 @@ export async function buildChatContext(params: {
   systemPrompt: string | undefined;
   /** How the tool set was filtered — surfaced for the stream-start log line. */
   toolSelection: { hasCustomSelection: boolean; enabledToolCount: number };
+  /** Per-run tracker shared with the stream's repeated-call stop condition. */
+  repeatTracker: ToolCallRepeatTracker;
 }> {
   const {
     conversationId,
@@ -52,6 +55,9 @@ export async function buildChatContext(params: {
     ConversationEnabledToolModel.findByConversation(conversationId),
     ConversationEnabledToolModel.hasCustomSelection(conversationId),
   ]);
+
+  // One tracker per run, shared with the stream's repeated-call stop condition.
+  const repeatTracker = new ToolCallRepeatTracker();
 
   // Fetch MCP tools with enabled tool filtering
   // Pass undefined if no custom selection (use all tools)
@@ -72,6 +78,7 @@ export async function buildChatContext(params: {
       elicitation,
       user,
       hookRunCollector,
+      repeatTracker,
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);
@@ -94,5 +101,6 @@ export async function buildChatContext(params: {
       hasCustomSelection,
       enabledToolCount: enabledToolIds.length,
     },
+    repeatTracker,
   };
 }

@@ -1,12 +1,12 @@
 import { goToPage } from "../fixtures";
 import { expect, test } from "./api-fixtures";
 
-// Seed an app from the `form` template (resolved server-side from templateId),
-// open /apps/:id/run, and assert through the nested sandbox frames
-// (host page → sandbox proxy iframe → inner app iframe) that the form reaches
-// "Ready." — which the template only shows after the injected runtime bridge
-// connected the guest SDK and completed a data-store read round-trip. This is
-// the end-to-end proof of the serve-time bridge injection in a real browser.
+// Seed an app from the default template, open /apps/:id/run, and assert through
+// the nested sandbox frames (host page → sandbox proxy iframe → inner app
+// iframe) that the app reaches "Ready." — which the template only shows after
+// the injected runtime bridge connected the guest SDK and completed a
+// data-store read round-trip. This is the end-to-end proof of the serve-time
+// bridge injection in a real browser.
 test("create an app from a template and run it standalone", async ({
   page,
   request,
@@ -34,7 +34,7 @@ test("create an app from a template and run it standalone", async ({
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, scope: "personal", templateId: "form" },
+    data: { name, scope: "personal" },
   });
   const app = (await createRes.json()) as { id: string };
 
@@ -47,10 +47,10 @@ test("create an app from a template and run it standalone", async ({
     await expect(appFrame.getByText("Ready.")).toBeVisible({
       timeout: 20_000,
     });
-    // auto-auth: the SDK bootstrap carries the viewer identity and the form
-    // template personalizes its title from archestra.user.name
+    // auto-auth: the SDK bootstrap carries the viewer identity and the default
+    // template personalizes its heading from archestra.user.name
     await expect(
-      appFrame.getByRole("heading", { name: /'s notes$/ }),
+      appFrame.getByRole("heading", { name: /^Hello, / }),
     ).toBeVisible();
 
     const diagnostics = await page.evaluate(

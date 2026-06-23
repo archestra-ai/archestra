@@ -49,6 +49,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import {
   useDeleteProject,
   useProject,
@@ -153,7 +154,7 @@ function ProjectDetail() {
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and files are kept — chats become ordinary conversations, the files stay in My Files."
+            description="Chats and files are kept — chats become ordinary conversations, and their files remain available in those conversations."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });
@@ -200,9 +201,9 @@ function ProjectChatInput({ projectId }: { projectId: string }) {
 
   return (
     <NewChatComposer
-      onSubmitPrompt={(text) =>
+      onSubmitPrompt={(text, agentId) =>
         router.push(
-          `/chat?project=${projectId}&user_prompt=${encodeURIComponent(text)}`,
+          buildProjectChatHandoffUrl({ projectId, prompt: text, agentId }),
         )
       }
     />
@@ -350,7 +351,6 @@ function ProjectFilesSidebar({
                 )}
               >
                 <FileSection
-                  title="Results"
                   items={items}
                   selectedId={selectedId}
                   onSelect={setSelectedId}

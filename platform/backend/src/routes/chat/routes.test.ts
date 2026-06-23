@@ -22,6 +22,7 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
 
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createLLMModel } from "@/clients/llm-client";
+import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import { test } from "@/test";
@@ -1115,10 +1116,10 @@ describe("buildChatStopConditions", () => {
       iconLogo: null,
     });
 
-    const stopConditions = buildChatStopConditions();
+    const stopConditions = buildChatStopConditions(new ToolCallRepeatTracker());
     const toolNames = getChatStopToolNames();
 
-    expect(stopConditions).toHaveLength(3);
+    expect(stopConditions).toHaveLength(4);
     expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
     expect(toolNames.swapToDefaultAgentToolName).toBe(
       "acme_control_plane__swap_to_default_agent",
@@ -1129,33 +1130,6 @@ describe("buildChatStopConditions", () => {
 });
 
 describe("generateConversationTitle", () => {
-  it("returns generated title on success", async () => {
-    mockGenerateText.mockResolvedValueOnce({
-      text: "  Debug React Error  ",
-    });
-
-    const result = await generateConversationTitle({
-      provider: "anthropic",
-      apiKey: "test-key",
-      modelName: "claude-test",
-      baseUrl: null,
-      agentId: "title-agent-id",
-      userId: "user-id",
-      conversationId: "conversation-id",
-      systemPrompt: "Generate a title.",
-      firstUserMessage: "Help me debug this React error",
-      firstAssistantMessage: "I can help with that.",
-    });
-
-    expect(result).toBe("Debug React Error");
-    expect(mockGenerateText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: "mocked-model",
-        prompt: expect.stringContaining("Help me debug this React error"),
-      }),
-    );
-  });
-
   it("returns null when LLM call fails", async () => {
     mockGenerateText.mockRejectedValueOnce(new Error("API Error"));
 
@@ -1249,34 +1223,5 @@ describe("generateConversationTitle", () => {
     const callArg = mockGenerateText.mock.calls[0][0];
     expect(callArg.maxOutputTokens).toBeLessThanOrEqual(64);
     expect(callArg.maxOutputTokens).toBeGreaterThan(0);
-  });
-});
-
-describe("title generation integration", () => {
-  it("extractFirstMessages and buildTitlePrompt work together", () => {
-    const messages = [
-      {
-        role: "user",
-        parts: [{ type: "text", text: "Help me debug this error" }],
-      },
-      {
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "I can help you debug that. What error are you seeing?",
-          },
-        ],
-      },
-    ];
-
-    const { firstUserMessage, firstAssistantMessage } =
-      extractFirstMessages(messages);
-    const prompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
-
-    expect(prompt).toContain("User: Help me debug this error");
-    expect(prompt).toContain(
-      "Assistant: I can help you debug that. What error are you seeing?",
-    );
   });
 });

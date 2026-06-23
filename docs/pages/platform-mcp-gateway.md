@@ -130,3 +130,7 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 ## Elicitation
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+## Environment
+
+A gateway can be assigned a deployment environment. It then exposes and executes only tools (and knowledge) from the same environment — a "dev" gateway cannot reach "prod" servers. Built-in servers are always available. Unassigned gateways use the Default environment. See [Environments](/docs/platform-environments).

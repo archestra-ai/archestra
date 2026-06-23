@@ -322,6 +322,27 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
 };
 
 /**
+ * Cache token price as a multiple of the model's per-token INPUT price.
+ * `read` = cache-read (cheap reuse); `write` = cache-creation (5-minute TTL)
+ * surcharge; `write1h` = 1-hour TTL cache-write surcharge.
+ *
+ * Used as the fallback when a model has no explicit (synced or admin-set) cache
+ * price: Anthropic/Bedrock bill a separate write surcharge (1.25x at 5m, 2x at
+ * 1h), while OpenAI/Gemini/DeepSeek auto-cache with only a read discount and no
+ * write surcharge. Providers absent from this map have no cache pricing model,
+ * so cache cost/savings are not derived for them.
+ */
+export const CACHE_PRICE_MULTIPLIERS: Partial<
+  Record<SupportedProvider, { read: number; write: number; write1h?: number }>
+> = {
+  anthropic: { read: 0.1, write: 1.25, write1h: 2 },
+  bedrock: { read: 0.1, write: 1.25, write1h: 2 },
+  openai: { read: 0.25, write: 0 },
+  gemini: { read: 0.25, write: 0 },
+  deepseek: { read: 0.1, write: 0 },
+};
+
+/**
  * True for OpenAI "pro" reasoning models, which OpenAI serves only through the
  * Responses API (`/v1/responses`). Calling them on `/v1/chat/completions`
  * returns `api_not_found_error` ("not a chat model"), so the chat client must

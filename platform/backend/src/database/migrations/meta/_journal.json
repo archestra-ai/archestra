@@ -2087,6 +2087,62 @@
       "when": 1781899258905,
       "tag": "0297_remove_knowledge_files",
       "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1781966151604,
+      "tag": "0298_cloudy_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "7",
+      "when": 1781979715500,
+      "tag": "0299_backfill_orphaned_schedule_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "7",
+      "when": 1782058452626,
+      "tag": "0300_rainy_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 301,
+      "version": "7",
+      "when": 1782117226973,
+      "tag": "0301_smiling_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "7",
+      "when": 1782141505231,
+      "tag": "0302_coerce_all_tools_agents_to_progressive",
+      "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1782168863366,
+      "tag": "0303_minor_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1782211728112,
+      "tag": "0304_wild_sandman",
+      "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "7",
+      "when": 1782215899438,
+      "tag": "0305_drop_conversation_file_touches",
+      "breakpoints": true
     }
   ]
 }

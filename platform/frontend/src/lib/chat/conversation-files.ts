@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-export type FileSource = "artifact" | "generated" | "attachment" | "my-file";
+export type FileSource = "artifact" | "generated" | "attachment" | "project";
 
 export type ConversationFileItem = {
   id: string;
@@ -19,9 +19,9 @@ type FilesResponse =
 /**
  * Builds the Files-panel sections from the API payload plus the in-memory
  * markdown artifact. `artifact.md` is synthesized client-side and always sits
- * first in the Generated section. `referenced` is the pre-existing files the
- * agent actually touched (read/edited) in this chat — not every file it could
- * reach — minus this conversation's own outputs.
+ * first in the Generated section. `projectFiles` is every file in the chat's
+ * project (project chats only), minus this conversation's own outputs; it is
+ * empty for a personal chat.
  */
 export function assembleFileSections(params: {
   files: FilesResponse;
@@ -29,9 +29,7 @@ export function assembleFileSections(params: {
 }): {
   generated: ConversationFileItem[];
   attachments: ConversationFileItem[];
-  referenced: ConversationFileItem[];
-  /** Title for the referenced section: the project's files in a project chat. */
-  referencedTitle: string;
+  projectFiles: ConversationFileItem[];
 } {
   const generated: ConversationFileItem[] = [];
 
@@ -65,22 +63,15 @@ export function assembleFileSections(params: {
     source: "attachment",
   }));
 
-  const referenced: ConversationFileItem[] = (
-    params.files?.referenced ?? []
+  const projectFiles: ConversationFileItem[] = (
+    params.files?.projectFiles ?? []
   ).map((f) => ({
     id: f.id,
     name: f.name,
     mimeType: f.mimeType,
     contentUrl: f.contentUrl,
-    source: "my-file",
+    source: "project",
   }));
 
-  return {
-    generated,
-    attachments,
-    referenced,
-    referencedTitle: params.files?.projectName
-      ? "Project files"
-      : "Referenced files",
-  };
+  return { generated, attachments, projectFiles };
 }

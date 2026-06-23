@@ -2,8 +2,12 @@ import {
   APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_RUN_COMMAND_FULL_NAME,
+  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
@@ -409,6 +413,108 @@ describe("Archestra Tools Dynamic Assignment", () => {
       expect(toolIds).toHaveLength(0);
     } finally {
       appsConfig.enabled = originalAppsEnabled;
+    }
+  });
+
+  test("AgentModel.create assigns sandbox runtime and Projects file tools when both features are enabled", async ({
+    makeAgent,
+  }) => {
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const projectsConfig = config.projects as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    const originalProjects = projectsConfig.enabled;
+    sandboxConfig.enabled = true;
+    projectsConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ name: "Sandbox Agent" });
+
+      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      for (const fullName of [
+        TOOL_RUN_COMMAND_FULL_NAME,
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+      ]) {
+        expect(names).toContain(fullName);
+      }
+      for (const shortName of PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
+        expect(names).toContain(getArchestraToolFullName(shortName));
+      }
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+      projectsConfig.enabled = originalProjects;
+    }
+  });
+
+  test("AgentModel.create assigns runtime tools but not Projects file tools when Projects is disabled", async ({
+    makeAgent,
+  }) => {
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const projectsConfig = config.projects as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    const originalProjects = projectsConfig.enabled;
+    // Seed with both on so the file tools exist in the catalog; the config gate
+    // itself must keep them off the new agent.
+    sandboxConfig.enabled = true;
+    projectsConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      projectsConfig.enabled = false;
+      const agent = await makeAgent({ name: "Runtime Only Agent" });
+
+      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      for (const fullName of [
+        TOOL_RUN_COMMAND_FULL_NAME,
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+      ]) {
+        expect(names).toContain(fullName);
+      }
+      for (const shortName of PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
+        expect(names).not.toContain(getArchestraToolFullName(shortName));
+      }
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+      projectsConfig.enabled = originalProjects;
+    }
+  });
+
+  test("AgentModel.create assigns no sandbox or file tools when the runtime is disabled", async ({
+    makeAgent,
+  }) => {
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const projectsConfig = config.projects as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    const originalProjects = projectsConfig.enabled;
+    // Seed with both on so the tools exist; turning the runtime off must keep
+    // the whole sandbox group off the new agent.
+    sandboxConfig.enabled = true;
+    projectsConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      sandboxConfig.enabled = false;
+      const agent = await makeAgent({ name: "No Runtime Agent" });
+
+      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      for (const fullName of [
+        TOOL_RUN_COMMAND_FULL_NAME,
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(
+          getArchestraToolFullName,
+        ),
+      ]) {
+        expect(names).not.toContain(fullName);
+      }
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+      projectsConfig.enabled = originalProjects;
     }
   });
 });

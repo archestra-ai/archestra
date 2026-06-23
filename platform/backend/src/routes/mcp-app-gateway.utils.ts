@@ -30,6 +30,7 @@ import {
   MemberModel,
   OAuthAccessTokenModel,
   TeamTokenModel,
+  ToolModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
@@ -416,20 +417,30 @@ function buildAppLaunchTool(appId: string, app: App): McpListTool {
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {
   const upstream = await AppToolModel.getToolsForApp(appId);
-  const upstreamTools: McpListTool[] = upstream.map((tool) => {
-    const meta = tool.meta as {
-      annotations?: McpListTool["annotations"];
-      _meta?: McpListTool["_meta"];
-    } | null;
-    return {
-      name: tool.name,
-      title: tool.name,
-      description: tool.description ?? undefined,
-      inputSchema: normalizeToolInputSchema(tool.parameters),
-      annotations: meta?.annotations ?? {},
-      _meta: meta?._meta ?? {},
-    };
-  });
+  // Trim the runtime list to the app's bound environment so it never offers a
+  // tool the call-time gate would refuse. UX hygiene only — the hard fence is
+  // gateAppToolCall.
+  const app = await AppModel.findById(appId);
+  const inEnvIds = await ToolModel.filterToolIdsInEnvironment(
+    upstream.map((tool) => tool.id),
+    app?.environmentId ?? null,
+  );
+  const upstreamTools: McpListTool[] = upstream
+    .filter((tool) => inEnvIds.has(tool.id))
+    .map((tool) => {
+      const meta = tool.meta as {
+        annotations?: McpListTool["annotations"];
+        _meta?: McpListTool["_meta"];
+      } | null;
+      return {
+        name: tool.name,
+        title: tool.name,
+        description: tool.description ?? undefined,
+        inputSchema: normalizeToolInputSchema(tool.parameters),
+        annotations: meta?.annotations ?? {},
+        _meta: meta?._meta ?? {},
+      };
+    });
 
   const builtInTools = getArchestraMcpTools()
     .filter((tool) => {

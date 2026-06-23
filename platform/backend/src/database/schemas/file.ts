@@ -78,12 +78,26 @@ const filesTable = pgTable(
     index("files_conversation_id_idx").on(table.conversationId),
     index("files_sandbox_id_idx").on(table.sandboxId),
     // Filename uniqueness per owner scope, so the human-readable filesystem
-    // layout (`<email|project>/<filename>`) is collision-free and a repeat
-    // write is rejected rather than overwriting. Personal files (no project)
-    // are unique per author; project files are unique within the project.
-    uniqueIndex("files_user_filename_uidx")
+    // layout is collision-free and a repeat write is rejected rather than
+    // overwriting. No-project files belong to a conversation and live at
+    // `<email>/<conversationId>/<filename>`, so a name is unique per
+    // (author, conversation) — two conversations may reuse a name.
+    uniqueIndex("files_user_conversation_filename_uidx")
+      .on(table.userId, table.conversationId, table.filename)
+      .where(
+        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NOT NULL`,
+      ),
+    // TODO(headless-files): a no-project write with no conversation (headless
+    // A2A / ChatOps / schedule / email execution) lands here as a flat
+    // `<email>/<filename>` orphan, kept unique per author by this index. Such
+    // files are created but no longer surfaced anywhere (the global "My Files"
+    // list was removed). Revisit to either surface them (e.g. scope by
+    // isolationKey) or reject no-project writes that have no conversation.
+    uniqueIndex("files_user_filename_orphan_uidx")
       .on(table.userId, table.filename)
-      .where(sql`${table.projectId} IS NULL`),
+      .where(
+        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NULL`,
+      ),
     uniqueIndex("files_project_filename_uidx")
       .on(table.projectId, table.filename)
       .where(sql`${table.projectId} IS NOT NULL`),

@@ -2,13 +2,36 @@ import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
   applyTextEditToMessages,
+  chatDraftStorageKey,
+  conversationStorageKeys,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
+  migrateLegacyNewChatDraft,
+  NEW_CHAT_DRAFT_STORAGE_KEY,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
   resolveCanonicalMessageId,
 } from "./chat-utils";
+
+/** Minimal in-memory localStorage stand-in for the draft migration tests. */
+function makeStorage(initial: Record<string, string> = {}) {
+  const map = new Map(Object.entries(initial));
+  return {
+    get length() {
+      return map.size;
+    },
+    key: (index: number) => Array.from(map.keys())[index] ?? null,
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      map.set(key, value);
+    },
+    removeItem: (key: string) => {
+      map.delete(key);
+    },
+    snapshot: () => Object.fromEntries(map),
+  };
+}
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
@@ -613,5 +636,83 @@ describe("applyTextEditToMessages", () => {
     });
 
     expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+  });
+});
+
+describe("chatDraftStorageKey", () => {
+  it("returns the conversation-scoped draft key for an existing conversation", () => {
+    expect(chatDraftStorageKey("conv-123")).toBe(
+      conversationStorageKeys("conv-123").draft,
+    );
+  });
+
+  it("returns the shared new-chat key when there is no conversation", () => {
+    expect(chatDraftStorageKey(undefined)).toBe(NEW_CHAT_DRAFT_STORAGE_KEY);
+    expect(chatDraftStorageKey(null)).toBe(NEW_CHAT_DRAFT_STORAGE_KEY);
+  });
+
+  it("does not vary the new-chat key by agent so a typed prompt survives an agent switch", () => {
+    // Regression guard: the draft key must be agent-independent. Previously it
+    // embedded the agentId, so switching agents re-keyed the draft and the
+    // restore effect cleared the user's in-progress prompt.
+    const keyForAgentA = chatDraftStorageKey(undefined);
+    const keyForAgentB = chatDraftStorageKey(undefined);
+    expect(keyForAgentA).toBe(keyForAgentB);
+  });
+});
+
+describe("migrateLegacyNewChatDraft", () => {
+  it("adopts a pre-upgrade per-agent draft into the shared key, then clears legacy keys", () => {
+    const storage = makeStorage({
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "draft I was typing",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "draft I was typing",
+    });
+  });
+
+  it("does not overwrite an existing shared draft, but still cleans up legacy keys", () => {
+    const storage = makeStorage({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "current draft",
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "stale legacy draft",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "current draft",
+    });
+  });
+
+  it("leaves unrelated keys untouched and is a no-op without legacy keys", () => {
+    const storage = makeStorage({
+      [conversationStorageKeys("conv-1").draft]: "a saved conversation draft",
+      "some-other-key": "value",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual({
+      [conversationStorageKeys("conv-1").draft]: "a saved conversation draft",
+      "some-other-key": "value",
+    });
+  });
+
+  it("is idempotent: a second run finds nothing left to migrate", () => {
+    const storage = makeStorage({
+      [`${NEW_CHAT_DRAFT_STORAGE_KEY}_agent-1`]: "draft",
+    });
+
+    migrateLegacyNewChatDraft(storage);
+    const afterFirst = storage.snapshot();
+    migrateLegacyNewChatDraft(storage);
+
+    expect(storage.snapshot()).toEqual(afterFirst);
+    expect(storage.snapshot()).toEqual({
+      [NEW_CHAT_DRAFT_STORAGE_KEY]: "draft",
+    });
   });
 });

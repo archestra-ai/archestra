@@ -1,7 +1,10 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
+
+const uiMeta = (resourceUri: string) => ({ _meta: { ui: { resourceUri } } });
 
 describe("McpServerModel", () => {
   describe("serverType field", () => {
@@ -476,6 +479,286 @@ describe("McpServerModel", () => {
           scope: "org",
         }),
       ).toBe("notion");
+    });
+  });
+
+  describe("findUiCapableForCaller", () => {
+    test("returns an installed server that exposes a ui:// tool, with its catalog metadata and resource", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Excalidraw",
+        description: "Draw diagrams",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("ui://excalidraw/app.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      const entry = res.find((r) => r.mcpServerId === server.id);
+      expect(entry).toMatchObject({
+        mcpServerId: server.id,
+        name: "Excalidraw",
+        description: "Draw diagrams",
+        scope: "org",
+        resourceUri: "ui://excalidraw/app.html",
+      });
+    });
+
+    test("excludes installed servers whose tools carry no ui:// resource", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Plain",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "plain",
+        meta: { _meta: {} },
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      expect(res.some((r) => r.mcpServerId === server.id)).toBe(false);
+    });
+
+    test("excludes the built-in Archestra catalog even when it has ui:// tools", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      try {
+        await makeInternalMcpCatalog({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Archestra",
+          serverType: "builtin",
+          scope: "org",
+        });
+      } catch {
+        // The built-in catalog may already be seeded in this test database.
+      }
+      const server = await makeMcpServer({
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: "open_panel",
+        meta: uiMeta("ui://archestra/panel.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      expect(res.some((r) => r.mcpServerId === server.id)).toBe(false);
+    });
+
+    test("hides a server the non-admin caller cannot access, but an admin sees it", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const owner = await makeUser();
+      const caller = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Private",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "personal",
+      });
+      // Personal access is membership in mcp_server_users; the caller has none.
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: owner.id,
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("ui://private/app.html"),
+      });
+
+      const asMember = await McpServerModel.findUiCapableForCaller({
+        userId: caller.id,
+        isMcpServerAdmin: false,
+      });
+      expect(asMember.some((r) => r.mcpServerId === server.id)).toBe(false);
+
+      const asAdmin = await McpServerModel.findUiCapableForCaller({
+        userId: caller.id,
+        isMcpServerAdmin: true,
+      });
+      expect(asAdmin.some((r) => r.mcpServerId === server.id)).toBe(true);
+    });
+
+    test("collapses a server's multiple ui:// tools into one entry using the lowest-named resource", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Multi",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "b_second",
+        meta: uiMeta("ui://multi/second.html"),
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "a_first",
+        meta: uiMeta("ui://multi/first.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      const entries = res.filter((r) => r.mcpServerId === server.id);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.resourceUri).toBe("ui://multi/first.html");
+    });
+
+    test("detects the legacy flat ui/resourceUri metadata key", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Legacy",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: { _meta: { "ui/resourceUri": "ui://legacy/app.html" } },
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      expect(res.find((r) => r.mcpServerId === server.id)?.resourceUri).toBe(
+        "ui://legacy/app.html",
+      );
+    });
+
+    test("search filters by catalog name", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Searchable Widget",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("ui://sw/app.html"),
+      });
+
+      const hit = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+        search: "widget",
+      });
+      expect(hit.some((r) => r.mcpServerId === server.id)).toBe(true);
+
+      const miss = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+        search: "no-such-server-xyz",
+      });
+      expect(miss.some((r) => r.mcpServerId === server.id)).toBe(false);
+    });
+
+    test("excludes a tool whose resourceUri is not a ui:// scheme", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Sneaky",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("https://evil.example/x.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        isMcpServerAdmin: false,
+      });
+      expect(res.some((r) => r.mcpServerId === server.id)).toBe(false);
     });
   });
 });

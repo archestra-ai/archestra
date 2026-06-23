@@ -35,7 +35,8 @@ import { useFeature } from "@/lib/config/config.query";
  */
 type McpAppEndpoint =
   | { kind: "agent"; agentId: string; serverPrefix: string }
-  | { kind: "app"; appId: string };
+  | { kind: "app"; appId: string }
+  | { kind: "server"; mcpServerId: string };
 
 /** MCP CallToolResult — defined inline to avoid direct @modelcontextprotocol/sdk dependency. */
 export type McpCallToolResult = {
@@ -128,13 +129,17 @@ export const McpAppRuntime = function McpAppRuntime({
   const endpointKey =
     endpoint.kind === "agent"
       ? `agent:${endpoint.agentId}:${endpoint.serverPrefix}`
-      : `app:${endpoint.appId}`;
+      : endpoint.kind === "server"
+        ? `server:${endpoint.mcpServerId}`
+        : `app:${endpoint.appId}`;
   // Sandbox-subdomain hash seed. Apps get a per-app bucket matching the backend
   // MCP server name; isolation does not depend on this being collision-free.
   const sandboxPrefix =
     endpoint.kind === "agent"
       ? endpoint.serverPrefix
-      : `archestra-app-${endpoint.appId}`;
+      : endpoint.kind === "server"
+        ? `archestra-mcp-server-${endpoint.mcpServerId}`
+        : `archestra-app-${endpoint.appId}`;
 
   // Use refs for all callbacks to avoid recreating bridge when props change
   const displayModeRef = useRef(displayMode);
@@ -320,7 +325,9 @@ export const McpAppRuntime = function McpAppRuntime({
     const mcpUrl =
       endpoint.kind === "agent"
         ? `/api/mcp/${endpoint.agentId}`
-        : `/api/mcp/app/${endpoint.appId}`;
+        : endpoint.kind === "server"
+          ? `/api/mcp/server/${endpoint.mcpServerId}`
+          : `/api/mcp/app/${endpoint.appId}`;
 
     // Proxy a JSON-RPC method to the backend MCP gateway (agent or app endpoint).
     const mcpProxy = async (method: string, params: unknown) => {

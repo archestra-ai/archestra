@@ -112,12 +112,8 @@ describe("toSpanUserInfo", () => {
     });
   });
 
-  test("returns null for null input", () => {
-    expect(toSpanUserInfo(null)).toBeNull();
-  });
-
-  test("returns null for undefined input", () => {
-    expect(toSpanUserInfo(undefined)).toBeNull();
+  test.each([null, undefined])("returns null for %s input", (input) => {
+    expect(toSpanUserInfo(input)).toBeNull();
   });
 });
 
@@ -379,17 +375,11 @@ describe("buildInteractionRecord", () => {
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
-  test("includes source when provided", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      source: "chatops:slack",
-    });
-    expect(record.source).toBe("chatops:slack");
-  });
-
-  test("source is undefined when not provided", () => {
-    const record = buildInteractionRecord(baseParams);
-    expect(record.source).toBeUndefined();
+  test("passes source through when provided, undefined otherwise", () => {
+    expect(
+      buildInteractionRecord({ ...baseParams, source: "chatops:slack" }).source,
+    ).toBe("chatops:slack");
+    expect(buildInteractionRecord(baseParams).source).toBeUndefined();
   });
 });
 

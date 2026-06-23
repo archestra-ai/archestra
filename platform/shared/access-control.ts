@@ -647,7 +647,13 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {
-    mcpServerInstallation: ["update"],
+    // Re-authentication re-supplies credentials for a connection the caller can
+    // already install, so it is gated like installation (:create), not :update.
+    // The handler does scope-aware authorization (owner-only for personal,
+    // team-admin for team, etc.) for the finer-grained check. Requiring :update
+    // here locked out members — who have :create but not :update — with a bare
+    // 403 the moment their OAuth token expired and they tried to re-authenticate.
+    mcpServerInstallation: ["create"],
   },
   [RouteId.ReinstallMcpServer]: {
     mcpServerInstallation: ["update"],
@@ -984,6 +990,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },
+  [RouteId.ListDefaultUserLimits]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.CreateDefaultUserLimit]: {
+    llmLimit: ["create"],
+  },
+  [RouteId.UpdateDefaultUserLimit]: {
+    llmLimit: ["update"],
+  },
+  [RouteId.DeleteDefaultUserLimit]: {
+    llmLimit: ["delete"],
+  },
   [RouteId.GetOptimizationRules]: {
     optimizationRule: ["read"],
   },
@@ -1294,7 +1312,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // URL, so a role allowed to produce an artifact can also fetch it.
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
-  [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
   [RouteId.CreateProject]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
@@ -1325,6 +1342,7 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.GetExternalApp]: { app: ["read"] },
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
@@ -1370,6 +1388,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+  [RouteId.McpServerProxyPost]: {}, // Server-scoped Apps proxy; access enforced in-handler
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 };
@@ -1382,9 +1401,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
-
-  // My Files
-  "/my-files": { sandbox: ["execute"] },
 
   // Projects
   "/projects": { project: ["read"] },
@@ -1404,6 +1420,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/apps": { app: ["read"] },
   "/apps/[id]": { app: ["read"] },
   "/apps/[id]/run": { app: ["read"] },
+  "/apps/server/[mcpServerId]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

@@ -3,7 +3,7 @@ title: "Role Mapping"
 category: Administration
 subcategory: Identity Providers
 description: "Map SSO claims to Archestra roles using Handlebars templates"
-order: 5
+order: 6
 lastUpdated: 2026-05-05
 ---
 

@@ -34,6 +34,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -137,7 +138,10 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import {
+  useIsKnowledgeBaseConfigured,
+  useKnowledgeBases,
+} from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -584,6 +588,10 @@ export function AgentDialog({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
+  const { data: canAccessKnowledgeSettings } = useHasPermissions({
+    knowledgeSettings: ["read"],
+  });
+  const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
@@ -600,16 +608,18 @@ export function AgentDialog({
   // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
   // Gated behind a feature flag (off by default) until the per-env runtime ships.
   const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
+  // Environment isolation is always enforced by the backend for agents and MCP
+  // gateways, so the tool picker reflects it (cross-environment catalogs are
+  // shown disabled). When the org only has the Default environment, nothing is
+  // cross-environment, so this is a no-op.
+  const environmentScopingEnabled =
+    agentType === "agent" || agentType === "mcp_gateway";
   const { data: environmentsData } = useEnvironments(
-    open && agentType === "agent" && !!agentEnvironmentsEnabled,
+    open && environmentScopingEnabled,
   );
   // Used to resolve the selected environment's name for the tools editor; the
   // EnvironmentSelector owns its own list + permission filtering.
   const environments = environmentsData?.environments ?? [];
-  // Scope the agent's MCP list to its environment only when the feature is on
-  // for an internal agent (same gate as the environment selector).
-  const environmentScopingEnabled =
-    agentType === "agent" && !!agentEnvironmentsEnabled;
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -670,6 +680,8 @@ export function AgentDialog({
   const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
     undefined,
   );
+  const agentEnvironmentName =
+    environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
@@ -680,17 +692,31 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
-  const [accessAllTools, setAccessAllTools] = useState(false);
+  // New agents default to implicit ("All tools") access; editing an existing
+  // agent overwrites this from its stored value.
+  const [accessAllTools, setAccessAllTools] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
+  // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
+  // environment. For agents it binds the code sandbox runtime (feature-flagged);
+  // for LLM proxies / MCP gateways it is an attribution label so their
+  // inference/usage falls under environment-scoped cost limits.
+  const supportsEnvironment =
+    isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
+  const environmentHelpText =
+    agentType === "llm_proxy"
+      ? "The environment this proxy's inference is attributed to, so its usage counts against that environment's cost limits."
+      : agentType === "mcp_gateway"
+        ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
+        : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  const dynamicToolAccessEnabled = useFeature("dynamicToolAccessEnabled");
-  // When the dynamic-tool-access feature is gated off, the selector is hidden
-  // and the agent is always treated as "Custom" (explicitly assigned tools).
-  const allToolsMode = accessAllTools && dynamicToolAccessEnabled;
+  // "All tools" (implicit access) is the default for new agents; admins can
+  // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
+  // scoped to tools/knowledge visible to the user AND in the agent's environment.
+  const allToolsMode = accessAllTools;
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -784,11 +810,10 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        // New agents default to "Custom" — explicitly assigned tools. The
-        // "All tools" dynamic-access mode is opt-in (and gated behind the
-        // dynamicToolAccessEnabled feature flag).
+        // New agents default to "All tools" (implicit access); admins can switch
+        // to "Custom" (explicitly assigned tools).
         setToolExposureMode("full");
-        setAccessAllTools(false);
+        setAccessAllTools(true);
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -989,8 +1014,10 @@ export function AgentDialog({
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
-              environmentId: environmentId || null,
               suggestedPrompts: validSuggestedPrompts,
+            }),
+            ...(supportsEnvironment && {
+              environmentId: environmentId || null,
             }),
             ...(supportsIdentityProvider && {
               identityProviderId: identityProviderId || null,
@@ -1028,8 +1055,10 @@ export function AgentDialog({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
-            environmentId: environmentId || null,
             suggestedPrompts: validSuggestedPrompts,
+          }),
+          ...(supportsEnvironment && {
+            environmentId: environmentId || null,
           }),
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
@@ -1142,6 +1171,7 @@ export function AgentDialog({
     deleteAgent,
     toolExposureMode,
     accessAllTools,
+    supportsEnvironment,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1252,6 +1282,22 @@ export function AgentDialog({
                     </div>
                   )}
 
+                  {/* Environment assignment (below description).
+                      - Agent: binds the agent's code sandbox to a per-environment
+                        Dagger engine + egress policy (feature-flagged).
+                      - LLM proxy / MCP gateway: assigns the deployment environment
+                        so its usage falls under environment-scoped cost limits.
+                      Hidden when only the default environment is available. */}
+                  {((isInternalAgent && agentEnvironmentsEnabled) ||
+                    agentType === "llm_proxy" ||
+                    agentType === "mcp_gateway") && (
+                    <EnvironmentSelector
+                      value={environmentId ?? null}
+                      onChange={setEnvironmentId}
+                      helpText={environmentHelpText}
+                    />
+                  )}
+
                   {/* Built-in agent config */}
                   {isPolicyConfigBuiltIn && (
                     <div className="space-y-4">
@@ -1329,19 +1375,6 @@ export function AgentDialog({
                     }
                   />
                 </div>
-              )}
-
-              {/* Sandbox Environment (Agent only): binds the agent's code
-                  sandbox to a per-environment Dagger engine + egress policy.
-                  Feature-flagged off by default; hidden when only the default
-                  environment is available. */}
-              {isInternalAgent && agentEnvironmentsEnabled && (
-                <EnvironmentSelector
-                  value={environmentId ?? null}
-                  onChange={setEnvironmentId}
-                  hideWhenOnlyDefault
-                  className="rounded-lg border bg-card p-4"
-                />
               )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
@@ -1520,31 +1553,29 @@ export function AgentDialog({
                   {/* Tools & knowledge */}
                   <div className="space-y-2">
                     <Label>Tools & Knowledge Sources</Label>
-                    {dynamicToolAccessEnabled && (
-                      <Tabs
-                        value={allToolsMode ? "all" : "specific"}
-                        onValueChange={(value) => {
-                          const all = value === "all";
-                          setAccessAllTools(all);
-                          // Dynamic access only works through the search/run
-                          // dispatch surface, so picking it enables that mode.
-                          if (all) {
-                            setToolExposureMode("search_and_run_only");
-                          }
-                        }}
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="all">All</TabsTrigger>
-                          <TabsTrigger value="specific">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    )}
+                    <Tabs
+                      value={allToolsMode ? "all" : "specific"}
+                      onValueChange={(value) => {
+                        const all = value === "all";
+                        setAccessAllTools(all);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (all) {
+                          setToolExposureMode("search_and_run_only");
+                        }
+                      }}
+                    >
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="specific">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                     {allToolsMode && (
                       <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
                           Every MCP tool and knowledge source the chatting user
-                          can access
+                          can access, in this agent's environment
                         </li>
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
@@ -1574,10 +1605,25 @@ export function AgentDialog({
                         <p className="text-xs font-medium text-muted-foreground">
                           Tools ({selectedToolsCount})
                         </p>
-                        {!agent && selectedToolsCount > 0 && (
+                        {((!agent && selectedToolsCount > 0) ||
+                          environmentScopingEnabled) && (
                           <p className="text-xs text-muted-foreground">
-                            Some recommended {appName} MCP tools are
-                            pre-selected for you
+                            {!agent && selectedToolsCount > 0 && (
+                              <>
+                                Some recommended {appName} MCP tools are
+                                pre-selected for you.{" "}
+                              </>
+                            )}
+                            {environmentScopingEnabled && (
+                              <>
+                                MCP servers are filtered to the selected
+                                environment
+                                {agentEnvironmentName
+                                  ? ` ("${agentEnvironmentName}")`
+                                  : " (Default)"}
+                                .
+                              </>
+                            )}
                           </p>
                         )}
                         <AgentToolsEditor
@@ -1588,19 +1634,70 @@ export function AgentDialog({
                           onSelectedCountChange={setSelectedToolsCount}
                           environmentScopingEnabled={environmentScopingEnabled}
                           agentEnvironmentId={environmentId ?? null}
-                          agentEnvironmentName={
-                            environments.find((env) => env.id === environmentId)
-                              ?.name ?? null
-                          }
+                          agentEnvironmentName={agentEnvironmentName}
                           onConflictsChange={setMcpEnvConflicts}
                           openComboboxOnMount={openToolsCombobox}
                         />
                       </div>
-                      {(knowledgeBases.length > 0 || connectors.length > 0) && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Knowledge Sources
-                          </p>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Knowledge Sources
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Assigning a source gives this{" "}
+                          {agentType === "mcp_gateway" ? "gateway" : "agent"} a{" "}
+                          <code>query_knowledge_sources</code> tool to search
+                          it.
+                        </p>
+                        {!isKnowledgeConfigured ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              Knowledge not configured
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              Configure embedding and reranking to use knowledge
+                              sources.
+                              {canAccessKnowledgeSettings && (
+                                <>
+                                  {" "}
+                                  <Link
+                                    href="/settings/knowledge"
+                                    className="underline underline-offset-2"
+                                  >
+                                    Configure knowledge
+                                  </Link>
+                                </>
+                              )}
+                            </p>
+                          </>
+                        ) : knowledgeBases.length === 0 &&
+                          connectors.length === 0 ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              disabled
+                              className="w-full justify-between font-normal"
+                            >
+                              No knowledge sources available
+                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              No knowledge bases or connectors yet.{" "}
+                              <Link
+                                href="/knowledge/connectors"
+                                className="underline underline-offset-2"
+                              >
+                                Add a connector
+                              </Link>
+                              .
+                            </p>
+                          </>
+                        ) : (
                           <Popover modal>
                             <PopoverTrigger asChild>
                               <Button
@@ -1699,12 +1796,21 @@ export function AgentDialog({
                                       {connectors.map((connector) => {
                                         const isSelected =
                                           connectorIds.includes(connector.id);
+                                        // Environment isolation: a connector in
+                                        // another environment can't be used by
+                                        // this agent, so it's shown disabled.
+                                        const isEnvIncompatible =
+                                          environmentScopingEnabled &&
+                                          (connector.environmentId ?? null) !==
+                                            (environmentId ?? null);
                                         return (
                                           <CommandItem
                                             key={connector.id}
                                             value={connector.name}
+                                            disabled={isEnvIncompatible}
                                             className="data-[selected=true]:bg-transparent"
                                             onSelect={() => {
+                                              if (isEnvIncompatible) return;
                                               setConnectorIds((prev) =>
                                                 isSelected
                                                   ? prev.filter(
@@ -1728,11 +1834,15 @@ export function AgentDialog({
                                                 {connector.name}
                                               </div>
                                               <div className="truncate text-xs text-muted-foreground">
-                                                {connector.description || (
-                                                  <span className="capitalize">
-                                                    {connector.connectorType}
-                                                  </span>
-                                                )}
+                                                {isEnvIncompatible
+                                                  ? "Different environment"
+                                                  : connector.description || (
+                                                      <span className="capitalize">
+                                                        {
+                                                          connector.connectorType
+                                                        }
+                                                      </span>
+                                                    )}
                                               </div>
                                             </div>
                                             <div className="ml-2 shrink-0">
@@ -1750,8 +1860,8 @@ export function AgentDialog({
                               </Command>
                             </PopoverContent>
                           </Popover>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
 

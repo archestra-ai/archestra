@@ -23,7 +23,6 @@ export function makeConfig(
       agentEnvironmentsEnabled: false,
       appsEnabled: false,
       projectsEnabled: false,
-      dynamicToolAccessEnabled: true,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

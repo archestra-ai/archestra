@@ -2,6 +2,7 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
+  isProjectsFileArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
@@ -74,6 +75,7 @@ export async function resolveDynamicTool(params: {
   const accessible = await getAccessibleTools(
     ctx.userId,
     ctx.organizationId,
+    ctx.agentEnvironmentId,
     toolName,
   );
   const tool = accessible[0];
@@ -93,11 +95,12 @@ export async function resolveDynamicTool(params: {
 
 /**
  * Whether an unassigned Archestra built-in may execute for this agent/user
- * anyway: the sandbox tools when the sandbox feature is on, and
- * query_knowledge_sources when the user can access at least one knowledge
- * connector. The caller (executeArchestraTool) has already enforced the tool's
- * RBAC permission; this adds the dynamic-access gates on top. Every other
- * built-in stays assignment-gated.
+ * anyway: the sandbox runtime tools when the sandbox runtime is on, the
+ * persistent-files (Projects) tools when the Projects feature is on (see
+ * isSandboxToolEnabled), and query_knowledge_sources when the user can access at
+ * least one knowledge connector. The caller (executeArchestraTool) has already
+ * enforced the tool's RBAC permission; this adds the dynamic-access gates on
+ * top. Every other built-in stays assignment-gated.
  */
 export async function isDynamicallyAvailableArchestraTool(params: {
   toolName: string;
@@ -111,8 +114,7 @@ export async function isDynamicallyAvailableArchestraTool(params: {
   }
   const isKnowledgeQuery =
     shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME;
-  const isSandboxTool =
-    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName);
+  const isSandboxTool = isSandboxToolEnabled(shortName);
   if (!isKnowledgeQuery && !isSandboxTool) {
     return false;
   }
@@ -121,7 +123,11 @@ export async function isDynamicallyAvailableArchestraTool(params: {
     return false;
   }
   return isKnowledgeQuery
-    ? userHasAccessibleKnowledgeConnectors(ctx.userId, ctx.organizationId)
+    ? userHasAccessibleKnowledgeConnectors(
+        ctx.userId,
+        ctx.organizationId,
+        ctx.agentEnvironmentId,
+      )
     : true;
 }
 
@@ -146,8 +152,12 @@ export async function getUnassignedDiscoverableTools(params: {
   }
 
   const [accessibleTools, hasKnowledgeConnectors] = await Promise.all([
-    getAccessibleTools(ctx.userId, ctx.organizationId),
-    userHasAccessibleKnowledgeConnectors(ctx.userId, ctx.organizationId),
+    getAccessibleTools(ctx.userId, ctx.organizationId, ctx.agentEnvironmentId),
+    userHasAccessibleKnowledgeConnectors(
+      ctx.userId,
+      ctx.organizationId,
+      ctx.agentEnvironmentId,
+    ),
   ]);
   return accessibleTools.filter(
     (tool) =>
@@ -171,15 +181,23 @@ export async function dynamicAccessContext(params: {
   agentId: string;
   userId?: string;
   organizationId?: string;
-}): Promise<{ userId: string; organizationId: string } | null> {
+}): Promise<{
+  userId: string;
+  organizationId: string;
+  agentEnvironmentId: string | null;
+} | null> {
   const { agentId, organizationId, userId } = params;
   if (!userId || !organizationId || userId === "system") {
     return null;
   }
-  if (!(await AgentModel.getAccessAllTools(agentId))) {
+  const [accessAllTools, agentEnvironmentId] = await Promise.all([
+    AgentModel.getAccessAllTools(agentId),
+    AgentModel.findEnvironmentId(agentId),
+  ]);
+  if (!accessAllTools) {
     return null;
   }
-  return { userId, organizationId };
+  return { userId, organizationId, agentEnvironmentId };
 }
 
 // === Internal helpers ===
@@ -192,6 +210,7 @@ const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
 async function userHasAccessibleKnowledgeConnectors(
   userId: string,
   organizationId: string,
+  environmentId: string | null,
 ): Promise<boolean> {
   const access =
     await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -202,9 +221,27 @@ async function userHasAccessibleKnowledgeConnectors(
     organizationId,
     canReadAll: access.canReadAll,
     viewerTeamIds: access.teamIds,
+    environmentId,
     limit: 1,
   });
   return connectors.length > 0;
+}
+
+// Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
+// the current deployment config. The runtime tools
+// (run_command/upload_file/download_file) follow the skills-sandbox runtime
+// flag; the persistent-files (Projects) tools follow the Projects flag in
+// addition to the runtime flag — they don't materialize a Dagger container, but
+// execution still requires the runtime (see sandbox.ts `ensureUsable`), so
+// exposing them only with both flags on mirrors the registration gate in
+// index.ts. Non-sandbox tools are never enabled by this predicate.
+function isSandboxToolEnabled(shortName: string): boolean {
+  if (isProjectsFileArchestraToolShortName(shortName)) {
+    return config.skillsSandbox.enabled && config.projects.enabled;
+  }
+  return (
+    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
+  );
 }
 
 // Mirrors the search-space exclusions: Archestra built-ins stay
@@ -213,9 +250,11 @@ async function userHasAccessibleKnowledgeConnectors(
 // either.
 //
 // EXCEPTIONS riding the relaxation:
-// - the sandbox tools (run_command/upload_file/download_file) when the sandbox
-//   feature is on, so a user with sandbox:execute can discover and run them
-//   without a manual assignment;
+// - the sandbox runtime tools (run_command/upload_file/download_file) when the
+//   sandbox runtime is on, and the persistent-files tools
+//   (search_files/read_file/save_result/edit_file/delete_file) when the
+//   Projects feature is on, so a user with sandbox:execute can discover and run
+//   them without a manual assignment (see isSandboxToolEnabled);
 // - query_knowledge_sources when the user can access a knowledge connector
 //   (the discovery path passes `hasKnowledgeConnectors` it already computed;
 //   the single-tool path checks it in isDynamicallyAvailableArchestraTool).
@@ -234,19 +273,19 @@ function isExcludedFromDiscovery(
   if (shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME) {
     return !options?.hasKnowledgeConnectors;
   }
-  return !(
-    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
-  );
+  return !isSandboxToolEnabled(shortName);
 }
 
 async function getAccessibleTools(
   userId: string,
   organizationId: string,
+  environmentId: string | null,
   name?: string,
 ): Promise<Tool[]> {
   return ToolModel.getMcpToolsAccessibleToUser({
     userId,
     organizationId,
+    environmentId,
     isAdmin: await userIsCatalogAdmin(userId, organizationId),
     name,
   });

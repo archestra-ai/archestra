@@ -49,7 +49,7 @@ describe("injectAppDiagnostics", () => {
     expect(text).toContain("UNTRUSTED");
     expect(text).toContain(`App ${APP_ID} (version 3):`);
     expect(text).toContain("- [error] boom is not defined (app:12)");
-    expect(text).toContain("update_app");
+    expect(text).toContain("edit_app");
     // the original message is untouched (persistence sees clean text)
     expect(messages[0].parts?.[0].text).toBe("it looks broken");
   });

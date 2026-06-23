@@ -2997,7 +2997,7 @@ describe("ToolModel", () => {
       const catalogId = randomUUID();
       await ToolModel.seedArchestraTools(catalogId);
 
-      const flaggedOffName = "archestra__create_app";
+      const flaggedOffName = "archestra__scaffold_app";
       const removedName = "archestra__obsolete_tool";
       await db.insert(schema.toolsTable).values([
         { name: flaggedOffName, parameters: {}, catalogId, agentId: null },

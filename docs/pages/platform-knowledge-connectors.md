@@ -353,6 +353,10 @@ Connectors can be managed from the **Connectors** page. Open a connector to:
 - **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
 - **View runs** -- see sync history with status, document counts, and errors
 
+## Environment
+
+A connector can be assigned a deployment environment. Only agents and gateways in the same environment can use its knowledge — a "dev" agent cannot query a "prod" connector. Unassigned connectors belong to the Default environment. See [Environments](/docs/platform-environments).
+
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.

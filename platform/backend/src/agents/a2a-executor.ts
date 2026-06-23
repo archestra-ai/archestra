@@ -8,14 +8,20 @@ import {
   consumeStream as consumeReadableStream,
   NoOutputGeneratedError,
   stepCountIs,
-  streamText,
+  type streamText,
 } from "ai";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
+import {
+  REPEAT_CALL_TERMINATION_NOTICE,
+  repeatCeilingStopCondition,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
 import logger from "@/logging";
 import { AgentModel, McpServerModel } from "@/models";
 import {
@@ -194,6 +200,10 @@ export async function executeA2AMessage(
   }
 
   try {
+    // One tracker per run, shared between the breaker (records each call) and the
+    // stop condition below (terminates the run once repeats hit the ceiling).
+    const repeatTracker = new ToolCallRepeatTracker();
+
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
@@ -210,6 +220,7 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      repeatTracker,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -251,101 +262,96 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Execute with AI SDK using streamText (required for long-running requests)
-    // We stream internally but collect the full result.
-    // Capture stream-level errors (e.g. API billing errors) via onError so we
-    // can surface the real cause instead of a generic NoOutputGeneratedError.
-
     // Build multimodal user content when image attachments are present
     const { content: userContent, skippedNote } = buildUserContent(
       message,
       attachments,
     );
 
-    let capturedStreamError: unknown;
-    const onError = ({ error }: { error: unknown }) => {
-      capturedStreamError = error;
+    // Execute via the shared agent-run primitive: it owns the streamText call
+    // and transparently recovers empty/abortive/context-length turns before any
+    // result is collected. We stream internally but collect the full result.
+    // Behavior change: A2A (and its scheduled/email/ChatOps/delegation callers)
+    // previously had no recovery — a clean-but-empty turn returned an empty
+    // success. It now retries and, on exhaustion, throws (mapped to a
+    // ProviderError below), matching the interactive chat path.
+    // Prefer the explicit `messages` param; otherwise use a `messages` user turn
+    // when images are present, falling back to a plain `prompt` for text only.
+    const baseConfig = {
+      model,
+      system: systemPrompt,
+      tools: mcpTools,
+      stopWhen: [
+        stepCountIs(MAX_AGENT_STEPS),
+        repeatCeilingStopCondition(repeatTracker),
+      ],
+      abortSignal,
     };
-
-    // By-pass "messages" param when it's provided
-    // Legacy:
-    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
-    const stream =
+    const config: Parameters<typeof streamText>[0] =
       params.messages !== undefined
-        ? streamText({
-            model,
-            system: systemPrompt,
-            messages: params.messages,
-            tools: mcpTools,
-            stopWhen: stepCountIs(500),
-            abortSignal,
-            onError,
-          })
+        ? { ...baseConfig, messages: params.messages }
         : userContent
-          ? streamText({
-              model,
-              system: systemPrompt,
+          ? {
+              ...baseConfig,
               messages: [{ role: "user" as const, content: userContent }],
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            })
-          : streamText({
-              model,
-              system: systemPrompt,
-              prompt: message + skippedNote,
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            });
+            }
+          : { ...baseConfig, prompt: message + skippedNote };
 
+    let finalText: string;
+    let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
+    let finishReason: Awaited<ReturnType<typeof streamText>["finishReason"]>;
     let responseUiMessage: UIMessage | undefined;
-    const uiMessageStreamConsumption = consumeReadableStream({
-      stream: stream.toUIMessageStream<UIMessage>({
-        originalMessages: params.originalUiMessages,
-        generateMessageId: () => crypto.randomUUID(),
-        onFinish: ({ responseMessage }) => {
-          responseUiMessage = responseMessage;
-        },
-        onError: (error) => {
-          // a nonexistent-tool call is recoverable: the SDK already feeds the
-          // tool-error back to the model and continues the loop, so return the
-          // recovery text as the part's errorText instead of killing the run
-          const unavailableToolError = getUnavailableToolErrorDetails(error);
-          if (unavailableToolError) {
-            logger.info(
-              { agentId: agent.id, unavailableToolError },
-              "Returning unavailable tool error as tool-level error in A2A execution",
+    // Captures the committed attempt's stream-level error (e.g. API billing
+    // errors) so a generic NoOutputGeneratedError can surface the real cause.
+    let getCapturedStreamError: () => unknown = () => undefined;
+    try {
+      const runStream = await runAgentStream({
+        config,
+        recovery: { logContext: { agentId: agent.id, sessionId } },
+      });
+      const stream = runStream.result;
+      getCapturedStreamError = runStream.getCapturedStreamError;
+
+      const uiMessageStreamConsumption = consumeReadableStream({
+        stream: stream.toUIMessageStream<UIMessage>({
+          originalMessages: params.originalUiMessages,
+          generateMessageId: () => crypto.randomUUID(),
+          onFinish: ({ responseMessage }) => {
+            responseUiMessage = responseMessage;
+          },
+          onError: (error) => {
+            // a nonexistent-tool call is recoverable: the SDK already feeds the
+            // tool-error back to the model and continues the loop, so return the
+            // recovery text as the part's errorText instead of killing the run
+            const unavailableToolError = getUnavailableToolErrorDetails(error);
+            if (unavailableToolError) {
+              logger.info(
+                { agentId: agent.id, unavailableToolError },
+                "Returning unavailable tool error as tool-level error in A2A execution",
+              );
+              return formatUnavailableToolErrorDetails(unavailableToolError);
+            }
+            logger.error(
+              { agentId: agent.id, error },
+              "Error stream.toUIMessageStream when parsing A2A execution response",
             );
-            return formatUnavailableToolErrorDetails(unavailableToolError);
-          }
+            throw error;
+          },
+        }),
+        onError: (error) => {
           logger.error(
             { agentId: agent.id, error },
-            "Error stream.toUIMessageStream when parsing A2A execution response",
+            "Error consuming UI message stream for A2A execution response",
           );
           throw error;
         },
-      }),
-      onError: (error) => {
-        logger.error(
-          { agentId: agent.id, error },
-          "Error consuming UI message stream for A2A execution response",
-        );
-        throw error;
-      },
-    });
+      });
 
-    // Wait for the stream to complete and get the final text.
-    // When the underlying provider returns an error (e.g. 400 insufficient
-    // credits), the stream produces zero steps and the AI SDK throws
-    // NoOutputGeneratedError.  Re-throw with the real error message so callers
-    // (and ultimately end-users) see what actually went wrong.
-    let finalText: string;
-    let usage: Awaited<typeof stream.usage>;
-    let finishReason: Awaited<typeof stream.finishReason>;
-    try {
+      // Wait for the stream to complete and get the final text.
+      // When the underlying provider returns an error (e.g. 400 insufficient
+      // credits), the stream produces zero steps and the AI SDK throws
+      // NoOutputGeneratedError.  Re-throw with the real error message so callers
+      // (and ultimately end-users) see what actually went wrong.
       [finalText, usage, finishReason] = await Promise.all([
         stream.text,
         stream.usage,
@@ -359,10 +365,21 @@ export async function executeA2AMessage(
           "A2A execution failed: no response UIMessage generated",
         );
       }
+
+      // The repeat-call ceiling stops the loop on a tool-call step, so the model
+      // never took a turn to produce assistant text and `finalText` is empty.
+      // Headless callers read only `text`, so surface why the run ended.
+      if (
+        finalText.trim() === "" &&
+        repeatTracker.hasReachedTerminationCeiling()
+      ) {
+        finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      }
     } catch (streamError) {
+      const capturedStreamError = getCapturedStreamError();
       if (
         NoOutputGeneratedError.isInstance(streamError) &&
-        capturedStreamError
+        capturedStreamError !== undefined
       ) {
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),

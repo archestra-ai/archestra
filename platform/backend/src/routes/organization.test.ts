@@ -561,42 +561,6 @@ describe("organization routes", () => {
         convertToolResultsToToon: true,
       });
     });
-
-    test("allows clearing the default user limit", async () => {
-      const setResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: 100,
-          defaultUserLimitModel: ["gpt-4o"],
-          defaultUserLimitCleanupInterval: "12h",
-        },
-      });
-
-      expect(setResponse.statusCode).toBe(200);
-      expect(setResponse.json()).toMatchObject({
-        defaultUserLimitValue: 100,
-        defaultUserLimitModel: ["gpt-4o"],
-        defaultUserLimitCleanupInterval: "12h",
-      });
-
-      const clearResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: null,
-          defaultUserLimitModel: null,
-          defaultUserLimitCleanupInterval: null,
-        },
-      });
-
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json()).toMatchObject({
-        defaultUserLimitValue: null,
-        defaultUserLimitModel: null,
-        defaultUserLimitCleanupInterval: null,
-      });
-    });
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {

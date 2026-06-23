@@ -77,13 +77,13 @@ export { default as conversationAttachmentsTable } from "./conversation-attachme
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
 export { default as conversationCompactionsTable } from "./conversation-compaction";
 export { default as conversationEnabledToolsTable } from "./conversation-enabled-tool";
-export { default as conversationFileTouchesTable } from "./conversation-file-touch";
 export {
   conversationShareTeamsTable,
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
+export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as hookFilesTable } from "./hook-file";

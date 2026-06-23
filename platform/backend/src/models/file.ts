@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   PersistedFile,
@@ -125,22 +125,30 @@ class FileModel {
     return row ? normalizeByteaField(row, "data") : null;
   }
 
-  /** The user's own files (newest first), metadata only: project files excluded. */
-  static async listForUser(params: {
+  /**
+   * A user's headless (no-project, no-conversation) file by name. The orphan
+   * unique index makes the match at most one. Used so a headless `save_result`
+   * with `overwrite` can replace the file it created on a previous run instead
+   * of dead-ending on the orphan name collision.
+   */
+  static async findOrphanByName(params: {
     organizationId: string;
     userId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
-      .select(artifactColumns)
+    filename: string;
+  }): Promise<PersistedFile | null> {
+    const [row] = await db
+      .select()
       .from(schema.filesTable)
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.userId, params.userId),
+          eq(schema.filesTable.filename, params.filename),
           isNull(schema.filesTable.projectId),
+          isNull(schema.filesTable.conversationId),
         ),
-      )
-      .orderBy(desc(schema.filesTable.createdAt));
+      );
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /** Files belonging to one project (newest first), any author; org-scoped. */
@@ -160,22 +168,51 @@ class FileModel {
       .orderBy(desc(schema.filesTable.createdAt));
   }
 
-  /** Files belonging to any of the given projects (newest first); org-scoped. */
-  static async listByProjects(params: {
+  /**
+   * The user's no-project files in one conversation (newest first), metadata
+   * only. This is the personal "My Files" scope after no-project files became
+   * conversation-scoped: a chat sees only its own files, never another
+   * conversation's. Project files are excluded (they use {@link listByProject}).
+   */
+  static async listNoProjectByConversation(params: {
     organizationId: string;
-    projectIds: string[];
+    userId: string;
+    conversationId: string;
   }): Promise<SandboxArtifactRow[]> {
-    if (params.projectIds.length === 0) return [];
     return db
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
-          inArray(schema.filesTable.projectId, params.projectIds),
+          eq(schema.filesTable.conversationId, params.conversationId),
+          eq(schema.filesTable.userId, params.userId),
+          isNull(schema.filesTable.projectId),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));
+  }
+
+  /**
+   * Every no-project file produced in one conversation (any author), with the
+   * storage pointer needed to purge external bytes. Used to clean up a
+   * conversation's files when it is deleted — project files (which outlive the
+   * conversation) are excluded.
+   */
+  static async listNoProjectFilesForConversation(params: {
+    organizationId: string;
+    conversationId: string;
+  }): Promise<SandboxArtifactRow[]> {
+    return db
+      .select(artifactColumns)
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.conversationId, params.conversationId),
+          isNull(schema.filesTable.projectId),
+        ),
+      );
   }
 
   /** Files the user authored in one conversation, newest first. */

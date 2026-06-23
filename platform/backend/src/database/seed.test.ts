@@ -7,7 +7,7 @@ import {
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
-import { afterEach } from "vitest";
+import { afterEach, beforeEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -148,9 +148,17 @@ Examples:
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
 
 describe("syncBuiltInSkills", () => {
+  // These cases assert on the always-on built-in skills, so pin the apps feature
+  // off (the build-app skill is gated on it) and restore the ambient flag after.
+  let originalAppsEnabled: boolean;
+  beforeEach(() => {
+    originalAppsEnabled = config.apps.enabled;
+    config.apps.enabled = false;
+  });
   // syncBuiltInSkills syncs branding per org; reset the singleton so it never
   // leaks an app name into a later (shuffled) test.
   afterEach(() => {
+    config.apps.enabled = originalAppsEnabled;
     archestraMcpBranding.syncFromOrganization(null);
   });
 
@@ -199,7 +207,11 @@ describe("syncBuiltInSkills", () => {
     await syncBuiltInSkills();
     await syncBuiltInSkills();
 
-    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    // apps feature pinned off here, so the apps-gated skills do not seed.
+    const expected = BUILT_IN_SKILLS.filter(
+      (skill) => !skill.requiresAppsFeature,
+    ).length;
+    expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
   test("does not seed a phantom copy when the name is already taken", async ({
@@ -345,6 +357,36 @@ describe("syncBuiltInSkills", () => {
     expect(after?.id).toBe(before?.id);
     expect(after?.name).toBe("Acme Copilot Platform Operations");
     expect(after?.content).not.toContain("Archestra");
+  });
+
+  test("seeds an apps-gated skill only when the apps feature is enabled", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const buildAppRef = builtInSkillSourceRef("build-app");
+
+    const original = config.apps.enabled;
+    try {
+      config.apps.enabled = false;
+      await syncBuiltInSkills();
+      expect(
+        await SkillModel.findBuiltIn({
+          organizationId: org.id,
+          sourceRef: buildAppRef,
+        }),
+      ).toBeNull();
+
+      config.apps.enabled = true;
+      await syncBuiltInSkills();
+      const seeded = await SkillModel.findBuiltIn({
+        organizationId: org.id,
+        sourceRef: buildAppRef,
+      });
+      expect(seeded).not.toBeNull();
+      expect(seeded?.content).toContain("window.archestra");
+    } finally {
+      config.apps.enabled = original;
+    }
   });
 });
 

@@ -249,6 +249,8 @@ export async function syncBuiltInSkillsForOrganization(
   archestraMcpBranding.syncFromOrganization(organization);
 
   for (const builtInSkill of BUILT_IN_SKILLS) {
+    // Skills tied to a dark feature stay out of the catalog until it ships.
+    if (builtInSkill.requiresAppsFeature && !config.apps.enabled) continue;
     const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
     const shipped = builtInSkillShippedWrite(builtInSkill);
 

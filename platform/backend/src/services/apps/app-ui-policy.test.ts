@@ -6,6 +6,7 @@ import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   APP_PLATFORM_CSP,
   buildValidatedVersionPayload,
+  validateAppHtmlStatic,
 } from "./app-ui-policy";
 
 describe("APP_PLATFORM_CSP", () => {
@@ -113,6 +114,62 @@ describe("buildValidatedVersionPayload", () => {
         html: `<html><head></head><body>${"z".repeat(APP_HTML_MAX_BYTES)}</body></html>`,
       }),
     ).rejects.toThrow(/byte limit/);
+  });
+});
+
+describe("validateAppHtmlStatic", () => {
+  test("a clean document yields no findings", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<!doctype html><html><head><title>x</title></head><body><h1>hi</h1></body></html>",
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("SDK self-bootstrap is an error finding", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><script>const x = window.__ARCHESTRA_APP_SDK_URL__;</script></head><body/></html>",
+    );
+    expect(findings).toContainEqual({
+      severity: "error",
+      message: expect.stringContaining("must not bootstrap the MCP App SDK"),
+    });
+  });
+
+  test("a missing document root is a warning finding", async () => {
+    const findings = await validateAppHtmlStatic("<h1>fragment</h1>");
+    expect(findings).toEqual([
+      {
+        severity: "warning",
+        message: expect.stringContaining("no <head> or <html>"),
+      },
+    ]);
+  });
+
+  test("a script host outside the CDN allowlist is a warning finding", async () => {
+    const findings = await validateAppHtmlStatic(
+      '<html><head><script src="https://evil.example.com/a.js"></script></head><body/></html>',
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("evil.example.com"),
+    });
+  });
+
+  test("a protocol-relative off-allowlist host is flagged once", async () => {
+    const findings = await validateAppHtmlStatic(
+      '<html><head><link href="//assets.example.org/x.css" rel="stylesheet"><link href="//assets.example.org/y.css" rel="stylesheet"></head><body/></html>',
+    );
+    const hostWarnings = findings.filter((f) =>
+      /references the host "assets\.example\.org"/.test(f.message),
+    );
+    expect(hostWarnings).toHaveLength(1);
+  });
+
+  test("allowlisted CDN hosts and relative refs are not flagged", async () => {
+    const findings = await validateAppHtmlStatic(
+      '<html><head><script src="https://cdn.jsdelivr.net/npm/x.js"></script><link rel="stylesheet" href="https://fonts.googleapis.com/css"><script src="/local.js"></script></head><body/></html>',
+    );
+    expect(findings).toEqual([]);
   });
 });
 

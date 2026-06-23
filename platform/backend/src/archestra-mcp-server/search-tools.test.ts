@@ -7,6 +7,7 @@ import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -345,6 +346,51 @@ describe("search_tools", () => {
     });
   });
 
+  test("on zero matches, hints the sandbox fallback when the sandbox is usable", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Sandbox Search Agent",
+        organizationId: org.id,
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "zzqqxyzznomatch", limit: 10 },
+        context,
+      );
+
+      const structuredContent =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structuredContent.matchCount).toBe(0);
+      expect(structuredContent.hint).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      expect(structuredContent.hint).toContain("fall back");
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
+  });
+
   test("excludes always-exposed tools but keeps authoring tools searchable", async ({
     makeAgent,
     makeMember,
@@ -474,9 +520,57 @@ describe("search_tools", () => {
         expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
         expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
         expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+        // Persistent-files tools surface too while the Projects feature is on.
+        expect(names).toContain(TOOL_READ_FILE_FULL_NAME);
       } finally {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
+      }
+    });
+
+    test("drops persistent-files tools from discovery when the Projects feature is off, keeping sandbox-runtime tools", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      const originalProjectsEnabled = config.projects.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "admin" });
+        const agent = await makeAgent({
+          name: "Projects Discovery Agent",
+          organizationId: org.id,
+          accessAllTools: true,
+        });
+        // Seed with the Projects feature on so the persistent-files catalog rows
+        // exist, then turn it off: the rows persist but discovery must drop them.
+        (config.projects as { enabled: boolean }).enabled = true;
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+        (config.projects as { enabled: boolean }).enabled = false;
+
+        const names = await searchSandboxTools({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
+
+        // Runtime tools follow the runtime flag — still discoverable.
+        expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+        expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+        expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+        // Persistent-files tools follow the Projects flag — gone.
+        expect(names).not.toContain(TOOL_READ_FILE_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+        (config.projects as { enabled: boolean }).enabled =
+          originalProjectsEnabled;
       }
     });
 
@@ -784,7 +878,7 @@ describe("search_tools", () => {
   });
 
   describe("parameter enrichment", () => {
-    test("surfaces type, enum, and one-level nested properties", () => {
+    test("surfaces type, enum, and nested properties", () => {
       const summaries = __test.summarizeInputParameters({
         type: "object",
         properties: {
@@ -822,10 +916,38 @@ describe("search_tools", () => {
           enum: null,
           description: null,
           properties: [
-            { name: "id", type: "number", required: true },
-            { name: "note", type: "string", required: false },
+            { name: "id", type: "number", required: true, properties: null },
+            { name: "note", type: "string", required: false, properties: null },
           ],
           hasHiddenDetail: false,
+        },
+      ]);
+    });
+
+    test("expands a second nested level for object-of-object params", () => {
+      const [summary] = __test.summarizeInputParameters({
+        type: "object",
+        properties: {
+          config: {
+            type: "object",
+            properties: {
+              user: {
+                type: "object",
+                properties: { name: { type: "string" } },
+                required: ["name"],
+              },
+            },
+          },
+        },
+      });
+      expect(summary.properties).toEqual([
+        {
+          name: "user",
+          type: "object",
+          required: false,
+          properties: [
+            { name: "name", type: "string", required: true, properties: null },
+          ],
         },
       ]);
     });
@@ -846,7 +968,7 @@ describe("search_tools", () => {
       });
       expect(summary.type).toBe("array");
       expect(summary.properties).toEqual([
-        { name: "content", type: "string", required: true },
+        { name: "content", type: "string", required: true, properties: null },
       ]);
     });
 
@@ -939,6 +1061,47 @@ describe("search_tools", () => {
       ).toBe("todos?:array{content!:string}");
     });
 
+    test("expands a second object level inline", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: { name: { type: "string" } },
+                },
+              },
+            },
+          },
+        }),
+      ).toBe("config?:object{user?:object{name?:string}}");
+    });
+
+    test("expands a second level through array-of-object items", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            payload: {
+              type: "object",
+              properties: {
+                rows: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: { id: { type: "number" } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ).toBe("payload?:object{rows?:array{id?:number}}");
+    });
+
     test("renders type, object shape, and enum together", () => {
       expect(
         signatureFor({
@@ -1017,7 +1180,7 @@ describe("search_tools", () => {
         expect(signatureFor(schema)).toBe("meta?:object…");
       });
 
-      test("marks an object nested deeper than the one level shown", () => {
+      test("fully shows an object nested two levels deep, no marker", () => {
         const schema = {
           type: "object",
           properties: {
@@ -1029,8 +1192,88 @@ describe("search_tools", () => {
             },
           },
         };
+        expect(hasHidden(schema)).toBe(false);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{name?}}",
+        );
+      });
+
+      test("marks an object nested deeper than the two levels shown", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: {
+                    address: { type: "object", properties: { city: {} } },
+                  },
+                },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(true);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{address?:object}}…",
+        );
+      });
+
+      test("marks an opaque second-level object", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: { user: { type: "object" } },
+            },
+          },
+        };
         expect(hasHidden(schema)).toBe(true);
         expect(signatureFor(schema)).toBe("config?:object{user?:object}…");
+      });
+
+      // The render resolves array items only when they list properties, while the
+      // marker resolves any object-typed items; this pins that they still agree —
+      // opaque items collapse the array to a bare type and the marker fires.
+      test("marks a second-level array of opaque objects", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                rows: { type: "array", items: { type: "object" } },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(true);
+        expect(signatureFor(schema)).toBe("config?:object{rows?:array}…");
+      });
+
+      test("does not mark a closed second-level object", () => {
+        const schema = {
+          type: "object",
+          properties: {
+            config: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: { name: { type: "string" } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        };
+        expect(hasHidden(schema)).toBe(false);
+        expect(signatureFor(schema)).toBe(
+          "config?:object{user?:object{name?:string}}",
+        );
       });
 
       test("marks an array of freeform objects", () => {

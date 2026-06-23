@@ -81,11 +81,15 @@ export async function fetchAzureModels(
       return fallbackToConfiguredDeployment(deploymentName);
     }
 
-    const data = (await response.json()) as { data?: { id: string }[] };
+    const data = (await response.json()) as {
+      data?: { id: string; model?: string }[];
+    };
     const models = (data.data ?? []).map((dep) => ({
       id: dep.id,
       displayName: dep.id,
       provider: "azure" as const,
+      // Data-plane deployments carry the backing model name; use it for pricing.
+      ...(dep.model ? { underlyingModelName: dep.model } : {}),
     }));
     return models.length > 0
       ? models
@@ -347,7 +351,10 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
   const data = (await response.json()) as {
     value?: {
       name?: string;
-      properties?: { provisioningState?: string };
+      properties?: {
+        provisioningState?: string;
+        model?: { name?: string };
+      };
     }[];
   };
 
@@ -355,12 +362,17 @@ async function fetchAzureManagementDeploymentsForAccount(params: {
     .filter(
       (deployment) => deployment.properties?.provisioningState !== "Failed",
     )
-    .map((deployment) => deployment.name)
-    .filter((name): name is string => Boolean(name))
-    .map((name) => ({
-      id: name,
-      displayName: name,
+    .filter((deployment): deployment is typeof deployment & { name: string } =>
+      Boolean(deployment.name),
+    )
+    .map((deployment) => ({
+      id: deployment.name,
+      displayName: deployment.name,
       provider: "azure" as const,
+      // Management deployments expose the backing model name; use it for pricing.
+      ...(deployment.properties?.model?.name
+        ? { underlyingModelName: deployment.properties.model.name }
+        : {}),
     }));
 }
 

@@ -40,10 +40,6 @@ describe("matchesAgentName", () => {
     expect(matchesAgentName("Agent  Peter", "Agent Peter")).toBe(true);
   });
 
-  test("matches with spaces in both", () => {
-    expect(matchesAgentName("Agent Peter", "Agent Peter")).toBe(true);
-  });
-
   test("returns false for partial match", () => {
     expect(matchesAgentName("Agent", "Agent Peter")).toBe(false);
   });
@@ -926,38 +922,6 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const manager = new ChatOpsManager();
     const agents = await manager.getAccessibleChatopsAgents({
       senderEmail: "channeluser@example.com",
-      isDm: false,
-    });
-
-    expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
-    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
-  });
-
-  test("excludes personal agents when isDm is not specified", async ({
-    makeUser,
-    makeOrganization,
-    makeInternalAgent,
-    makeMember,
-  }) => {
-    const user = await makeUser({ email: "defaultuser@example.com" });
-    const org = await makeOrganization();
-    await makeMember(user.id, org.id, { role: "admin" });
-
-    const orgAgent = await makeInternalAgent({
-      organizationId: org.id,
-      name: "Org Agent",
-      scope: "org",
-    });
-    const personalAgent = await makeInternalAgent({
-      organizationId: org.id,
-      name: "Personal Agent",
-      scope: "personal",
-      authorId: user.id,
-    });
-
-    const manager = new ChatOpsManager();
-    const agents = await manager.getAccessibleChatopsAgents({
-      senderEmail: "defaultuser@example.com",
       isDm: false,
     });
 
@@ -2300,11 +2264,11 @@ describe("buildChatOpsSessionId", () => {
     expect(result.length).toBeLessThanOrEqual(58);
   });
 
-  test("produces same hash for same channel ID (deterministic)", () => {
+  test("hashes the same long channel ID to a stable session ID", () => {
     const longChannelId =
       "a:15T7kNVP8YbByYGI_Fpc-Ci4cqqlrOfJiumEhUcnvNEZtyranEbXyAUqrNC9jGpSyulMgLurq6nD51ASEEq7sXfK3zetvCvC_XYj37IVz-tFUihy9HjP6YdqWnMw0URwu";
-    const a = buildChatOpsSessionId("ms-teams", longChannelId);
-    const b = buildChatOpsSessionId("ms-teams", longChannelId);
-    expect(a).toBe(b);
+    expect(buildChatOpsSessionId("ms-teams", longChannelId)).toBe(
+      buildChatOpsSessionId("ms-teams", longChannelId),
+    );
   });
 });

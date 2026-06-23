@@ -85,6 +85,31 @@ describe("the Apps SDK static file", () => {
   });
 });
 
+// The sandbox proxy injects a securitypolicyviolation listener into every guest
+// to surface runtime CSP problems. The ext-apps bundle probes code-gen support
+// with a caught `new Function("")`, which still fires a (benign) violation, so
+// the listener mutes it. Owned apps carry their SDK URL in the backend envelope
+// and never receive the `window.__ARCHESTRA_APP_SDK_URL__` global the proxy only
+// sets for external apps — so the mute must key off the platform asset path, not
+// that global, which leaked a phantom "1 runtime error" on every owned render.
+describe("the sandbox proxy CSP violation filter", () => {
+  const proxy = readFileSync(
+    join(__dirname, "../../static/mcp-sandbox-proxy.html"),
+    "utf-8",
+  );
+
+  test("mutes the platform SDK probe by asset path (owned + external apps)", () => {
+    expect(proxy).toContain('indexOf("/_sandbox/ext-apps-app.js")');
+    expect(proxy).toContain('indexOf("/_sandbox/archestra-app-sdk.js")');
+  });
+
+  test("does not gate the mute on the external-only SDK-URL global", () => {
+    expect(proxy).not.toContain(
+      "e.sourceFile === window.__ARCHESTRA_APP_SDK_URL__",
+    );
+  });
+});
+
 describe("buildPlatformCspContent", () => {
   test("pins the platform sandbox with absolute, origin-rooted asset URLs", () => {
     const csp = buildPlatformCspContent(

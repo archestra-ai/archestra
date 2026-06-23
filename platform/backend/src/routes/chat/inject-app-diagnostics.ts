@@ -19,7 +19,7 @@ const UUID_PATTERN =
  * When the last user message carries `metadata.appDiagnostics` (runtime
  * errors / CSP violations the chat UI captured from owned MCP App renders),
  * append a clearly-delimited, explicitly-untrusted diagnostics block to that
- * message's text so the model can fix the app via `update_app` without the
+ * message's text so the model can fix the app via `edit_app` without the
  * user pasting errors by hand.
  *
  * Mirrors `injectSkillActivation`: returns a shallow copy for the LLM; the

@@ -24,12 +24,24 @@ function insert(params: {
   });
 }
 
-test("listForUser returns the user's own files and excludes project files", async ({
+test("listNoProjectByConversation returns the user's no-project files in that conversation only", async ({
   makeUser,
   makeOrganization,
+  makeAgent,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const convA = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  const convB = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
   const project = await ProjectModel.create({
     organizationId: org.id,
     userId: user.id,
@@ -37,23 +49,33 @@ test("listForUser returns the user's own files and excludes project files", asyn
     description: null,
   });
 
-  const own = await insert({
+  const inA = await insert({
     organizationId: org.id,
     userId: user.id,
+    conversationId: convA.id,
     filename: "mine.txt",
+  });
+  // another conversation's file and a project file must both be excluded
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: convB.id,
+    filename: "other.txt",
   });
   await insert({
     organizationId: org.id,
     userId: user.id,
+    conversationId: convA.id,
     projectId: project.id,
     filename: "proj.txt",
   });
 
-  const mine = await FileModel.listForUser({
+  const inConvA = await FileModel.listNoProjectByConversation({
     organizationId: org.id,
     userId: user.id,
+    conversationId: convA.id,
   });
-  expect(mine.map((r) => r.id)).toEqual([own.id]);
+  expect(inConvA.map((r) => r.id)).toEqual([inA.id]);
 
   const projFiles = await FileModel.listByProject({
     organizationId: org.id,
@@ -99,12 +121,76 @@ test("listByConversation returns only the caller's files in that conversation", 
   expect(listed[0].id).toBe(mine.id);
 });
 
-test("insertRow rejects a duplicate filename in the same owner scope", async ({
+test("insertRow rejects a duplicate filename in the same conversation", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const conv = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: conv.id,
+    filename: "dup.txt",
+  });
+  await expect(
+    insert({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv.id,
+      filename: "dup.txt",
+    }),
+  ).rejects.toBeInstanceOf(FileNameExistsError);
+});
+
+test("insertRow allows the same filename in two different conversations", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const convA = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  const convB = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+  });
+  await insert({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: convA.id,
+    filename: "report.txt",
+  });
+  await expect(
+    insert({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: convB.id,
+      filename: "report.txt",
+    }),
+  ).resolves.toBeTruthy();
+});
+
+test("insertRow rejects a duplicate filename for a user's headless (no-conversation) files", async ({
   makeUser,
   makeOrganization,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
+  // conversationId omitted → null: the orphan index keeps these unique per user.
   await insert({
     organizationId: org.id,
     userId: user.id,

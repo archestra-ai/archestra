@@ -11,7 +11,6 @@ import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamTokenModel } from "@/models";
-import ToolModel from "@/models/tool";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -1007,6 +1006,87 @@ describe("chat-mcp-client tool caching", () => {
     chatClient.clearChatMcpClient(agent.id);
     await chatClient.__test.clearToolCache(cacheKey);
   });
+
+  test("empty conversation selection keeps built-in search/run tools and drops user tools", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ teams: [team.id] });
+    await makeTeamMember(team.id, user.id);
+    await TeamTokenModel.createTeamToken(team.id, team.name);
+
+    const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+
+    archestraMcpBranding.syncFromOrganization(null);
+    const searchToolsName = getArchestraToolFullName("search_tools");
+    const runToolName = getArchestraToolFullName("run_tool");
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: searchToolsName,
+            description: "Search tools",
+            inputSchema: {
+              type: "object",
+              properties: { query: { type: "string" } },
+            },
+          },
+          {
+            name: runToolName,
+            description: "Run tool",
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string" },
+                tool_args: { type: "object" },
+              },
+              required: ["tool_name"],
+            },
+          },
+          {
+            name: "workspace__find_projects",
+            description: "Find projects",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    // A search_and_run_only conversation with zero user-selectable tools enabled
+    // resolves to an empty enabledToolIds; the built-in meta tools must survive.
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      enabledToolIds: [],
+    });
+
+    expect(Object.keys(tools).sort()).toEqual(
+      [runToolName, searchToolsName].sort(),
+    );
+    expect(tools).not.toHaveProperty("workspace__find_projects");
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache(cacheKey);
+  });
 });
 
 describe("filterToolsByEnabledIds", () => {
@@ -1032,13 +1112,21 @@ describe("filterToolsByEnabledIds", () => {
     expect(Object.keys(result)).toHaveLength(2);
   });
 
-  test("returns empty when enabledToolIds is empty array", async () => {
+  test("empty array retains archestra built-in tools and drops the rest", async () => {
+    archestraMcpBranding.syncFromOrganization(null);
+    const searchToolsName = getArchestraToolFullName("search_tools");
+
     const tools = {
       github__list_repos: makeMockTool(),
+      [searchToolsName]: makeMockTool("Search tools"),
     };
 
+    // Empty custom selection = zero user-selectable tools enabled. Built-ins
+    // (search_tools/run_tool) must still survive so search_and_run_only agents
+    // can call tools; only the user-selectable tool is dropped.
     const result = await filterToolsByEnabledIds(tools, []);
-    expect(Object.keys(result)).toHaveLength(0);
+
+    expect(Object.keys(result)).toEqual([searchToolsName]);
   });
 
   test("white-labeled built-in tools bypass custom selection filtering", async ({
@@ -1092,6 +1180,62 @@ describe("filterToolsByEnabledIds", () => {
 
     expect(Object.keys(result)).toContain("github__list_repos");
     expect(Object.keys(result)).not.toContain("slack__send_message");
+  });
+
+  test("empty array returns nothing when there are no built-in tools", async () => {
+    archestraMcpBranding.syncFromOrganization(null);
+    const tools = {
+      github__list_repos: makeMockTool(),
+      slack__send_message: makeMockTool(),
+    };
+
+    // No archestra built-ins to bypass the selection, so disabling every
+    // user-selectable tool genuinely yields an empty set.
+    const result = await filterToolsByEnabledIds(tools, []);
+
+    expect(Object.keys(result)).toHaveLength(0);
+  });
+
+  test("empty array retains white-labeled built-in tools", async () => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const brandedWhoami = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME, {
+      appName: "Acme Copilot",
+      fullWhiteLabeling: true,
+    });
+
+    const tools = {
+      github__list_repos: makeMockTool(),
+      [brandedWhoami]: makeMockTool("Who am I"),
+    };
+
+    // The bypass must recognize the white-labeled built-in name under an empty
+    // selection too, or white-label deployments lose search/run.
+    const result = await filterToolsByEnabledIds(tools, []);
+
+    expect(Object.keys(result)).toEqual([brandedWhoami]);
+  });
+
+  test("empty array drops names that carry the archestra prefix but are not real built-ins", async () => {
+    archestraMcpBranding.syncFromOrganization(null);
+    const searchToolsName = getArchestraToolFullName("search_tools");
+    const prefixedNonTool = searchToolsName.replace(
+      "search_tools",
+      "bogus_not_a_tool",
+    );
+
+    const tools = {
+      [prefixedNonTool]: makeMockTool("Looks built-in but is not"),
+      [searchToolsName]: makeMockTool("Search tools"),
+    };
+
+    // isToolName validates the short name against the known set, so a name that
+    // merely carries the prefix is treated as user-selectable and filtered out.
+    const result = await filterToolsByEnabledIds(tools, []);
+
+    expect(Object.keys(result)).toEqual([searchToolsName]);
   });
 });
 
@@ -1250,37 +1394,34 @@ describe("getChatMcpToolUiResourceUris", () => {
 
   test("returns only tools that have a UI resource URI in meta", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
 
-    const mockTools = [
-      {
-        id: "tool-1",
-        name: "server__get-stats",
-        description: "Get stats",
-        parameters: {},
-        meta: { _meta: { ui: { resourceUri: "resource://server/stats-ui" } } },
-      },
-      {
-        id: "tool-2",
-        name: "server__get-info",
-        description: "Get info",
-        parameters: {},
-        meta: null, // no UI
-      },
-      {
-        id: "tool-3",
-        name: "server__show-chart",
-        description: "Show chart",
-        parameters: {},
-        meta: { _meta: { ui: { resourceUri: "resource://server/chart-ui" } } },
-      },
-    ];
-
-    const spy = vi
-      .spyOn(ToolModel, "getMcpToolsByAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockTools as any);
+    const statsTool = await makeTool({
+      name: "server__get-stats",
+      description: "Get stats",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "resource://server/stats-ui" } } },
+    });
+    const infoTool = await makeTool({
+      name: "server__get-info",
+      description: "Get info",
+      catalogId: catalog.id,
+      meta: null,
+    });
+    const chartTool = await makeTool({
+      name: "server__show-chart",
+      description: "Show chart",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "resource://server/chart-ui" } } },
+    });
+    await makeAgentTool(agent.id, statsTool.id);
+    await makeAgentTool(agent.id, infoTool.id);
+    await makeAgentTool(agent.id, chartTool.id);
 
     const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
 
@@ -1289,35 +1430,28 @@ describe("getChatMcpToolUiResourceUris", () => {
       "server__show-chart": "resource://server/chart-ui",
     });
     expect(result).not.toHaveProperty("server__get-info");
-
-    spy.mockRestore();
   });
 
   test("returns empty record when no tools have a UI resource URI", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
 
-    const mockTools = [
-      {
-        id: "tool-1",
-        name: "server__query",
-        description: "Query",
-        parameters: {},
-        meta: { annotations: { audience: ["assistant"] } }, // no _meta.ui
-      },
-    ];
-
-    const spy = vi
-      .spyOn(ToolModel, "getMcpToolsByAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockTools as any);
+    const queryTool = await makeTool({
+      name: "server__query",
+      description: "Query",
+      catalogId: catalog.id,
+      meta: { annotations: { audience: ["assistant"] } }, // no _meta.ui
+    });
+    await makeAgentTool(agent.id, queryTool.id);
 
     const result = await chatClient.getChatMcpToolUiResourceUris(agent.id);
 
     expect(result).toEqual({});
-
-    spy.mockRestore();
   });
 });
 
@@ -1696,8 +1830,8 @@ describe("buildArchestraToolOutput", () => {
   });
 
   test.for([
-    "create_app",
-    "update_app",
+    "scaffold_app",
+    "edit_app",
     "render_app",
   ] as const)("returns the rich shape for a direct %s result so chat can mount the app runtime", async (shortName, {
     makeAgent,
@@ -1723,7 +1857,7 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
-  test("returns the rich shape for a run_tool dispatch with a bare create_app target", async ({
+  test("returns the rich shape for a run_tool dispatch with a bare scaffold_app target", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -1736,7 +1870,7 @@ describe("buildArchestraToolOutput", () => {
     const result = await buildArchestraToolOutput({
       response: appResponse,
       toolName: "archestra__run_tool",
-      toolArguments: { tool_name: "create_app", tool_args: {} },
+      toolArguments: { tool_name: "scaffold_app", tool_args: {} },
       agentId: agent.id,
     });
 
@@ -1757,7 +1891,7 @@ describe("buildArchestraToolOutput", () => {
         ],
         isError: true,
       },
-      toolName: "archestra__create_app",
+      toolName: "archestra__scaffold_app",
       toolArguments: {},
       agentId: agent.id,
     });
@@ -1785,16 +1919,18 @@ describe("buildArchestraToolOutput", () => {
 
   test("attaches the target tool's UI resource when dispatched via run_tool", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
-    const mockToolDef = {
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
       name: "excalidraw__create_view",
+      catalogId: catalog.id,
       meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
-    };
-    const spy = vi
-      .spyOn(ToolModel, "findByNameForAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce(mockToolDef as any);
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -1806,7 +1942,6 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(spy).toHaveBeenCalledWith("excalidraw__create_view", agent.id);
     expect(typeof result).toBe("object");
     expect(result).toMatchObject({
       content: "Diagram displayed!",
@@ -1816,18 +1951,53 @@ describe("buildArchestraToolOutput", () => {
       },
       structuredContent: { checkpoint: "abc" },
     });
+  });
 
-    spy.mockRestore();
+  test("does not attach the UI resource when the target tool is not assigned to the agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const owner = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(owner.id, targetTool.id);
+
+    // A different agent without the tool assigned must not resolve it: the
+    // target lookup is scoped to the caller's agent, so no UI resource attaches.
+    const otherAgent = await makeAgent();
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: otherAgent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
   });
 
   test("returns plain text when the dispatched target has no UI resource", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
   }) => {
     const agent = await makeAgent();
-    const spy = vi
-      .spyOn(ToolModel, "findByNameForAgent")
-      // biome-ignore lint/suspicious/noExplicitAny: test mock data
-      .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "context7__search",
+      catalogId: catalog.id,
+      meta: null,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -1837,8 +2007,6 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toBe("Diagram displayed!");
-
-    spy.mockRestore();
   });
 });
 

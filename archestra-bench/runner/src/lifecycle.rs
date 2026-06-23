@@ -124,6 +124,14 @@ const DAGGER_RUNNER_HOST: &str = "tcp://127.0.0.1:1234";
 const DEV_AUTH_SECRET: &str = "better-auth-secret-12345678901234567890";
 const DEFAULT_ADMIN_EMAIL: &str = "admin@example.com";
 const DEFAULT_ADMIN_PASSWORD: &str = "password";
+/// The dedicated bench Postgres the runner provisions when no external one is configured.
+/// Credentials and port must match `archestra-bench/dev/docker-compose.bench-pg.yml`.
+const DEFAULT_BENCH_DATABASE_URL: &str = "postgres://postgres:postgres@localhost:5544/postgres";
+const BENCH_PG_COMPOSE_PROJECT: &str = "archestra-bench";
+
+/// Provision the dedicated bench Postgres at most once per process. Isolated lanes call
+/// [`Instance::start`] concurrently, so this serializes the `docker compose up` across them.
+static BENCH_PG_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 
 #[derive(Debug, thiserror::Error)]
 pub enum LifecycleError {
@@ -154,8 +162,10 @@ pub struct Instance {
     env: HashMap<String, String>,
     maint_db_url: String,
     db_url: String,
+    db_managed: bool,
     api_port: u16,
     metrics_port: u16,
+    bench_compose: PathBuf,
     teardown_id: Option<u64>,
 }
 
@@ -163,6 +173,10 @@ impl Instance {
     pub fn new(repo_root: PathBuf, run_id: impl Into<String>, log_path: PathBuf) -> Self {
         let run_id = run_id.into();
         let platform = repo_root.join("platform");
+        let bench_compose = repo_root
+            .join("archestra-bench")
+            .join("dev")
+            .join("docker-compose.bench-pg.yml");
         Self {
             run_id,
             log_path,
@@ -176,8 +190,10 @@ impl Instance {
             env: HashMap::new(),
             maint_db_url: String::new(),
             db_url: String::new(),
+            db_managed: true,
             api_port: 0,
             metrics_port: 0,
+            bench_compose,
             teardown_id: None,
         }
     }
@@ -191,13 +207,21 @@ impl Instance {
             )));
         }
         self.env = parse_env_file(&env_path)?;
-        self.maint_db_url = self
-            .env
-            .get("ARCHESTRA_DATABASE_URL")
-            .ok_or_else(|| {
-                LifecycleError::Config("ARCHESTRA_DATABASE_URL not set in .env".to_string())
-            })?
-            .clone();
+        let (bench_db_url, managed) = resolve_bench_db_url(&self.env);
+        self.db_managed = managed;
+        info!(
+            "bench Postgres: {} ({})",
+            redacted_db_location(&bench_db_url),
+            if managed {
+                "runner-managed container"
+            } else {
+                "external (ARCHESTRA_BENCH_DATABASE_URL)"
+            }
+        );
+        if managed {
+            ensure_bench_postgres(&self.bench_compose).await?;
+        }
+        self.maint_db_url = bench_db_url;
         self.db_name = benchmark_db_name(&self.run_id);
         self.db_url = with_dbname(&self.maint_db_url, &self.db_name);
         self.api_port = free_port().await?;
@@ -246,8 +270,9 @@ impl Instance {
             tokio_postgres::connect(&libpq_url(&self.maint_db_url), tokio_postgres::NoTls)
                 .await
                 .map_err(|e| {
-                    LifecycleError::Postgres(shared_postgres_unavailable_message(
+                    LifecycleError::Postgres(bench_postgres_unavailable_message(
                         &self.maint_db_url,
+                        self.db_managed,
                         e,
                     ))
                 })?;
@@ -466,11 +491,70 @@ pub fn with_dbname(db_url: &str, dbname: &str) -> String {
     parsed.to_string()
 }
 
-pub fn shared_postgres_unavailable_message(db_url: &str, _error: impl std::fmt::Display) -> String {
-    format!(
-        "cannot connect to shared Archestra Postgres at {}; start the dev stack from platform/ with ARCHESTRA_CODE_RUNTIME_ENABLED=true and `tilt up`, or restore the configured Postgres port-forward",
-        redacted_db_location(db_url)
-    )
+/// Resolve the Postgres the benchmark uses, and whether the runner owns its lifecycle.
+/// An explicit `ARCHESTRA_BENCH_DATABASE_URL` (process env or `.env`) points at a Postgres the
+/// operator manages — the runner leaves it alone. Otherwise it defaults to, and provisions, the
+/// dedicated container in `docker-compose.bench-pg.yml`, bypassing the dev stack's slow port-forward.
+fn resolve_bench_db_url(env: &HashMap<String, String>) -> (String, bool) {
+    let explicit = std::env::var("ARCHESTRA_BENCH_DATABASE_URL")
+        .ok()
+        .or_else(|| env.get("ARCHESTRA_BENCH_DATABASE_URL").cloned())
+        .filter(|s| !s.trim().is_empty());
+    match explicit {
+        Some(url) => (url, false),
+        None => (DEFAULT_BENCH_DATABASE_URL.to_string(), true),
+    }
+}
+
+/// Bring the dedicated bench Postgres up and block until it is healthy. Idempotent: `docker compose
+/// up -d --wait` reconciles an already-running container and returns fast, and [`BENCH_PG_READY`]
+/// collapses concurrent callers into a single invocation.
+async fn ensure_bench_postgres(compose_file: &Path) -> Result<(), LifecycleError> {
+    BENCH_PG_READY
+        .get_or_try_init(|| async {
+            info!(
+                "ensuring dedicated bench Postgres ({})",
+                compose_file.display()
+            );
+            let compose = compose_file.to_string_lossy();
+            let output = Command::new("docker")
+                .args(["compose", "-p", BENCH_PG_COMPOSE_PROJECT, "-f"])
+                .arg(compose.as_ref())
+                .args(["up", "-d", "--wait"])
+                .output()
+                .await
+                .map_err(|e| {
+                    LifecycleError::Config(format!(
+                        "failed to run `docker compose` for the bench Postgres (is Docker installed and running?): {e}"
+                    ))
+                })?;
+            if !output.status.success() {
+                return Err(LifecycleError::Postgres(format!(
+                    "could not start the dedicated bench Postgres: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            Ok(())
+        })
+        .await
+        .copied()
+}
+
+pub fn bench_postgres_unavailable_message(
+    db_url: &str,
+    managed: bool,
+    _error: impl std::fmt::Display,
+) -> String {
+    let location = redacted_db_location(db_url);
+    if managed {
+        format!(
+            "cannot connect to the runner-managed bench Postgres at {location}; ensure Docker is running so `docker compose` can provision it, or set ARCHESTRA_BENCH_DATABASE_URL to a Postgres you manage"
+        )
+    } else {
+        format!(
+            "cannot connect to the bench Postgres at {location} from ARCHESTRA_BENCH_DATABASE_URL; ensure it is reachable, or unset it to let the runner provision a dedicated container"
+        )
+    }
 }
 
 pub fn redacted_db_location(db_url: &str) -> String {
@@ -524,6 +608,9 @@ pub fn build_backend_env(
         dagger_cli_bin.to_string(),
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
+    // Per-lane projects isolate file ownership so lanes sharing one backend don't collide on common
+    // artifact names; the feature must be on for `POST /api/projects` and project-scoped conversations.
+    env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
     env
 }
 

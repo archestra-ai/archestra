@@ -122,47 +122,37 @@ export function McpAppTopBar({
   );
 }
 
+/** Shared visual props for the address-pill icon buttons (ghost, icon-sized). */
+const ICON_BUTTON_PROPS = {
+  variant: "ghost",
+  size: "icon",
+  className: "h-6 w-6 text-muted-foreground",
+} as const;
+
 /**
- * Shared icon button for the address pill — a single place for the ghost / icon
+ * Shared click button for the address pill — a single place for the ghost / icon
  * sizing so the per-action wrappers below just pass an icon, a label (used for
- * both `aria-label` and `title`), and either an `onClick` or a `href`. A `href`
- * renders as a link (via `Button asChild`); `target="_blank"` adds `rel`.
+ * both `aria-label` and `title`), and an `onClick`. The lone link button
+ * ({@link McpAppStandaloneButton}) reuses {@link ICON_BUTTON_PROPS} directly.
  */
 function McpAppIconButton({
   icon: Icon,
   label,
   onClick,
-  href,
-  target,
 }: {
   icon: LucideIcon;
   label: string;
-  onClick?: () => void;
-  href?: string;
-  target?: React.HTMLAttributeAnchorTarget;
+  onClick: () => void;
 }) {
-  const shared = {
-    variant: "ghost",
-    size: "icon",
-    className: "h-6 w-6 text-muted-foreground",
-    "aria-label": label,
-    title: label,
-  } as const;
-  const icon = <Icon className="h-3.5 w-3.5" />;
-
-  return href ? (
-    <Button asChild {...shared}>
-      <Link
-        href={href}
-        target={target}
-        rel={target === "_blank" ? "noreferrer" : undefined}
-      >
-        {icon}
-      </Link>
-    </Button>
-  ) : (
-    <Button type="button" onClick={onClick} {...shared}>
-      {icon}
+  return (
+    <Button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      {...ICON_BUTTON_PROPS}
+    >
+      <Icon className="h-3.5 w-3.5" />
     </Button>
   );
 }
@@ -203,23 +193,16 @@ export function McpAppFullscreenExitButton({
 /** Opens the owned app's standalone run page in a new tab. */
 export function McpAppStandaloneButton({ appId }: { appId: string }) {
   return (
-    <McpAppIconButton
-      icon={SquareArrowOutUpRight}
-      label="Open standalone"
-      href={`/apps/${appId}/run`}
-      target="_blank"
-    />
-  );
-}
-
-/** Links to the owned app's detail page. */
-export function McpAppAppsPageButton({ appId }: { appId: string }) {
-  return (
-    <McpAppIconButton
-      icon={AppWindow}
-      label="Go to Apps page"
-      href={`/apps/${appId}`}
-    />
+    <Button
+      asChild
+      aria-label="Open standalone"
+      title="Open standalone"
+      {...ICON_BUTTON_PROPS}
+    >
+      <Link href={`/apps/${appId}/run`} target="_blank" rel="noreferrer">
+        <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+      </Link>
+    </Button>
   );
 }
 

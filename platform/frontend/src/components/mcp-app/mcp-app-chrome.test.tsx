@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  McpAppAppsPageButton,
   McpAppChangelogPill,
   McpAppFullscreenExitButton,
   McpAppStandaloneButton,
@@ -33,13 +32,6 @@ describe("address-pill action buttons", () => {
     const link = screen.getByRole("link", { name: /open standalone/i });
     expect(link).toHaveAttribute("href", "/apps/app-123/run");
     expect(link).toHaveAttribute("target", "_blank");
-  });
-
-  it("links to the owned app's detail page", () => {
-    render(<McpAppAppsPageButton appId="app-123" />);
-
-    const link = screen.getByRole("link", { name: /go to apps page/i });
-    expect(link).toHaveAttribute("href", "/apps/app-123");
   });
 
   it("fires onClick when the fullscreen-exit button is pressed", async () => {

@@ -65,6 +65,18 @@ jobs:
           gcloud container clusters get-credentials "${GKE_CLUSTER}" \
             --zone "${GKE_ZONE}" --project "${GKE_PROJECT}"
 
+      # Since CI releases at the fail-fast window, a prior run's pod outlives its GitHub job — the
+      # Actions-level concurrency group no longer prevents two pods sharing the Dagger engine. Refuse to
+      # start if a benchmark Job is still active, before spending a build on it.
+      - name: Guard against an overlapping run
+        run: |
+          set -uo pipefail
+          if kubectl get jobs -n archestra -l app=archestra-bench \
+               -o jsonpath='{.items[*].status.active}' 2>/dev/null | grep -q '[1-9]'; then
+            echo "::error::a benchmark Job is still active in archestra; refusing to start an overlapping run"
+            exit 1
+          fi
+
       - name: Resolve staging deployment facts
         id: resolve
         run: |
@@ -106,11 +118,14 @@ jobs:
           DAGGER_NS: ${{ steps.resolve.outputs.dagger_ns }}
         run: |
           set -euo pipefail
+          RC=0
           VERDICT=$(kubectl auth can-i create pods/exec \
-            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n "${DAGGER_NS}" 2>&1 || true)
-          echo "can-i create pods/exec in ${DAGGER_NS}: ${VERDICT}"
-          if [ "${VERDICT}" = "no" ]; then
-            echo "::error::platform SA ${PLATFORM_SA} lacks pods/exec in ${DAGGER_NS}; Dagger calls will fail"
+            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n "${DAGGER_NS}" 2>&1) || RC=$?
+          echo "can-i create pods/exec in ${DAGGER_NS}: ${VERDICT} (rc=${RC})"
+          # Fail closed: only an explicit allow proceeds. An API/impersonation error or a "no - <reason>"
+          # response must not slip through as if permitted.
+          if [ "${RC}" -ne 0 ] || [ "${VERDICT}" != "yes" ]; then
+            echo "::error::platform SA ${PLATFORM_SA} cannot create pods/exec in ${DAGGER_NS} (verdict: ${VERDICT}); Dagger calls will fail"
             exit 1
           fi
 

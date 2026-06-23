@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { type PanelApp, useApps } from "@/components/chat/apps-context";
+import { useApps } from "@/components/chat/apps-context";
 import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
@@ -23,6 +23,7 @@ import {
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppRefreshButton,
+  McpAppSidebarButton,
   McpAppTopBar,
   McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
@@ -32,13 +33,6 @@ import {
   McpAppRuntime,
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -246,12 +240,11 @@ export function McpAppSection({
       </div>
     ) : null;
 
-  // Chat inline shows fullscreen + a side-panel action on the right of the top
-  // bar. When portaled into the panel, the side-panel action is dropped (the
-  // panel selector governs which app shows there).
-  const liveActions: McpAppAction[] = renderInSidebar
-    ? ["fullscreen"]
-    : ["fullscreen", "showInSidebar"];
+  // Address-pill actions: open-standalone (new tab) plus a fullscreen exit
+  // button that only appears while fullscreen (the enter icon is hidden for now,
+  // but app-requested fullscreen stays usable). The open-in-side-panel control
+  // lives in the top bar's right zone, not here.
+  const liveActions: McpAppAction[] = ["fullscreen", "openStandalone"];
 
   const liveSurface = (
     <McpAppErrorBoundary>
@@ -264,30 +257,34 @@ export function McpAppSection({
         fillContainer={renderInSidebar}
         topBar={
           <McpAppTopBar
-            left={<McpAppRefreshButton onClick={handleRefresh} />}
-            center={
-              renderInSidebar && apps.length > 1 ? (
-                <SidebarAppSwitcher
-                  apps={apps}
-                  value={selectedToolCallId}
-                  onSelect={select}
+            label={headerName}
+            switcher={
+              renderInSidebar && apps.length > 1
+                ? {
+                    value: selectedToolCallId,
+                    options: apps.map((app) => ({
+                      value: app.toolCallId,
+                      label: app.label,
+                    })),
+                    onChange: select,
+                  }
+                : undefined
+            }
+            actions={
+              <>
+                <McpAppRefreshButton onClick={handleRefresh} />
+                <McpAppActions
+                  appId={appId}
+                  actions={liveActions}
+                  isFullscreen={displayMode === "fullscreen"}
+                  onToggleFullscreen={handleToggleFullscreen}
                 />
-              ) : (
-                headerName
-              )
+              </>
             }
             right={
-              <McpAppActions
-                appId={appId}
-                actions={liveActions}
-                onShowInSidebar={
-                  toolCallId && !renderInSidebar
-                    ? handleShowInSidebar
-                    : undefined
-                }
-                isFullscreen={displayMode === "fullscreen"}
-                onToggleFullscreen={handleToggleFullscreen}
-              />
+              toolCallId && !renderInSidebar ? (
+                <McpAppSidebarButton onClick={handleShowInSidebar} />
+              ) : undefined
             }
           />
         }
@@ -344,15 +341,14 @@ export function McpAppSection({
           frozenHeight={lastInlineHeightRef.current}
           topBar={
             <McpAppTopBar
-              center={headerName}
+              label={headerName}
+              // Unselected placeholders carry the open-in-side-panel control so
+              // the user can switch the panel to this app; the selected one is
+              // already shown there.
               right={
-                // Unselected placeholders carry the open-in-sidebar action so the
-                // user can switch the panel to this app; the selected one already
-                // shows it.
-                <McpAppActions
-                  actions={["showInSidebar"]}
-                  onShowInSidebar={isSelected ? undefined : handleShowInSidebar}
-                />
+                isSelected ? undefined : (
+                  <McpAppSidebarButton onClick={handleShowInSidebar} />
+                )
               }
             />
           }
@@ -370,31 +366,4 @@ export function McpAppSection({
   }
 
   return liveSurface;
-}
-
-/** App-switcher rendered in the panel card's header when the conversation has
- * more than one app, so the user can switch which app the panel shows. */
-function SidebarAppSwitcher({
-  apps,
-  value,
-  onSelect,
-}: {
-  apps: PanelApp[];
-  value: string | null;
-  onSelect: (toolCallId: string) => void;
-}) {
-  return (
-    <Select value={value ?? undefined} onValueChange={onSelect}>
-      <SelectTrigger className="h-7 w-auto max-w-[220px] gap-1 border-none bg-transparent px-2 text-xs font-medium shadow-none focus:ring-0">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {apps.map((app) => (
-          <SelectItem key={app.toolCallId} value={app.toolCallId}>
-            <span className="truncate">{app.label}</span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
 }

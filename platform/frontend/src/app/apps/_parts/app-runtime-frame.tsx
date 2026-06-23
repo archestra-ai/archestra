@@ -54,19 +54,19 @@ export function AppRuntimeFrame({
           fillContainer
           topBar={
             <McpAppTopBar
-              left={
-                <McpAppRefreshButton
-                  onClick={() => setReloadNonce((nonce) => nonce + 1)}
-                />
-              }
-              center={app.name}
-              right={
-                <McpAppActions
-                  appId={appId}
-                  actions={actions}
-                  isFullscreen={displayMode === "fullscreen"}
-                  onToggleFullscreen={handleToggleFullscreen}
-                />
+              label={app.name}
+              actions={
+                <>
+                  <McpAppRefreshButton
+                    onClick={() => setReloadNonce((nonce) => nonce + 1)}
+                  />
+                  <McpAppActions
+                    appId={appId}
+                    actions={actions}
+                    isFullscreen={displayMode === "fullscreen"}
+                    onToggleFullscreen={handleToggleFullscreen}
+                  />
+                </>
               }
             />
           }

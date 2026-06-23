@@ -93,9 +93,10 @@ export class A2AManager {
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
     };
+    abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
-      const { actor, agentId, request, systemParams } = params;
+      const { actor, agentId, request, systemParams, abortSignal } = params;
 
       const a2aUser =
         actor.kind === "user" && actor.id !== "system"
@@ -250,6 +251,7 @@ export class A2AManager {
             originalUiMessages: contextUiMessages,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
+            abortSignal,
           });
         },
       });

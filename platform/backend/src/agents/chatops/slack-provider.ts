@@ -21,8 +21,10 @@ import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
+  ChatOpsProcessingControlsRef,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatOpsStopDecision,
   ChatReplyOptions,
   ChatThreadMessage,
   ChatThreadMessageFile,
@@ -100,6 +102,12 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async handleInteractivePayload(payload: unknown): Promise<void> {
+    const stopDecision = this.parseStopPayload(payload);
+    if (stopDecision) {
+      await this.eventHandler?.handleInteractiveStop(this, stopDecision);
+      return;
+    }
+
     const approvalDecision = this.parseApprovalPayload(payload);
     if (approvalDecision) {
       await this.eventHandler?.handleInteractiveApprovalDecision(
@@ -938,6 +946,48 @@ class SlackProvider implements ChatOpsProvider {
     };
   }
 
+  parseStopPayload(payload: unknown): ChatOpsStopDecision | null {
+    const p = payload as SlackInteractivePayload;
+    if (p.type !== "block_actions" || !p.actions?.length) {
+      return null;
+    }
+
+    const action = p.actions[0];
+    if (
+      !action.action_id?.startsWith("stop_turn") &&
+      !action.action_id?.startsWith("stop_thread")
+    ) {
+      return null;
+    }
+
+    let parsed: {
+      scope?: "turn" | "thread";
+      turnId?: string;
+      threadKey?: string;
+    } = {};
+    try {
+      parsed = action.value ? JSON.parse(action.value) : {};
+    } catch {
+      return null;
+    }
+    if (
+      (parsed.scope !== "turn" && parsed.scope !== "thread") ||
+      !parsed.threadKey
+    ) {
+      return null;
+    }
+
+    return {
+      scope: parsed.scope,
+      turnId: parsed.turnId,
+      threadKey: parsed.threadKey,
+      channelId: p.channel?.id || "",
+      workspaceId: p.team?.id || null,
+      messageKey: p.message?.ts || "",
+      userId: p.user?.id || "unknown",
+    };
+  }
+
   /**
    * Handle a Slack slash command.
    * Returns the response object. Caller is responsible for delivery
@@ -1204,6 +1254,111 @@ class SlackProvider implements ChatOpsProvider {
       logger.debug(
         { error: errorMessage(error) },
         "[SlackProvider] clearTypingStatus failed (non-fatal)",
+      );
+    }
+  }
+
+  async postProcessingControls(options: {
+    channelId: string;
+    threadId?: string;
+    turnId: string;
+    threadKey: string;
+  }): Promise<ChatOpsProcessingControlsRef | undefined> {
+    if (!this.client) return undefined;
+
+    const stopButton = (
+      text: string,
+      actionId: string,
+      value: Record<string, unknown>,
+    ): Button => ({
+      type: "button",
+      text: { type: "plain_text", text, emoji: true },
+      action_id: actionId,
+      value: JSON.stringify(value),
+      style: "danger" as ColorScheme,
+    });
+
+    try {
+      const result = await this.client.chat.postMessage({
+        channel: options.channelId,
+        text: "Working on it…",
+        blocks: [
+          {
+            type: "section" as const,
+            text: {
+              type: "mrkdwn" as const,
+              text: ":hourglass_flowing_sand: _Working on it…_",
+            },
+          },
+          {
+            type: "actions" as const,
+            elements: [
+              stopButton("Stop this turn", `stop_turn_${options.turnId}`, {
+                scope: "turn",
+                turnId: options.turnId,
+                threadKey: options.threadKey,
+              }),
+              stopButton(
+                "Stop in this thread",
+                `stop_thread_${options.threadKey}`,
+                { scope: "thread", threadKey: options.threadKey },
+              ),
+            ],
+          },
+        ],
+        thread_ts: options.threadId,
+      });
+      const ts = typeof result.ts === "string" ? result.ts : "";
+      if (!ts) return undefined;
+      return { channelId: options.channelId, messageKey: ts };
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] postProcessingControls failed (non-fatal)",
+      );
+      return undefined;
+    }
+  }
+
+  async updateProcessingControls(options: {
+    channelId: string;
+    messageKey: string;
+    status: string;
+  }): Promise<void> {
+    if (!this.client || !options.messageKey) return;
+    try {
+      await this.client.chat.update({
+        channel: options.channelId,
+        ts: options.messageKey,
+        text: options.status,
+        blocks: [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: options.status },
+          },
+        ],
+      });
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] updateProcessingControls failed (non-fatal)",
+      );
+    }
+  }
+
+  async clearProcessingControls(
+    ref: ChatOpsProcessingControlsRef,
+  ): Promise<void> {
+    if (!this.client || !ref.messageKey) return;
+    try {
+      await this.client.chat.delete({
+        channel: ref.channelId,
+        ts: ref.messageKey,
+      });
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] clearProcessingControls failed (non-fatal)",
       );
     }
   }

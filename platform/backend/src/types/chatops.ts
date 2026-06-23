@@ -355,6 +355,32 @@ export interface ChatOpsProvider {
   clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
 
   /**
+   * Post a transient "processing" message carrying Stop controls while the
+   * agent works on a turn. Returns a reference used to update/remove it when
+   * the turn finishes or is stopped. Optional: providers without interactive
+   * controls (e.g. plain webhooks) can omit it.
+   */
+  postProcessingControls?(options: {
+    channelId: string;
+    threadId?: string;
+    turnId: string;
+    threadKey: string;
+  }): Promise<ChatOpsProcessingControlsRef | undefined>;
+
+  /** Replace a processing-controls message with a terminal status (no buttons). */
+  updateProcessingControls?(options: {
+    channelId: string;
+    messageKey: string;
+    status: string;
+  }): Promise<void>;
+
+  /** Remove a processing-controls message once the turn completes normally. */
+  clearProcessingControls?(ref: ChatOpsProcessingControlsRef): Promise<void>;
+
+  /** Parse a Stop-button interactive payload, or null if it isn't one. */
+  parseStopPayload?(payload: unknown): ChatOpsStopDecision | null;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
@@ -478,6 +504,34 @@ export interface ChatOpsProvider {
  * Callback interface for socket-mode providers to delegate events
  * back to the ChatOpsManager without depending on it directly.
  */
+/**
+ * Reference to a posted "processing controls" message so it can later be
+ * updated (→ "Stopped") or removed (turn finished).
+ */
+export interface ChatOpsProcessingControlsRef {
+  channelId: string;
+  /** Provider message identifier (Slack message `ts`). */
+  messageKey: string;
+}
+
+/**
+ * A user's request, via the Stop buttons, to cancel in-flight processing.
+ * `scope: "turn"` cancels a single turn; `scope: "thread"` cancels every
+ * in-flight turn in the same thread.
+ */
+export interface ChatOpsStopDecision {
+  scope: "turn" | "thread";
+  /** Present for `scope: "turn"` — identifies the single turn to cancel. */
+  turnId?: string;
+  /** Thread/session key shared by all turns in a conversation. */
+  threadKey: string;
+  channelId: string;
+  workspaceId: string | null;
+  /** `ts` of the clicked controls message (for acknowledgement). */
+  messageKey: string;
+  userId: string;
+}
+
 export interface ChatOpsEventHandler {
   handleIncomingMessage(
     provider: ChatOpsProvider,
@@ -491,6 +545,10 @@ export interface ChatOpsEventHandler {
   handleInteractiveSelection(
     provider: ChatOpsProvider,
     payload: unknown,
+  ): Promise<void>;
+  handleInteractiveStop(
+    provider: ChatOpsProvider,
+    decision: ChatOpsStopDecision,
   ): Promise<void>;
   getAccessibleChatopsAgents({
     senderEmail,

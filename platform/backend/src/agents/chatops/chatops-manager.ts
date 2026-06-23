@@ -19,9 +19,11 @@ import { RouteCategory } from "@/observability/tracing";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
+  ChatOpsProcessingControlsRef,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatOpsStopDecision,
   IncomingChatMessage,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -62,6 +64,16 @@ export class ChatOpsManager {
   private slackProvider: SlackProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
+
+  /**
+   * In-flight chatops turns keyed by turn id (the triggering message id). Each
+   * entry holds the AbortController used to cancel the turn's agent execution
+   * and the thread key so "Stop in this thread" can cancel every turn at once.
+   */
+  private readonly activeTurns = new Map<
+    string,
+    { controller: AbortController; threadKey: string }
+  >();
 
   constructor() {
     this.a2aManager = new A2AManager({
@@ -503,6 +515,55 @@ export class ChatOpsManager {
       provider,
       sendReply: true,
     });
+  }
+
+  async handleInteractiveStop(
+    provider: ChatOpsProvider,
+    decision: ChatOpsStopDecision,
+  ): Promise<void> {
+    let aborted = 0;
+
+    if (decision.scope === "turn" && decision.turnId) {
+      const entry = this.activeTurns.get(decision.turnId);
+      if (entry) {
+        entry.controller.abort();
+        aborted += 1;
+      }
+    } else if (decision.scope === "thread") {
+      for (const entry of this.activeTurns.values()) {
+        if (entry.threadKey === decision.threadKey) {
+          entry.controller.abort();
+          aborted += 1;
+        }
+      }
+    }
+
+    logger.info(
+      {
+        scope: decision.scope,
+        turnId: decision.turnId,
+        threadKey: decision.threadKey,
+        aborted,
+      },
+      "[ChatOps] Stop requested",
+    );
+
+    // Each aborted turn updates its own controls message to "Stopped". If
+    // nothing was in flight (the turn already finished), acknowledge on the
+    // clicked message so the buttons don't appear stuck.
+    if (
+      aborted === 0 &&
+      decision.messageKey &&
+      provider.updateProcessingControls
+    ) {
+      await provider
+        .updateProcessingControls({
+          channelId: decision.channelId,
+          messageKey: decision.messageKey,
+          status: "_Nothing to stop — already finished_",
+        })
+        .catch(() => {});
+    }
   }
 
   /**
@@ -1362,6 +1423,32 @@ export class ChatOpsManager {
       processingStartedAt: Date.now(),
     };
 
+    // Register an AbortController for this turn so the Stop buttons (and a
+    // "Stop in this thread" click on any sibling turn) can cancel the agent
+    // execution mid-flight. Keyed by the triggering message id (the turn id).
+    const turnId = message.messageId;
+    const threadKey = buildChatOpsSessionId(
+      provider.providerId,
+      message.channelId,
+      message.threadId,
+    );
+    const abortController = new AbortController();
+    this.activeTurns.set(turnId, { controller: abortController, threadKey });
+
+    // Post the Stop controls (Stop this turn / Stop in this thread) while the
+    // agent works. Providers without interactive controls simply skip this.
+    let controlsRef: ChatOpsProcessingControlsRef | undefined;
+    if (sendReply && provider.postProcessingControls) {
+      controlsRef = await provider
+        .postProcessingControls({
+          channelId: message.channelId,
+          threadId: message.threadId,
+          turnId,
+          threadKey,
+        })
+        .catch(() => undefined);
+    }
+
     // Send typing indicator before execution starts (non-fatal).
     // Slack always has threadId (falls back to event.ts); Teams may not
     // (only set for thread replies) but doesn't need it (uses conversationReference).
@@ -1383,7 +1470,13 @@ export class ChatOpsManager {
         provider,
         fullMessage,
         userId,
+        abortSignal: abortController.signal,
       });
+
+      // Turn finished on its own — remove the now-stale Stop controls.
+      if (controlsRef && provider.clearProcessingControls) {
+        await provider.clearProcessingControls(controlsRef).catch(() => {});
+      }
 
       return await this.replyByMessageExecutionResult({
         agent: responseAgent,
@@ -1393,6 +1486,33 @@ export class ChatOpsManager {
         result,
       });
     } catch (error) {
+      // The user stopped this turn — that's not a failure. Mark the controls
+      // message as stopped and clear the transient "thinking" indicator.
+      if (abortController.signal.aborted) {
+        logger.info(
+          { messageId: message.messageId },
+          "[ChatOps] Turn stopped by user",
+        );
+        if (controlsRef && provider.updateProcessingControls) {
+          await provider
+            .updateProcessingControls({
+              channelId: controlsRef.channelId,
+              messageKey: controlsRef.messageKey,
+              status: ":octagonal_sign: _Stopped_",
+            })
+            .catch(() => {});
+        }
+        await provider
+          .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+          ?.catch(() => {});
+        return { success: false, error: "stopped" };
+      }
+
+      // Real failure — drop the Stop controls before reporting the error.
+      if (controlsRef && provider.clearProcessingControls) {
+        await provider.clearProcessingControls(controlsRef).catch(() => {});
+      }
+
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
@@ -1422,6 +1542,8 @@ export class ChatOpsManager {
       }
 
       return { success: false, error: errorMessage(error) };
+    } finally {
+      this.activeTurns.delete(turnId);
     }
   }
 
@@ -1604,11 +1726,20 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     userId: string;
+    abortSignal?: AbortSignal;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
   }> {
-    const { agent, binding, message, provider, fullMessage, userId } = params;
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      userId,
+      abortSignal,
+    } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
     // so all messages in the same thread are grouped together in logs
@@ -1645,6 +1776,7 @@ export class ChatOpsManager {
       agentId: agent.id,
       request,
       systemParams,
+      abortSignal,
     });
 
     // If swap_agent/swap_to_default_agent created a thread-level override
@@ -1698,6 +1830,7 @@ export class ChatOpsManager {
           agentId: swappedAgent.id,
           request,
           systemParams,
+          abortSignal,
         });
 
         return {

@@ -1062,6 +1062,100 @@ describe("SlackProvider.parseInteractivePayload", () => {
   });
 });
 
+// =============================================================================
+// parseStopPayload
+// =============================================================================
+
+describe("SlackProvider.parseStopPayload", () => {
+  test("stop_turn block_actions returns a turn-scoped decision", () => {
+    const provider = createProvider();
+
+    const result = provider.parseStopPayload({
+      type: "block_actions",
+      actions: [
+        {
+          action_id: "stop_turn_1234567890.123456",
+          value: JSON.stringify({
+            scope: "turn",
+            turnId: "1234567890.123456",
+            threadKey: "chatops:slack:C12345",
+          }),
+        },
+      ],
+      user: { id: "U_CLICKER", name: "Alice" },
+      channel: { id: "C12345" },
+      team: { id: "T12345" },
+      message: { ts: "1111111111.000000" },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.scope).toBe("turn");
+    expect(result?.turnId).toBe("1234567890.123456");
+    expect(result?.threadKey).toBe("chatops:slack:C12345");
+    expect(result?.channelId).toBe("C12345");
+    expect(result?.workspaceId).toBe("T12345");
+    expect(result?.messageKey).toBe("1111111111.000000");
+    expect(result?.userId).toBe("U_CLICKER");
+  });
+
+  test("stop_thread block_actions returns a thread-scoped decision", () => {
+    const provider = createProvider();
+
+    const result = provider.parseStopPayload({
+      type: "block_actions",
+      actions: [
+        {
+          action_id: "stop_thread_chatops:slack:C12345",
+          value: JSON.stringify({
+            scope: "thread",
+            threadKey: "chatops:slack:C12345",
+          }),
+        },
+      ],
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.scope).toBe("thread");
+    expect(result?.turnId).toBeUndefined();
+    expect(result?.threadKey).toBe("chatops:slack:C12345");
+  });
+
+  test("non-stop action_id returns null", () => {
+    const provider = createProvider();
+
+    const result = provider.parseStopPayload({
+      type: "block_actions",
+      actions: [{ action_id: "select_agent", value: "{}" }],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("missing threadKey returns null", () => {
+    const provider = createProvider();
+
+    const result = provider.parseStopPayload({
+      type: "block_actions",
+      actions: [
+        { action_id: "stop_turn_x", value: JSON.stringify({ scope: "turn" }) },
+      ],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("malformed JSON value returns null", () => {
+    const provider = createProvider();
+
+    const result = provider.parseStopPayload({
+      type: "block_actions",
+      actions: [{ action_id: "stop_turn_x", value: "{not json" }],
+    });
+
+    expect(result).toBeNull();
+  });
+});
+
 describe("SlackProvider file attachment downloads", () => {
   function createProviderWithConfig(overrides?: {
     botUserId?: string;

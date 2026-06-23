@@ -51,7 +51,7 @@ spec:
       containers:
         - name: bench
           image: ${BENCH_IMAGE}
-          command: ["run-staging-benchmark"]
+          command: ["run-benchmark"]
           env:
             - name: POSTGRES_PASSWORD
               value: "${POSTGRES_PASSWORD}"

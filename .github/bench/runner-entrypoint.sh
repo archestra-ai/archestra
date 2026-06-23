@@ -1,5 +1,5 @@
 #!/bin/sh
-# Drives one staging benchmark run inside the prod platform image: provisions the bench env file, runs
+# Drives one benchmark run inside the prod platform image: provisions the bench env file, runs
 # the benchmark against the Postgres sidecar + staging Dagger engine, then packages the run dir into a
 # single checksummed tarball and keep-alives so CI can `kubectl cp` it from the still-live container.
 # Hard-kill paths (OOM/eviction/deadline SIGKILL) never reach the marker; CI detects those itself.

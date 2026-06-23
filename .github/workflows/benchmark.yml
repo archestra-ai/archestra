@@ -1,4 +1,4 @@
-name: Staging Benchmark
+name: Benchmark
 
 # Runs archestra-bench once per day against staging-grade infrastructure: the currently-deployed
 # platform image, an ephemeral Postgres sidecar, and the shared staging managed Dagger engine. Never
@@ -17,7 +17,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: staging-benchmark
+  group: benchmark
   cancel-in-progress: false
 
 env:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   benchmark:
-    name: Run staging benchmark
+    name: Run benchmark
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
@@ -244,7 +244,7 @@ jobs:
         if: always() && steps.wait.outputs.result == 'done'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: staging-benchmark-run-${{ steps.apply.outputs.run_number }}
+          name: benchmark-run-${{ steps.apply.outputs.run_number }}
           path: |
             run
             logs
@@ -258,7 +258,7 @@ jobs:
         run: |
           set -euo pipefail
           uv run archestra-bench/scripts/export_tensorboard.py --run-dir run --out tb
-          gcloud storage rsync -r tb "${GCS_BUCKET}/tb/staging/daily"
+          gcloud storage rsync -r tb "${GCS_BUCKET}/tb/daily"
           gcloud storage cp run/aggregate.json "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/aggregate.json"
           gcloud storage cp run/report.md "${GCS_BUCKET}/runs/${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}/report.md"
 
@@ -295,12 +295,12 @@ jobs:
             RATE=$(jq -r '(.pass_rate * 100) | floor' run/aggregate.json)
             OUTCOMES=$(jq -r '.outcomes | to_entries | map("\(.key)=\(.value)") | join(" ")' run/aggregate.json)
             if [ "${PASSED}" -eq 0 ]; then
-              TEXT="⚠️ Staging benchmark: 0/${TOTAL} passed — harness likely broken · ${OUTCOMES}"
+              TEXT="⚠️ Benchmark: 0/${TOTAL} passed — harness likely broken · ${OUTCOMES}"
             else
-              TEXT="✅ Staging benchmark: ${PASSED}/${TOTAL} passed (${RATE}%) · ${OUTCOMES}"
+              TEXT="✅ Benchmark: ${PASSED}/${TOTAL} passed (${RATE}%) · ${OUTCOMES}"
             fi
           else
-            TEXT="❌ Staging benchmark FAILED (${WAIT_RESULT:-error}) — no aggregate produced"
+            TEXT="❌ Benchmark FAILED (${WAIT_RESULT:-error}) — no aggregate produced"
           fi
           PAYLOAD=$(jq -n --arg text "${TEXT} | ${RUN_URL}" '{text: $text}')
           curl -fsS -X POST -H 'Content-type: application/json' --data "${PAYLOAD}" "${SLACK_WEBHOOK_URL}"

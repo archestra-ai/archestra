@@ -1,6 +1,6 @@
-# Staging benchmark CI
+# Benchmark CI
 
-`.github/workflows/staging-benchmark.yml` runs `archestra-bench` daily against the currently-deployed
+`.github/workflows/benchmark.yml` runs `archestra-bench` daily against the currently-deployed
 staging platform image, an ephemeral Postgres sidecar, and the shared staging managed Dagger engine.
 It never mutates the live staging Deployment, its DB, or its data. Trigger manually from the Actions
 tab (`workflow_dispatch`) or wait for the daily cron.
@@ -9,7 +9,7 @@ Files:
 
 - `Dockerfile` — bench runner image: the `archestra-bench` binary + `/bench` fixtures + `uv` on top of
   the resolved `PLATFORM_IMAGE`.
-- `runner-entrypoint.sh` (`run-staging-benchmark`) — writes `/app/.env`, runs the bench, packages the
+- `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, packages the
   run dir into `run.tgz` + sha, then keep-alives for `kubectl cp`.
 - `job.yaml` — the k8s Job (bench container + `pgvector` sidecar). `${...}` filled by `envsubst` in CI.
 
@@ -47,8 +47,8 @@ The WIF auth and GKE creds reuse the existing
 
 ```
 gs://archestra-bench-history/
-  tb/staging/daily/overall/        TensorBoard scalar event files (run-wide tags)
-  tb/staging/daily/lane=<lane>/    per-(env, task) tags; lanes are sibling series sharing task tags
+  tb/daily/overall/        TensorBoard scalar event files (run-wide tags)
+  tb/daily/lane=<lane>/    per-(env, task) tags; lanes are sibling series sharing task tags
   runs/<run>/aggregate.json        per-run aggregate
   runs/<run>/report.md             per-run markdown report
 ```
@@ -61,7 +61,7 @@ gs://archestra-bench-history/
 Point TensorBoard straight at the bucket — it reads `gs://` natively:
 
 ```sh
-tensorboard --logdir gs://archestra-bench-history/tb/staging/daily
+tensorboard --logdir gs://archestra-bench-history/tb/daily
 ```
 
 Run it locally, or as a long-lived pod with `kubectl port-forward` for shared access (not provisioned

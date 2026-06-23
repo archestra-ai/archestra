@@ -31,8 +31,8 @@ COPY --from=bench-builder /src/archestra-bench/target/release/archestra-bench /u
 COPY archestra-bench/envs /bench/envs
 COPY archestra-bench/tasks /bench/tasks
 COPY archestra-bench/lanes.toml /bench/lanes.toml
-COPY .github/bench/runner-entrypoint.sh /usr/local/bin/run-staging-benchmark
-RUN chmod +x /usr/local/bin/run-staging-benchmark
+COPY .github/bench/runner-entrypoint.sh /usr/local/bin/run-benchmark
+RUN chmod +x /usr/local/bin/run-benchmark
 
 # Image-layout facts the bench needs to drive the prod image: drizzle-kit replaces the dev pnpm
 # migrate, and the dagger CLI is the one baked into the platform image. The dagger runner host and

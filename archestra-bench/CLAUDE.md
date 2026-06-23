@@ -32,9 +32,9 @@ file layout, lifecycle) live in `../README.md` -- this file is the discipline, n
 If a weak model scores 100% on a task, it is leaking or trivial: de-clue the prompt or strengthen the
 oracle. Solving it should require the work, not pattern-matching the phrasing.
 
-## Running against a prod image (staging CI)
+## Running against a prod image (benchmark CI)
 
-The daily staging benchmark (`.github/bench/`, see its README) runs this harness inside the deployed
+The daily benchmark (`.github/bench/`, see its README) runs this harness inside the deployed
 platform image instead of the dev repo. Three knobs make that work, all defaulting to today's local
 behavior when unset:
 

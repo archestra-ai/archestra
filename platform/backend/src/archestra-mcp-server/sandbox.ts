@@ -764,8 +764,7 @@ const registry = defineArchestraTools([
           data: loaded.data,
           mimeType: loaded.mimeType,
           originalName: loaded.originalName,
-          // PFS-sourced uploads are marked so the conversation Files panel
-          // can show which persistent files the agent touched here.
+          // Tag the upload's origin: a PFS "my_file" pull vs an inline source.
           origin: args.source.type === "my_file" ? "my_file" : null,
         });
 
@@ -1661,8 +1660,6 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
-  /** Set for my_file sources — the PFS file the agent pulled in, for touch tracking. */
-  sourceFileId?: string;
 }
 
 /**
@@ -1956,9 +1953,6 @@ async function loadUploadSource(params: {
         data: resolved.data,
         mimeType: resolved.mimeType,
         originalName: resolved.originalName,
-        // null (an untracked, hand-placed object with no row) → undefined: there
-        // is no files row to record a conversation touch against.
-        sourceFileId: resolved.fileId ?? undefined,
       };
     }
   }

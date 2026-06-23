@@ -2,15 +2,7 @@
 exact total monthly cost. The exact cent total over the controlled seat table is unforgeable without the
 tool output, so answer-match + tool-call presence together prove the MCP was actually used."""
 
-import json
-import os
-from pathlib import Path
-
-
-def _load(env_var: str) -> dict:
-    path = os.environ.get(env_var)
-    assert path, f"{env_var} is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+from bench_verifier import read_fixture_json, result, state
 
 
 def _invocations() -> list[tuple[str, dict]]:
@@ -21,7 +13,7 @@ def _invocations() -> list[tuple[str, dict]]:
     run_command are called directly. Unwrap run_tool so callers see the real tool name + args either way.
     """
     out: list[tuple[str, dict]] = []
-    for call in _load("BENCH_STATE").get("tool_calls", []):
+    for call in state().get("tool_calls", []):
         name = call.get("name", "")
         inp = call.get("input") or {}
         if name.endswith("__run_tool") and isinstance(inp, dict):
@@ -33,9 +25,7 @@ def _invocations() -> list[tuple[str, dict]]:
 
 
 def _expected() -> int:
-    base = os.environ.get("BENCH_FIXTURES")
-    assert base, "BENCH_FIXTURES is not set"
-    answer = json.loads((Path(base) / "expected" / "answer.json").read_text(encoding="utf-8"))
+    answer = read_fixture_json("expected", "answer.json")
     return answer["total_monthly_cost_cents"]
 
 
@@ -47,6 +37,6 @@ def test_called_list_seats() -> None:
 
 
 def test_total_matches() -> None:
-    submitted = _load("BENCH_RESULT")["total_monthly_cost_cents"]
+    submitted = result()["total_monthly_cost_cents"]
     expected = _expected()
     assert submitted == expected, f"got {submitted}, expected {expected}"

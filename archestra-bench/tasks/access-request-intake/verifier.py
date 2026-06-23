@@ -4,8 +4,8 @@ read-write, plus the manager email), and file ONE create_access_request to the I
 complete, corrected set. The graded signal is the (unwrapped) tool-call input, not the agent's prose."""
 
 import json
-import os
-from pathlib import Path
+
+from bench_verifier import result, state
 
 SKILL = "access-request-intake"
 EXPECTED = {
@@ -16,17 +16,11 @@ EXPECTED = {
 SUPERSEDED_ACCESS_LEVEL = "admin"
 
 
-def _load(env_var: str) -> dict:
-    path = os.environ.get(env_var)
-    assert path, f"{env_var} is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
 def _invocations() -> list[tuple[str, dict]]:
     """Every tool the agent invoked as (tool_name, tool_args), unwrapping archestra__run_tool
     (search_and_run_only mode routes MCP tools through run_tool with {tool_name, tool_args})."""
     out: list[tuple[str, dict]] = []
-    for call in _load("BENCH_STATE").get("tool_calls", []):
+    for call in state().get("tool_calls", []):
         name = call.get("name", "")
         inp = call.get("input") or {}
         if name.endswith("__run_tool") and isinstance(inp, dict):
@@ -42,7 +36,7 @@ def _access_requests() -> list[dict]:
 
 
 def test_skill_seeded_from_repo() -> None:
-    rest = _load("BENCH_STATE").get("rest", {})
+    rest = state().get("rest", {})
     assert rest, "no rest snapshot captured"
     payload = next(iter(rest.values()))
     rows = payload.get("data") if isinstance(payload, dict) else payload
@@ -85,5 +79,5 @@ def test_request_filed_with_corrected_fields() -> None:
 
 
 def test_reported_ticket_id() -> None:
-    submitted = _load("BENCH_RESULT")["ticket_id"]
+    submitted = result()["ticket_id"]
     assert submitted == "REQ-10042", f"got {submitted!r}, expected the service-desk ticket id"

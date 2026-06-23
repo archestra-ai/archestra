@@ -758,12 +758,35 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
 const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
+/**
+ * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
+ * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
+ * always wins (`"true"`/`"false"`); a blank or unset value falls back to
+ * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
+ * ships-dark/preview feature at once while keeping per-feature opt-out intact
+ * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ *
+ * Beta only flips the *intent* to enable — infra-gated features still need their
+ * backing setup to actually run: the sandbox/hooks need a Dagger runner host,
+ * and the cloud auth modes (Bedrock IAM, Azure/Vertex Entra) need the relevant
+ * provider configured with credentials present.
+ *
+ * @public — exported for testability
+ */
+export function betaFeatureEnabled(envValue: string | undefined): boolean {
+  if (envValue === undefined || envValue === "") {
+    return process.env.ARCHESTRA_BETA === "true";
+  }
+  return envValue === "true";
+}
+
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
 // off.
-const skillsSandboxRequested =
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
+const skillsSandboxRequested = betaFeatureEnabled(
+  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+);
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
@@ -837,9 +860,12 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
-    environmentsEnabled:
-      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED === "true",
+    skillsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
+    ),
+    environmentsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
+    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -912,16 +938,18 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
-      azureFoundryEntraIdEnabled:
-        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
-        "true",
+      azureFoundryEntraIdEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED,
+      ),
     },
     gemini: {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
       vertexAi: {
-        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
+        enabled: betaFeatureEnabled(
+          process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED,
+        ),
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
         location:
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
@@ -1007,7 +1035,9 @@ const config = {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
       /** Enable AWS IAM authentication (IRSA, env vars, instance profile) instead of API key */
-      iamAuthEnabled: process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED === "true",
+      iamAuthEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED,
+      ),
       /** Explicit AWS region override; falls back to extracting from base URL */
       region: process.env.ARCHESTRA_BEDROCK_REGION || "",
       /** Comma-separated list of provider prefixes to include (e.g., "anthropic,amazon"). Empty = allow all. */
@@ -1030,8 +1060,9 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
-      entraIdEnabled:
-        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
+      entraIdEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED,
+      ),
     },
   },
   chat: {
@@ -1198,7 +1229,7 @@ const config = {
    */
   hooks: {
     enabled:
-      process.env.ARCHESTRA_AGENT_HOOKS_ENABLED === "true" &&
+      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
       skillsSandboxEnabled,
   },
   /**
@@ -1247,7 +1278,7 @@ const config = {
    * tools. Ships dark: off by default until the feature is ready to surface.
    */
   apps: {
-    enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
   },
   /**
    * Projects + the persistent "My Files" file system on top of the skill
@@ -1257,7 +1288,7 @@ const config = {
    * my_file upload source.
    */
   projects: {
-    enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

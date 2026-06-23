@@ -434,9 +434,6 @@ function InstructionsRow({
             : "Empty — add instructions for every chat"}
         </span>
       </span>
-      <Badge variant="secondary" className="shrink-0">
-        Instructions
-      </Badge>
     </button>
   );
 }

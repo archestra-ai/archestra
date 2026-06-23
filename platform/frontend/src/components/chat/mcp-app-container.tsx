@@ -13,7 +13,7 @@ import { useApps } from "@/components/chat/apps-context";
 import {
   getAppRenderVerb,
   humanizeToolLabel,
-  isSupersededOwnedRender,
+  isSupersededRender,
 } from "@/components/chat/chat-messages.utils";
 import {
   clampInlineHeight,
@@ -215,14 +215,15 @@ export function McpAppSection({
     return null;
   }
 
-  // A superseded owned-app render (a newer render of the same app exists in the
-  // conversation) collapses to a static changelog pill instead of mounting the
-  // live runtime — only the latest render of each app stays live. External
-  // MCP-UI renders have no appId and are distinct invocations, never superseded.
-  if (appId && isSupersededOwnedRender({ apps, appId, toolCallId })) {
+  // A superseded render (a newer render of the same app — keyed by
+  // uiResourceUri — exists in the conversation) collapses to a static changelog
+  // pill instead of mounting the live runtime, so only the latest render of each
+  // app stays live. Applies to both owned apps and external MCP-UI calls; the
+  // pill degrades to just the label for non-owned renders (no version/verb).
+  if (isSupersededRender({ apps, uiResourceUri, toolCallId })) {
     return (
       <McpAppChangelogPill
-        appName={appName ?? null}
+        appName={appName ?? humanizeToolLabel(toolName)}
         version={appVersion ?? null}
         verb={getAppRenderVerb(toolName)}
       />

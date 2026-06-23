@@ -347,7 +347,14 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
       render(
         sidebar ? (
           <AppsProvider
-            apps={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+            apps={[
+              {
+                toolCallId: "tc1",
+                label: "app",
+                uiResourceUri: defaultProps.uiResourceUri,
+                createdAt: 0,
+              },
+            ]}
           >
             <SidebarDriver target={document.body} />
             <McpAppSection
@@ -458,7 +465,14 @@ describe("McpAppSection sidebar hosting", () => {
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
           <SidebarHost target={target} />
           <McpAppSection
@@ -493,7 +507,14 @@ describe("McpAppSection sidebar hosting", () => {
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
           <SidebarHost target={target} />
           <McpAppSection
@@ -538,8 +559,18 @@ describe("McpAppSection sidebar hosting", () => {
         // selection and the rendered tc2 section stays unselected.
         <AppsProvider
           apps={[
-            { toolCallId: "tc1", label: "First App", createdAt: 1 },
-            { toolCallId: "tc2", label: "Second App", createdAt: 0 },
+            {
+              toolCallId: "tc1",
+              label: "First App",
+              uiResourceUri: "resource://test-server/ui-other",
+              createdAt: 1,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Second App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
           ]}
         >
           <SidebarHost target={target} />
@@ -591,6 +622,7 @@ describe("McpAppSection superseded renders", () => {
             {
               toolCallId: "tc2",
               label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
               appId: APP_ID,
               createdAt: 1,
             },
@@ -621,6 +653,7 @@ describe("McpAppSection superseded renders", () => {
             {
               toolCallId: "tc1",
               label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
               appId: APP_ID,
               createdAt: 0,
             },

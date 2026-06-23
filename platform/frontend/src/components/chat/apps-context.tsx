@@ -13,6 +13,13 @@ export interface PanelApp {
   toolCallId: string;
   /** Short, human-readable label for the app (typically the tool name without the server prefix, or the owned-app name). */
   label: string;
+  /**
+   * Resource URI identifying the app — the dedup key. Owned apps use the
+   * synthetic `ui://archestra-app/<appId>` (version-independent); external
+   * MCP-UI tool calls use the URI from their result. Repeated renders of the
+   * same URI collapse to one entry tracking the latest render.
+   */
+  uiResourceUri: string;
   /** Owned-app id, when this entry is an Archestra-authored app. External MCP-UI tool calls have none. */
   appId?: string | null;
   /** Latest owned-app version this entry shows. */

@@ -1,5 +1,6 @@
 import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   RouteId,
 } from "@archestra/shared";
@@ -197,6 +198,52 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }) =>
       projectService.listFiles({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.get(
+    "/api/projects/:id/instructions",
+    {
+      schema: {
+        operationId: RouteId.GetProjectInstructions,
+        description:
+          "The project's instructions (markdown). Readable by anyone with " +
+          "project access; empty until the owner first saves it. The content " +
+          "is injected into the system prompt of every chat in the project.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ content: z.string() })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.getInstructions({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/instructions",
+    {
+      schema: {
+        operationId: RouteId.SetProjectInstructions,
+        description:
+          "Set the project's instructions (owner only). The first save creates " +
+          "the instructions file; saving empty content keeps it but injects " +
+          "nothing.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          content: z.string().max(PROJECT_INSTRUCTIONS_MAX_LENGTH),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) => {
+      await projectService.setInstructions({
+        id,
+        organizationId,
+        userId: user.id,
+        content: body.content,
+      });
+      return { ok: true as const };
+    },
   );
 
   fastify.get(

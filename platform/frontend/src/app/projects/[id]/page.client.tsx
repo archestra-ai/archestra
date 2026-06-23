@@ -3,12 +3,13 @@
 import {
   type archestraApiTypes,
   PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_INSTRUCTIONS_FILENAME,
+  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import {
   CalendarClock,
   Eye,
-  File as FileIcon,
   FileText,
   Globe,
   Lock,
@@ -26,6 +27,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import {
   type FileListItem,
   FileSection,
@@ -59,6 +61,8 @@ import {
   useProject,
   useProjectConversations,
   useProjectFiles,
+  useProjectInstructions,
+  useSetProjectInstructions,
   useSetProjectShare,
   useUpdateProject,
 } from "@/lib/projects/projects.query";
@@ -188,6 +192,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
+          isOwner={project.isOwner}
         />
       </div>
     </div>
@@ -290,18 +295,32 @@ function ChatsList({
  * Files panel: same resizable shell, same tab header, same stacked
  * list-over-preview body.
  */
+/** Sentinel selection id for the pinned instructions entry (not a file ref). */
+const INSTRUCTIONS_SELECTION = "__project_instructions__";
+
 function ProjectFilesSidebar({
   projectId,
   projectName,
+  isOwner,
 }: {
   projectId: string;
   projectName: string;
+  isOwner: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // The instructions file is surfaced only as the pinned entry, so keep it out
+  // of the ordinary list. Its presence + size drives the pinned row's state.
+  const instructionsFile = (files ?? []).find(
+    (f) => f.filename === PROJECT_INSTRUCTIONS_FILENAME,
+  );
+  const hasInstructions = (instructionsFile?.sizeBytes ?? 0) > 0;
+
   const items: FileListItem[] = (files ?? [])
-    .filter((f) => f.downloadable)
+    .filter(
+      (f) => f.downloadable && f.filename !== PROJECT_INSTRUCTIONS_FILENAME,
+    )
     .map((f) => ({
       id: f.downloadRef,
       name: f.filename,
@@ -309,9 +328,12 @@ function ProjectFilesSidebar({
       contentUrl: sandboxArtifactUrl(f.downloadRef),
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
+  const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
+  const previewing = selected !== null || instructionsSelected;
 
   // Open with the newest file previewed, like the chat panel does. Only once —
-  // an explicitly closed preview stays closed.
+  // an explicitly closed preview stays closed. The instructions entry is opened
+  // only on click, never by default.
   const defaultApplied = useRef(false);
   const newestId = items.at(-1)?.id;
   useEffect(() => {
@@ -338,39 +360,211 @@ function ProjectFilesSidebar({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
-          {items.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-              <FileIcon className="mb-2 h-6 w-6 opacity-50" />
-              <p className="font-medium">No files yet</p>
-              <p className="mt-1">
-                Results the agent saves in this project will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="flex h-full flex-col">
-              <div
-                className={cn(
-                  "overflow-y-auto px-3 py-3",
-                  selected ? "max-h-[45%] shrink-0 border-b" : "flex-1",
-                )}
-              >
+          <div className="flex h-full flex-col">
+            <div
+              className={cn(
+                "overflow-y-auto px-3 py-3",
+                previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
+              )}
+            >
+              <InstructionsRow
+                selected={instructionsSelected}
+                hasContent={hasInstructions}
+                onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+              />
+              {items.length > 0 ? (
                 <FileSection
                   items={items}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
                 />
-              </div>
-              {selected && (
-                <FilePreview
-                  file={selected}
-                  onClose={() => setSelectedId(null)}
-                />
+              ) : (
+                <p className="px-1 pt-3 text-xs text-muted-foreground">
+                  Results the agent saves in this project will appear here.
+                </p>
               )}
             </div>
-          )}
+            {instructionsSelected && (
+              <ProjectInstructionsPanel
+                projectId={projectId}
+                isOwner={isOwner}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
+            {selected && (
+              <FilePreview
+                file={selected}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
+          </div>
         </div>
       </Tabs>
     </ResizableRightPanel>
+  );
+}
+
+/** The always-present, pinned instructions entry at the top of the file list. */
+function InstructionsRow({
+  selected,
+  hasContent,
+  onSelect,
+}: {
+  selected: boolean;
+  hasContent: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
+        selected ? "border-primary/40 bg-muted" : "hover:bg-muted/50",
+      )}
+    >
+      <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {PROJECT_INSTRUCTIONS_FILENAME}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {hasContent
+            ? "Project instructions for every chat"
+            : "Empty — add instructions for every chat"}
+        </span>
+      </span>
+      <Badge variant="secondary" className="shrink-0">
+        Instructions
+      </Badge>
+    </button>
+  );
+}
+
+/**
+ * View/edit panel for the pinned instructions entry. Read mode renders the
+ * markdown; the owner can edit it inline. Non-owners get a read-only view.
+ */
+function ProjectInstructionsPanel({
+  projectId,
+  isOwner,
+  onClose,
+}: {
+  projectId: string;
+  isOwner: boolean;
+  onClose: () => void;
+}) {
+  const { data, isPending } = useProjectInstructions(projectId);
+  const setInstructions = useSetProjectInstructions();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const content = data?.content ?? "";
+  const overLimit = draft.length > PROJECT_INSTRUCTIONS_MAX_LENGTH;
+
+  const startEditing = () => {
+    setDraft(content);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    if (overLimit) return;
+    const ok = await setInstructions.mutateAsync({
+      id: projectId,
+      content: draft,
+    });
+    if (ok) setEditing(false);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <FileText className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+          {PROJECT_INSTRUCTIONS_FILENAME}
+        </span>
+        {isOwner && !editing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={startEditing}
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </Button>
+        )}
+        {editing && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={setInstructions.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={save}
+              disabled={setInstructions.isPending || overLimit}
+            >
+              Save
+            </Button>
+          </>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-muted-foreground"
+          onClick={onClose}
+        >
+          Close
+        </Button>
+      </div>
+
+      {editing ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-1 p-3">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add instructions that apply to every chat in this project…"
+            className="min-h-40 flex-1 resize-none font-mono text-xs"
+            autoFocus
+          />
+          <span
+            className={cn(
+              "self-end text-[11px]",
+              overLimit ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {draft.length.toLocaleString()} /{" "}
+            {PROJECT_INSTRUCTIONS_MAX_LENGTH.toLocaleString()}
+          </span>
+        </div>
+      ) : isPending ? (
+        <p className="p-4 text-xs text-muted-foreground">Loading…</p>
+      ) : content.trim() ? (
+        <ConversationArtifactPanel
+          artifact={content}
+          isOpen
+          onToggle={onClose}
+          embedded
+          hideHeader
+        />
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
+          <p className="font-medium">No instructions yet</p>
+          <p className="mt-1">
+            {isOwner
+              ? "Add instructions to steer every chat in this project."
+              : "The project owner hasn't added any instructions."}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

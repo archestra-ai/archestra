@@ -137,6 +137,43 @@ class ProjectService {
     }
   }
 
+  /**
+   * The project's instructions text ("" when never saved). Readable by anyone
+   * with project access — the instructions steer every chat in the project.
+   */
+  async getInstructions(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<{ content: string }> {
+    const project = await this.requireReadable(params);
+    const content = await fileStore.readProjectInstructions({
+      organizationId: params.organizationId,
+      projectId: project.id,
+    });
+    return { content: content ?? "" };
+  }
+
+  /**
+   * Create or replace the project's instructions (owner only). The first save
+   * materializes the real `instructions.md` file; empty content is kept (an
+   * empty file is simply not injected into chats), never deleted.
+   */
+  async setInstructions(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    content: string;
+  }): Promise<void> {
+    const project = await this.requireOwned(params);
+    await fileStore.writeProjectInstructions({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      projectId: project.id,
+      content: params.content,
+    });
+  }
+
   /** Upsert (or remove, when visibility is null) the project's share. */
   async setShare(params: {
     id: string;

@@ -19,7 +19,9 @@ const {
   getProject,
   getProjectConversations,
   getProjectFiles,
+  getProjectInstructions,
   getProjects,
+  setProjectInstructions,
   setProjectShare,
   updateProject,
 } = archestraApiSdk;
@@ -87,6 +89,50 @@ export function useProjectFiles(id: string | undefined) {
         return null;
       }
       return data;
+    },
+  });
+}
+
+/** The project's instructions ("" when never saved). */
+export function useProjectInstructions(id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", id, "instructions"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getProjectInstructions({
+        path: { id: id as string },
+      });
+      if (error) {
+        if (!isProjectNotFound(error)) handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useSetProjectInstructions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; content: string }) => {
+      const { error } = await setProjectInstructions({
+        path: { id: params.id },
+        body: { content: params.content },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      toast.success("Instructions saved");
+      queryClient.invalidateQueries({
+        queryKey: ["projects", id, "instructions"],
+      });
+      // The first save materializes the instructions.md file.
+      queryClient.invalidateQueries({ queryKey: ["projects", id, "files"] });
     },
   });
 }

@@ -378,7 +378,7 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:delete": "Delete chat conversations",
   "project:read": "View projects and the chats inside them",
   "project:create": "Create projects",
-  "project:update": "Edit project descriptions and sharing",
+  "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
@@ -1325,6 +1325,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // `downloadable` and then 403 on every fetch. Project membership is still
   // enforced in the handler (projectService.listFiles -> requireReadable).
   [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Instructions are plain project metadata (not a sandbox byte surface), so the
+  // GET needs only project read — every project reader can see the instructions
+  // that steer the project's chats. Editing is owner-only, enforced in the
+  // handler on top of project:update.
+  [RouteId.GetProjectInstructions]: { project: ["read"] },
+  [RouteId.SetProjectInstructions]: { project: ["update"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes

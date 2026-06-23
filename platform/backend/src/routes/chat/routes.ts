@@ -87,6 +87,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
+import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
@@ -459,6 +460,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           abortSignal: chatAbortController.signal,
         });
 
+        // A project chat prepends the project's instructions to the system
+        // prompt. Kicked off as a promise so it runs concurrently with the org
+        // reads below rather than adding a serial read on the hot path.
+        // Best-effort: a read failure (or lost project access) must never break
+        // the chat, and an empty file injects nothing.
+        const projectInstructionsPromise: Promise<string | undefined> =
+          conversation.projectId
+            ? projectService
+                .getInstructions({
+                  id: conversation.projectId,
+                  organizationId,
+                  userId: user.id,
+                })
+                .then(({ content }) => (content.trim() ? content : undefined))
+                .catch((error) => {
+                  logger.warn(
+                    {
+                      error,
+                      conversationId,
+                      projectId: conversation.projectId,
+                    },
+                    "Failed to load project instructions, proceeding without them",
+                  );
+                  return undefined;
+                })
+            : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -471,17 +499,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          buildChatContext({
-            conversationId,
-            agentId,
-            agent,
-            user: { id: user.id, email: user.email, name: user.name },
-            organizationId,
-            hookSessionContext,
-            hookRunCollector,
-            elicitation: chatMcpElicitation,
-            abortSignal: chatAbortController.signal,
-          }),
+          projectInstructionsPromise.then((projectInstructions) =>
+            buildChatContext({
+              conversationId,
+              agentId,
+              agent,
+              user: { id: user.id, email: user.email, name: user.name },
+              organizationId,
+              hookSessionContext,
+              projectInstructions,
+              hookRunCollector,
+              elicitation: chatMcpElicitation,
+              abortSignal: chatAbortController.signal,
+            }),
+          ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
         ]);

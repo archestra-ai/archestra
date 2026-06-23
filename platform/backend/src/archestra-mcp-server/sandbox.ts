@@ -1,5 +1,6 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
+  PROJECT_INSTRUCTIONS_FILENAME,
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
@@ -1331,6 +1332,16 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
+      }
+      // The project instructions file is available but never deletable — refuse
+      // with a clear message instead of letting the store throw.
+      if (
+        resolved.projectId &&
+        resolved.filename === PROJECT_INSTRUCTIONS_FILENAME
+      ) {
+        return errorResult(
+          `"${resolved.filename}" is the project's instructions file and can't be deleted. Clear its contents from the project's Instructions panel instead.`,
+        );
       }
 
       const deleted = await fileStore.delete({

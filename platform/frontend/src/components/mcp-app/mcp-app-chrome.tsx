@@ -191,7 +191,7 @@ export function McpAppStandaloneButton({ appId }: { appId: string }) {
       title="Open standalone"
       {...ICON_BUTTON_PROPS}
     >
-      <Link href={`/apps/${appId}/run`} target="_blank" rel="noreferrer">
+      <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">
         <SquareArrowOutUpRight className="h-3.5 w-3.5" />
       </Link>
     </Button>

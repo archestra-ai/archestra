@@ -1,12 +1,40 @@
+import { E2eTestId } from "@archestra/shared";
+import type { APIRequestContext } from "@playwright/test";
 import { goToPage } from "../fixtures";
-import { expect, test } from "./api-fixtures";
+import { expect, type TestFixtures, test } from "./api-fixtures";
 
-// Seed an app from the default template, open /apps/:id/run, and assert through
-// the nested sandbox frames (host page → sandbox proxy iframe → inner app
-// iframe) that the app reaches "Ready." — which the template only shows after
-// the injected runtime bridge connected the guest SDK and completed a
-// data-store read round-trip. This is the end-to-end proof of the serve-time
-// bridge injection in a real browser.
+// Seed a personal app from the default template, run the body, then delete it.
+async function withApp(
+  makeApiRequest: TestFixtures["makeApiRequest"],
+  request: APIRequestContext,
+  run: (app: { id: string; name: string }) => Promise<void>,
+) {
+  const name = `e2e-app-${Date.now()}`;
+  const res = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/apps",
+    data: { name, scope: "personal" },
+  });
+  const { id } = (await res.json()) as { id: string };
+  try {
+    await run({ id, name });
+  } finally {
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/apps/${id}`,
+      ignoreStatusCheck: true,
+    });
+  }
+}
+
+// Open /a/:id (the full-page runtime) and assert through the nested sandbox
+// frames (host page → sandbox proxy iframe → inner app iframe) that the app
+// reaches "Ready." — which the template only shows after the injected runtime
+// bridge connected the guest SDK and completed a data-store read round-trip.
+// The runtime owns its chrome, so the app name is the tab title and the global
+// sidebar must not render.
 test("create an app from a template and run it standalone", async ({
   page,
   request,
@@ -29,29 +57,15 @@ test("create an app from a template and run it standalone", async ({
     });
   });
 
-  const name = `e2e-app-${Date.now()}`;
-  const createRes = await makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: "/api/apps",
-    data: { name, scope: "personal" },
-  });
-  const app = (await createRes.json()) as { id: string };
+  await withApp(makeApiRequest, request, async ({ id, name }) => {
+    await goToPage(page, `/a/${id}`);
 
-  try {
-    await goToPage(page, `/apps/${app.id}/run`);
-    // The run page renders the app name in its own <header>. The surrounding
-    // app shell also surfaces the name (a muted chrome label that mounts a beat
-    // later), so an unscoped getByText(name) is a strict-mode race: fast PR runs
-    // resolve before that label exists, slow merge-queue runs match both. Scope
-    // the smoke check to the header so it stays unambiguous.
-    await expect(page.locator("header").getByText(name)).toBeVisible();
+    await expect(page).toHaveTitle(name);
+    await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toHaveCount(0);
 
     const proxyFrame = page.frameLocator("iframe");
     const appFrame = proxyFrame.frameLocator("iframe");
-    await expect(appFrame.getByText("Ready.")).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(appFrame.getByText("Ready.")).toBeVisible({ timeout: 20_000 });
     // auto-auth: the SDK bootstrap carries the viewer identity and the default
     // template personalizes its heading from archestra.user.name
     await expect(
@@ -63,12 +77,21 @@ test("create an app from a template and run it standalone", async ({
         (window as unknown as { __appDiagnostics: unknown[] }).__appDiagnostics,
     );
     expect(diagnostics).toEqual([]);
-  } finally {
-    await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/apps/${app.id}`,
-      ignoreStatusCheck: true,
-    });
-  }
+  });
+});
+
+// The management page (/apps/:id) is a normal app-shell page: sidebar plus the
+// management tabs.
+test("app management page keeps the sidebar and shows the tabs", async ({
+  page,
+  request,
+  makeApiRequest,
+}) => {
+  await withApp(makeApiRequest, request, async ({ id }) => {
+    await goToPage(page, `/apps/${id}`);
+
+    await expect(page.getByTestId(E2eTestId.SidebarUserProfile)).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Preview" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Settings" })).toBeVisible();
+  });
 });

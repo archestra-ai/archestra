@@ -30,7 +30,7 @@ describe("address-pill action buttons", () => {
     render(<McpAppStandaloneButton appId="app-123" />);
 
     const link = screen.getByRole("link", { name: /open standalone/i });
-    expect(link).toHaveAttribute("href", "/apps/app-123/run");
+    expect(link).toHaveAttribute("href", "/a/app-123");
     expect(link).toHaveAttribute("target", "_blank");
   });
 

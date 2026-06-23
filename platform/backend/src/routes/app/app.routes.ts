@@ -33,6 +33,11 @@ import {
   callerIsAppAdmin,
   resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
+import {
+  createAppBacking,
+  deleteAppBacking,
+  syncAppBacking,
+} from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
@@ -282,6 +287,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `An app named "${body.name}" already exists in this scope.`,
         );
       }
+      await createAppBacking({
+        app,
+        userId: user.id,
+        organizationId,
+        teamIds,
+      });
       return reply.send(warnings.length > 0 ? { ...app, warnings } : app);
     },
   );
@@ -426,6 +437,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
+      await syncAppBacking(updated);
       return reply.send(
         warnings.length > 0 ? { ...updated, warnings } : updated,
       );
@@ -460,6 +472,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
+      await deleteAppBacking(app);
       logger.info({ appId, userId: user.id }, "App deleted via REST");
       return reply.send({ success });
     },

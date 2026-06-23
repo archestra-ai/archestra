@@ -193,6 +193,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
+        // App backing entities are created and managed via /api/apps and run
+        // in-process; they are not installable through the generic server route
+        // (which would deploy/discover them).
+        if (catalogItem.serverType === "app") {
+          throw new ApiError(
+            400,
+            "App servers are managed via the Apps API and cannot be installed here.",
+          );
+        }
+
         // Playwright browser preview can only be installed as a personal server
         if (
           isPlaywrightCatalogItem(serverData.catalogId) &&
@@ -1064,6 +1074,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API and have no credentials to re-authenticate.",
+        );
+      }
       // Check mcpServer create permission (required for re-authentication)
       const { success: hasMcpServerCreatePermission } = await hasPermission(
         { mcpServerInstallation: ["create"] },
@@ -1336,6 +1352,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Cannot delete built-in MCP servers");
       }
 
+      // App backing servers are owned by the Apps lifecycle. Deleting one here
+      // would orphan the app (FK set null) and strip its show_app surface — the
+      // app must be deleted via the Apps API instead.
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API; delete the app instead.",
+        );
+      }
+
       await assertScopedLifecycleAuthorization({
         mcpServer,
         userId: user.id,
@@ -1598,6 +1624,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
+      }
+
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers run in-process and are not reinstallable; manage them via the Apps API.",
+        );
       }
 
       await assertScopedLifecycleAuthorization({

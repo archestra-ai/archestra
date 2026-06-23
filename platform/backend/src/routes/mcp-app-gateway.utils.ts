@@ -12,6 +12,7 @@ import {
   ListToolsRequestSchema,
   type ListToolsResult,
   ReadResourceRequestSchema,
+  type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   archestraMcpBranding,
@@ -133,59 +134,7 @@ export async function createAppServer(
           message: `Resource not found: ${uri}`,
         };
       }
-      const current = await AppModel.findById(appId);
-      const head = current
-        ? await AppVersionModel.findByAppAndVersion(
-            appId,
-            current.latestVersion,
-          )
-        : null;
-      if (!head) {
-        throw {
-          code: -32002,
-          message: `App resource not found for ${appId}`,
-        };
-      }
-      const viewer = tokenAuth.userId
-        ? await UserModel.getById(tokenAuth.userId)
-        : null;
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: RESOURCE_MIME_TYPE,
-            // Owned apps get the Apps SDK (window.archestra) injected at serve
-            // time; the stored HTML stays pure UI. The bootstrap carries the
-            // viewer identity and the assigned-tool descriptors.
-            text: await injectAppSdk(
-              head.html,
-              {
-                user: viewer ? { id: viewer.id, name: viewer.name } : null,
-                tools: await buildAppSdkTools(appId, tokenAuth),
-                appId,
-                version: head.version,
-                captureScreenshot:
-                  viewer != null && current?.authorId === viewer.id,
-              },
-              // An external client renders in a foreign host whose sandbox CSP
-              // may refuse cross-origin assets, so serve a self-contained
-              // resource; Archestra's own session render keeps linked assets.
-              { selfContained: !tokenAuth.isSessionAuth },
-            ),
-            _meta: {
-              ui: {
-                // Owned apps always render under the platform CSP — never a
-                // stored, author-influenced one. MCP tools are the only data
-                // egress; static assets come from the hardcoded CDN allowlist.
-                csp: APP_PLATFORM_CSP,
-                ...(head.uiPermissions
-                  ? { permissions: head.uiPermissions }
-                  : {}),
-              },
-            },
-          },
-        ],
-      };
+      return buildAppUiResource(appId, uri, tokenAuth);
     },
   );
 
@@ -264,6 +213,65 @@ export async function createAppServer(
 
   logger.info({ appId }, "MCP app server instance created");
   return { server: mcpServer, app };
+}
+
+/**
+ * Build an app's `ui://` resource (head HTML + SDK bootstrap + platform CSP)
+ * in-process. Shared by the route-bound app server above and the generic
+ * gateway's resources/read path, so a `serverType:"app"` server rendered
+ * through the standard gateway serves identical bytes under the same
+ * platform-pinned CSP — never an author-declared one.
+ */
+export async function buildAppUiResource(
+  appId: string,
+  uri: string,
+  tokenAuth: TokenAuthContext,
+): Promise<{ contents: ReadResourceResult["contents"] }> {
+  const current = await AppModel.findById(appId);
+  const head = current
+    ? await AppVersionModel.findByAppAndVersion(appId, current.latestVersion)
+    : null;
+  if (!head) {
+    throw { code: -32002, message: `App resource not found for ${appId}` };
+  }
+  const viewer = tokenAuth.userId
+    ? await UserModel.getById(tokenAuth.userId)
+    : null;
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: RESOURCE_MIME_TYPE,
+        // Owned apps get the Apps SDK (window.archestra) injected at serve
+        // time; the stored HTML stays pure UI. The bootstrap carries the
+        // viewer identity and the assigned-tool descriptors.
+        text: await injectAppSdk(
+          head.html,
+          {
+            user: viewer ? { id: viewer.id, name: viewer.name } : null,
+            tools: await buildAppSdkTools(appId, tokenAuth),
+            appId,
+            version: head.version,
+            captureScreenshot:
+              viewer != null && current?.authorId === viewer.id,
+          },
+          // An external client renders in a foreign host whose sandbox CSP
+          // may refuse cross-origin assets, so serve a self-contained
+          // resource; Archestra's own session render keeps linked assets.
+          { selfContained: !tokenAuth.isSessionAuth },
+        ),
+        _meta: {
+          ui: {
+            // Owned apps always render under the platform CSP — never a
+            // stored, author-influenced one. MCP tools are the only data
+            // egress; static assets come from the hardcoded CDN allowlist.
+            csp: APP_PLATFORM_CSP,
+            ...(head.uiPermissions ? { permissions: head.uiPermissions } : {}),
+          },
+        },
+      },
+    ],
+  };
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 import type { AppSpec } from "@/types/app-spec";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import environmentsTable from "./environment";
+import mcpServerTable from "./mcp-server";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -64,6 +65,20 @@ const appsTable = softDeletablePgTable(
       () => environmentsTable.id,
       { onDelete: "set null" },
     ),
+    /**
+     * Backing MCP server that makes this app a first-class catalog entity: it
+     * surfaces the app in the MCP servers list and exposes a `show_app` tool
+     * through the standard gateway (visibility/environment/guardrails then ride
+     * the normal tool path). Null for apps created before this backing existed.
+     *
+     * Routing handle only — serving and isolation still key on `apps.id` (the
+     * data store partition, tool gate, and OAuth audience); the backing server
+     * id must never become the isolation key. ON DELETE SET NULL so deleting
+     * the backing server detaches rather than orphaning the app.
+     */
+    mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
+      onDelete: "set null",
+    }),
     /**
      * Consolidated requirements the app was refined to (mutable head; re-refining
      * overwrites it). Null for legacy apps authored before the refine flow.

@@ -80,6 +80,20 @@ class AppModel {
     return result ?? null;
   }
 
+  /** A single active app by its backing mcp_server id (the catalog→app link). */
+  static async findByMcpServerId(mcpServerId: string): Promise<App | null> {
+    const [result] = await db
+      .select()
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.mcpServerId, mcpServerId),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return result ?? null;
+  }
+
   /** A single active app scoped to an org. */
   static async findByIdInOrg(
     id: string,
@@ -177,6 +191,7 @@ class AppModel {
         | "templateId"
         | "spec"
         | "environmentId"
+        | "mcpServerId"
       >
     >;
     version?: VersionPayload;

@@ -15606,6 +15606,7 @@ export type CreateAppResponses = {
         description: string | null;
         templateId: string | null;
         environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -15974,6 +15975,7 @@ export type GetAppResponses = {
         description: string | null;
         templateId: string | null;
         environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -16102,6 +16104,7 @@ export type UpdateAppResponses = {
         description: string | null;
         templateId: string | null;
         environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -36567,7 +36570,7 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -36700,7 +36703,7 @@ export type CreateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant?: boolean;
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
@@ -36897,7 +36900,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -37191,7 +37194,7 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -37322,7 +37325,7 @@ export type UpdateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote' | 'builtin';
+        serverType?: 'local' | 'remote' | 'builtin' | 'app';
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
@@ -37519,7 +37522,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -45900,7 +45903,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46037,7 +46040,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46238,7 +46241,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46364,7 +46367,7 @@ export type ReauthenticateMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46762,7 +46765,7 @@ export type ReinstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;

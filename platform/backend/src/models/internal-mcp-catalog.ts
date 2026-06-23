@@ -421,19 +421,22 @@ class InternalMcpCatalogModel {
 
     // Name immutability: matches the existing UI-enforced posture and avoids
     // cascading rename to k8s deployment names and pre-slugified tool rows.
+    // App backing catalogs are exempt — they have no k8s deployment and a fixed
+    // tool name (`show_app`), so they track the app's name on rename.
     if (dbValues.name !== undefined) {
       const [existing] = await db
-        .select({ name: schema.internalMcpCatalogTable.name })
+        .select({
+          name: schema.internalMcpCatalogTable.name,
+          serverType: schema.internalMcpCatalogTable.serverType,
+        })
         .from(schema.internalMcpCatalogTable)
         .where(eq(schema.internalMcpCatalogTable.id, id));
-      if (
-        existing &&
-        dbValues.name !== undefined &&
-        dbValues.name !== existing.name
-      ) {
-        throw new Error("Catalog item name cannot be changed after creation");
+      if (existing?.serverType !== "app") {
+        if (existing && dbValues.name !== existing.name) {
+          throw new Error("Catalog item name cannot be changed after creation");
+        }
+        delete dbValues.name;
       }
-      delete dbValues.name;
     }
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;

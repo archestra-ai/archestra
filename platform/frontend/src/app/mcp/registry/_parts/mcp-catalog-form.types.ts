@@ -195,7 +195,10 @@ export const formSchema = z
     name: z.string().trim().min(1, "Name is required"),
     description: z.string().optional().or(z.literal("")),
     icon: z.string().nullable().optional(),
-    serverType: z.enum(["remote", "local"]),
+    // "app" is a platform-authored MCP App backing server: it reuses this form
+    // only for visibility + environment (the deploy/credential sections are
+    // hidden), so the remote/local-specific superRefines below never apply to it.
+    serverType: z.enum(["remote", "local", "app"]),
     multitenant: z.boolean().optional(),
     serverUrl: z
       .string()

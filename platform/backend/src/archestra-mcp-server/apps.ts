@@ -43,6 +43,10 @@ import {
   escapeAngleBrackets,
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
+import {
+  createAppBacking,
+  syncAppBacking,
+} from "@/services/apps/app-mcp-backing";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
@@ -347,6 +351,16 @@ const registry = defineArchestraTools([
           `An app named "${args.name}" already exists in this scope.`,
         );
       }
+
+      // Back the app with a catalog/server/show_app tool like the REST path, so
+      // MCP-authored apps are first-class servers too. scaffold_app defers team
+      // and environment selection to the REST/UI path, so no teams here.
+      await createAppBacking({
+        app,
+        userId: context.userId,
+        organizationId: context.organizationId,
+        teamIds: [],
+      });
 
       if (resolvedTools !== undefined && resolvedTools.length > 0) {
         try {
@@ -877,6 +891,10 @@ const registry = defineArchestraTools([
       if (!updated) {
         return errorResult(`Failed to publish app ${args.appId}.`);
       }
+      // Keep the backing server/catalog scope in sync with the published scope,
+      // exactly as the REST re-scope path does — otherwise the registry/gateway
+      // would expose the app under its old scope.
+      await syncAppBacking(updated);
 
       const runUrl = `/a/${updated.id}`;
       const audience =

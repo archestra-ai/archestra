@@ -382,6 +382,12 @@ class McpServerModel {
       .where(
         and(
           ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          // Platform-authored apps back a serverType:"app" server that exposes a
+          // ui:// tool too, but they are surfaced as owned apps (and served
+          // viewer-scoped under the platform CSP) — never as external,
+          // server-scoped, author-CSP apps. Excluding them here keeps each app
+          // listed once and preserves its CSP floor.
+          ne(schema.mcpServersTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
           accessibleIds
             ? inArray(schema.mcpServersTable.id, accessibleIds)
@@ -624,6 +630,22 @@ class McpServerModel {
     }
 
     return updatedServer;
+  }
+
+  /**
+   * Set the visibility scope of an MCP server. For installed servers scope is
+   * install-time-only (changed via uninstall+reinstall), but an app backing
+   * server is in-process with no deployment, so its scope can be re-pointed in
+   * place to track the app's scope.
+   */
+  static async setScope(
+    id: string,
+    scope: ResourceVisibilityScope,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope })
+      .where(eq(schema.mcpServersTable.id, id));
   }
 
   /**

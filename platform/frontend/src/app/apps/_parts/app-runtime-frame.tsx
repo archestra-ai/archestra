@@ -3,34 +3,63 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import { useState } from "react";
+import { useInlineCeiling } from "@/components/mcp-app/app-height";
+import type { McpAppAction } from "@/components/mcp-app/mcp-app-actions";
+import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useApp } from "@/lib/app.query";
 
 // Mounts an app's runtime (sandboxed iframe + AppBridge) against the app-bound
-// MCP endpoint, owning the display-mode/size state that chat's McpAppSection
-// would otherwise supply. Used by the standalone run page and the detail preview.
-export function AppRuntimeFrame({ appId }: { appId: string }) {
+// MCP endpoint, owning the display-mode state that chat's McpAppSection would
+// otherwise supply, and wrapping it in the shared McpAppCard so the runtime gets
+// the same action chrome (fullscreen, standalone) as chat. Used by the standalone
+// run page and the detail preview.
+export function AppRuntimeFrame({
+  appId,
+  actions = ["fullscreen"],
+}: {
+  appId: string;
+  actions?: McpAppAction[];
+}) {
+  const inlineCeiling = useInlineCeiling();
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [resourceState, setResourceState] = useState<
     "unknown" | "renderable" | "empty"
   >("unknown");
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Resolve the head version before mounting so this render persists
   // diagnostics under a concrete version — mounting earlier would capture (and
   // then discard) entries against a null version while the metadata loads.
   const { data: app } = useApp(appId);
 
+  const handleToggleFullscreen = () =>
+    setDisplayMode((mode) => (mode === "fullscreen" ? "inline" : "fullscreen"));
+
   return (
     <div className="h-full w-full">
       {app && (
-        <McpAppRuntime
-          toolResourceUri={getArchestraAppResourceUri(appId)}
-          endpoint={{ kind: "app", appId }}
-          appVersion={app.latestVersion}
+        <McpAppCard
           displayMode={displayMode}
-          onDisplayModeChange={setDisplayMode}
-          onSizeChange={() => {}}
-          onResourceStateChange={setResourceState}
-        />
+          onToggleFullscreen={handleToggleFullscreen}
+          size={null}
+          inlineCeiling={inlineCeiling}
+          fillContainer
+          appName={app.name}
+          onRefresh={() => setReloadNonce((nonce) => nonce + 1)}
+          appId={appId}
+          actions={actions}
+        >
+          <McpAppRuntime
+            toolResourceUri={getArchestraAppResourceUri(appId)}
+            endpoint={{ kind: "app", appId }}
+            appVersion={app.latestVersion}
+            displayMode={displayMode}
+            onDisplayModeChange={setDisplayMode}
+            onSizeChange={() => {}}
+            onResourceStateChange={setResourceState}
+            reloadNonce={reloadNonce}
+          />
+        </McpAppCard>
       )}
       {resourceState === "empty" && (
         <p className="p-4 text-sm text-muted-foreground">

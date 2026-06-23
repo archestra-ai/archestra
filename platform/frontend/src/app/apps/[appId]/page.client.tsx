@@ -1,10 +1,7 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
@@ -45,14 +42,6 @@ export default function AppDetailPage({ appId }: { appId: string }) {
         </span>
       }
       description={app?.description ?? ""}
-      actionButton={
-        <Button asChild variant="outline">
-          <Link href={`/apps/${appId}/run`}>
-            <ExternalLink className="h-4 w-4" />
-            Open standalone
-          </Link>
-        </Button>
-      }
     >
       <Tabs defaultValue="preview">
         <TabsList>
@@ -65,7 +54,10 @@ export default function AppDetailPage({ appId }: { appId: string }) {
 
         <TabsContent value="preview">
           <div className="min-h-[400px] overflow-hidden rounded-lg border">
-            <AppRuntimeFrame appId={appId} />
+            <AppRuntimeFrame
+              appId={appId}
+              actions={["fullscreen", "openStandalone"]}
+            />
           </div>
         </TabsContent>
 

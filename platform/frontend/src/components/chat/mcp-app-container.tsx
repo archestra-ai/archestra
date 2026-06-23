@@ -1,12 +1,11 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
-import { PanelRightOpen } from "lucide-react";
 import type React from "react";
 import {
   Component,
   useCallback,
-  useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -17,18 +16,18 @@ import {
   INITIAL_INLINE_HEIGHT,
   useInlineCeiling,
 } from "@/components/mcp-app/app-height";
+import type { McpAppAction } from "@/components/mcp-app/mcp-app-actions";
+import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
   McpAppRuntime,
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
-import { Button } from "@/components/ui/button";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
-import { cn } from "@/lib/utils";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -72,6 +71,9 @@ class McpAppErrorBoundary extends Component<
   }
 }
 
+/** Stable no-op size reporter for the panel-hosted (fill) render. */
+const noopSizeChange = () => {};
+
 /**
  * Self-contained MCP App section for use inside a Tool collapsible.
  * Owns display-mode / size state and the rawToolResult derivation so the
@@ -81,6 +83,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   appId,
+  appName,
   appVersion,
   toolName,
   toolCallId,
@@ -98,6 +101,8 @@ export function McpAppSection({
    * forwarded into the iframe (they are not app data).
    */
   appId?: string;
+  /** Human-readable app name for the card header (owned apps); falls back to the short tool name. */
+  appName?: string | null;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
@@ -118,6 +123,8 @@ export function McpAppSection({
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+  // Bump to remount (reload) the sandboxed iframe via the runtime's reload nonce.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -132,16 +139,28 @@ export function McpAppSection({
   const effectiveResourceState =
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
-  const { selectedToolCallId, select, showInSidebar, portalTarget } = useApps();
+  const { selectedToolCallId, showInSidebar, portalTarget } = useApps();
 
   const parsedToolName = parseFullToolName(toolName);
   const shortToolName = parsedToolName.toolName ?? toolName;
+  const headerName = appName || shortToolName;
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const sidebarHostingActive = portalTarget !== null;
   // When the sidebar Apps tab is open, every inline app is replaced by a
   // placeholder; only the *selected* app's iframe lives in the sidebar.
   const renderInSidebar = sidebarHostingActive && isSelected;
   const renderPlaceholder = sidebarHostingActive;
+
+  // Track the last inline body height while the app shows inline; once it moves
+  // to the panel we stop updating, so the chat placeholder keeps that frozen
+  // footprint and messages below it don't reflow.
+  const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
+  if (!renderPlaceholder) {
+    lastInlineHeightRef.current = clampInlineHeight(
+      size?.height ?? INITIAL_INLINE_HEIGHT,
+      inlineCeiling,
+    );
+  }
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -157,15 +176,18 @@ export function McpAppSection({
     };
   }, [rawOutput, appId]);
 
-  const handleSelect = () => {
-    if (!toolCallId) return;
-    select(toolCallId);
-  };
-
   const handleShowInSidebar = () => {
     if (!toolCallId) return;
     showInSidebar(toolCallId);
   };
+
+  const handleToggleFullscreen = useCallback(() => {
+    setDisplayMode((mode) => (mode === "fullscreen" ? "inline" : "fullscreen"));
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setReloadNonce((nonce) => nonce + 1);
+  }, []);
 
   const handleResourceStateChange = useCallback(
     (state: "renderable" | "empty") => {
@@ -208,18 +230,29 @@ export function McpAppSection({
       </div>
     ) : null;
 
-  const appSurface = (
+  // Chat inline shows fullscreen + a side-panel action on the right of the top
+  // bar. When portaled into the panel, the side-panel action is dropped (the
+  // panel selector governs which app shows there).
+  const liveActions: McpAppAction[] = renderInSidebar
+    ? ["fullscreen"]
+    : ["fullscreen", "showInSidebar"];
+
+  const liveSurface = (
     <McpAppErrorBoundary>
-      <McpAppContainer
+      <McpAppCard
         displayMode={displayMode}
-        onClose={() => setDisplayMode("inline")}
+        onToggleFullscreen={handleToggleFullscreen}
         diagnostics={diagnosticsBadge}
         size={size}
         inlineCeiling={inlineCeiling}
+        fillContainer={renderInSidebar}
+        appName={headerName}
+        onRefresh={handleRefresh}
+        appId={appId}
+        actions={liveActions}
         onShowInSidebar={
           toolCallId && !renderInSidebar ? handleShowInSidebar : undefined
         }
-        fillContainer={renderInSidebar}
       >
         <McpAppRuntime
           toolResourceUri={uiResourceUri}
@@ -235,254 +268,55 @@ export function McpAppSection({
           }
           displayMode={displayMode}
           onDisplayModeChange={setDisplayMode}
-          onSizeChange={setSize}
+          // While portaled into the panel (fill mode), don't report size: that
+          // would overwrite the last inline size and make the card return at the
+          // panel's height when the panel closes.
+          onSizeChange={renderInSidebar ? noopSizeChange : setSize}
           containerMaxHeight={renderInSidebar ? undefined : inlineCeiling}
+          // Seed the iframe + loading box at the last measured inline height so a
+          // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
+          inlineInitialHeight={
+            size ? clampInlineHeight(size.height, inlineCeiling) : undefined
+          }
           toolInput={appId ? undefined : toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
           onResourceStateChange={handleResourceStateChange}
           onSendMessage={onSendMessage}
           appVersion={appVersion}
+          reloadNonce={reloadNonce}
         />
-      </McpAppContainer>
+      </McpAppCard>
     </McpAppErrorBoundary>
   );
 
   if (renderPlaceholder) {
     return (
       <>
-        <SidebarAppPlaceholder
-          label={shortToolName}
-          isSelected={isSelected}
-          onSelect={handleSelect}
+        <McpAppCard
+          displayMode="inline"
+          onToggleFullscreen={handleToggleFullscreen}
+          size={size}
+          inlineCeiling={inlineCeiling}
+          appName={headerName}
+          frozenHeight={lastInlineHeightRef.current}
+          appId={appId}
+          // Unselected placeholders carry the open-in-sidebar action so the user
+          // can switch the panel to this app; the selected one already shows it.
+          actions={["showInSidebar"]}
+          onShowInSidebar={isSelected ? undefined : handleShowInSidebar}
+          placeholder={
+            <span className="text-muted-foreground">
+              {isSelected ? "Showing in sidebar" : "Open in the side panel"}
+            </span>
+          }
         />
         {renderInSidebar &&
           portalTarget &&
-          createPortal(appSurface, portalTarget)}
+          createPortal(liveSurface, portalTarget)}
       </>
     );
   }
 
-  return appSurface;
-}
-
-function SidebarAppPlaceholder({
-  label,
-  isSelected,
-  onSelect,
-}: {
-  label: string;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-dashed bg-muted/30 p-3 flex items-center justify-between gap-2 text-xs",
-        isSelected
-          ? "border-primary/50 text-foreground"
-          : "border-border text-muted-foreground",
-      )}
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate font-medium">{label}</span>
-      </div>
-      {isSelected && (
-        <span className="h-7 flex items-center px-3 text-xs text-primary shrink-0">
-          Showing in sidebar
-        </span>
-      )}
-      {!isSelected && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs shrink-0"
-          onClick={onSelect}
-        >
-          Show in sidebar
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/**
- * Container that handles display mode switching (inline ↔ fullscreen).
- *
- * Uses a single stable React tree for both modes so that children (iframe)
- * are never unmounted/remounted when toggling — only CSS classes change.
- *
- * In fullscreen, uses `position: fixed` sized to the Conversation scroll area
- * (found via `role="log"`) so the chat input remains visible below.
- */
-function McpAppContainer({
-  displayMode,
-  onClose,
-  children,
-  diagnostics,
-  size,
-  inlineCeiling,
-  onShowInSidebar,
-  fillContainer = false,
-}: {
-  displayMode: McpUiDisplayMode;
-  onClose: () => void;
-  children: React.ReactNode;
-  /**
-   * Diagnostics badge rendered above the app. Kept out of `children` so the
-   * fill/fullscreen `[&>div]:!h-full` stretch only hits the app surface — a
-   * badge stretched to full height would shove the app below the fold.
-   */
-  diagnostics?: React.ReactNode;
-  size: { width: number; height: number } | null;
-  /** Viewport-derived max height for the inline card; reacts to window resize. */
-  inlineCeiling: number;
-  /** Inline-mode action: send this app to the sidebar. */
-  onShowInSidebar?: () => void;
-  /** When true, the app fills its parent container (used when portaled to sidebar). */
-  fillContainer?: boolean;
-}) {
-  const isFullscreen = displayMode === "fullscreen";
-  const [bounds, setBounds] = useState<{
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!isFullscreen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen, onClose]);
-
-  // Cover the entire viewport in fullscreen mode
-  useEffect(() => {
-    if (!isFullscreen) {
-      setBounds(null);
-      return;
-    }
-    setBounds({
-      top: 0,
-      left: 0,
-      width: window.innerWidth,
-      height: window.innerHeight,
-    });
-    const update = () => {
-      setBounds({
-        top: 0,
-        left: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("resize", update);
-    };
-  }, [isFullscreen]);
-
-  return (
-    <div
-      className={cn(
-        "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group",
-        isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",
-        fillContainer && !isFullscreen ? "h-full flex flex-col" : "",
-        isFullscreen && !bounds
-          ? "opacity-0 scale-95 pointer-events-none"
-          : "opacity-100 scale-100",
-      )}
-      style={
-        isFullscreen && bounds
-          ? {
-              top: bounds.top,
-              left: bounds.left,
-              width: bounds.width,
-              height: bounds.height,
-            }
-          : undefined
-      }
-    >
-      {/* Top toolbar — collapses to 0 height when there are no actions to show. */}
-      {(isFullscreen || onShowInSidebar) && (
-        <div
-          className={cn(
-            "flex items-center justify-end gap-1 transition-all duration-300 overflow-hidden",
-            isFullscreen
-              ? "h-12 p-2 border-b opacity-100"
-              : fillContainer
-                ? "h-8 p-1 border-b opacity-100"
-                : "absolute top-1 right-1 z-10 h-7",
-          )}
-        >
-          {onShowInSidebar && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={onShowInSidebar}
-              aria-label="Show in sidebar"
-              title="Show in sidebar"
-            >
-              Show in sidebar
-            </Button>
-          )}
-          {isFullscreen && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              aria-label="Exit fullscreen"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </Button>
-          )}
-        </div>
-      )}
-
-      {diagnostics && <div className="shrink-0">{diagnostics}</div>}
-
-      <div
-        style={
-          fillContainer && !isFullscreen
-            ? undefined
-            : {
-                maxHeight: isFullscreen
-                  ? `${bounds?.height || 1000}px`
-                  : `${clampInlineHeight(size?.height ?? INITIAL_INLINE_HEIGHT, inlineCeiling)}px`,
-              }
-        }
-        className={cn(
-          "transition-[max-height] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          isFullscreen
-            ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
-            : fillContainer
-              ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
-              : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
+  return liveSurface;
 }

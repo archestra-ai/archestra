@@ -8,19 +8,13 @@ verifier.stderr), distinct from a graded wrong answer.
 """
 
 import json
-import os
 import urllib.error
 import urllib.request
-from pathlib import Path
+
+from bench_verifier import result
 
 _REPO_API = "https://api.github.com/repos/archestra-ai/archestra"
 _ABS_TOL = 25  # absorbs run-to-verify star drift only; a non-fetching answer cannot land this close
-
-
-def _submitted() -> dict:
-    path = os.environ.get("BENCH_RESULT")
-    assert path, "BENCH_RESULT is not set"
-    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def _live_stars() -> int:
@@ -37,7 +31,7 @@ def _live_stars() -> int:
 
 
 def test_stars_match() -> None:
-    submitted = _submitted()["stars"]
+    submitted = result()["stars"]
     live = _live_stars()
     assert abs(submitted - live) <= _ABS_TOL, (
         f"submitted {submitted} not within {_ABS_TOL} of live stargazers_count {live}"

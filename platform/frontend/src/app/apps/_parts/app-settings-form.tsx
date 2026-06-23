@@ -6,6 +6,7 @@ import type {
 } from "@archestra/shared";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -24,6 +25,9 @@ type App = archestraApiTypes.GetAppResponses["200"];
 export function AppSettingsForm({ app }: { app: App }) {
   const updateApp = useUpdateApp();
   const [scope, setScope] = useState<ResourceVisibilityScope>(app.scope);
+  const [environmentId, setEnvironmentId] = useState<string | null>(
+    app.environmentId ?? null,
+  );
   const form = useForm({
     defaultValues: {
       name: app.name,
@@ -38,6 +42,7 @@ export function AppSettingsForm({ app }: { app: App }) {
         name: values.name.trim(),
         description: values.description.trim() || null,
         scope,
+        environmentId,
       },
     });
   });
@@ -81,6 +86,12 @@ export function AppSettingsForm({ app }: { app: App }) {
           </p>
         ) : null}
       </div>
+
+      <EnvironmentSelector
+        value={environmentId}
+        onChange={setEnvironmentId}
+        helpText="The app can only be assigned and call MCP tools in this environment."
+      />
 
       <div>
         <PermissionButton

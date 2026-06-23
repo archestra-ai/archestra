@@ -106,7 +106,7 @@ export const CreateBaseToolArgsSchema = z
       .boolean()
       .optional()
       .describe(
-        "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Defaults to false. Also gated by the organization's security settings.",
+        "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings.",
       ),
   })
   .strict();

@@ -156,7 +156,7 @@ const EditAgentToolArgsSchema = z
           .boolean()
           .optional()
           .describe(
-            "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent.",
+            "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'.",
           ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)

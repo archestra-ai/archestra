@@ -173,10 +173,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: conversation × tool; chat surface",
   },
-  conversationFileTouchesTable: {
-    audited: false,
-    reason: "join: conversation × file the agent touched; chat Files panel",
-  },
   conversationSharesTable: {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
@@ -192,6 +188,11 @@ export const AUDIT_DECISIONS = {
   projectShareTeamsTable: {
     audited: false,
     reason: "join: project share × team",
+  },
+  projectPinsTable: {
+    audited: false,
+    reason:
+      "per-user pin on a project; personal preference, not an access change",
   },
   conversationShareTeamsTable: {
     audited: false,

@@ -20,13 +20,16 @@ const {
   getProjectConversations,
   getProjectFiles,
   getProjects,
+  pinProject,
   setProjectShare,
+  unpinProject,
   updateProject,
 } = archestraApiSdk;
 
-export function useProjects() {
+export function useProjects(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["projects"],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { data, error } = await getProjects();
       if (error) {
@@ -108,8 +111,6 @@ export function useCreateProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      // its files appear on the My Files page too
-      queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
     },
   });
 }
@@ -124,6 +125,28 @@ export function useUpdateProject() {
     ) => {
       const { id, ...body } = params;
       const { error } = await updateProject({ path: { id }, body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", id] });
+    },
+  });
+}
+
+/** Pin/unpin a project for the current user (personal — toggle by `pinned`). */
+export function usePinProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { error } = pinned
+        ? await pinProject({ path: { id } })
+        : await unpinProject({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;

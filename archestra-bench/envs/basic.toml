@@ -1,10 +1,11 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger"]
 
-# These tasks are read-only against backend state (they run sandbox code + download artifacts, never
-# mutating the skill/tool catalog), and the skill surface is large + web-pinned -- so seed one backend
-# once and let concurrent lanes share it. Sandbox workspaces are per-conversation, so lanes don't clash.
+# These tasks don't mutate shared backend state (the skill/tool catalog), and the skill surface is
+# large + web-pinned -- so seed one backend once and let concurrent lanes share it. Sandbox workspaces
+# are per-conversation and persistent files are per-lane project-scoped, so lanes don't clash even
+# though purchase-ledger writes and re-reads a persistent file across conversations.
 share_backend = true
 
 # Platform feature flags applied when creating this env's agents. Optional; defaults shown.

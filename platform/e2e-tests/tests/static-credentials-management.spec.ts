@@ -332,7 +332,7 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
     await install(page, canCreateTeamCredential);
   }
 
-  // Check Credentials counter
+  // Check Connections counter
   const checkCredentialsCount = async (page: Page) => {
     await goToPage(page, "/mcp/registry");
     await openManageCredentialsDialog(page, catalogItemName);

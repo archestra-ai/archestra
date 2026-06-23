@@ -49,7 +49,8 @@ const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your 
 // the final ask, so the model learns submission is required only on the final stage. Steers the model
 // to do the step's work and end its turn (a chat reply, which advances the runner to the next stage)
 // rather than hunting for a submit tool and looping on the "more steps" rejection.
-const CONTINUE_INSTRUCTION: &str = "When you've finished this step, tell me where things stand and wait for my next message.";
+const CONTINUE_INSTRUCTION: &str =
+    "When you've finished this step, tell me where things stand and wait for my next message.";
 // One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
 // stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
 // omission.
@@ -69,6 +70,7 @@ const REQUIRED_TOOL_SHORT_NAMES: &[&str] = &[
     "download_file",
     "list_skills",
     "load_skill",
+    "search_files",
 ];
 const MUTATING_SKILL_TOOL_SHORT_NAMES: &[&str] = &["create_skill", "update_skill"];
 
@@ -94,6 +96,8 @@ pub struct RunCtx {
     pub envs_dir: PathBuf,
     /// Rewrite each env's `*.mcp.lock` from the observed surface instead of enforcing it.
     pub update_mcp_lock: bool,
+    /// Platform directory override (the prod image lays the app out at `/app`); `None` → `<repo>/platform`.
+    pub platform_dir: Option<PathBuf>,
 }
 
 /// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
@@ -135,6 +139,7 @@ pub async fn run(
     run_dir: Option<&Path>,
     max_workers: Option<usize>,
     update_mcp_lock: bool,
+    platform_dir: Option<&Path>,
 ) -> Result<RunOutcome, RunError> {
     let envs_dir = bench_dir.join("envs");
     let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
@@ -167,6 +172,7 @@ pub async fn run(
         api_keys,
         envs_dir,
         update_mcp_lock,
+        platform_dir: platform_dir.map(Path::to_path_buf),
     };
 
     let results = execute_plan(plan, ctx.clone(), workers).await;
@@ -501,7 +507,12 @@ async fn setup_shared_env(
     let log_path = ctx
         .root_run_dir
         .join(format!("{}.backend.log", slug(&env.id)));
-    let mut instance = Instance::new(repo_root(), format!("{}-{}", ctx.run_id, env.id), log_path);
+    let mut instance = Instance::new(
+        repo_root(),
+        ctx.platform_dir.clone(),
+        format!("{}-{}", ctx.run_id, env.id),
+        log_path,
+    );
     instance.start().await.map_err(|e| e.to_string())?;
 
     let client = instance.client.clone();
@@ -649,6 +660,7 @@ async fn run_isolated_lane(
         .join(format!("{}__{}.backend.log", slug(&env.id), lane.slug()));
     let mut instance = Instance::new(
         repo_root(),
+        ctx.platform_dir.clone(),
         format!("{}-{}-{}", ctx.run_id, env.id, lane.name),
         log_path,
     );
@@ -1266,12 +1278,23 @@ async fn capture_effective_prompts(
     turn_count: usize,
     artifacts: &RunArtifacts,
 ) {
+    // Every emitted event carries `conversation_id` so a multi-conversation rollout's captured prompts
+    // can be attributed to the conversation they came from.
+    let emit_error = async |message: &str| {
+        artifacts
+            .append(
+                "effective_prompt_error",
+                serde_json::json!({"conversation_id": conversation_id, "error": message}),
+            )
+            .await;
+    };
+
     let interactions = match client.fetch_session_interactions(conversation_id).await {
         Ok(rows) => rows,
         Err(e) => {
             let msg = format!("failed to fetch interactions: {e}");
             warn!("{msg}");
-            artifacts.append_error("effective_prompt_error", &msg).await;
+            emit_error(&msg).await;
             return;
         }
     };
@@ -1279,28 +1302,67 @@ async fn capture_effective_prompts(
     if turn_count > 0 && interactions.is_empty() {
         let msg = "no interactions found despite the conversation taking turns".to_string();
         warn!("{msg}");
-        artifacts.append_error("effective_prompt_error", &msg).await;
+        emit_error(&msg).await;
         return;
     }
 
     let outcome = extract_effective_prompts(&interactions);
     for prompt in &outcome.prompts {
         match serde_json::to_value(prompt) {
-            Ok(value) => artifacts.append("effective_prompt", value).await,
+            Ok(mut value) => {
+                if let serde_json::Value::Object(map) = &mut value {
+                    map.insert(
+                        "conversation_id".to_string(),
+                        serde_json::Value::String(conversation_id.to_string()),
+                    );
+                }
+                artifacts.append("effective_prompt", value).await
+            }
             Err(e) => {
                 warn!("failed to serialize effective prompt: {e}");
-                artifacts
-                    .append_error("effective_prompt_error", &e.to_string())
-                    .await;
+                emit_error(&e.to_string()).await;
             }
         }
     }
     for error in &outcome.errors {
         warn!("effective-prompt anomaly: {error}");
-        artifacts
-            .append_error("effective_prompt_error", error)
-            .await;
+        emit_error(error).await;
     }
+}
+
+/// Create a conversation for the running task and record it. Used both for the task's initial
+/// conversation and for each `new_conversation` stage, which opens a fresh one (same agent, project,
+/// model, and key) so the agent starts from an empty sandbox and chat history.
+async fn open_conversation(
+    client: &EvalClient,
+    agent_id: &str,
+    title: &str,
+    resolved: &ResolvedModel,
+    project_id: Option<&str>,
+    artifacts: &RunArtifacts,
+) -> Result<String, RunError> {
+    let conversation = client
+        .create_conversation(
+            agent_id,
+            Some(title),
+            Some(&resolved.model_id),
+            Some(&resolved.api_key_id),
+            project_id,
+        )
+        .await?;
+    let conversation_id = conversation
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| RunError::Config("create_conversation returned no `id`".to_string()))?
+        .to_string();
+    artifacts
+        .append(
+            "conversation_created",
+            serde_json::json!({"conversation_id": conversation_id}),
+        )
+        .await;
+    Ok(conversation_id)
 }
 
 async fn grade_rollout(
@@ -1323,28 +1385,20 @@ async fn grade_rollout(
         .await
         .map_err(|e| RunError::Mcp(e.to_string()))?;
 
-    let conversation = client
-        .create_conversation(
-            agent_id,
-            Some(rollout_key),
-            Some(&resolved.model_id),
-            Some(&resolved.api_key_id),
-            project_id,
-        )
-        .await?;
-    let conversation_id = conversation
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| RunError::Config("create_conversation returned no `id`".to_string()))?
-        .to_string();
+    let mut conversation_id = open_conversation(
+        &client,
+        agent_id,
+        rollout_key,
+        resolved,
+        project_id,
+        artifacts,
+    )
+    .await?;
+    // Every conversation this rollout drives, in order. `new_conversation` stages append to it;
+    // `metadata["conversation_id"]` tracks the current one so run.json points at the conversation that
+    // produced the result, and effective-prompt capture runs over all of them after the loop.
+    let mut conversation_ids = vec![conversation_id.clone()];
     metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
-    artifacts
-        .append(
-            "conversation_created",
-            serde_json::json!({"conversation_id": conversation_id}),
-        )
-        .await;
     artifacts.write_run(metadata).await;
 
     let runtime: HashMap<String, String> = HashMap::from([
@@ -1374,6 +1428,23 @@ async fn grade_rollout(
     let mut stage_error: Option<String> = None;
     let final_stage = task.stages.len().saturating_sub(1);
     for (index, stage) in task.stages.iter().enumerate() {
+        // A `new_conversation` stage starts a fresh conversation (empty sandbox + chat history) and
+        // becomes the current one for this and later stages -- so a task can export a file in one chat
+        // and rediscover it from persistent storage in the next. Rejected on the first stage at load
+        // time, since the initial conversation is already created above.
+        if stage.new_conversation {
+            conversation_id = open_conversation(
+                &client,
+                agent_id,
+                rollout_key,
+                resolved,
+                project_id,
+                artifacts,
+            )
+            .await?;
+            conversation_ids.push(conversation_id.clone());
+            metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
+        }
         // Single source of truth: the final stage both opens the server-side submission gate and gets
         // the SUBMIT_INSTRUCTION trailer (earlier stages get CONTINUE_INSTRUCTION). Binding it once
         // keeps the gate and the prompt trailer from drifting apart.
@@ -1381,6 +1452,9 @@ async fn grade_rollout(
         if submission_open {
             bench_mcp.allow_submission(rollout_key).await;
         }
+        // Carry prior chat history only when continuing the same conversation; a freshly opened one
+        // (first stage, or a `new_conversation` stage) starts empty.
+        let expect_prior_history = index > 0 && !stage.new_conversation;
         stage_error = drive_stage_with_retry(
             &client,
             &conversation_id,
@@ -1389,7 +1463,7 @@ async fn grade_rollout(
             &mut run,
             artifacts,
             &runtime,
-            index > 0,
+            expect_prior_history,
             submission_open,
         )
         .await?;
@@ -1418,6 +1492,7 @@ async fn grade_rollout(
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
             files: Vec::new(),
+            new_conversation: false,
         };
         stage_error = drive_stage_with_retry(
             &client,
@@ -1433,7 +1508,11 @@ async fn grade_rollout(
         .await?;
     }
 
-    capture_effective_prompts(&client, &conversation_id, run.turn_count, artifacts).await;
+    // Capture every conversation the rollout drove, not just the last -- a `new_conversation` task
+    // splits its turns across several, and each one's effective prompts are worth recording.
+    for cid in &conversation_ids {
+        capture_effective_prompts(&client, cid, run.turn_count, artifacts).await;
+    }
 
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
@@ -2773,6 +2852,7 @@ mod tests {
             api_keys: std::collections::HashMap::new(),
             envs_dir: tmp.path().to_path_buf(),
             update_mcp_lock: false,
+            platform_dir: None,
         };
         let mut env = dummy_env("e", vec![dummy_task("t1")]);
         env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;

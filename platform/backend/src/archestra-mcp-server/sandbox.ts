@@ -16,7 +16,6 @@ import logger from "@/logging";
 import {
   AgentModel,
   ConversationAttachmentModel,
-  ConversationFileTouchModel,
   EnvironmentModel,
   FileNameExistsError,
   SkillSandboxConversationGoneError,
@@ -79,7 +78,7 @@ const READ_FILE_DEFAULT_LINES = 2000;
 
 // Cap raw image bytes read_file will return inline so the base64 payload stays
 // under the model's ~5 MB per-image limit (base64 inflates by ~4/3). Larger
-// images are refused with a pointer to the download URL.
+// images are refused with a hint to copy the file into the sandbox instead.
 const READ_FILE_IMAGE_BYTES_LIMIT = 3.75 * 1024 * 1024;
 
 // typed target — no magic strings. omitted = the conversation's default
@@ -194,9 +193,9 @@ const DownloadFileSchema = z
     target: SandboxTargetSchema,
   })
   .describe(
-    "Copy a file out of the sandbox into durable storage and return a " +
-      "download URL. Use this for any binary or generated output — run_command " +
-      "only returns text. In a project chat the file is saved to the " +
+    "Copy a file out of the sandbox into durable storage, where it shows up in " +
+      "the chat's Files panel. Use this for any binary or generated output — " +
+      "run_command only returns text. In a project chat the file is saved to the " +
       "project. (To read a skill's source files, use load_skill with a path.)",
   );
 
@@ -206,12 +205,6 @@ const DownloadFileOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /**
-   * Stable URL the frontend can fetch the bytes from (auth-scoped to the
-   * caller). Relative to the backend origin; safe to pass straight to `<img
-   * src>` or `<a href>` in the same-origin chat UI.
-   */
-  downloadUrl: z.string(),
   stagingNotices: z
     .array(z.string())
     .describe(
@@ -330,9 +323,9 @@ const SearchFilesSchema = z
       ),
   })
   .describe(
-    "Search the user's persistent file storage (My Files): files exported " +
-      "from sandboxes across ALL conversations. In a project chat, searches " +
-      "the project's files instead.",
+    "Search this conversation's persistent files: files exported from its " +
+      "sandbox or written with save_result. In a project chat, searches the " +
+      "project's files instead.",
   );
 
 const SearchFilesOutputSchema = z.object({
@@ -393,13 +386,14 @@ const ReadFileSchema = z
     message: "provide exactly one of `id` or `filename`",
   })
   .describe(
-    "Read a persistent file (My Files) directly — no sandbox roundtrip. Text " +
+    "Read a persistent file directly — no sandbox roundtrip. Text " +
       "files come back as numbered lines (`<n>\\t<line>`); images (PNG, JPEG, " +
       "WebP, GIF) are returned inline so you can see them. Identify the file by " +
       "`id` (from search_files / save_result) or by `filename`. Page large text " +
       "files with `offset`/`limit`. For other binary types (PDF, archives, …), " +
-      "use the download URL or upload_file + run_command. In a project chat only " +
-      "the project's files are visible. Requires `sandbox:execute`.",
+      "copy the file into the sandbox with upload_file + run_command. Only this " +
+      "conversation's files are visible (in a project chat, the project's " +
+      "files). Requires `sandbox:execute`.",
   );
 
 const ReadFileOutputSchema = z.object({
@@ -453,8 +447,8 @@ const SaveResultSchema = z
       .optional()
       .default(false)
       .describe(
-        "Replace an existing file of the same name in place, keeping its id and " +
-          "download URL. Default false errors if the name is already taken.",
+        "Replace an existing file of the same name in place, keeping its id. " +
+          "Default false errors if the name is already taken.",
       ),
   })
   .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
@@ -474,8 +468,6 @@ const SaveResultOutputSchema = z.object({
     .describe("Owning project when saved in a project chat; null otherwise."),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /** See DownloadFileOutputSchema.downloadUrl. */
-  downloadUrl: z.string(),
   overwritten: z
     .boolean()
     .describe("True when an existing same-named file was replaced in place."),
@@ -534,8 +526,6 @@ const EditFileOutputSchema = z.object({
   filename: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
-  /** See DownloadFileOutputSchema.downloadUrl. */
-  downloadUrl: z.string(),
   replacements: z
     .number()
     .describe("How many occurrences of old_string were replaced."),
@@ -635,10 +625,10 @@ const registry = defineArchestraTools([
     shortName: TOOL_DOWNLOAD_FILE_SHORT_NAME,
     title: "Download File",
     description:
-      "Copy a file out of the conversation's sandbox into durable storage and " +
-      "return a download URL. Use this for any binary or generated output — " +
-      "run_command only returns text. To read a skill's own source files, use " +
-      "load_skill with a path instead. Requires `sandbox:execute`.",
+      "Copy a file out of the conversation's sandbox into durable storage, where " +
+      "it shows up in the chat's Files panel. Use this for any binary or " +
+      "generated output — run_command only returns text. To read a skill's own " +
+      "source files, use load_skill with a path instead. Requires `sandbox:execute`.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
@@ -682,9 +672,8 @@ const registry = defineArchestraTools([
           "[Sandbox] file downloaded",
         );
 
-        // Bytes flow sandbox -> DB -> UI via the artifacts route; the model
-        // only ever sees a short reference + URL here, never the blob.
-        const downloadUrl = `/api/skill-sandbox/artifacts/${result.artifactId}`;
+        // Bytes flow sandbox -> DB -> Files panel via the artifacts route; the
+        // model only ever sees a short reference here, never the blob or a link.
         return structuredSuccessResult(
           {
             fileId: result.artifactId,
@@ -692,14 +681,10 @@ const registry = defineArchestraTools([
             path: result.path,
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
-            downloadUrl,
             stagingNotices: result.stagingNotices,
           },
           withStagingNotices(
-            [
-              `Saved ${result.path} (${result.sizeBytes} bytes).`,
-              `Download URL (use this for links, not the sandbox path): ${downloadUrl}`,
-            ].join("\n"),
+            `Saved ${result.path} (${result.sizeBytes} bytes). It is available in the Files panel.`,
             result.stagingNotices,
           ),
         );
@@ -764,8 +749,7 @@ const registry = defineArchestraTools([
           data: loaded.data,
           mimeType: loaded.mimeType,
           originalName: loaded.originalName,
-          // PFS-sourced uploads are marked so the conversation Files panel
-          // can show which persistent files the agent touched here.
+          // Tag the upload's origin: a PFS "my_file" pull vs an inline source.
           origin: args.source.type === "my_file" ? "my_file" : null,
         });
 
@@ -778,26 +762,6 @@ const registry = defineArchestraTools([
           },
           "[Sandbox] file uploaded",
         );
-
-        // Pulling a persistent file into the sandbox is a "read" — record it so
-        // the chat Files panel shows the files the agent actually touched. The
-        // upload already succeeded, so this is best-effort: a failure is logged,
-        // not surfaced as a failed tool call.
-        if (loaded.sourceFileId && context.conversationId) {
-          const { conversationId } = context;
-          const { sourceFileId } = loaded;
-          void ConversationFileTouchModel.recordTouch({
-            organizationId: guard.userCtx.organizationId,
-            conversationId,
-            fileId: sourceFileId,
-            touchKind: "read",
-          }).catch((error) => {
-            logger.warn(
-              { error, conversationId, fileId: sourceFileId },
-              "[Sandbox] failed to record file touch",
-            );
-          });
-        }
 
         return structuredSuccessResult(
           { ...result },
@@ -812,12 +776,12 @@ const registry = defineArchestraTools([
     shortName: TOOL_SEARCH_FILES_SHORT_NAME,
     title: "Search Files",
     description:
-      "Search the user's persistent file storage (My Files): files exported " +
-      "with download_file across ALL conversations, plus files the user added " +
-      "by hand. Returns metadata only — each result carries a stable `ref`. To " +
-      "work on a found file, pass its `ref` to read_file (read its content), or " +
-      "to upload_file's my_file source (copy it into the sandbox). In a project " +
-      "chat, searches the project's files instead. Requires `sandbox:execute`.",
+      "Search the persistent files of THIS conversation: files exported with " +
+      "download_file or written with save_result here. Returns metadata only — " +
+      "each result carries a stable `ref`. To work on a found file, pass its " +
+      "`ref` to read_file (read its content), or to upload_file's my_file source " +
+      "(copy it into the sandbox). In a project chat, searches the project's " +
+      "files instead. Requires `sandbox:execute`.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
     async handler({ args, context }) {
@@ -837,16 +801,18 @@ const registry = defineArchestraTools([
         throw error;
       }
 
+      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      // A headless no-project call has no conversation to scope to — no files.
+      if (!fileScope) {
+        return structuredSuccessResult(
+          { files: [] },
+          "No persistent files matched.",
+        );
+      }
       const matches = await fileStore.search({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
-        scope: scope
-          ? {
-              kind: "project",
-              projectId: scope.projectId,
-              projectName: scope.projectName,
-            }
-          : { kind: "personal" },
+        scope: fileScope,
         query: args.query,
       });
 
@@ -876,14 +842,14 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_FILE_SHORT_NAME,
     title: "Read File",
     description:
-      "Read a persistent file (My Files) directly — no sandbox roundtrip. Text " +
+      "Read a persistent file directly — no sandbox roundtrip. Text " +
       "files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are " +
       "returned inline so you can see them. Identify the file by `id` (from " +
       "search_files / save_result) or by `filename`. Page large text files with " +
-      "`offset`/`limit`. For other binary types, use the download URL or copy " +
+      "`offset`/`limit`. For other binary types, copy " +
       "the file into the sandbox with upload_file and inspect it with " +
-      "run_command. In a project chat only the project's files are visible. " +
-      "Requires `sandbox:execute`.",
+      "run_command. Only this conversation's files are visible (in a project " +
+      "chat, the project's files). Requires `sandbox:execute`.",
     schema: ReadFileSchema,
     outputSchema: ReadFileOutputSchema,
     async handler({ args, context }) {
@@ -904,21 +870,22 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
+      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      if (!fileScope) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
       const resolved = await fileStore.resolveMyFileSource({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
         filename: args.filename,
-        scope: scope ? { projectId: scope.projectId } : null,
+        scope: fileScope,
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
       }
 
       const { data, mimeType, originalName, fileId } = resolved;
-      const downloadHint = fileId
-        ? `Download it at /api/skill-sandbox/artifacts/${fileId}, or `
-        : "";
 
       // Inline-safe raster image? Decide from the BYTES, not the (spoofable) mime
       // label — `claimed: undefined` means only a real PNG/JPEG/WebP/GIF signature
@@ -931,14 +898,9 @@ const registry = defineArchestraTools([
         if (data.byteLength > READ_FILE_IMAGE_BYTES_LIMIT) {
           return errorResult(
             `"${originalName}" is too large to view inline (${data.byteLength} bytes > ${READ_FILE_IMAGE_BYTES_LIMIT} byte limit). ` +
-              `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+              `Copy it into the sandbox with upload_file and inspect it with run_command.`,
           );
         }
-        recordReadTouch({
-          organizationId: guard.userCtx.organizationId,
-          conversationId: context.conversationId,
-          fileId,
-        });
         logger.info(
           { fileId, sizeBytes: data.byteLength, mimeType: imageMime },
           "[Sandbox] image read from PFS",
@@ -970,7 +932,7 @@ const registry = defineArchestraTools([
       if (data.byteLength > limit) {
         return errorResult(
           `"${originalName}" is too large to read inline (${data.byteLength} bytes > ${limit} byte limit). ` +
-            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
         );
       }
 
@@ -981,15 +943,9 @@ const registry = defineArchestraTools([
       if (text === null) {
         return errorResult(
           `"${originalName}" (${mimeType}) is not text or a supported image. ` +
-            `${downloadHint}copy it into the sandbox with upload_file and process it with run_command.`,
+            `Copy it into the sandbox with upload_file and process it with run_command.`,
         );
       }
-
-      recordReadTouch({
-        organizationId: guard.userCtx.organizationId,
-        conversationId: context.conversationId,
-        fileId,
-      });
 
       if (data.byteLength === 0) {
         logger.info({ fileId, sizeBytes: 0 }, "[Sandbox] file read from PFS");
@@ -1036,7 +992,7 @@ const registry = defineArchestraTools([
         // could be rendered — explain rather than imply the range is empty.
         summary.push(
           `Line ${startLine} is too large to render inline (over the ${config.skillsSandbox.outputBytesLimit}-byte output cap). ` +
-            `${downloadHint}copy it into the sandbox with upload_file and inspect it with run_command.`,
+            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
         );
       } else {
         // offset past end of file.
@@ -1075,7 +1031,7 @@ const registry = defineArchestraTools([
     title: "Save Result",
     description:
       "Save inline content directly to the user's persistent file storage " +
-      "(My Files) and return a download URL — no sandbox roundtrip. Use it " +
+      "(My Files) — no sandbox roundtrip. Use it " +
       "for results you produced in the conversation itself (text, markdown, " +
       "small data files). Pass `overwrite: true` to replace an existing " +
       "same-named file in place (e.g. a full rewrite); otherwise a duplicate " +
@@ -1138,15 +1094,24 @@ const registry = defineArchestraTools([
       });
 
       // Overwrite: replace an existing same-named file in this scope in place,
-      // keeping its id (and download URL). Falls through to create when none
+      // keeping its id. Falls through to create when none
       // exists. Without overwrite, a duplicate name surfaces as an error below.
+      // A headless no-project write resolves the orphan it created on a prior run
+      // (no conversation/project scope), so re-runs stay idempotent.
+      const fileScope = resolveChatFileScope(scope, context.conversationId);
       if (args.overwrite) {
-        const existing = await fileStore.resolveMyFileRef({
-          organizationId: guard.userCtx.organizationId,
-          userId: guard.userCtx.userId,
-          filename,
-          scope: scope ? { projectId: scope.projectId } : null,
-        });
+        const existing = fileScope
+          ? await fileStore.resolveMyFileRef({
+              organizationId: guard.userCtx.organizationId,
+              userId: guard.userCtx.userId,
+              filename,
+              scope: fileScope,
+            })
+          : await fileStore.resolveOrphanRef({
+              organizationId: guard.userCtx.organizationId,
+              userId: guard.userCtx.userId,
+              filename,
+            });
         if (!("error" in existing)) {
           const updated = await fileStore.update({
             file: existing,
@@ -1229,12 +1194,16 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
+      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      if (!fileScope) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
       const resolved = await fileStore.resolveMyFileRef({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
         filename: args.filename,
-        scope: scope ? { projectId: scope.projectId } : null,
+        scope: fileScope,
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
@@ -1310,35 +1279,15 @@ const registry = defineArchestraTools([
         "[Sandbox] file edited in PFS",
       );
 
-      if (context.conversationId) {
-        const { conversationId } = context;
-        void ConversationFileTouchModel.recordTouch({
-          organizationId: guard.userCtx.organizationId,
-          conversationId,
-          fileId: updated.id,
-          touchKind: "edit",
-        }).catch((error) => {
-          logger.warn(
-            { error, conversationId, fileId: updated.id },
-            "[Sandbox] failed to record file touch",
-          );
-        });
-      }
-
-      const downloadUrl = `/api/skill-sandbox/artifacts/${updated.id}`;
       return structuredSuccessResult(
         {
           fileId: updated.id,
           filename: updated.filename,
           mimeType: updated.mimeType,
           sizeBytes: updated.sizeBytes,
-          downloadUrl,
           replacements,
         },
-        [
-          `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
-          `Download URL (use this for links): ${downloadUrl}`,
-        ].join("\n"),
+        `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
       );
     },
   }),
@@ -1369,12 +1318,16 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
+      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      if (!fileScope) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
       const resolved = await fileStore.resolveMyFileRef({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
         filename: args.filename,
-        scope: scope ? { projectId: scope.projectId } : null,
+        scope: fileScope,
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
@@ -1684,8 +1637,6 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
-  /** Set for my_file sources — the PFS file the agent pulled in, for touch tracking. */
-  sourceFileId?: string;
 }
 
 /**
@@ -1784,7 +1735,6 @@ function saveResultSuccess(params: {
     },
     "[Sandbox] result saved to PFS",
   );
-  const downloadUrl = `/api/skill-sandbox/artifacts/${row.id}`;
   return structuredSuccessResult(
     {
       fileId: row.id,
@@ -1792,42 +1742,36 @@ function saveResultSuccess(params: {
       projectName: scope?.projectName ?? null,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
-      downloadUrl,
       overwritten,
     },
-    [
-      `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
-      `Download URL (use this for links): ${downloadUrl}`,
-    ].join("\n"),
+    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent storage"}.`,
   );
 }
 
+/** Map a my_file resolution failure to a model-facing message. */
 /**
- * Best-effort record that the agent read a persistent file in this conversation
- * (powers the chat Files panel). No-op without a conversation or a backing row
- * (hand-placed files have no row to touch). Failures are logged, never surfaced.
+ * The My Files scope a chat's file tools operate in: the owning project for a
+ * project chat, otherwise the current conversation. Returns null for a headless
+ * no-project call (no conversation to scope to) — no-project file tools then
+ * have nothing to read, and a no-project write falls back to a flat orphan.
  */
-function recordReadTouch(params: {
-  organizationId: string;
-  conversationId: string | undefined;
-  fileId: string | null;
-}): void {
-  const { organizationId, conversationId, fileId } = params;
-  if (!conversationId || !fileId) return;
-  void ConversationFileTouchModel.recordTouch({
-    organizationId,
-    conversationId,
-    fileId,
-    touchKind: "read",
-  }).catch((error) => {
-    logger.warn(
-      { error, conversationId, fileId },
-      "[Sandbox] failed to record file touch",
-    );
-  });
+function resolveChatFileScope(
+  projectScope: ProjectFileScope | null,
+  conversationId: string | undefined,
+):
+  | { kind: "project"; projectId: string; projectName: string }
+  | { kind: "conversation"; conversationId: string }
+  | null {
+  if (projectScope) {
+    return {
+      kind: "project",
+      projectId: projectScope.projectId,
+      projectName: projectScope.projectName,
+    };
+  }
+  return conversationId ? { kind: "conversation", conversationId } : null;
 }
 
-/** Map a my_file resolution failure to a model-facing message. */
 function describeMyFileError(
   error: MyFileResolutionError["error"],
   ref: string,
@@ -1952,15 +1896,19 @@ async function loadUploadSource(params: {
       };
     }
     case "my_file": {
+      const fileScope = resolveChatFileScope(scope, conversationId);
+      const ref = source.id ?? source.filename ?? "";
+      if (!fileScope) {
+        return { error: describeMyFileError("not_found", ref) };
+      }
       const resolved = await fileStore.resolveMyFileSource({
         organizationId: userCtx.organizationId,
         userId: userCtx.userId,
         id: source.id,
         filename: source.filename,
-        scope: scope ? { projectId: scope.projectId } : null,
+        scope: fileScope,
       });
       if ("error" in resolved) {
-        const ref = source.id ?? source.filename ?? "";
         logger.warn(
           {
             organizationId: userCtx.organizationId,
@@ -1977,9 +1925,6 @@ async function loadUploadSource(params: {
         data: resolved.data,
         mimeType: resolved.mimeType,
         originalName: resolved.originalName,
-        // null (an untracked, hand-placed object with no row) → undefined: there
-        // is no files row to record a conversation touch against.
-        sourceFileId: resolved.fileId ?? undefined,
       };
     }
   }

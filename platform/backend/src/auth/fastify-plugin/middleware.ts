@@ -247,12 +247,19 @@ export class Authnz {
         );
       }
 
-      const serviceAccountResult =
-        await ServiceAccountModel.verifyToken(authHeader);
-      if (serviceAccountResult) {
-        request.serviceAccountAuthResult = serviceAccountResult;
-        logger.trace("[Authnz] Service account token verification succeeded");
-        return true;
+      try {
+        const serviceAccountResult =
+          await ServiceAccountModel.verifyToken(authHeader);
+        if (serviceAccountResult) {
+          request.serviceAccountAuthResult = serviceAccountResult;
+          logger.trace("[Authnz] Service account token verification succeeded");
+          return true;
+        }
+      } catch (error) {
+        logger.warn(
+          { error: error instanceof Error ? error.message : "unknown" },
+          "[Authnz] Service account token verification errored, treating as unauthenticated",
+        );
       }
     }
 

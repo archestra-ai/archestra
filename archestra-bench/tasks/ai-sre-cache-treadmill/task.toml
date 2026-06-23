@@ -7,7 +7,7 @@ Work out the single root cause behind the 401s -- identify the real mechanism. T
   `chat-active-run-drain`, `mcp-gateway-auth-cache`, `idp-token-cache`, `user-token-model`, `llm-proxy-adapter`, `k8s-network-policy`, `context-compaction`.
 - `failure_class`: the failure category, exactly one of:
   `fk_violation_on_cascade_delete`, `negative_cache_ttl_refresh`, `negative_cache_no_expiry`, `positive_cache_stale_read`, `upstream_idle_timeout_misclassified`, `image_token_overestimate`, `dns_egress_blocked`.
-- `evidence_id`: the exact `profileId` value of the profile at the center of this incident -- the one whose authorization kept returning 401 the LONGEST before it finally recovered on its own (copy it verbatim from the log lines).
+- `evidence_id`: the exact `profileId` value of the profile at the center of this incident -- the one whose authorization kept returning 401 the longest before it finally recovered on its own (copy it verbatim from the log lines).
 - `summary`: one or two sentences explaining the root cause in your own words.
 
 Example shape: result = {"root_cause_component": "...", "failure_class": "...", "evidence_id": "...", "summary": "..."}."""

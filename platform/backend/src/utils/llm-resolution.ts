@@ -119,7 +119,14 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     if (model) {
       return {
         modelId: model.id,
-        chatApiKeyId: resolved.apiKeyId ?? null,
+        // A per-user provider model never pins a key: the resolved key (e.g. the
+        // admin's, when the org default points at a Copilot model) belongs to
+        // whoever configured it and isn't usable by — or visible to — the acting
+        // user. Persist the model alone; the acting user's own credential is
+        // resolved per-user at request time (or a connect prompt is surfaced).
+        chatApiKeyId: providerRequiresPerUserCredential(model.provider)
+          ? null
+          : (resolved.apiKeyId ?? null),
         selectedModel: model.modelId,
         selectedProvider: model.provider,
       };

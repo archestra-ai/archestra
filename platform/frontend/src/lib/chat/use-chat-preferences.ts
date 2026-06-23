@@ -4,8 +4,10 @@ import {
   type ModelSelection,
   type ModelSource,
   pickBestModel,
+  providerRequiresPerUserCredential,
   type RankedModel,
   resolveModelSelection,
+  type SupportedProvider,
 } from "@archestra/shared";
 
 export type { ModelSource };
@@ -161,7 +163,20 @@ export function resolveInitialModel(
     const best = pickBestModel(allModels);
     return best ? { modelId: best.id, apiKeyId: null } : null;
   }
-  return { modelId: resolved.modelId, apiKeyId: resolved.apiKeyId ?? null };
+  // A per-user provider model (e.g. an org default pointing at GitHub Copilot)
+  // must not carry the configured key — that key belongs to whoever set it (the
+  // admin) and isn't accessible to the viewer. Drop it so the selector resolves
+  // the model on its own and the send falls through to per-user credential
+  // resolution (which surfaces the inline connect prompt).
+  const resolvedProvider = Object.keys(modelsByProvider).find((provider) =>
+    modelsByProvider[provider]?.some((m) => m.id === resolved.modelId),
+  );
+  const apiKeyId =
+    resolvedProvider &&
+    providerRequiresPerUserCredential(resolvedProvider as SupportedProvider)
+      ? null
+      : (resolved.apiKeyId ?? null);
+  return { modelId: resolved.modelId, apiKeyId };
 }
 
 /**

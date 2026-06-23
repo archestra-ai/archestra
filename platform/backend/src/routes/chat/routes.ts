@@ -2383,10 +2383,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (isApiKeyRequired(titleLlm.provider, titleLlm.apiKey)) {
-        throw new ApiError(
-          400,
-          "LLM Provider API key not configured. Please configure it in Provider Settings.",
+        // Title generation is best-effort. When the resolved model has no usable
+        // key for the acting user — e.g. a per-user provider (GitHub Copilot)
+        // they haven't connected, which can be inherited from an org/agent
+        // default — skip silently instead of failing the request with a generic
+        // "configure a key" error. The chat stream already surfaces the inline
+        // connect prompt; a redundant toast here would only mislead the member.
+        logger.info(
+          { conversationId: id, provider: titleLlm.provider },
+          "Skipping title generation - no usable API key for the acting user",
         );
+        return reply.send(conversation);
       }
 
       // Generate title using the extracted function

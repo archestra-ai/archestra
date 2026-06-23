@@ -4,19 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 
-const { createSetupMock, fetchSkillsMock, hasPermissionsMock } = vi.hoisted(
-  () => ({
-    createSetupMock: vi.fn(),
-    fetchSkillsMock: vi.fn(),
-    hasPermissionsMock: vi.fn(),
-  }),
-);
+const {
+  createSetupMock,
+  fetchSkillsMock,
+  hasPermissionsMock,
+  setupStatusMock,
+} = vi.hoisted(() => ({
+  createSetupMock: vi.fn(),
+  fetchSkillsMock: vi.fn(),
+  hasPermissionsMock: vi.fn(),
+  setupStatusMock: vi.fn(),
+}));
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionSetup: () => ({
     mutateAsync: createSetupMock,
     isPending: false,
   }),
+  useConnectionSetupStatus: () => setupStatusMock(),
 }));
 
 vi.mock("./skills-marketplace-step", () => ({
@@ -106,6 +111,7 @@ beforeEach(() => {
     expiresAt: new Date().toISOString(),
     tokenStart: "tok",
   });
+  setupStatusMock.mockReturnValue({ data: null });
 });
 
 describe("ConnectCommandPanel", () => {
@@ -134,6 +140,24 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByText("http://localhost:9000/v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("confirms the client is connected once the command has run", async () => {
+    renderPanel();
+    await screen.findByText(COMMAND);
+    // Not consumed yet: no confirmation.
+    expect(
+      screen.queryByTestId("connect-command-consumed"),
+    ).not.toBeInTheDocument();
+
+    // The poll reports the setup token was consumed (the script ran).
+    setupStatusMock.mockReturnValue({ data: { consumed: true } });
+    renderPanel();
+
+    expect(
+      await screen.findByTestId("connect-command-consumed"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/is connected/).length).toBeGreaterThan(0);
   });
 
   it("shows a separate endpoint line when more than one endpoint is configured", async () => {

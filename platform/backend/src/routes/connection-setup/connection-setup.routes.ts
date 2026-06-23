@@ -98,6 +98,14 @@ const CreateConnectionSetupResponseSchema = z.object({
   tokenStart: z.string(),
 });
 
+const GetConnectionSetupStatusResponseSchema = z.object({
+  id: z.string().uuid(),
+  /** True once the one-time script has been fetched and run. */
+  consumed: z.boolean(),
+  consumedAt: z.date().nullable(),
+  expiresAt: z.date(),
+});
+
 const CreateConnectionVirtualKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
 });
@@ -242,6 +250,41 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connection-setups/:id",
+    {
+      schema: {
+        operationId: RouteId.GetConnectionSetupStatus,
+        description:
+          "Report whether a connection setup the caller created has been " +
+          "consumed (its one-time script fetched and run). Lets the " +
+          "/connection page flip the command step to a confirmed state.",
+        tags: ["Connection Setups"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(
+          GetConnectionSetupStatusResponseSchema,
+        ),
+      },
+    },
+    async ({ params, organizationId, user }, reply) => {
+      const setup = await ConnectionSetupModel.findOwnedById({
+        id: params.id,
+        organizationId,
+        userId: user.id,
+      });
+      if (!setup) {
+        throw new ApiError(404, "Connection setup not found");
+      }
+
+      return reply.send({
+        id: setup.id,
+        consumed: setup.consumedAt !== null,
+        consumedAt: setup.consumedAt,
+        expiresAt: setup.expiresAt,
       });
     },
   );

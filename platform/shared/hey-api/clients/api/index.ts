@@ -163,6 +163,7 @@ export {
   getChatOpsStatus,
   getConfig,
   getConnectionSetupScript,
+  getConnectionSetupStatus,
   getConnector,
   getConnectorDocument,
   getConnectorDocuments,

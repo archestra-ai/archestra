@@ -103,6 +103,34 @@ class ConnectionSetupModel {
       .where(eq(schema.connectionSetupsTable.id, id));
   }
 
+  /**
+   * Looks up a setup the caller created, scoped to their org + user, so the
+   * /connection page can poll whether its one-time script has run. Returns
+   * null when the id is unknown or belongs to someone else (no leak).
+   */
+  static async findOwnedById(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<ConnectionSetup | null> {
+    const [row] = await db
+      .select()
+      .from(schema.connectionSetupsTable)
+      .where(
+        and(
+          eq(schema.connectionSetupsTable.id, params.id),
+          eq(
+            schema.connectionSetupsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.connectionSetupsTable.userId, params.userId),
+        ),
+      )
+      .limit(1);
+
+    return (row as ConnectionSetup | undefined) ?? null;
+  }
+
   /** Existence probe so the script endpoint can pick 404 vs 410. */
   static async findByToken(rawToken: string): Promise<ConnectionSetup | null> {
     const [row] = await db

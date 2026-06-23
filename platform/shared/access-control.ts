@@ -462,6 +462,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // skill admin) are conditional on what the setup includes and enforced in
   // the route handler. The script GET is public (token-authenticated).
   [RouteId.CreateConnectionSetup]: {},
+  // Polls whether a setup the caller created has been consumed (its script
+  // executed). Ownership (same org + user) is enforced in the handler.
+  [RouteId.GetConnectionSetupStatus]: {},
   // Provisions a personal virtual key for the manual /connection flow. The
   // llmVirtualKey:create check is enforced in the handler (mirrors the
   // virtual-key branch of CreateConnectionSetup).

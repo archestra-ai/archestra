@@ -1,8 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
-const { createConnectionSetup, createConnectionVirtualKey } = archestraApiSdk;
+const {
+  createConnectionSetup,
+  createConnectionVirtualKey,
+  getConnectionSetupStatus,
+} = archestraApiSdk;
 
 export type CreateConnectionSetupBody =
   archestraApiTypes.CreateConnectionSetupData["body"];
@@ -52,5 +56,28 @@ export function useCreateConnectionVirtualKey() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
     },
+  });
+}
+
+/**
+ * Polls whether a generated setup command has been run yet. The script GET
+ * consumes the setup token server-side, so once `consumed` flips true the
+ * /connection page can confirm the client is wired up. Polling stops as soon
+ * as the setup is consumed (no point re-asking a one-time command).
+ */
+export function useConnectionSetupStatus(id: string | null) {
+  return useQuery({
+    queryKey: ["connection-setup-status", id],
+    enabled: !!id,
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getConnectionSetupStatus({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    refetchInterval: (query) => (query.state.data?.consumed ? false : 2500),
   });
 }

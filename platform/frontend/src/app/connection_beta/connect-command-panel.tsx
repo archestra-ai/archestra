@@ -5,7 +5,14 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Check, CircleDashed, Copy, Loader2, RotateCcw } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  CircleDashed,
+  Copy,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +37,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
+  useConnectionSetupStatus,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
 import {
@@ -221,6 +229,12 @@ export function ConnectCommandPanel({
     null,
   );
   const [failed, setFailed] = useState(false);
+
+  // Once a command exists, poll its setup until the user runs it — the script
+  // GET consumes the token server-side, so `consumed` confirms the client is
+  // wired up. The poll re-keys on result.id, so regenerating starts fresh.
+  const { data: setupStatus } = useConnectionSetupStatus(result?.id ?? null);
+  const consumed = setupStatus?.consumed === true;
 
   // One key per distinct setup payload. The effect below regenerates when it
   // changes; the ref guards against an older in-flight response overwriting a
@@ -573,6 +587,7 @@ export function ConnectCommandPanel({
 
       <WizardStep n={3} title="Run this command" last>
         <div className="flex flex-col gap-3">
+          {consumed && <ConnectedBanner clientLabel={client.label} />}
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
               <div className="flex items-center gap-1 border-b border-[#1f2937] px-3">
@@ -729,6 +744,28 @@ function CommandLine({
       <pre className="m-0 overflow-x-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
         {command}
       </pre>
+    </div>
+  );
+}
+
+/**
+ * Confirmation shown once the generated command has actually run — the script
+ * GET consumed the setup token, so the client is now wired up.
+ */
+function ConnectedBanner({ clientLabel }: { clientLabel: string }) {
+  return (
+    <div
+      data-testid="connect-command-consumed"
+      className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+    >
+      <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+      <div>
+        <p className="font-medium">{clientLabel} is connected</p>
+        <p className="text-emerald-700/90 dark:text-emerald-300/80">
+          The command ran and configured this client. You can close this page —
+          re-run the setup any time by regenerating a command.
+        </p>
+      </div>
     </div>
   );
 }

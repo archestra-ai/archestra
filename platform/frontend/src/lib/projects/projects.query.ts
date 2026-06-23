@@ -26,12 +26,31 @@ const {
   updateProject,
 } = archestraApiSdk;
 
-export function useProjects(options?: { enabled?: boolean }) {
+type ProjectListFilters = NonNullable<
+  archestraApiTypes.GetProjectsData["query"]
+>;
+
+/**
+ * Projects list, optionally scoped + searched. The list lives under a
+ * `["projects", "list", …]` key so it can be invalidated without touching the
+ * per-project detail queries (`["projects", id, …]`). With no filters (the
+ * sidebar, and the page's "All" scope) the key is identical, so they share one
+ * cache entry.
+ */
+export function useProjects(
+  options?: { enabled?: boolean } & ProjectListFilters,
+) {
+  const scope = options?.scope;
+  const search = options?.search?.trim() || undefined;
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: [
+      "projects",
+      "list",
+      { scope: scope ?? null, search: search ?? null },
+    ],
     enabled: options?.enabled ?? true,
     queryFn: async () => {
-      const { data, error } = await getProjects();
+      const { data, error } = await getProjects({ query: { scope, search } });
       if (error) {
         handleApiError(error);
         return null;
@@ -110,7 +129,7 @@ export function useCreateProject() {
     onSuccess: (project) => {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
     },
   });
 }
@@ -133,7 +152,7 @@ export function useUpdateProject() {
     },
     onSuccess: (ok, { id }) => {
       if (!ok) return;
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },
   });
@@ -155,7 +174,7 @@ export function usePinProject() {
     },
     onSuccess: (ok, { id }) => {
       if (!ok) return;
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },
   });
@@ -182,7 +201,7 @@ export function useSetProjectShare() {
     onSuccess: (ok, { id }) => {
       if (!ok) return;
       toast.success("Project sharing updated");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
     },
   });
@@ -204,11 +223,11 @@ export function useDeleteProject() {
       toast.success(
         "Project deleted — its chats were kept as ordinary conversations.",
       );
-      // Refresh only the project LIST. `exact` keeps this from prefix-matching
-      // — and thus refetching — the deleted project's own detail/conversations/
-      // files queries, which are still mounted for the instant before we
-      // navigate away and would 404 on the now-gone id.
-      queryClient.invalidateQueries({ queryKey: ["projects"], exact: true });
+      // Refresh only the project LIST queries (`["projects", "list", …]`). This
+      // can't prefix-match the deleted project's own detail/conversations/files
+      // queries (`["projects", id, …]`), which are still mounted for the instant
+      // before we navigate away and would 404 on the now-gone id.
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
     },
   });
 }

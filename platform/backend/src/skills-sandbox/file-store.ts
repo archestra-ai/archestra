@@ -146,34 +146,39 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return null;
       if (!(await this.canAccessScope(parsed.scope, params))) return null;
-      if (!(await this.objectRefOwned(parsed, store))) return null;
-      let data: Buffer;
-      try {
-        data = await store.read(parsed.key);
-      } catch (error) {
-        // a path escaping the root reads as "not found", not a 500.
-        if (error instanceof UnsafePathError) return null;
-        throw error;
-      }
-      const name = keyName(parsed.key);
-      return {
-        id: null,
-        filename: name,
-        mimeType: resolveArtifactMime({
-          buffer: data,
-          claimed: mimeFromExtension(name),
-        }),
-        data,
-      };
+      return this.readObjectResolved(parsed, store);
     }
     const file = await this.authorizedFile(params);
-    if (!file) return null;
-    return {
-      id: file.id,
-      filename: file.filename,
-      mimeType: file.mimeType,
-      data: await readRowBytes(file),
-    };
+    return file ? this.rowToResolved(file) : null;
+  }
+
+  /**
+   * Read-only bytes for a `project:admin` overseeing a foreign project: resolves
+   * only PROJECT-scoped files/objects (never personal ones) in the org, WITHOUT
+   * the owner/share check. The caller (artifact route) must have already
+   * confirmed `project:admin`. Distinct from {@link get}/{@link delete} so the
+   * admin allowance can never reach a write/delete path.
+   */
+  async getProjectScopedForAdmin(params: {
+    ref: string;
+    organizationId: string;
+  }): Promise<ResolvedFile | null> {
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return null;
+      const store = getObjectStore();
+      if (!store) return null;
+      if (!(await this.projectInOrg(parsed.scope.projectId, params))) {
+        return null;
+      }
+      return this.readObjectResolved(parsed, store);
+    }
+    if (!UUID_RE.test(params.ref)) return null;
+    const file = await FileModel.findById(params.ref);
+    if (!file || file.organizationId !== params.organizationId) return null;
+    if (!file.projectId) return null; // never expose personal files
+    if (!(await this.projectInOrg(file.projectId, params))) return null;
+    return this.rowToResolved(file);
   }
 
   /** Delete a file (row first, then its bytes) the caller may access. */
@@ -675,6 +680,51 @@ class FileStore {
       return canAccess ? file : null;
     }
     return file.userId === params.userId ? file : null;
+  }
+
+  /** Is this project in the caller's org? (admin-oversight read gate) */
+  private async projectInOrg(
+    projectId: string,
+    ctx: { organizationId: string },
+  ): Promise<boolean> {
+    const project = await ProjectModel.findById(projectId);
+    return !!project && project.organizationId === ctx.organizationId;
+  }
+
+  /** Read + build a ResolvedFile for an untracked object (after authorization). */
+  private async readObjectResolved(
+    parsed: { scope: RefScope; key: string },
+    store: NonNullable<ReturnType<typeof getObjectStore>>,
+  ): Promise<ResolvedFile | null> {
+    if (!(await this.objectRefOwned(parsed, store))) return null;
+    let data: Buffer;
+    try {
+      data = await store.read(parsed.key);
+    } catch (error) {
+      // a path escaping the root reads as "not found", not a 500.
+      if (error instanceof UnsafePathError) return null;
+      throw error;
+    }
+    const name = keyName(parsed.key);
+    return {
+      id: null,
+      filename: name,
+      mimeType: resolveArtifactMime({
+        buffer: data,
+        claimed: mimeFromExtension(name),
+      }),
+      data,
+    };
+  }
+
+  /** Build a ResolvedFile for a persisted row (after authorization). */
+  private async rowToResolved(file: PersistedFile): Promise<ResolvedFile> {
+    return {
+      id: file.id,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      data: await readRowBytes(file),
+    };
   }
 
   /**

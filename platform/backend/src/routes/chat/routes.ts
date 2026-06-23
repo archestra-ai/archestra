@@ -1437,7 +1437,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableOrProjectAdminConversationById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -1521,7 +1521,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableOrProjectAdminConversationById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -1535,6 +1535,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationId: id,
           organizationId,
           requestingUserId: user.id,
+          // read-only GET: a project admin may oversee a foreign project's files
+          allowProjectAdminOversight: true,
         }),
       );
     },
@@ -1567,7 +1569,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify the requester can read the conversation that owns this
       // attachment. Without this check, any org member with chat:read could
       // fetch any attachment in the org regardless of per-conversation ACLs.
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableOrProjectAdminConversationById({
         conversationId: meta.conversationId,
         userId: user.id,
         organizationId,
@@ -3345,6 +3347,54 @@ async function findScheduleRunConversationForAdmin(params: {
     id: params.conversationId,
     organizationId: params.organizationId,
   });
+}
+
+/**
+ * Read-only oversight of a PROJECT conversation for a `project:admin`: a project
+ * admin may read any conversation that belongs to a project in their org, even
+ * one they don't own or share. Returns null for standalone (non-project)
+ * conversations so this never widens into a blanket org-chat-read permission.
+ * Mirrors {@link findScheduleRunConversationForAdmin}; read-only by construction
+ * (write paths use `ConversationModel.findById`, owner-only).
+ */
+async function findProjectAdminConversation(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  const isProjectAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "admin",
+  );
+  if (!isProjectAdmin) {
+    return null;
+  }
+  const conversation = await ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+  if (!conversation || !conversation.projectId) {
+    return null;
+  }
+  return conversation;
+}
+
+/**
+ * Like {@link findReadableConversationById} but also admits a `project:admin`
+ * for project conversations (read-only oversight). Use ONLY in read-only GET
+ * handlers — never in fork or any write path, which must stay owner/share-gated.
+ */
+async function findReadableOrProjectAdminConversationById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  return (
+    (await findReadableConversationById(params)) ??
+    (await findProjectAdminConversation(params))
+  );
 }
 
 async function forkConversation(params: {

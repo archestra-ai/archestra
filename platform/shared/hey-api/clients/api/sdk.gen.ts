@@ -4997,7 +4997,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 });
 
 /**
- * List projects the caller can see: their own plus ones shared with their teams or the whole organization.
+ * List projects the caller can see: their own plus ones shared with their teams or the whole organization. `scope` filters personal/shared; `scope=others` (project admins only) lists projects owned by other members for oversight. `search` matches name + description.
  *
  * Authentication:
  *

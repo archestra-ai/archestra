@@ -9,6 +9,24 @@ export type ProjectShareVisibility = z.infer<
   typeof ProjectShareVisibilitySchema
 >;
 
+/**
+ * The caller's relationship to a project, derived from their real access path:
+ * - `owner`  — they own it (full control).
+ * - `shared` — reachable via an org/team share (read + collaborate, no manage).
+ * - `admin`  — reachable only because they hold `project:admin`; read + manage the
+ *   project, but not start chats / create or run-now its schedules.
+ */
+export const ProjectViewerRoleSchema = z.enum(["owner", "shared", "admin"]);
+export type ProjectViewerRole = z.infer<typeof ProjectViewerRoleSchema>;
+
+/**
+ * Projects-list scope filter (mirrors the Agents page personal/shared filter).
+ * Omitted = all accessible (owner ∪ shared). `others` is admin-only: projects
+ * owned by other members that aren't shared with the caller.
+ */
+export const ProjectListScopeSchema = z.enum(["personal", "shared", "others"]);
+export type ProjectListScope = z.infer<typeof ProjectListScopeSchema>;
+
 export const SelectProjectSchema = createSelectSchema(schema.projectsTable);
 export const InsertProjectSchema = createInsertSchema(
   schema.projectsTable,
@@ -35,7 +53,10 @@ export const ProjectListItemSchema = z.object({
   description: z.string().nullable(),
   /** Emoji or base64 image data URL; null = use the default project icon. */
   icon: z.string().nullable(),
-  isOwner: z.boolean(),
+  /** The caller's relationship to this project (drives the UI's capabilities). */
+  viewerRole: ProjectViewerRoleSchema,
+  /** Display name of the project's owner; null if it can't be resolved. */
+  ownerName: z.string().nullable(),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),
@@ -45,7 +66,10 @@ export const ProjectListItemSchema = z.object({
 });
 export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;
 
-/** Project detail; share team ids are present for the owner only. */
+/**
+ * Project detail; share team ids are present for those who can manage the
+ * project (owner or `project:admin`), so the edit dialog can populate sharing.
+ */
 export const ProjectDetailSchema = ProjectListItemSchema.extend({
   shareTeamIds: z.array(z.string()).nullable(),
 });

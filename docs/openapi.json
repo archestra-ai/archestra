@@ -205162,8 +205162,17 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "isOwner": {
-                      "type": "boolean"
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "ownerName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "conversationCount": {
                       "type": "integer",
@@ -205193,7 +205202,8 @@
                     "name",
                     "description",
                     "icon",
-                    "isOwner",
+                    "viewerRole",
+                    "ownerName",
                     "conversationCount",
                     "visibility",
                     "pinnedAt",
@@ -205445,7 +205455,30 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see: their own plus ones shared with their teams or the whole organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "List projects the caller can see: their own plus ones shared with their teams or the whole organization. `scope` filters personal/shared; `scope=others` (project admins only) lists projects owned by other members for oversight. `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "others"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -205472,8 +205505,17 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "isOwner": {
-                        "type": "boolean"
+                      "viewerRole": {
+                        "type": "string",
+                        "enum": [
+                          "owner",
+                          "shared",
+                          "admin"
+                        ]
+                      },
+                      "ownerName": {
+                        "nullable": true,
+                        "type": "string"
                       },
                       "conversationCount": {
                         "type": "integer",
@@ -205503,7 +205545,8 @@
                       "name",
                       "description",
                       "icon",
-                      "isOwner",
+                      "viewerRole",
+                      "ownerName",
                       "conversationCount",
                       "visibility",
                       "pinnedAt",
@@ -205795,8 +205838,17 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "isOwner": {
-                      "type": "boolean"
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "ownerName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "conversationCount": {
                       "type": "integer",
@@ -205833,7 +205885,8 @@
                     "name",
                     "description",
                     "icon",
-                    "isOwner",
+                    "viewerRole",
+                    "ownerName",
                     "conversationCount",
                     "visibility",
                     "pinnedAt",

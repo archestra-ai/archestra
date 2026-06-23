@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Project, ProjectShare, ProjectShareVisibility } from "@/types";
 
@@ -166,7 +166,42 @@ class ProjectShareModel {
     }
     const projects = [...byId.values()];
 
-    // attach visibility in one query so the list can show share state
+    return (await ProjectShareModel.attachVisibility(projects)).sort((a, b) => {
+      const aOwn = a.userId === params.userId ? 0 : 1;
+      const bOwn = b.userId === params.userId ? 0 : 1;
+      if (aOwn !== bOwn) return aOwn - bOwn;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+  }
+
+  /**
+   * Every project in the org owned by someone other than `excludeUserId`, with
+   * share visibility attached — newest first. Backs the admin "Other users"
+   * oversight view; the caller (service) filters out projects the admin can
+   * already reach via share so the buckets stay non-overlapping.
+   */
+  static async listOrgProjectsOwnedByOthers(params: {
+    organizationId: string;
+    excludeUserId: string;
+  }): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
+    const owned = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          ne(schema.projectsTable.userId, params.excludeUserId),
+        ),
+      );
+    return (await ProjectShareModel.attachVisibility(owned)).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+  }
+
+  /** Attach each project's share visibility (null = unshared) in one query. */
+  private static async attachVisibility(
+    projects: Project[],
+  ): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
     const shares =
       projects.length === 0
         ? []
@@ -185,18 +220,10 @@ class ProjectShareModel {
     const visibilityByProject = new Map(
       shares.map((s) => [s.projectId, s.visibility]),
     );
-
-    return projects
-      .map((p) => ({
-        ...p,
-        visibility: visibilityByProject.get(p.id) ?? null,
-      }))
-      .sort((a, b) => {
-        const aOwn = a.userId === params.userId ? 0 : 1;
-        const bOwn = b.userId === params.userId ? 0 : 1;
-        if (aOwn !== bOwn) return aOwn - bOwn;
-        return b.createdAt.getTime() - a.createdAt.getTime();
-      });
+    return projects.map((p) => ({
+      ...p,
+      visibility: visibilityByProject.get(p.id) ?? null,
+    }));
   }
 }
 

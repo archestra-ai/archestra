@@ -1,10 +1,12 @@
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -760,5 +762,95 @@ describe("projects feature gating", () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe("GET /api/skill-sandbox/artifacts/:artifactId — project admin oversight", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let owner: User;
+  let actingUser: User;
+  let savedProjectsEnabled: boolean;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    owner = await makeUser();
+    await makeMember(owner.id, organizationId, {});
+    actingUser = owner;
+    savedProjectsEnabled = config.projects.enabled;
+    (config.projects as { enabled: boolean }).enabled = true;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = actingUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+  });
+
+  afterEach(async () => {
+    (config.projects as { enabled: boolean }).enabled = savedProjectsEnabled;
+    await app.close();
+  });
+
+  test("a project admin can download a foreign project's file but not delete it or read a personal one", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "oversight-files",
+      description: null,
+    });
+    const sandbox = await seedSandbox({ organizationId, userId: owner.id });
+    const projectFile = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: owner.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("project bytes"),
+      path: "/sandbox/in-project.txt",
+      projectId: project.id,
+    });
+    const personalFile = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: owner.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("personal bytes"),
+      path: "/sandbox/personal.txt",
+      projectId: null,
+    });
+
+    const admin = await makeUser({ email: "artifact-admin@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    actingUser = admin;
+
+    // Reads the project file (oversight) ...
+    const projectRead = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${projectFile.id}`,
+    });
+    expect(projectRead.statusCode).toBe(200);
+    expect(projectRead.rawPayload.toString()).toBe("project bytes");
+
+    // ... but a personal (non-project) file is never exposed ...
+    const personalRead = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${personalFile.id}`,
+    });
+    expect(personalRead.statusCode).toBe(404);
+
+    // ... and file deletion is not a granted oversight capability.
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${projectFile.id}`,
+    });
+    expect(del.statusCode).toBe(404);
   });
 });

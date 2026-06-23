@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { projectService } from "@/services/project";
 import {
@@ -12,6 +13,7 @@ import {
   ProjectConversationItemSchema,
   ProjectDetailSchema,
   ProjectListItemSchema,
+  ProjectListScopeSchema,
   ProjectShareVisibilitySchema,
   SandboxFileListItemSchema,
 } from "@/types";
@@ -58,7 +60,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: project.name,
         description: project.description,
         icon: project.icon,
-        isOwner: true,
+        viewerRole: "owner" as const,
+        ownerName: user.name ?? null,
         conversationCount: 0,
         visibility: null,
         pinnedAt: null,
@@ -73,14 +76,34 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProjects,
         description:
-          "List projects the caller can see: their own plus ones shared " +
-          "with their teams or the whole organization.",
+          "List projects the caller can see: their own plus ones shared with " +
+          "their teams or the whole organization. `scope` filters " +
+          "personal/shared; `scope=others` (project admins only) lists projects " +
+          "owned by other members for oversight. `search` matches name + " +
+          "description.",
         tags: ["Projects"],
+        querystring: z.object({
+          scope: ProjectListScopeSchema.optional(),
+          search: z.string().optional(),
+        }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
       },
     },
-    async ({ organizationId, user }) =>
-      projectService.list({ organizationId, userId: user.id }),
+    async ({ query, organizationId, user }) => {
+      const isProjectAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "project",
+        "admin",
+      );
+      return projectService.list({
+        organizationId,
+        userId: user.id,
+        isProjectAdmin,
+        scope: query.scope,
+        search: query.search,
+      });
+    },
   );
 
   fastify.get(
@@ -96,7 +119,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }) =>
-      projectService.get({ id, organizationId, userId: user.id }),
+      projectService.get({
+        id,
+        organizationId,
+        userId: user.id,
+        allowAdminOversight: true,
+      }),
   );
 
   fastify.patch(
@@ -197,7 +225,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }) =>
-      projectService.listFiles({ id, organizationId, userId: user.id }),
+      projectService.listFiles({
+        id,
+        organizationId,
+        userId: user.id,
+        allowAdminOversight: true,
+      }),
   );
 
   fastify.get(
@@ -220,6 +253,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        allowAdminOversight: true,
       }),
   );
 

@@ -1,8 +1,10 @@
+import { userHasPermission } from "@/auth";
 import {
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
   ProjectShareModel,
+  UserModel,
 } from "@/models";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
@@ -11,7 +13,9 @@ import type {
   ProjectConversationItem,
   ProjectDetail,
   ProjectListItem,
+  ProjectListScope,
   ProjectShareVisibility,
+  ProjectViewerRole,
   SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -53,29 +57,83 @@ class ProjectService {
     }
   }
 
+  /**
+   * Projects for the list view, scoped + searched. `all` (no scope) and
+   * `personal`/`shared` draw from the caller's accessible set; `others` is the
+   * admin oversight bucket (projects owned by other members, not shared to the
+   * caller) and is empty unless `isProjectAdmin`.
+   */
   async list(params: {
     organizationId: string;
     userId: string;
+    isProjectAdmin?: boolean;
+    scope?: ProjectListScope;
+    search?: string;
   }): Promise<ProjectListItem[]> {
-    const projects = await ProjectShareModel.listAccessibleProjects(params);
-    const projectIds = projects.map((p) => p.id);
-    const [counts, pins] = await Promise.all([
+    const { organizationId, userId, scope } = params;
+
+    let candidates: {
+      project: Project & { visibility: ProjectShareVisibility | null };
+      viewerRole: ProjectViewerRole;
+    }[];
+    if (scope === "others") {
+      if (!params.isProjectAdmin) return [];
+      const accessible = await ProjectShareModel.listAccessibleProjects({
+        userId,
+        organizationId,
+      });
+      const accessibleIds = new Set(accessible.map((p) => p.id));
+      const others = await ProjectShareModel.listOrgProjectsOwnedByOthers({
+        organizationId,
+        excludeUserId: userId,
+      });
+      candidates = others
+        .filter((project) => !accessibleIds.has(project.id))
+        .map((project) => ({ project, viewerRole: "admin" as const }));
+    } else {
+      const accessible = await ProjectShareModel.listAccessibleProjects({
+        userId,
+        organizationId,
+      });
+      candidates = accessible.map((project) => ({
+        project,
+        viewerRole:
+          project.userId === userId ? ("owner" as const) : ("shared" as const),
+      }));
+      if (scope === "personal") {
+        candidates = candidates.filter((c) => c.viewerRole === "owner");
+      } else if (scope === "shared") {
+        candidates = candidates.filter((c) => c.viewerRole === "shared");
+      }
+    }
+
+    const query = params.search?.trim().toLowerCase();
+    if (query) {
+      candidates = candidates.filter(
+        ({ project }) =>
+          project.name.toLowerCase().includes(query) ||
+          (project.description?.toLowerCase().includes(query) ?? false),
+      );
+    }
+
+    const projectIds = candidates.map((c) => c.project.id);
+    const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
+    const [counts, pins, ownerNames] = await Promise.all([
       ProjectModel.countConversations(projectIds),
-      ProjectPinModel.getPinnedAtForProjects({
-        userId: params.userId,
-        projectIds,
-      }),
+      ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
+      UserModel.getNamesByIds(ownerIds),
     ]);
-    return projects.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      icon: p.icon,
-      isOwner: p.userId === params.userId,
-      conversationCount: counts.get(p.id) ?? 0,
-      visibility: p.visibility,
-      pinnedAt: pins.get(p.id) ?? null,
-      createdAt: p.createdAt,
+    return candidates.map(({ project, viewerRole }) => ({
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      icon: project.icon,
+      viewerRole,
+      ownerName: ownerNames.get(project.userId) ?? null,
+      conversationCount: counts.get(project.id) ?? 0,
+      visibility: project.visibility,
+      pinnedAt: pins.get(project.id) ?? null,
+      createdAt: project.createdAt,
     }));
   }
 
@@ -83,33 +141,37 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
+    allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
-    const project = await this.requireReadable(params);
-    const [share, counts, pins] = await Promise.all([
+    const { project, viewerRole } = await this.requireViewable(params);
+    const [share, counts, pins, ownerNames] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
       ProjectPinModel.getPinnedAtForProjects({
         userId: params.userId,
         projectIds: [project.id],
       }),
+      UserModel.getNamesByIds([project.userId]),
     ]);
-    const isOwner = project.userId === params.userId;
+    // share targets are visible to those who can manage the project (so the
+    // edit dialog can populate sharing): the owner or a project admin.
+    const canManage = viewerRole === "owner" || viewerRole === "admin";
     return {
       id: project.id,
       name: project.name,
       description: project.description,
       icon: project.icon,
-      isOwner,
+      viewerRole,
+      ownerName: ownerNames.get(project.userId) ?? null,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
-      // share targets are the owner's business only
-      shareTeamIds: isOwner ? (share?.teamIds ?? []) : null,
+      shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
     };
   }
 
-  /** Update owner-editable fields (name/description/icon); only provided keys change. */
+  /** Update name/description/icon (owner or project admin); only provided keys change. */
   async update(params: {
     id: string;
     organizationId: string;
@@ -118,7 +180,7 @@ class ProjectService {
     description?: string | null;
     icon?: string | null;
   }): Promise<void> {
-    await this.requireOwned(params);
+    await this.requireManageable(params);
     const fields: {
       name?: string;
       description?: string | null;
@@ -157,7 +219,7 @@ class ProjectService {
     visibility: ProjectShareVisibility | null;
     teamIds: string[];
   }): Promise<void> {
-    await this.requireOwned(params);
+    await this.requireManageable(params);
     if (params.visibility === null) {
       await ProjectShareModel.remove(params.id);
       return;
@@ -181,7 +243,7 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<void> {
-    await this.requireOwned(params);
+    await this.requireManageable(params);
     await fileStore.purgeProjectBytes({
       organizationId: params.organizationId,
       projectId: params.id,
@@ -197,8 +259,11 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
+    allowAdminOversight?: boolean;
   }): Promise<SandboxFileListItem[]> {
-    const project = await this.requireReadable(params);
+    const { project } = await this.requireViewable(params);
+    // Access is the service gate above (requireViewable); fileStore.search
+    // lists by project scope and does not re-check the caller.
     return fileStore.search({
       organizationId: params.organizationId,
       userId: params.userId,
@@ -214,8 +279,9 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
+    allowAdminOversight?: boolean;
   }): Promise<ProjectConversationItem[]> {
-    const project = await this.requireReadable(params);
+    const { project } = await this.requireViewable(params);
     const rows = await ProjectModel.listConversations(project.id);
     return rows.map((row) => ({
       ...row,
@@ -269,21 +335,78 @@ class ProjectService {
     return project;
   }
 
-  /** Project the caller owns, by id; "not yours" reads as 404 too. */
-  private async requireOwned(params: {
+  /**
+   * Project the caller may read, with their relationship to it. Share/owner
+   * access always counts; a `project:admin` caller also passes when
+   * `allowAdminOversight` is set (read-only oversight of a foreign project).
+   * "no access" reads as 404.
+   */
+  private async requireViewable(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    allowAdminOversight?: boolean;
+  }): Promise<{ project: Project; viewerRole: ProjectViewerRole }> {
+    const project = await ProjectModel.findById(params.id);
+    if (project && project.organizationId === params.organizationId) {
+      if (project.userId === params.userId) {
+        return { project, viewerRole: "owner" };
+      }
+      if (
+        await ProjectShareModel.userCanAccessProject({
+          project,
+          userId: params.userId,
+          organizationId: params.organizationId,
+        })
+      ) {
+        return { project, viewerRole: "shared" };
+      }
+      if (
+        params.allowAdminOversight &&
+        (await this.callerIsProjectAdmin(params))
+      ) {
+        return { project, viewerRole: "admin" };
+      }
+    }
+    throw new ApiError(404, "Project not found");
+  }
+
+  /**
+   * Project the caller may manage (edit/share/delete), by id: the owner, or a
+   * `project:admin` for any project in the org. "not allowed" reads as 404.
+   */
+  private async requireManageable(params: {
     id: string;
     organizationId: string;
     userId: string;
   }): Promise<Project> {
-    const project = await ProjectModel.findByIdForOwner({
+    const owned = await ProjectModel.findByIdForOwner({
       id: params.id,
       userId: params.userId,
       organizationId: params.organizationId,
     });
-    if (!project) {
-      throw new ApiError(404, "Project not found");
+    if (owned) return owned;
+    const project = await ProjectModel.findById(params.id);
+    if (
+      project &&
+      project.organizationId === params.organizationId &&
+      (await this.callerIsProjectAdmin(params))
+    ) {
+      return project;
     }
-    return project;
+    throw new ApiError(404, "Project not found");
+  }
+
+  private async callerIsProjectAdmin(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    return userHasPermission(
+      params.userId,
+      params.organizationId,
+      "project",
+      "admin",
+    );
   }
 }
 

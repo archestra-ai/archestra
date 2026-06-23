@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -70,6 +71,18 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userId: user.id,
         });
+        // A project admin overseeing a foreign project may read its files
+        // read-only, even without share access. Project-scoped files only —
+        // personal files are never exposed by this fallback.
+        if (
+          !resolved &&
+          (await userHasPermission(user.id, organizationId, "project", "admin"))
+        ) {
+          resolved = await fileStore.getProjectScopedForAdmin({
+            ref: artifactId,
+            organizationId,
+          });
+        }
       } catch (error) {
         if (error instanceof FileBytesMissingError) {
           // the row exists but its bytes are gone

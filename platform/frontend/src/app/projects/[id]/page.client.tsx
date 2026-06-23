@@ -114,6 +114,12 @@ function ProjectDetail() {
     );
   }
 
+  // A project admin overseeing someone else's project gets read-only access:
+  // no chat composer, no pin, no new schedules — but can edit/delete it.
+  const isAdminView = project.viewerRole === "admin";
+  const canManage = project.viewerRole === "owner" || isAdminView;
+  const canChat = !isAdminView;
+
   return (
     // The same two-column shell as /chat: the page content scrolls in the left
     // column while the Files panel takes the full height of the right side.
@@ -129,8 +135,14 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {!project.isOwner && (
+              {project.viewerRole === "shared" && (
                 <Badge variant="secondary">Shared with you</Badge>
+              )}
+              {isAdminView && (
+                <Badge variant="secondary">
+                  Viewing as administrator
+                  {project.ownerName ? ` · ${project.ownerName}` : ""}
+                </Badge>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -143,22 +155,24 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      pinProjectMutation.mutate({
-                        id: project.id,
-                        pinned: !project.pinnedAt,
-                      })
-                    }
-                  >
-                    {project.pinnedAt ? (
-                      <PinOff className="h-4 w-4" />
-                    ) : (
-                      <Pin className="h-4 w-4" />
-                    )}
-                    {project.pinnedAt ? "Unpin" : "Pin"}
-                  </DropdownMenuItem>
-                  {project.isOwner && (
+                  {!isAdminView && (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        pinProjectMutation.mutate({
+                          id: project.id,
+                          pinned: !project.pinnedAt,
+                        })
+                      }
+                    >
+                      {project.pinnedAt ? (
+                        <PinOff className="h-4 w-4" />
+                      ) : (
+                        <Pin className="h-4 w-4" />
+                      )}
+                      {project.pinnedAt ? "Unpin" : "Pin"}
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && (
                     <>
                       <DropdownMenuItem onSelect={() => setEditOpen(true)}>
                         <Pencil className="h-4 w-4" />
@@ -200,8 +214,11 @@ function ProjectDetail() {
           )}
 
           <div className="space-y-6">
-            <ProjectChatInput projectId={project.id} />
-            <ProjectSchedulesSection projectId={project.id} />
+            {canChat && <ProjectChatInput projectId={project.id} />}
+            <ProjectSchedulesSection
+              projectId={project.id}
+              canCreate={canChat}
+            />
             <ChatsList conversations={conversations ?? []} />
           </div>
         </PageLayout>

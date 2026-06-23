@@ -53593,7 +53593,10 @@ export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletio
 export type GetProjectsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        scope?: 'personal' | 'shared' | 'others';
+        search?: string;
+    };
     url: '/api/projects';
 };
 
@@ -53671,7 +53674,8 @@ export type GetProjectsResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
         pinnedAt: string | null;
@@ -53766,7 +53770,8 @@ export type CreateProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
         pinnedAt: string | null;
@@ -53944,7 +53949,8 @@ export type GetProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
         pinnedAt: string | null;

@@ -57,7 +57,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "admin"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -380,6 +380,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions and sharing",
   "project:delete": "Delete projects",
+  "project:admin":
+    "View, edit, and delete projects owned by other members, and manage their existing scheduled tasks",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration

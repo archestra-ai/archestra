@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: Named collections of chats that share files and scheduled runs
-lastUpdated: 2026-06-18
+lastUpdated: 2026-06-23
 ---
 
 <!--
@@ -14,7 +14,13 @@ A project is a named collection of chats that own a shared set of result files. 
 
 ## Sharing
 
-A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) stay owner-only. Deleting a project keeps its chats as ordinary conversations but removes its files.
+A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) are owner-only, except for holders of `project:admin` (see Finding projects). Deleting a project keeps its chats as ordinary conversations but removes its files.
+
+## Finding projects
+
+The projects list has a search box and a scope filter that mirrors the agents filter: All (your own plus those shared with you), Personal (yours), and Shared with me. Search matches a project's name and description.
+
+Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can read the chats and files read-only, edit or delete the project, and manage its existing scheduled tasks (edit, enable/disable, delete) — but cannot start a chat, create a schedule, or run one manually, since those would generate new activity in someone else's project. The Other users list is not grouped by pinned. Grant `project:admin` from [Access Control](./platform-access-control).
 
 ## Files
 

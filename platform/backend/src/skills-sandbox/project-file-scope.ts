@@ -53,3 +53,28 @@ export async function resolveProjectFileScope(params: {
 
   return { projectId: project.id, projectName: project.name };
 }
+
+/**
+ * Project scope of a conversation WITHOUT the share/access check — for a
+ * `project:admin` reading a foreign project's files read-only (oversight).
+ * Returns null for non-project chats or cross-org. The caller MUST have already
+ * confirmed `project:admin`; never use this on a write path.
+ */
+export async function resolveProjectFileScopeForAdmin(params: {
+  conversationId: string;
+  organizationId: string;
+}): Promise<ProjectFileScope | null> {
+  const [conversation] = await db
+    .select({ projectId: schema.conversationsTable.projectId })
+    .from(schema.conversationsTable)
+    .where(eq(schema.conversationsTable.id, params.conversationId));
+  if (!conversation?.projectId) return null;
+
+  const [project] = await db
+    .select()
+    .from(schema.projectsTable)
+    .where(eq(schema.projectsTable.id, conversation.projectId));
+  if (!project || project.organizationId !== params.organizationId) return null;
+
+  return { projectId: project.id, projectName: project.name };
+}

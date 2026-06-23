@@ -13,7 +13,8 @@ type ProjectFixture = {
   name: string;
   description: string | null;
   icon: string | null;
-  isOwner: boolean;
+  viewerRole: "owner" | "shared" | "admin";
+  ownerName: string | null;
   conversationCount: number;
   visibility: "organization" | "team" | null;
   pinnedAt: string | null;
@@ -22,6 +23,16 @@ type ProjectFixture = {
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/projects",
+}));
+
+vi.mock("@/components/search-input", () => ({
+  SearchInput: () => <input aria-label="Search projects" />,
+}));
+
+vi.mock("@/components/project-scope-filter", () => ({
+  ProjectScopeFilter: () => <div>scope filter</div>,
 }));
 
 vi.mock("next/link", () => ({
@@ -277,7 +288,8 @@ function makeProject(overrides: Partial<ProjectFixture>): ProjectFixture {
     name: "Project",
     description: null,
     icon: null,
-    isOwner: true,
+    viewerRole: "owner",
+    ownerName: null,
     conversationCount: 0,
     visibility: null,
     pinnedAt: null,

@@ -12,12 +12,10 @@ export type PinnedSidebarItem<C, P> =
   | { type: "chat"; pinnedAt: string | Date; item: C }
   | { type: "project"; pinnedAt: string | Date; item: P };
 
-export function buildPinnedSidebarItems<C extends Pinnable, P extends Pinnable>(
-  args: {
-    chats: C[];
-    projects: P[];
-  },
-): PinnedSidebarItem<C, P>[] {
+export function buildPinnedSidebarItems<
+  C extends Pinnable,
+  P extends Pinnable,
+>(args: { chats: C[]; projects: P[] }): PinnedSidebarItem<C, P>[] {
   const items: PinnedSidebarItem<C, P>[] = [];
   for (const chat of args.chats) {
     if (chat.pinnedAt) {
@@ -26,7 +24,11 @@ export function buildPinnedSidebarItems<C extends Pinnable, P extends Pinnable>(
   }
   for (const project of args.projects) {
     if (project.pinnedAt) {
-      items.push({ type: "project", pinnedAt: project.pinnedAt, item: project });
+      items.push({
+        type: "project",
+        pinnedAt: project.pinnedAt,
+        item: project,
+      });
     }
   }
   return items.sort(

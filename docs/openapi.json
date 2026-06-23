@@ -205123,7 +205123,7 @@
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 500
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,
@@ -206084,7 +206084,7 @@
                   "description": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 500
+                    "maxLength": 200
                   },
                   "icon": {
                     "nullable": true,

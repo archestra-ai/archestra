@@ -1,0 +1,394 @@
+"use client";
+
+import {
+  type archestraApiTypes,
+  type archestraCatalogTypes,
+  E2eTestId,
+} from "@archestra/shared";
+
+import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { DebouncedInput } from "@/components/debounced-input";
+import { TruncatedText } from "@/components/truncated-text";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useMcpRegistryServersInfinite,
+  useMcpServerCategories,
+} from "@/lib/mcp/external-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import type { SelectedCategory } from "../../_parts/CatalogFilters";
+import type { McpCatalogFormValues } from "../../_parts/mcp-catalog-form.types";
+import { transformExternalCatalogToFormValues } from "../../_parts/mcp-catalog-form.utils";
+import { RequestInstallationDialog } from "../../_parts/request-installation-dialog";
+import { TransportBadges } from "../../_parts/transport-badges";
+
+type ServerType = "all" | "remote" | "local";
+
+export function ArchestraCatalogTab({
+  catalogItems: initialCatalogItems,
+  onSelectServer,
+}: {
+  catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  onSelectServer: (formValues: McpCatalogFormValues) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [requestServer, setRequestServer] =
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
+  const [filters, setFilters] = useState<{
+    type: ServerType;
+    category: SelectedCategory;
+  }>({
+    type: "all",
+    category: "all",
+  });
+
+  // Get catalog items for filtering (with live updates)
+  const { data: catalogItems } = useInternalMcpCatalog({
+    initialData: initialCatalogItems,
+  });
+
+  // Fetch available categories
+  const { data: availableCategories = [] } = useMcpServerCategories();
+
+  const { data: userAllowedToCreateCatalogItem = false } = useHasPermissions({
+    mcpRegistry: ["create"],
+  });
+
+  // Use server-side search and category filtering
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useMcpRegistryServersInfinite(searchQuery, filters.category);
+
+  const handleSelectServer = (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
+    const formValues = transformExternalCatalogToFormValues(server);
+    onSelectServer(formValues);
+  };
+
+  const handleRequestInstallation = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
+    // Just open the request dialog with the server data
+    setRequestServer(server);
+  };
+
+  // Flatten all pages into a single array of servers
+  const servers = useMemo(() => {
+    if (!data) return [];
+    return data.pages.flatMap((page) => page.servers);
+  }, [data]);
+
+  // Apply client-side type filter only (categories are filtered backend-side)
+  const filteredServers = useMemo(() => {
+    let filtered = servers;
+
+    // Filter by type (client-side since API doesn't support this)
+    if (filters.type !== "all") {
+      filtered = filtered.filter(
+        (server) => server.server.type === filters.type,
+      );
+    }
+
+    return filtered;
+  }, [servers, filters.type]);
+
+  // Create a Set of catalog item names for efficient lookup
+  const catalogServerNames = useMemo(
+    () => new Set(catalogItems?.map((item) => item.name) || []),
+    [catalogItems],
+  );
+
+  return (
+    <div className="w-full space-y-2">
+      <div className="ml-1 grid grid-cols-1 items-end gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.5fr)_minmax(0,0.5fr)]">
+        <div className="min-w-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <DebouncedInput
+              placeholder="Search servers by name..."
+              initialValue={searchQuery}
+              onChange={setSearchQuery}
+              className="pl-9"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <Select
+            value={filters.type}
+            onValueChange={(value) =>
+              setFilters({ ...filters, type: value as ServerType })
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="remote">Remote</SelectItem>
+              <SelectItem value="local">Local</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="min-w-0">
+          <Select
+            value={filters.category}
+            onValueChange={(value) =>
+              setFilters({ ...filters, category: value as SelectedCategory })
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {availableCategories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from(
+            { length: 4 },
+            (_, i) => `skeleton-${i}-${Date.now()}`,
+          ).map((key) => (
+            <Card key={key}>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full mt-2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive mb-2">
+            Failed to load servers from the external catalog
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : "Unknown error"}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !error && filteredServers && (
+        <>
+          <div className="flex items-center justify-between ml-1">
+            <p className="text-sm text-muted-foreground">
+              {filteredServers.length}{" "}
+              {filteredServers.length === 1 ? "server" : "servers"} found
+            </p>
+          </div>
+
+          {filteredServers.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">
+                No servers match your search criteria.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 overflow-y-auto">
+                {filteredServers.map((server) => (
+                  <ServerCard
+                    key={server.name}
+                    server={server}
+                    onSelectServer={handleSelectServer}
+                    onRequestInstallation={handleRequestInstallation}
+                    isInCatalog={catalogServerNames.has(server.name)}
+                    userAllowedToCreateCatalogItem={
+                      userAllowedToCreateCatalogItem
+                    }
+                  />
+                ))}
+              </div>
+
+              {hasNextPage && (
+                <div className="flex justify-center mt-6">
+                  <Button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    variant="outline"
+                    size="lg"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Loading more...
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      <RequestInstallationDialog
+        server={requestServer}
+        onClose={() => setRequestServer(null)}
+      />
+    </div>
+  );
+}
+
+// Server card component for a single server
+function ServerCard({
+  server,
+  onSelectServer,
+  onRequestInstallation,
+  isInCatalog,
+  userAllowedToCreateCatalogItem,
+}: {
+  server: archestraCatalogTypes.ArchestraMcpServerManifest;
+  onSelectServer: (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => void;
+  onRequestInstallation: (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => void;
+  isInCatalog: boolean;
+  userAllowedToCreateCatalogItem: boolean;
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader>
+        <div className="flex items-start">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            {server.icon && (
+              <img
+                src={server.icon}
+                alt={`${server.name} icon`}
+                className="w-8 h-8 rounded flex-shrink-0 mt-0.5"
+              />
+            )}
+            <CardTitle className="text-base">
+              <TruncatedText
+                message={server.display_name || server.name}
+                maxLength={40}
+              />
+            </CardTitle>
+          </div>
+          <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
+            {server.category && (
+              <Badge variant="outline" className="text-xs">
+                {server.category}
+              </Badge>
+            )}
+            {!server.oauth_config?.requires_proxy && (
+              <Badge variant="secondary" className="text-xs">
+                OAuth
+              </Badge>
+            )}
+          </div>
+        </div>
+        {server.display_name && server.display_name !== server.name && (
+          <p className="text-xs text-muted-foreground font-mono">
+            {server.name}
+          </p>
+        )}
+        <TransportBadges
+          isRemote={server.server.type === "remote"}
+          className="mt-1"
+        />
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col space-y-3">
+        {server.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {server.description}
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2 mt-auto pt-3 justify-end">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild className="flex-1">
+              <Link
+                href={`/mcp/registry/beta/catalog/${encodeURIComponent(server.name)}`}
+                target="_blank"
+              >
+                <Info className="h-4 w-4 mr-1" />
+                Details
+              </Link>
+            </Button>
+            {server.github_info?.url && (
+              <Button variant="outline" size="sm" asChild className="flex-1">
+                <a
+                  href={server.github_info.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Github className="h-4 w-4 mr-1" />
+                  Code
+                </a>
+              </Button>
+            )}
+            {(server.homepage || server.documentation) && (
+              <Button variant="outline" size="sm" asChild className="flex-1">
+                <a
+                  href={server.homepage || server.documentation}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <BookOpen className="h-4 w-4 mr-1" />
+                  Docs
+                </a>
+              </Button>
+            )}
+          </div>
+          <Button
+            onClick={() =>
+              userAllowedToCreateCatalogItem
+                ? onSelectServer(server)
+                : onRequestInstallation(server)
+            }
+            disabled={isInCatalog}
+            size="sm"
+            className="w-full"
+            data-testid={E2eTestId.AddCatalogItemButton}
+          >
+            {isInCatalog
+              ? "Added"
+              : userAllowedToCreateCatalogItem
+                ? "Use as Template"
+                : "Request to add to internal registry"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

@@ -61616,6 +61616,9 @@ export type GetToolsWithAssignmentsResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            annotations: {
+                [key: string]: unknown;
+            } | null;
             catalogId: string | null;
             createdAt: string;
             updatedAt: string;

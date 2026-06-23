@@ -21,7 +21,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { CreateCatalogDialog } from "@/app/mcp/registry/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -215,7 +214,7 @@ export function ChatPageContent({
 
   // Dialog management for MCP installation
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    "custom-request" | "create-catalog" | "edit-agent"
+    "custom-request" | "edit-agent"
   >();
 
   // Check if user can create catalog items directly
@@ -1035,9 +1034,10 @@ export function ChatPageContent({
       return;
     }
 
-    // Open the appropriate dialog based on user permissions
+    // Users who can create catalog items get the Add MCP Server page (in a
+    // new tab so the conversation stays put); others get the request dialog.
     if (canCreateCatalog) {
-      openDialog("create-catalog");
+      window.open("/mcp/registry/new", "_blank");
     } else {
       openDialog("custom-request");
     }
@@ -1050,7 +1050,7 @@ export function ChatPageContent({
           output: {
             type: "text",
             text: canCreateCatalog
-              ? "Opening the Add MCP Server to Private Registry dialog."
+              ? "Opening the Add MCP Server to Private Registry page."
               : "Opening the custom MCP server installation request dialog.",
           } as never,
         });
@@ -2233,11 +2233,6 @@ export function ChatPageContent({
         <CustomServerRequestDialog
           isOpen={isDialogOpened("custom-request")}
           onClose={() => closeDialog("custom-request")}
-        />
-        <CreateCatalogDialog
-          isOpen={isDialogOpened("create-catalog")}
-          onClose={() => closeDialog("create-catalog")}
-          onSuccess={() => router.push("/mcp/registry")}
         />
         <AgentDialog
           open={isDialogOpened("edit-agent")}

@@ -568,6 +568,8 @@ export const RouteId = {
   GetProjectFiles: "getProjectFiles",
   GetProjectInstructions: "getProjectInstructions",
   SetProjectInstructions: "setProjectInstructions",
+  PinProject: "pinProject",
+  UnpinProject: "unpinProject",
   DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
 
   // Audit Log Routes

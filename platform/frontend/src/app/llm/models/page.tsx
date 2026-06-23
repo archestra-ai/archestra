@@ -7,6 +7,7 @@ import {
   type ModelInputModality,
   type ModelOutputModality,
   OUTPUT_MODALITY_OPTIONS,
+  providerRequiresPerUserCredential,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -34,8 +35,10 @@ import {
   EmbeddingModelBadge,
   FreeModelBadge,
   LatestModelBadge,
+  PerUserModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
+import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -78,7 +81,7 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
-import { useSetModelProvidersAction } from "../layout";
+import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
@@ -162,23 +165,19 @@ export default function ModelsPage() {
     }
   }, [syncModelsMutation, refetch]);
 
-  const setModelProvidersAction = useSetModelProvidersAction();
-  useEffect(() => {
-    setModelProvidersAction(
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleRefresh}
-        disabled={isRefreshingModels}
-      >
-        <RefreshCw
-          className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
-        />
-        {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
-      </Button>,
-    );
-    return () => setModelProvidersAction(null);
-  }, [setModelProvidersAction, isRefreshingModels, handleRefresh]);
+  const refreshModelsButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleRefresh}
+      disabled={isRefreshingModels}
+    >
+      <RefreshCw
+        className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
+      />
+      {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
+    </Button>
+  );
 
   const columns: ColumnDef<ModelWithApiKeys>[] = useMemo(
     () => [
@@ -216,6 +215,9 @@ export default function ModelsPage() {
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
                 {row.original.isBest && <BestModelBadge />}
+                {providerRequiresPerUserCredential(provider) && (
+                  <PerUserModelBadge />
+                )}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
                 )}
@@ -363,7 +365,12 @@ export default function ModelsPage() {
   );
 
   return (
-    <>
+    <PageLayout
+      title="Models"
+      description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
+      tabs={MODEL_NAV_TABS}
+      actionButton={refreshModelsButton}
+    >
       <div className="space-y-4">
         {models.length > 0 && (
           <div className="flex flex-wrap gap-4">
@@ -519,7 +526,7 @@ export default function ModelsPage() {
           }}
         />
       )}
-    </>
+    </PageLayout>
   );
 }
 

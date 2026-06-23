@@ -62,6 +62,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isOwner: true,
         conversationCount: 0,
         visibility: null,
+        pinnedAt: null,
         createdAt: project.createdAt,
       };
     },
@@ -267,6 +268,44 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.PinProject,
+        description:
+          "Pin a project to the current user's sidebar. Personal — does not " +
+          "affect other members. Any user who can read the project may pin it.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.pin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinProject,
+        description:
+          "Remove the current user's pin on a project. Idempotent; allowed " +
+          "even if the project was since unshared from the user.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.unpin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
   );
 };
 

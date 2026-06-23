@@ -15,6 +15,8 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
   Users,
 } from "lucide-react";
@@ -61,6 +63,7 @@ import {
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import {
   useDeleteProject,
+  usePinProject,
   useProject,
   useProjectConversations,
   useProjectFiles,
@@ -86,6 +89,7 @@ function ProjectDetail() {
   const { data: project, isPending } = useProject(id);
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
+  const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -124,12 +128,15 @@ function ProjectDetail() {
           title={
             <span className="flex items-center gap-2">
               <AgentIcon icon={project.icon} fallbackType="project" size={22} />
-              {project.name}
+              <span className="min-w-0 truncate">{project.name}</span>
             </span>
           }
           description={project.description ?? ""}
           actionButton={
-            project.isOwner ? (
+            <div className="flex items-center gap-2">
+              {!project.isOwner && (
+                <Badge variant="secondary">Shared with you</Badge>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -141,29 +148,46 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
                   <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setConfirmDelete(true)}
+                    onSelect={() =>
+                      pinProjectMutation.mutate({
+                        id: project.id,
+                        pinned: !project.pinnedAt,
+                      })
+                    }
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
+                    {project.pinnedAt ? (
+                      <PinOff className="h-4 w-4" />
+                    ) : (
+                      <Pin className="h-4 w-4" />
+                    )}
+                    {project.pinnedAt ? "Unpin" : "Pin"}
                   </DropdownMenuItem>
+                  {project.isOwner && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                        <Pencil className="h-4 w-4" />
+                        Edit details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setConfirmDelete(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
-              <Badge variant="secondary">Shared with you</Badge>
-            )
+            </div>
           }
         >
           <DeleteConfirmDialog
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and files are kept — chats become ordinary conversations, and their files remain available in those conversations."
+            description="Chats are kept as ordinary conversations. Project files are deleted with the project."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });

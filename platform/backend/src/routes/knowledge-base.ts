@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
@@ -504,6 +505,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "At least one team must be selected for team-scoped connectors",
         );
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         visibility === "team-scoped" &&
         !config.enterpriseFeatures.knowledgeBase
@@ -513,6 +517,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
+      // SPDX-SnippetEnd
 
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
@@ -825,6 +830,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "At least one team must be selected for team-scoped connectors",
         );
       }
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         connector.visibility !== "team-scoped" &&
         nextVisibility === "team-scoped" &&
@@ -835,6 +843,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
+      // SPDX-SnippetEnd
       if (usesGithubAppConfig && body.credentials) {
         throw new ApiError(
           400,

@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: ""
+      amd64_only:
+        description: "Build only linux/amd64 and skip the arm64 matrix leg. Use for amd64-only deploy targets (e.g. the staging cluster). Release/Docker Hub builds leave this false to stay multi-arch."
+        required: false
+        type: boolean
+        default: false
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -78,6 +83,9 @@ jobs:
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
     runs-on: ${{ matrix.platform }}
+    # Skip the arm64 leg when the caller only needs amd64 (e.g. staging). The
+    # amd64 leg still runs, and merge-manifests publishes a single-arch tag.
+    if: ${{ !inputs.amd64_only || matrix.os_and_arch != 'linux/arm64' }}
     strategy:
       fail-fast: false
       matrix:

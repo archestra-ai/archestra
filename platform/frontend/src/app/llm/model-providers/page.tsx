@@ -38,6 +38,7 @@ import {
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
+import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -70,7 +71,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
-import { useSetModelProvidersAction } from "../layout";
+import { MODEL_NAV_TABS } from "../model-nav-tabs";
 
 const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -283,20 +284,16 @@ export default function ApiKeysPage() {
   const editFormValues = editForm.watch();
   const isEditValid = Boolean(editFormValues.name);
 
-  const setModelProvidersAction = useSetModelProvidersAction();
-  useEffect(() => {
-    setModelProvidersAction(
-      <PermissionButton
-        permissions={{ llmProviderApiKey: ["create"] }}
-        onClick={() => setIsCreateDialogOpen(true)}
-        data-testid={E2eTestId.AddChatApiKeyButton}
-      >
-        <Plus className="h-4 w-4" />
-        Add API Key
-      </PermissionButton>,
-    );
-    return () => setModelProvidersAction(null);
-  }, [setModelProvidersAction]);
+  const addApiKeyButton = (
+    <PermissionButton
+      permissions={{ llmProviderApiKey: ["create"] }}
+      onClick={() => setIsCreateDialogOpen(true)}
+      data-testid={E2eTestId.AddChatApiKeyButton}
+    >
+      <Plus className="h-4 w-4" />
+      Add API Key
+    </PermissionButton>
+  );
 
   const apiKeys = queriedApiKeys;
 
@@ -480,143 +477,150 @@ export default function ApiKeysPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <SearchInput
-          objectNamePlural="API keys"
-          searchFields={["name"]}
-          paramName="search"
-        />
-        <Select
-          value={providerFilter}
-          onValueChange={(value) =>
-            updateQueryParams({
-              provider: value === "all" ? null : value,
-            })
-          }
-        >
-          <SelectTrigger className="w-full sm:w-[240px]">
-            <SelectValue placeholder="All providers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All providers</SelectItem>
-            <LlmProviderSelectItems options={providerOptions} />
-          </SelectContent>
-        </Select>
-      </div>
-
-      {byosEnabled &&
-        apiKeys.some((key) => key.secretStorageType === "database") && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Database-stored API keys detected</AlertTitle>
-            <AlertDescription>
-              External Vault storage is enabled, but some of your API keys are
-              still stored in the database. To migrate them to the vault, delete
-              them and create new ones with vault references.
-            </AlertDescription>
-          </Alert>
-        )}
-
-      <div data-testid={E2eTestId.ChatApiKeysTable}>
-        <DataTable
-          columns={columns}
-          data={apiKeys}
-          getRowId={(row) => row.id}
-          hideSelectedCount
-          isLoading={permissionsPending || isPending}
-          emptyMessage="No API keys configured"
-          hasActiveFilters={Boolean(search || providerFilter !== "all")}
-          filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
-          onClearFilters={() =>
-            updateQueryParams({
-              search: null,
-              provider: null,
-            })
-          }
-        />
-      </div>
-
-      {/* Create Dialog */}
-      <CreateLlmProviderApiKeyDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        title="Add API Key"
-        description="Add a new LLM provider API key for use in Chat and LLM Proxy"
-      />
-
-      {/* Edit Dialog */}
-      <FormDialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        title="Edit API Key"
-        description="Update the name, API key value, or scope"
-        size="small"
-        className="sm:max-w-xl"
-      >
-        <DialogForm
-          onSubmit={handleEdit}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <DialogBody>
-            {selectedApiKey && (
-              <LlmProviderApiKeyForm
-                mode="full"
-                showConsoleLink={false}
-                existingKey={selectedApiKey}
-                existingKeys={apiKeys}
-                form={editForm}
-                isPending={updateMutation.isPending}
-              />
-            )}
-          </DialogBody>
-          <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={!isEditValid || updateMutation.isPending}
-            >
-              {updateMutation.isPending && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              Test & Save
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
-
-      {/* Delete Confirmation Dialog */}
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        title="Delete API Key"
-        description={
-          <DeleteApiKeyDescription
-            apiKey={selectedApiKey}
-            virtualKeys={blockingVirtualKeys?.data ?? []}
-            totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
-            oauthClients={blockingOauthClients}
-            isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
+    <PageLayout
+      title="Model Providers"
+      description="Connect the LLM providers used in Chat and the LLM Proxy by adding their API keys."
+      tabs={MODEL_NAV_TABS}
+      actionButton={addApiKeyButton}
+    >
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <SearchInput
+            objectNamePlural="API keys"
+            searchFields={["name"]}
+            paramName="search"
           />
-        }
-        isPending={deleteMutation.isPending}
-        onConfirm={handleDelete}
-        confirmDisabled={
-          isLoadingVirtualKeys ||
-          isLoadingOauthClients ||
-          (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-          blockingOauthClients.length > 0
-        }
-        confirmLabel="Delete API Key"
-        pendingLabel="Deleting..."
-      />
-    </div>
+          <Select
+            value={providerFilter}
+            onValueChange={(value) =>
+              updateQueryParams({
+                provider: value === "all" ? null : value,
+              })
+            }
+          >
+            <SelectTrigger className="w-full sm:w-[240px]">
+              <SelectValue placeholder="All providers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All providers</SelectItem>
+              <LlmProviderSelectItems options={providerOptions} />
+            </SelectContent>
+          </Select>
+        </div>
+
+        {byosEnabled &&
+          apiKeys.some((key) => key.secretStorageType === "database") && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Database-stored API keys detected</AlertTitle>
+              <AlertDescription>
+                External Vault storage is enabled, but some of your API keys are
+                still stored in the database. To migrate them to the vault,
+                delete them and create new ones with vault references.
+              </AlertDescription>
+            </Alert>
+          )}
+
+        <div data-testid={E2eTestId.ChatApiKeysTable}>
+          <DataTable
+            columns={columns}
+            data={apiKeys}
+            getRowId={(row) => row.id}
+            hideSelectedCount
+            isLoading={permissionsPending || isPending}
+            emptyMessage="No API keys configured"
+            hasActiveFilters={Boolean(search || providerFilter !== "all")}
+            filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
+            onClearFilters={() =>
+              updateQueryParams({
+                search: null,
+                provider: null,
+              })
+            }
+          />
+        </div>
+
+        {/* Create Dialog */}
+        <CreateLlmProviderApiKeyDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          title="Add API Key"
+          description="Add a new LLM provider API key for use in Chat and LLM Proxy"
+        />
+
+        {/* Edit Dialog */}
+        <FormDialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          title="Edit API Key"
+          description="Update the name, API key value, or scope"
+          size="small"
+          className="sm:max-w-xl"
+        >
+          <DialogForm
+            onSubmit={handleEdit}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <DialogBody>
+              {selectedApiKey && (
+                <LlmProviderApiKeyForm
+                  mode="full"
+                  showConsoleLink={false}
+                  existingKey={selectedApiKey}
+                  existingKeys={apiKeys}
+                  form={editForm}
+                  isPending={updateMutation.isPending}
+                />
+              )}
+            </DialogBody>
+            <DialogStickyFooter className="mt-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!isEditValid || updateMutation.isPending}
+              >
+                {updateMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Test & Save
+              </Button>
+            </DialogStickyFooter>
+          </DialogForm>
+        </FormDialog>
+
+        {/* Delete Confirmation Dialog */}
+        <DeleteConfirmDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          title="Delete API Key"
+          description={
+            <DeleteApiKeyDescription
+              apiKey={selectedApiKey}
+              virtualKeys={blockingVirtualKeys?.data ?? []}
+              totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
+              oauthClients={blockingOauthClients}
+              isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
+            />
+          }
+          isPending={deleteMutation.isPending}
+          onConfirm={handleDelete}
+          confirmDisabled={
+            isLoadingVirtualKeys ||
+            isLoadingOauthClients ||
+            (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
+            blockingOauthClients.length > 0
+          }
+          confirmLabel="Delete API Key"
+          pendingLabel="Deleting..."
+        />
+      </div>
+    </PageLayout>
   );
 }
 

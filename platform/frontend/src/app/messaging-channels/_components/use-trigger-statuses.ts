@@ -48,10 +48,10 @@ export function useTriggerStatuses() {
   const a2aActive = (internalAgents?.length ?? 0) > 0;
 
   const triggers = [
-    { active: msTeamsActive, href: "/agents/triggers/ms-teams" },
-    { active: slackActive, href: "/agents/triggers/slack" },
-    { active: emailActive, href: "/agents/triggers/email" },
-    { active: a2aActive, href: "/agents/triggers/a2a" },
+    { active: msTeamsActive, href: "/messaging-channels/ms-teams" },
+    { active: slackActive, href: "/messaging-channels/slack" },
+    { active: emailActive, href: "/messaging-channels/email" },
+    { active: a2aActive, href: "/messaging-channels/a2a" },
   ] as const;
   const firstActiveHref =
     triggers.find((t) => t.active)?.href ?? triggers[0].href;

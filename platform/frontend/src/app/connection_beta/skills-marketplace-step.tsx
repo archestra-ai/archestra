@@ -102,7 +102,7 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
         No skills to share yet. Create one under{" "}
-        <Link href="/agents/skills" className="underline">
+        <Link href="/skills" className="underline">
           Skills
         </Link>
         .

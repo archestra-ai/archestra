@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseHasPermissions = vi.fn();
 const mockUseLlmProviderApiKeys = vi.fn();
-const mockSetProviderAction = vi.fn();
 
 vi.mock("next/image", () => ({
   default: ({
@@ -16,8 +15,10 @@ vi.mock("next/image", () => ({
   ),
 }));
 
-vi.mock("../layout", () => ({
-  useSetModelProvidersAction: () => mockSetProviderAction,
+vi.mock("@/components/page-layout", () => ({
+  PageLayout: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({

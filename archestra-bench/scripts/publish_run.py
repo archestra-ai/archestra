@@ -27,10 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tb", type=Path, required=True, help="TensorBoard event dir to publish")
-    parser.add_argument("--run-dir", type=Path, required=True, help="bench run dir (aggregate.json, report.md)")
+    parser.add_argument(
+        "--tb", type=Path, required=True, help="TensorBoard event dir to publish"
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="bench run dir (aggregate.json, report.md)",
+    )
     parser.add_argument("--tarball", type=Path, required=True, help="packaged run.tgz")
     args = parser.parse_args()
 
@@ -41,7 +50,12 @@ def main() -> int:
     if os.environ.get("BENCH_TB_EXPORT_OK", "1") != "1":
         warnings.append("TensorBoard export failed")
     warnings += _upload(run_id, tb=args.tb, run_dir=args.run_dir, tarball=args.tarball)
-    _post_slack(summary, warnings)
+    gcs_bucket = os.environ["GCS_BUCKET"]
+    links = {
+        "report": _https_url(gcs_bucket, f"runs/{run_id}/report.md"),
+        "details": _https_url(gcs_bucket, f"runs/{run_id}/aggregate.json"),
+    }
+    _post_slack(summary, warnings, links=links)
 
     return 0 if summary.healthy and not warnings else 1
 
@@ -68,9 +82,14 @@ def _summarize(aggregate_path: Path) -> _Summary:
         logger.exception("could not parse %s", aggregate_path)
         return failed
     if total == 0 or passed == 0:
-        return _Summary(healthy=False, text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}")
+        return _Summary(
+            healthy=False,
+            text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}",
+        )
     rate = int(pass_rate * 100)
-    return _Summary(healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}")
+    return _Summary(
+        healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}"
+    )
 
 
 def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]:
@@ -82,15 +101,24 @@ def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]
         return ["GCS upload unavailable"]
 
     warnings: list[str] = []
-    # Required: the run's record. Missing one is a real failure to surface.
-    for local, remote in (
-        (tarball, f"runs/{run_id}/run.tgz"),
-        (run_dir / "aggregate.json", f"runs/{run_id}/aggregate.json"),
-        (run_dir / "report.md", f"runs/{run_id}/report.md"),
+    # Required: the run's record. Missing one is a real failure to surface. The explicit charset keeps
+    # report.md / aggregate.json from rendering as latin-1 (mojibake) when opened via the browser URL.
+    for local, remote, content_type in (
+        (tarball, f"runs/{run_id}/run.tgz", None),
+        (
+            run_dir / "aggregate.json",
+            f"runs/{run_id}/aggregate.json",
+            "application/json; charset=utf-8",
+        ),
+        (
+            run_dir / "report.md",
+            f"runs/{run_id}/report.md",
+            "text/plain; charset=utf-8",
+        ),
     ):
         if not local.is_file():
             warnings.append(f"missing {local.name}")
-        elif not _upload_one(bucket, local, remote):
+        elif not _upload_one(bucket, local, remote, content_type=content_type):
             warnings.append(f"upload failed: {remote}")
 
     # Optional: the TensorBoard event tree (overall/ and lane=<lane>/), uploaded verbatim.
@@ -104,9 +132,11 @@ def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]
     return warnings
 
 
-def _upload_one(bucket: storage.Bucket, local: Path, remote: str) -> bool:
+def _upload_one(
+    bucket: storage.Bucket, local: Path, remote: str, *, content_type: str | None = None
+) -> bool:
     try:
-        bucket.blob(remote).upload_from_filename(str(local))
+        bucket.blob(remote).upload_from_filename(str(local), content_type=content_type)
         logger.info("uploaded %s -> %s", local, remote)
         return True
     except Exception:
@@ -114,7 +144,9 @@ def _upload_one(bucket: storage.Bucket, local: Path, remote: str) -> bool:
         return False
 
 
-def _post_slack(summary: _Summary, warnings: list[str]) -> None:
+def _post_slack(
+    summary: _Summary, warnings: list[str], *, links: dict[str, str]
+) -> None:
     webhook = os.environ.get("SLACK_BENCH_WEBHOOK_URL", "").strip()
     if not webhook:
         logger.info("no Slack webhook configured; skipping")
@@ -122,11 +154,15 @@ def _post_slack(summary: _Summary, warnings: list[str]) -> None:
     text = summary.text
     if warnings:
         text += " · ⚠️ " + "; ".join(warnings)
+    for label, url in links.items():
+        text += f" · <{url}|{label}>"
     run_url = os.environ.get("RUN_URL", "").strip()
     if run_url:
         text += f" · <{run_url}|run>"
     payload = json.dumps({"text": text}).encode()
-    request = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
+    request = urllib.request.Request(
+        webhook, data=payload, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             logger.info("posted Slack summary (%s)", response.status)
@@ -134,9 +170,17 @@ def _post_slack(summary: _Summary, warnings: list[str]) -> None:
         logger.exception("failed to post Slack summary")
 
 
+def _bucket_name(gcs_bucket: str) -> str:
+    return urlparse(gcs_bucket).netloc if gcs_bucket.startswith("gs://") else gcs_bucket
+
+
 def _bucket(gcs_bucket: str) -> storage.Bucket:
-    name = urlparse(gcs_bucket).netloc if gcs_bucket.startswith("gs://") else gcs_bucket
-    return storage.Client().bucket(name)
+    return storage.Client().bucket(_bucket_name(gcs_bucket))
+
+
+def _https_url(gcs_bucket: str, remote: str) -> str:
+    # Authenticated browser URL (bucket members only); gs:// isn't clickable in Slack.
+    return f"https://storage.cloud.google.com/{_bucket_name(gcs_bucket)}/{remote}"
 
 
 if __name__ == "__main__":

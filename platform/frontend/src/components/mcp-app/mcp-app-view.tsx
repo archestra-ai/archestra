@@ -94,7 +94,9 @@ export const McpAppRuntime = function McpAppRuntime({
   preloadedResource,
   onResourceStateChange,
   appVersion,
-  containerMaxHeight,
+  containerDimensions,
+  reloadNonce,
+  inlineInitialHeight,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -111,11 +113,21 @@ export const McpAppRuntime = function McpAppRuntime({
   onResourceStateChange: (state: "renderable" | "empty") => void;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
-  /** Inline visual ceiling from the host card; absent on full-bleed surfaces
-   * (run page, preview). Drives the guest size hint and pre-report height. */
-  containerMaxHeight?: number;
+  /** Container size hint forwarded to the guest (SEP-1865 `containerDimensions`).
+   * `maxHeight` is the inline visual ceiling from the host card; absent on
+   * full-bleed surfaces (run page, preview). Drives the guest size hint and the
+   * pre-report height. */
+  containerDimensions?: { maxHeight?: number };
+  /** Bump to remount (reload) the sandboxed iframe — re-runs its creation effect. */
+  reloadNonce?: number;
+  /** Last measured inline height; seeds the iframe + loading box so a fresh
+   * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
+  inlineInitialHeight?: number;
 }) {
   const { resolvedTheme } = useTheme();
+  // The host only ever caps height (width is unbounded); unpack the SEP-shaped
+  // hint into the single value the size logic below threads through.
+  const containerMaxHeight = containerDimensions?.maxHeight;
   const [bridge, setBridge] = useState<AppBridge | null>(null);
   const [appResource, setAppResource] = useState<AppResourceMeta | null>(
     preloadedResource ?? null,
@@ -162,6 +174,10 @@ export const McpAppRuntime = function McpAppRuntime({
   const rpcIdRef = useRef(0);
   // Shared cancel ref so the prop-update useEffect can cancel an in-flight fallback fetch.
   const fetchCancelledRef = useRef(false);
+  // Last height the guest reported. A reload recreates the iframe; starting it at
+  // this height (instead of the default) avoids a collapse-then-grow jump while
+  // the reloaded app re-reports its size.
+  const lastReportedHeightRef = useRef<number | null>(null);
 
   // Render-loop diagnostics (owned apps only): runtime errors / CSP violations
   // forwarded by the sandbox proxy are validated and collected per
@@ -538,7 +554,11 @@ export const McpAppRuntime = function McpAppRuntime({
       fetchCancelledRef.current = true;
       appBridge.teardownResource({}).catch(() => {});
     };
-  }, [endpointKey, toolResourceUri]);
+    // reloadNonce: bumping it rebuilds the bridge from scratch (a clean reload).
+    // The iframe reconnects automatically since SandboxIframe's connect effect
+    // keys on the bridge identity — remounting only the iframe would instead
+    // reconnect the already-connected bridge and throw.
+  }, [endpointKey, toolResourceUri, reloadNonce]);
 
   // If preloadedResource arrives as a prop update after initial mount (race
   // condition: tool part rendered before the SSE event was processed), apply it.
@@ -641,7 +661,14 @@ export const McpAppRuntime = function McpAppRuntime({
         </div>
       )}
       {!loadError && (!bridge || !appResource) && (
-        <div className="flex items-center justify-center rounded-lg bg-muted/50 min-h-[100px]">
+        <div
+          className="flex items-center justify-center rounded-lg bg-muted/50 min-h-[100px]"
+          style={
+            inlineInitialHeight != null
+              ? { minHeight: `${inlineInitialHeight}px` }
+              : undefined
+          }
+        >
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
             <span className="text-sm">Loading...</span>
@@ -659,6 +686,9 @@ export const McpAppRuntime = function McpAppRuntime({
           toolResult={toolResult}
           onError={onError}
           onSizeChanged={(size) => {
+            if (typeof size.height === "number" && size.height > 0) {
+              lastReportedHeightRef.current = size.height;
+            }
             onSizeChangeRef.current({
               width: size.width ?? 0,
               height: size.height ?? 0,
@@ -666,9 +696,11 @@ export const McpAppRuntime = function McpAppRuntime({
           }}
           useDedicatedOrigin={sandboxResult.hasCrossOrigin}
           initialHeight={
-            containerMaxHeight != null
+            lastReportedHeightRef.current ??
+            inlineInitialHeight ??
+            (containerMaxHeight != null
               ? INITIAL_INLINE_HEIGHT
-              : UNCAPPED_INITIAL_HEIGHT
+              : UNCAPPED_INITIAL_HEIGHT)
           }
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
@@ -734,7 +766,14 @@ function SandboxIframe({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [ready, setReady] = useState(false);
+  // Track WHICH bridge is connected, not just a boolean: a reload swaps in a new
+  // bridge instance, and `ready` must read false the instant the identity changes
+  // — otherwise the send effects below fire against the not-yet-connected bridge
+  // and throw "Not connected".
+  const [connectedBridge, setConnectedBridge] = useState<AppBridge | null>(
+    null,
+  );
+  const ready = connectedBridge === appBridge;
   const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const onSizeChangedRef = useRef(onSizeChanged);
@@ -805,7 +844,7 @@ function SandboxIframe({
         appBridge
           .connect(transport)
           .then(() => {
-            if (!cancelled) setReady(true);
+            if (!cancelled) setConnectedBridge(appBridge);
           })
           .catch((err) => {
             if (!cancelled) {
@@ -854,7 +893,7 @@ function SandboxIframe({
       // stay stale-true after a re-render that re-runs this effect (e.g.
       // editing a message re-renders the message list), and sendToolInput
       // throws "Not connected".
-      setReady(false);
+      setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
   }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);

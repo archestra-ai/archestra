@@ -40,7 +40,12 @@ test("create an app from a template and run it standalone", async ({
 
   try {
     await goToPage(page, `/apps/${app.id}/run`);
-    await expect(page.getByText(name)).toBeVisible();
+    // The run page renders the app name in its own <header>. The surrounding
+    // app shell also surfaces the name (a muted chrome label that mounts a beat
+    // later), so an unscoped getByText(name) is a strict-mode race: fast PR runs
+    // resolve before that label exists, slow merge-queue runs match both. Scope
+    // the smoke check to the header so it stays unambiguous.
+    await expect(page.locator("header").getByText(name)).toBeVisible();
 
     const proxyFrame = page.frameLocator("iframe");
     const appFrame = proxyFrame.frameLocator("iframe");

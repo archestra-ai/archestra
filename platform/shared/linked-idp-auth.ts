@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { z } from "zod";
 
 export const LINKED_IDP_SSO_MODE = "linked-idp";

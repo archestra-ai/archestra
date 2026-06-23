@@ -470,7 +470,10 @@ where
         .await
         .unwrap_or_else(|payload| {
             let message = panic_message(payload.as_ref());
-            Err(panic_to_error(backend.engine_fault_from_panic(message), message))
+            Err(panic_to_error(
+                backend.engine_fault_from_panic(message),
+                message,
+            ))
         })
 }
 

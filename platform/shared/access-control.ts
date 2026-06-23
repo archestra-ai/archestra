@@ -1331,6 +1331,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // handler on top of project:update.
   [RouteId.GetProjectInstructions]: { project: ["read"] },
   [RouteId.SetProjectInstructions]: { project: ["update"] },
+  [RouteId.PinProject]: { project: ["read"] },
+  [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
@@ -1414,12 +1416,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
-  "/agents/triggers": { agentTrigger: ["read"] },
-  "/agents/triggers/slack": { agentTrigger: ["read"] },
-  "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
-  "/agents/triggers/email": { agentTrigger: ["read"] },
-  "/agents/skills": { skill: ["read"] },
-  "/agents/skills/new": { skill: ["create"] },
+  "/messaging-channels": { agentTrigger: ["read"] },
+  "/messaging-channels/slack": { agentTrigger: ["read"] },
+  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
+  "/messaging-channels/email": { agentTrigger: ["read"] },
+  "/skills": { skill: ["read"] },
+  "/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // Apps
@@ -1430,8 +1432,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/model-providers/api-keys": { llmProviderApiKey: ["read"] },
-  "/llm/model-providers/models": { llmModel: ["read"] },
+  "/llm/model-providers": { llmProviderApiKey: ["read"] },
+  "/llm/models": { llmModel: ["read"] },
   "/llm/credentials/virtual-keys": {
     llmVirtualKey: ["read"],
     llmProviderApiKey: ["read"],

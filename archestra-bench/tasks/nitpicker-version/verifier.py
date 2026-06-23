@@ -5,21 +5,10 @@ version of the `nitpicker` crate published on or before 2026-06-01, recorded at 
 never staged to the agent).
 """
 
-import json
-import os
-from pathlib import Path
-
-
-def _load(env_var: str, *rel: str) -> dict:
-    base = os.environ.get(env_var)
-    assert base, f"{env_var} is not set"
-    path = Path(base, *rel)
-    return json.loads(path.read_text(encoding="utf-8"))
+from bench_verifier import read_fixture_json, result
 
 
 def test_version_matches() -> None:
-    result = _load("BENCH_RESULT")
-    expected = _load("BENCH_FIXTURES", "expected", "expected.json")
-    assert result["version"] == expected["version"], (
-        f"submitted {result['version']!r}, expected {expected['version']!r}"
-    )
+    submitted = result()["version"]
+    expected = read_fixture_json("expected", "expected.json")["version"]
+    assert submitted == expected, f"submitted {submitted!r}, expected {expected!r}"

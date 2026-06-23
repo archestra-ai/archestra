@@ -7,17 +7,9 @@ hardcoded answer. The skills response is asserted complete (so a paginated overf
 rather than silently undercounting). BENCH_RESULT carries the submitted count.
 """
 
-import json
-import os
-from pathlib import Path
+from bench_verifier import result, state
 
 _TARGET_A = 3  # count names whose lowercase form has exactly this many 'a's
-
-
-def _load(env_var: str) -> dict:
-    base = os.environ.get(env_var)
-    assert base, f"{env_var} is not set"
-    return json.loads(Path(base).read_text(encoding="utf-8"))
 
 
 def _rows(value: object) -> list:
@@ -45,8 +37,7 @@ def test_count_matches() -> None:
     # Truth is the `name` field of /api/agents/<id>/tools and /api/skills -- which must be byte-identical
     # to the names the model is shown (so the agent's count and this recompute agree). That holds while
     # the chat tool list uses the registered tool names verbatim; if that ever changes, this diverges.
-    state = _load("BENCH_STATE")
-    rest = state["rest"]
+    rest = state()["rest"]
     assert len(rest) == 2, f"expected exactly two captured rest paths, got {list(rest)}"
     skills_key = next(k for k in rest if k.startswith("/api/skills"))
     tools_key = next(k for k in rest if k != skills_key)
@@ -61,5 +52,5 @@ def test_count_matches() -> None:
 
     names = _names(_rows(rest[tools_key])) + _names(skill_rows)
     expected = sum(1 for name in names if name.lower().count("a") == _TARGET_A)
-    submitted = _load("BENCH_RESULT")["count"]
+    submitted = result()["count"]
     assert submitted == expected, f"submitted count {submitted} != recomputed {expected} (over {len(names)} names)"

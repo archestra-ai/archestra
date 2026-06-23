@@ -62,8 +62,11 @@ load time, so a precomputed answer in `expected/` can never leak). A task whose 
 **file** sets `artifact_key` to the result property naming the file the agent exported via
 `download_file`; the harness downloads that artifact and hands its bytes to the verifier as
 `BENCH_OUTPUT`. Every verifier runs in its own ephemeral `uv` env (pytest installed automatically; a
-verifier needing third-party packages lists them under `[verifier].deps`), so the harness itself ships
-no Python — the only Python in the repo is the per-task verifiers and fixtures, each isolated per run.
+verifier needing third-party packages lists them under `[verifier].deps`). The harness stages one
+shared stdlib helper, `bench_verifier.py`, beside each verifier; a verifier reads the contract through
+it — `result()`, `state()`, `output()`, `fixtures(*rel)`, `read_fixture_json(*rel)` — instead of
+re-deriving the env-var plumbing. Beyond that helper, the only Python in the repo is the per-task
+verifiers and fixtures, each isolated per run.
 
 A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}` placeholder (path
 confined to the task dir) — useful for small tabular inputs when the target provider can't accept a

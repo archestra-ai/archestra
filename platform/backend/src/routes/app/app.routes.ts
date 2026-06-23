@@ -664,11 +664,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // Internal helpers
 // =============================================================================
 
-/**
- * Dedupe team ids and verify every one belongs to the caller's organization, so
- * a cross-org team id can never become an access principal for an app. Throws
- * `ApiError(400)` on an unknown/foreign team. Returns the deduped list.
- */
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;

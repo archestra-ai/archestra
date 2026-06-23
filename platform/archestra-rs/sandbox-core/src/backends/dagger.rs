@@ -79,10 +79,9 @@ const DAGGER_CLI_BIN_ENV: &str = "_EXPERIMENTAL_DAGGER_CLI_BIN";
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
 /// How often an idle session pings the engine to keep its `kube-pod://` attachable
-/// channel warm. The channel was observed going half-open only after minutes of
-/// idle, so 30s sits well inside that with margin. This is a Dagger transport
-/// concern — a backend without a long-lived attachable channel has no such loop,
-/// so it lives here rather than in the backend-agnostic session actor.
+/// channel warm. The channel was observed going half-open after minutes of idle;
+/// 30s stays well inside that. A Dagger transport concern, so it lives here rather
+/// than in the backend-agnostic session actor.
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 /// the dagger SDK message emitted when the engine accepted `/query` but timed
 /// out waiting for this client's session attachables. see [`classify_engine_fault`].
@@ -345,10 +344,10 @@ impl SessionProc {
     /// reached; `kill_on_drop(true)` reaps the dropped child there instead.
     async fn shutdown(mut self) {
         let _ = self.shutdown.send(());
-        // `kill()` is SIGKILL + reap. If the child already exited on its own,
-        // `start_kill` errors *before* the internal wait, so reap explicitly to
-        // avoid leaving a zombie until drop.
-        if self.child.kill().await.is_err() {
+        // `kill()` is SIGKILL + reap. If the child already exited, `start_kill`
+        // errors before the internal wait, so reap explicitly to avoid a zombie.
+        if let Err(err) = self.child.kill().await {
+            tracing::debug!(error = %err, "dagger session child kill errored; reaping");
             let _ = self.child.wait().await;
         }
     }
@@ -463,10 +462,9 @@ where
         graphql_client: Arc::new(DefaultGraphQLClient::new(&conn, &cfg)),
     };
 
-    // Keep the engine attachable channel warm across idle gaps so the next request
-    // doesn't meet a half-open channel. Tied to the session's shutdown broadcast so
-    // teardown stops it. Ping failures are logged, not acted on — a genuinely dead
-    // channel is recovered reactively when the next request errors and respawns.
+    // Keep the attachable channel warm across idle gaps so the next request doesn't
+    // meet a half-open channel. A failing ping is only logged — a dead channel is
+    // recovered reactively when the next request respawns.
     let keepalive = spawn_channel_keepalive(client.clone(), proc.subscribe_shutdown());
 
     let outcome = f(client).await;
@@ -481,28 +479,39 @@ where
 
 /// Background task that pings the engine on `KEEPALIVE_INTERVAL` to keep an idle
 /// session's attachable channel warm. `version()` is the cheapest query that
-/// still exercises the channel. Stops when the session's shutdown broadcast fires.
+/// still exercises the channel.
 fn spawn_channel_keepalive(
     client: DaggerConn,
-    mut shutdown: broadcast::Receiver<()>,
+    shutdown: broadcast::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(KEEPALIVE_INTERVAL);
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // the first tick fires immediately; skip it so a freshly-connected session
-        // isn't pinged before it has had a chance to go idle.
-        tick.tick().await;
-        loop {
-            tokio::select! {
-                _ = shutdown.recv() => break,
-                _ = tick.tick() => {
-                    if let Err(err) = client.version().await {
-                        tracing::warn!(error = %err, "dagger session keepalive ping failed");
-                    }
-                }
+    tokio::spawn(keepalive_loop(KEEPALIVE_INTERVAL, shutdown, move || {
+        let client = client.clone();
+        async move {
+            if let Err(err) = client.version().await {
+                tracing::warn!(error = %err, "dagger session keepalive ping failed");
             }
         }
-    })
+    }))
+}
+
+/// Tick `ping` every `interval` until the shutdown broadcast fires. The transport
+/// ping is injected so the loop's control flow is testable without a live engine.
+async fn keepalive_loop<F, Fut>(interval: Duration, mut shutdown: broadcast::Receiver<()>, mut ping: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let mut tick = tokio::time::interval(interval);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // the first tick fires immediately; skip it so a freshly-connected session
+    // isn't pinged before it has had a chance to go idle.
+    tick.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.recv() => break,
+            _ = tick.tick() => ping().await,
+        }
+    }
 }
 
 /// connect to the Dagger engine and drive the generic actor loop for the
@@ -1266,6 +1275,39 @@ mod tests {
         assert!(returned.is_ok(), "shutdown() must return promptly");
         assert!(process_finished(pid), "shutdown() must reap the exited child");
         std::fs::remove_file(&script).ok();
+    }
+
+    #[tokio::test]
+    async fn keepalive_loop_pings_until_shutdown() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
+        let pings = Arc::new(AtomicU64::new(0));
+        let counter = pings.clone();
+        let handle = tokio::spawn(keepalive_loop(
+            Duration::from_millis(10),
+            shutdown_rx,
+            move || {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                }
+            },
+        ));
+
+        // let several ticks fire (the immediate first tick is skipped), then stop.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        shutdown_tx.send(()).unwrap();
+        // the loop must observe the broadcast and return; a hang here is a failure.
+        tokio::time::timeout(Duration::from_secs(1), handle)
+            .await
+            .expect("keepalive loop must stop on shutdown")
+            .unwrap();
+
+        assert!(
+            pings.load(Ordering::Relaxed) >= 2,
+            "keepalive must ping repeatedly before shutdown"
+        );
     }
 
     #[test]

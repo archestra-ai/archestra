@@ -1,5 +1,5 @@
 [[stages]]
-text = """Here's our transaction export for January -- it's got some refunds and a couple of orders that never went through mixed in with the real sales. Could you pull out just the completed purchases into a clean file and keep it saved for me? I'll want to come back to it later, so make sure it won't get lost. No need to total anything yet.
+text = """Here's our transaction export for January -- it's got some refunds and a couple of orders that never went through mixed in with the real sales. Could you pull out just the completed purchases into a clean file for me? I'll want to come back to it later. No need to total anything yet.
 
 ```csv
 {{file:inputs/transactions.csv}}

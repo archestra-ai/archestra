@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server } from "node:http";
 import { PassThrough } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
@@ -448,6 +449,19 @@ class WebSocketService {
           stdin,
           stdout,
           stderr,
+          (status) => {
+            if (status.status === "Failure" && ws.readyState === WS.OPEN) {
+              const reason =
+                status.message || status.reason || "Command failed";
+              this.sendToClient(ws, {
+                type: "mcp_exec_error",
+                payload: {
+                  serverId,
+                  error: `Shell session failed: ${reason}`,
+                },
+              });
+            }
+          },
         );
 
       this.mcpExecSubscriptions.set(ws, {
@@ -465,21 +479,30 @@ class WebSocketService {
       });
 
       // Bridge K8s stdout/stderr -> client
+      const stdoutDecoder = new StringDecoder("utf8");
+      const stderrDecoder = new StringDecoder("utf8");
+
       stdout.on("data", (chunk: Buffer) => {
         if (ws.readyState === WS.OPEN) {
-          this.sendToClient(ws, {
-            type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
-          });
+          const data = stdoutDecoder.write(chunk);
+          if (data.length > 0) {
+            this.sendToClient(ws, {
+              type: "mcp_exec_output",
+              payload: { serverId, data },
+            });
+          }
         }
       });
 
       stderr.on("data", (chunk: Buffer) => {
         if (ws.readyState === WS.OPEN) {
-          this.sendToClient(ws, {
-            type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
-          });
+          const data = stderrDecoder.write(chunk);
+          if (data.length > 0) {
+            this.sendToClient(ws, {
+              type: "mcp_exec_output",
+              payload: { serverId, data },
+            });
+          }
         }
       });
 

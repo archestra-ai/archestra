@@ -138,7 +138,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
         "mcp_exec_closed",
         (message: McpExecClosedMessage) => {
           if (message.payload.serverId !== serverId || disposed) return;
-          setStatus("disconnected");
+          setStatus((prev) => (prev === "error" ? prev : "disconnected"));
         },
       );
 

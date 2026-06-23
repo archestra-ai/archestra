@@ -1212,6 +1212,83 @@ describe("websocket MCP exec", () => {
     expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
   });
 
+  test("surfaces exec Failure status from statusCallback as exec_error", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog();
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const mockK8sWs = makeMockK8sWs();
+    const failureMessage = 'exec: "/bin/sh": no such file or directory';
+
+    // Capture the statusCallback (5th arg) so we can simulate a Failure status
+    // the way the k8s client reports a missing/failed shell exec.
+    let statusCallback:
+      | ((status: {
+          status?: string;
+          message?: string;
+          reason?: string;
+        }) => void)
+      | undefined;
+    vi.spyOn(McpServerRuntimeManager, "execIntoMcpServer").mockImplementation(
+      async (_serverId, _stdin, _stdout, _stderr, cb) => {
+        statusCallback = cb;
+        return { k8sWs: mockK8sWs, podName: "mcp-test-pod" };
+      },
+    );
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec ...",
+    );
+
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
+    } as unknown as WS;
+
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_mcp_exec",
+        payload: { serverId: mcpServer.id },
+      },
+      ws,
+    );
+
+    expect(statusCallback).toBeDefined();
+
+    // Simulate the k8s client reporting the exec failed (e.g. no shell in image)
+    statusCallback?.({ status: "Failure", message: failureMessage });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "mcp_exec_error",
+        payload: {
+          serverId: mcpServer.id,
+          error: `Shell session failed: ${failureMessage}`,
+        },
+      }),
+    );
+  });
+
   test("forwards stdout data to client as exec_output", async ({
     makeOrganization,
     makeUser,

@@ -3690,6 +3690,7 @@ export default class K8sDeployment {
     stdout: import("node:stream").Writable,
     stderr: import("node:stream").Writable,
     command: string[] = ["/bin/sh"],
+    statusCallback?: (status: k8s.V1Status) => void,
   ) {
     const pod = await this.findPodForDeployment();
     if (!pod?.metadata?.name) {
@@ -3706,6 +3707,7 @@ export default class K8sDeployment {
       stderr,
       stdin,
       true, // tty
+      statusCallback,
     );
 
     return { k8sWs, podName };

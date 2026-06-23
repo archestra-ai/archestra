@@ -2,9 +2,9 @@
 
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { AppFrame } from "@/components/mcp-app/app-frame";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
-import { AppRuntimeFrame } from "../../_parts/app-runtime-frame";
 
 // Full-page standalone runtime: no chat chrome, just the app and a way back.
 export default function AppRunPage({ appId }: { appId: string }) {
@@ -32,7 +32,7 @@ export default function AppRunPage({ appId }: { appId: string }) {
         </span>
       </header>
       <main className="min-h-0 flex-1 overflow-auto">
-        <AppRuntimeFrame appId={appId} />
+        <AppFrame endpoint={{ kind: "app", appId }} fillContainer />
       </main>
     </div>
   );

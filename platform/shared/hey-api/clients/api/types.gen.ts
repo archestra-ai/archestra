@@ -25531,6 +25531,7 @@ export type GetConfigResponses = {
             fullWhiteLabeling: boolean;
         };
         features: {
+            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             agentSkillsEnabled: boolean;

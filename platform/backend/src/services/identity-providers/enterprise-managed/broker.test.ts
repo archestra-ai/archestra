@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { randomUUID } from "node:crypto";
 import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { vi } from "vitest";

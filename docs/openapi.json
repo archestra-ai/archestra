@@ -90968,6 +90968,9 @@
                     "features": {
                       "type": "object",
                       "properties": {
+                        "betaEnabled": {
+                          "type": "boolean"
+                        },
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
@@ -91074,6 +91077,7 @@
                         }
                       },
                       "required": [
+                        "betaEnabled",
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "agentSkillsEnabled",

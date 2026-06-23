@@ -1,14 +1,17 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
+import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
+  getAppRenderVerb,
   hasTextPart,
   identifyCompactToolGroups,
+  isSupersededOwnedRender,
 } from "./chat-messages.utils";
 
 const getToolShortName = (toolName: string) =>
@@ -708,5 +711,48 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.size).toBe(2);
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
+  });
+});
+
+describe("isSupersededOwnedRender", () => {
+  const app = (toolCallId: string, appId: string): PanelApp => ({
+    toolCallId,
+    label: "Dashboard",
+    appId,
+    version: 1,
+    createdAt: 0,
+  });
+
+  it("returns false for the latest render of an app (registry points at it)", () => {
+    const apps = [app("tc2", "app-1")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc2" }),
+    ).toBe(false);
+  });
+
+  it("returns true for a prior render once a newer render registers", () => {
+    const apps = [app("tc2", "app-1")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc1" }),
+    ).toBe(true);
+  });
+
+  it("returns false when the app has no registry entry yet (mid-stream)", () => {
+    const apps = [app("tc9", "other-app")];
+    expect(
+      isSupersededOwnedRender({ apps, appId: "app-1", toolCallId: "tc1" }),
+    ).toBe(false);
+  });
+});
+
+describe("getAppRenderVerb", () => {
+  it("maps each app-rendering tool to its past-tense verb", () => {
+    expect(getAppRenderVerb("archestra__scaffold_app")).toBe("Created");
+    expect(getAppRenderVerb("archestra__edit_app")).toBe("Updated");
+    expect(getAppRenderVerb("archestra__render_app")).toBe("Rendered");
+  });
+
+  it("returns null for non-app tools", () => {
+    expect(getAppRenderVerb("google__search")).toBeNull();
   });
 });

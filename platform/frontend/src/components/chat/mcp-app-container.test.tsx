@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
@@ -34,6 +34,12 @@ vi.mock("@modelcontextprotocol/ext-apps/app-bridge", () => ({
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
+}));
+
+vi.mock("next/link", () => ({
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 vi.mock("@/lib/config/config", () => ({
@@ -521,7 +527,7 @@ describe("McpAppSection sidebar hosting", () => {
     target.remove();
   });
 
-  it("offers a Show in sidebar control for a second, unselected app", async () => {
+  it("keeps a second, unselected app live inline while the panel hosts another", async () => {
     const user = userEvent.setup();
     const target = document.createElement("div");
     document.body.appendChild(target);
@@ -547,11 +553,16 @@ describe("McpAppSection sidebar hosting", () => {
       );
     });
 
-    // tc1 auto-selected (latest), so tc2 shows the placeholder control; clicking
-    // it selects tc2 and portals its iframe into the sidebar target.
+    // tc1 is auto-selected and hosted in the panel. The unselected tc2 keeps
+    // rendering live inline (not a placeholder) and is NOT shown in the sidebar,
+    // while still offering its own Show in sidebar control.
     const showButton = screen.getByRole("button", { name: /show in sidebar/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText(/showing in sidebar/i)).not.toBeInTheDocument();
+    // tc2's live iframe renders inline (in the document, outside the sidebar target).
+    expect(document.querySelector("iframe")).toBeInTheDocument();
 
+    // Clicking it selects tc2 and portals its iframe into the sidebar target.
     await act(async () => {
       await user.click(showButton);
     });
@@ -560,6 +571,76 @@ describe("McpAppSection sidebar hosting", () => {
     expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
 
     target.remove();
+  });
+});
+
+describe("McpAppSection superseded renders", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("collapses to a changelog pill when a newer render of the same app exists", async () => {
+    await act(async () => {
+      render(
+        // Registry's latest render of APP_ID is tc2, so the tc1 section below is
+        // superseded and must render the static pill, not a live iframe.
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc2",
+              label: "Dashboard",
+              appId: APP_ID,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(screen.getByText(/Dashboard · v1 · Updated/)).toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("renders the live surface for the latest render of an app", async () => {
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              appId: APP_ID,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
   });
 });
 

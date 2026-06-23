@@ -133,8 +133,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateProject,
         description:
-          "Update a project's name, description, and/or icon (owner only). " +
-          "Only the provided fields change.",
+          "Update a project's name, description, and/or icon (owner or a " +
+          "project admin). Only the provided fields change.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -168,8 +168,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SetProjectShare,
         description:
-          "Set who can see the project (owner only): the whole organization, " +
-          'specific teams, or nobody (visibility "none" unshares).',
+          "Set who can see the project (owner or a project admin): the whole " +
+          'organization, specific teams, or nobody (visibility "none" unshares).',
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -199,8 +199,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteProject,
         description:
-          "Delete a project (owner only). Its chats survive as ordinary " +
-          "conversations; its files are deleted with it.",
+          "Delete a project (owner or a project admin). Its chats survive as " +
+          "ordinary conversations; its files are deleted with it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

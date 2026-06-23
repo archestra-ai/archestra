@@ -674,13 +674,16 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId, headers }, reply) => {
+      // No `allowProjectAdmin` here: this path can MINT a run conversation when
+      // one isn't linked yet (createAndLinkRunConversation below), which is a
+      // chat-generating action a project admin must not perform on a foreign
+      // project. Owners and scheduledTask admins keep their existing access.
       const run = await findAccessibleRunOrThrow({
         triggerId: id,
         runId,
         userId: user.id,
         organizationId,
         headers,
-        allowProjectAdmin: true,
       });
 
       const conversation = await ensureRunConversation({

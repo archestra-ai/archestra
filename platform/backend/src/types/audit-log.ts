@@ -139,9 +139,16 @@ export const AuditableSnapshotSchema = z
 export type AuditableSnapshot = z.infer<typeof AuditableSnapshotSchema>;
 
 export const SelectAuditLogSchema = createSelectSchema(schema.auditLogsTable, {
-  action: AuditEventNameSchema,
-  actorType: AuditActorTypeSchema,
-  outcome: AuditOutcomeSchema,
+  // Read-side resilience: these enum-constrained columns are stored as plain
+  // `text` in Postgres (no CHECK constraint), so a legacy or renamed value that
+  // predates the current vocabulary can linger in the DB. Without `.catch`, a
+  // single such row would fail response serialization and break the entire
+  // Audit Logs page ("response doesn't match schema"). Coerce any
+  // out-of-vocabulary value to a safe sentinel instead of throwing. Writes stay
+  // strict via InsertAuditLogSchema below.
+  action: AuditEventNameSchema.catch("unknown.updated"),
+  actorType: AuditActorTypeSchema.catch("system"),
+  outcome: AuditOutcomeSchema.catch("failure"),
 }).extend({
   before: AuditableSnapshotSchema,
   after: AuditableSnapshotSchema,

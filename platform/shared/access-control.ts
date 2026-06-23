@@ -381,7 +381,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:update": "Edit project descriptions and sharing",
   "project:delete": "Delete projects",
   "project:admin":
-    "View, edit, and delete projects owned by other members, and manage their existing scheduled tasks",
+    "Oversee projects owned by other members: view, edit, delete, and manage their existing scheduled tasks. Layers on top of the standard read/manage permissions (all included in the Admin role).",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration

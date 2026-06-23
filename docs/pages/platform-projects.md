@@ -20,7 +20,9 @@ A project is private to its owner until shared. Sharing makes it visible to the 
 
 The projects list has a search box and a scope filter that mirrors the agents filter: All (your own plus those shared with you), Personal (yours), and Shared with me. Search matches a project's name and description.
 
-Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can read the chats and files read-only, edit or delete the project, and manage its existing scheduled tasks (edit, enable/disable, delete) — but cannot start a chat, create a schedule, or run one manually, since those would generate new activity in someone else's project. The Other users list is not grouped by pinned. Grant `project:admin` from [Access Control](./platform-access-control).
+Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can read the chats and files read-only, edit or delete the project, and manage its existing scheduled tasks (edit, enable/disable, delete) — but cannot start a chat, create a schedule, or run one manually, since those would generate new activity in someone else's project. The Other users list is not grouped by pinned.
+
+`project:admin` is an oversight scope that layers on top of the standard project, chat, and scheduled-task read/manage permissions rather than replacing them; the predefined Admin role already includes all of them. To build a custom oversight role, grant `project:admin` alongside those base permissions from [Access Control](./platform-access-control).
 
 ## Files
 

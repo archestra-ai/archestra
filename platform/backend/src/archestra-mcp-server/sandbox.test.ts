@@ -13,7 +13,6 @@ import {
 import config from "@/config";
 import {
   ConversationAttachmentModel,
-  ConversationFileTouchModel,
   ConversationModel,
   FileModel,
   FileNameExistsError,
@@ -2201,7 +2200,7 @@ describe("read_file", () => {
     expect(result.isError).toBe(true);
   });
 
-  test("reads without materializing a sandbox and records a read touch", async () => {
+  test("reads without materializing a sandbox", async () => {
     const ctx = await makePlainChatCtx();
     const file = await makePersonalFile(
       "touch.txt",
@@ -2219,13 +2218,6 @@ describe("read_file", () => {
     expect(result.isError).toBe(false);
     expect(createSpy).not.toHaveBeenCalled();
     expect(defaultSpy).not.toHaveBeenCalled();
-
-    const referenced = await ConversationFileTouchModel.listReferencedFiles({
-      organizationId,
-      conversationId: ctx.conversationId as string,
-      scope: { kind: "personal", userId },
-    });
-    expect(referenced.map((f) => f.id)).toEqual([file.id]);
   });
 
   test("in a project chat cannot read a personal file", async () => {
@@ -2325,7 +2317,7 @@ describe("edit_file / delete_file", () => {
     });
   }
 
-  test("edit_file replaces a snippet in place, keeps the id, records a touch", async () => {
+  test("edit_file replaces a snippet in place, keeps the id", async () => {
     const ctx = await makePlainChatCtx();
     const file = await makePersonalFile(
       "poem.md",
@@ -2345,13 +2337,6 @@ describe("edit_file / delete_file", () => {
 
     const row = await FileModel.findById(file.id);
     expect(row?.data?.toString()).toBe("roses are red\nviolets are cyan\n");
-
-    const referenced = await ConversationFileTouchModel.listReferencedFiles({
-      organizationId,
-      conversationId: ctx.conversationId as string,
-      scope: { kind: "personal", userId },
-    });
-    expect(referenced.map((f) => f.id)).toEqual([file.id]);
   });
 
   test("edit_file resolves by filename", async () => {

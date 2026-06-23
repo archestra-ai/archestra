@@ -1,7 +1,6 @@
 import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import ConversationFileTouchModel from "@/models/conversation-file-touch";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
@@ -56,7 +55,6 @@ test("conversationFilesService.list groups generated + attachments with basename
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
 
@@ -78,8 +76,8 @@ test("conversationFilesService.list groups generated + attachments with basename
       createdAt: attachment.createdAt.toISOString(),
     },
   ]);
-  // nothing was touched and the only PFS row is this chat's own output
-  expect(result.referenced).toEqual([]);
+  // a personal chat has no project, so no project files section
+  expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
 });
 
@@ -112,13 +110,12 @@ test("conversationFilesService.list drops attachments from a different org", asy
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
   expect(result.attachments).toEqual([]);
 });
 
-test("personal chat: referenced excludes other-conversation files and dedupes the chat's own outputs", async ({
+test("personal chat: projectFiles is empty even when the user has files in other chats", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -150,9 +147,9 @@ test("personal chat: referenced excludes other-conversation files and dedupes th
     data: Buffer.from("a"),
   });
 
-  // a personal file produced in some OTHER conversation, with a (stale) read
-  // touch recorded against THIS chat. No-project files are conversation-scoped,
-  // so it must NOT surface in this chat's referenced section.
+  // a personal file produced in some OTHER conversation. No-project files are
+  // conversation-scoped, and a personal chat has no project files section, so
+  // it must not surface here.
   const otherConv = await makeConversation(agent.id, {
     userId: user.id,
     organizationId: org.id,
@@ -163,7 +160,7 @@ test("personal chat: referenced excludes other-conversation files and dedupes th
     conversationId: otherConv.id,
     defaultCwd: "/home/sandbox",
   });
-  const elsewhere = await fileStore.put({
+  await fileStore.put({
     organizationId: org.id,
     userId: user.id,
     projectId: null,
@@ -175,33 +172,17 @@ test("personal chat: referenced excludes other-conversation files and dedupes th
     data: Buffer.from("b"),
   });
 
-  await ConversationFileTouchModel.recordTouch({
-    organizationId: org.id,
-    conversationId: conv.id,
-    fileId: elsewhere.id,
-    touchKind: "read",
-  });
-  // touching this chat's own output must not duplicate it into `referenced`
-  await ConversationFileTouchModel.recordTouch({
-    organizationId: org.id,
-    conversationId: conv.id,
-    fileId: ownOutput.id,
-    touchKind: "read",
-  });
-
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: user.id,
     requestingUserId: user.id,
   });
   expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-  // the other-conversation file is excluded; the own output is deduped vs
-  // generated — so a no-project chat's referenced section is empty.
-  expect(result.referenced).toEqual([]);
+  expect(result.projectFiles).toEqual([]);
+  expect(result.projectName).toBeNull();
 });
 
-test("project chat: referenced is the touched project files, for any reader", async ({
+test("project chat: projectFiles is every project file (any author, any chat), for any reader with access", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -239,7 +220,8 @@ test("project chat: referenced is the touched project files, for any reader", as
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const projectFile = await fileStore.put({
+  // a project file with no originating conversation
+  const looseFile = await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -250,45 +232,75 @@ test("project chat: referenced is the touched project files, for any reader", as
     sizeBytes: 2,
     data: Buffer.from("in"),
   });
-  // an untouched project file must stay out of the panel
-  await fileStore.put({
+  // a project file authored in a DIFFERENT conversation of the project — it
+  // must still appear in this chat's project files section.
+  const otherConv = await ConversationModel.create({
+    userId: owner.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+  const otherChatSandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: owner.id,
+    conversationId: otherConv.id,
+    defaultCwd: "/home/sandbox",
+  });
+  const fromOtherChat = await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
-    conversationId: null,
-    sandboxId: ownerSandbox.id,
-    filename: "untouched.txt",
+    conversationId: otherConv.id,
+    sandboxId: otherChatSandbox.id,
+    filename: "other-chat.txt",
     mimeType: "text/plain",
     sizeBytes: 3,
     data: Buffer.from("out"),
   });
-
-  await ConversationFileTouchModel.recordTouch({
+  // a file generated in THIS chat: it surfaces under `generated`, not duplicated
+  // into projectFiles.
+  const thisChatSandbox = await SkillSandboxModel.create({
     organizationId: org.id,
+    userId: member.id,
     conversationId: conv.id,
-    fileId: projectFile.id,
-    touchKind: "read",
+    defaultCwd: "/home/sandbox",
+    isDefault: true,
+  });
+  const ownOutput = await fileStore.put({
+    organizationId: org.id,
+    userId: member.id,
+    projectId: project.id,
+    conversationId: conv.id,
+    sandboxId: thisChatSandbox.id,
+    filename: "mine.txt",
+    mimeType: "text/plain",
+    sizeBytes: 1,
+    data: Buffer.from("m"),
   });
 
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: member.id,
     requestingUserId: member.id,
   });
-  expect(result.referenced).toEqual([
-    {
-      id: projectFile.id,
-      name: "result.txt",
-      mimeType: "text/plain",
-      contentUrl: `/api/skill-sandbox/artifacts/${projectFile.id}`,
-      createdAt: projectFile.createdAt.toISOString(),
-    },
-  ]);
+
+  expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
+  // every project file except this chat's own output, regardless of author or
+  // originating conversation
+  expect(result.projectFiles.map((f) => f.id).sort()).toEqual(
+    [looseFile.id, fromOtherChat.id].sort(),
+  );
+  expect(result.projectFiles).toContainEqual({
+    id: looseFile.id,
+    name: "result.txt",
+    mimeType: "text/plain",
+    contentUrl: `/api/skill-sandbox/artifacts/${looseFile.id}`,
+    createdAt: looseFile.createdAt.toISOString(),
+  });
   expect(result.projectName).toBe("filespanel");
 });
 
-test("project chat: a requester without project access sees no referenced files", async ({
+test("project chat: a requester without project access sees no project files", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -310,7 +322,7 @@ test("project chat: a requester without project access sees no referenced files"
     conversationId: null,
     defaultCwd: "/home/sandbox",
   });
-  const secret = await fileStore.put({
+  await fileStore.put({
     organizationId: org.id,
     userId: owner.id,
     projectId: project.id,
@@ -322,32 +334,25 @@ test("project chat: a requester without project access sees no referenced files"
     data: Buffer.from("hi"),
   });
   // the outsider owns a chat in the project but the project is unshared (e.g.
-  // access was revoked) — the project's files must stay out of reach even though
-  // a touch was recorded while they had access.
+  // access was revoked) — the project's files must stay out of reach because
+  // resolveProjectFileScope fails closed.
   const conv = await ConversationModel.create({
     userId: outsider.id,
     organizationId: org.id,
     agentId: agent.id,
     projectId: project.id,
   });
-  await ConversationFileTouchModel.recordTouch({
-    organizationId: org.id,
-    conversationId: conv.id,
-    fileId: secret.id,
-    touchKind: "read",
-  });
 
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
-    conversationOwnerUserId: outsider.id,
     requestingUserId: outsider.id,
   });
-  expect(result.referenced).toEqual([]);
+  expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
 });
 
-test("projects off: referenced is empty and projectName null, generated still shown", async ({
+test("projects off: projectFiles is empty and projectName null, generated still shown", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -382,39 +387,14 @@ test("projects off: referenced is empty and projectName null, generated still sh
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
-    // a touched PFS file — would normally appear under `referenced`
-    const otherSandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      defaultCwd: "/home/sandbox",
-    });
-    const touched = await fileStore.put({
-      organizationId: org.id,
-      userId: user.id,
-      projectId: null,
-      conversationId: null,
-      sandboxId: otherSandbox.id,
-      filename: "elsewhere.txt",
-      mimeType: "text/plain",
-      sizeBytes: 1,
-      data: Buffer.from("b"),
-    });
-    await ConversationFileTouchModel.recordTouch({
-      organizationId: org.id,
-      conversationId: conv.id,
-      fileId: touched.id,
-      touchKind: "read",
-    });
 
     const result = await conversationFilesService.list({
       conversationId: conv.id,
       organizationId: org.id,
-      conversationOwnerUserId: user.id,
       requestingUserId: user.id,
     });
     expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
-    expect(result.referenced).toEqual([]);
+    expect(result.projectFiles).toEqual([]);
     expect(result.projectName).toBeNull();
   } finally {
     (config.projects as { enabled: boolean }).enabled = original;

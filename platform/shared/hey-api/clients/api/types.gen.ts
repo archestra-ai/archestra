@@ -22316,7 +22316,7 @@ export type GetChatConversationFilesResponses = {
             contentUrl: string;
             createdAt: string;
         }>;
-        referenced: Array<{
+        projectFiles: Array<{
             id: string;
             name: string;
             mimeType: string;

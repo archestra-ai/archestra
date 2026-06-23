@@ -1508,7 +1508,7 @@ export const setConversationHooksDebug = <ThrowOnError extends boolean = false>(
 });
 
 /**
- * List files for a conversation: this chat's own outputs, user attachments, and the pre-existing files the agent actually touched in this chat (metadata only).
+ * List files for a conversation: this chat's own outputs, user attachments, and — for a project chat — every file in the project (metadata only).
  *
  * Authentication:
  *

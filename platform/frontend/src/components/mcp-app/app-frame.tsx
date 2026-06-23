@@ -118,15 +118,18 @@ export function AppFrame({
           inlineCeiling={inlineCeiling}
           fillContainer={fillContainer}
           topBar={
-            <McpAppTopBar>
+            <McpAppTopBar
+              right={
+                displayMode === "fullscreen" ? (
+                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+                ) : undefined
+              }
+            >
               <McpAppAddressPill
                 label={label ?? app.name}
                 actions={
                   <>
                     <McpAppRefreshButton onClick={reload} />
-                    {displayMode === "fullscreen" && (
-                      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-                    )}
                     {actions}
                   </>
                 }

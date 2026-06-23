@@ -251,9 +251,6 @@ export function McpAppSection({
   const pillActions = (
     <>
       <McpAppRefreshButton onClick={reload} />
-      {displayMode === "fullscreen" && (
-        <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-      )}
       {appId && <McpAppStandaloneButton appId={appId} />}
     </>
   );
@@ -268,14 +265,19 @@ export function McpAppSection({
         inlineCeiling={inlineCeiling}
         fillContainer={renderInSidebar}
         topBar={
-          // Refresh, plus a fullscreen-exit button that only appears while
-          // fullscreen (the enter icon is hidden for now, but app-requested
-          // fullscreen stays usable), plus open-standalone for owned apps.
+          // Pill carries refresh + open-standalone (owned apps). The right zone
+          // holds open-in-sidebar, prefixed by a minimize button while the
+          // app-requested fullscreen is active.
           <McpAppTopBar
             right={
-              toolCallId && !renderInSidebar ? (
-                <McpAppSidebarButton onClick={handleShowInSidebar} />
-              ) : undefined
+              <>
+                {displayMode === "fullscreen" && (
+                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+                )}
+                {toolCallId && !renderInSidebar && (
+                  <McpAppSidebarButton onClick={handleShowInSidebar} />
+                )}
+              </>
             }
           >
             {renderInSidebar && apps.length > 1 ? (

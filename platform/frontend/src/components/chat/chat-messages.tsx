@@ -48,6 +48,7 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import {
+  type McpContentBlock,
   Tool,
   ToolContent,
   ToolErrorDetails,
@@ -1898,6 +1899,9 @@ const MessageTool = memo(
               label={errorText ? "Error" : "Result"}
               output={output}
               errorText={errorText}
+              rawContent={
+                mcpOutput?.rawContent as McpContentBlock[] | undefined
+              }
             />
           )}
           {!authToolBody &&
@@ -1908,6 +1912,9 @@ const MessageTool = memo(
                 label={errorText ? "Error" : "Result"}
                 output={output}
                 errorText={errorText}
+                rawContent={
+                  mcpOutput?.rawContent as McpContentBlock[] | undefined
+                }
               />
             )}
         </ToolContent>

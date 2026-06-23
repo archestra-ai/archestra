@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { Response } from "./response";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -360,26 +361,165 @@ export const ToolErrorDetails = ({
   </div>
 );
 
+export type McpContentBlock = {
+  type: string;
+  text?: string;
+  data?: string;
+  mimeType?: string;
+  uri?: string;
+  name?: string;
+  description?: string;
+  resource?: {
+    uri?: string;
+    mimeType?: string;
+    text?: string;
+    blob?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
+  rawContent?: McpContentBlock[];
   conversations?: Array<{
     role: "user" | "assistant";
     content: string | unknown;
   }>;
 };
 
+const toDataUrl = (mimeType?: unknown, data?: unknown): string | undefined =>
+  typeof mimeType === "string" && typeof data === "string"
+    ? `data:${mimeType};base64,${data}`
+    : undefined;
+
+function McpContentBlockView({ block }: { block: McpContentBlock }) {
+  switch (block.type) {
+    case "text":
+      return typeof block.text === "string" && block.text.length > 0 ? (
+        <Response>{block.text}</Response>
+      ) : null;
+    case "image": {
+      const src = toDataUrl(block.mimeType, block.data);
+      return src ? (
+        <img
+          src={src}
+          alt={
+            typeof block.name === "string" ? block.name : "Tool image output"
+          }
+          className="max-h-96 max-w-full rounded-md border border-border"
+        />
+      ) : null;
+    }
+    case "audio": {
+      const src = toDataUrl(block.mimeType, block.data);
+      return src ? (
+        // biome-ignore lint/a11y/useMediaCaption: tool-provided audio has no caption track
+        <audio controls src={src} className="w-full" />
+      ) : null;
+    }
+    case "resource_link": {
+      const uri = typeof block.uri === "string" ? block.uri : undefined;
+      const name =
+        typeof block.name === "string" && block.name.length > 0
+          ? block.name
+          : uri;
+      return (
+        <div className="flex flex-col gap-0.5 rounded-md border border-border p-2">
+          {name ? <span className="text-sm font-medium">{name}</span> : null}
+          {uri ? (
+            <span className="break-all text-xs text-muted-foreground">
+              {uri}
+            </span>
+          ) : null}
+          {typeof block.description === "string" ? (
+            <span className="text-xs text-muted-foreground">
+              {block.description}
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+    case "resource": {
+      const resource = block.resource ?? {};
+      const mimeType =
+        typeof resource.mimeType === "string" ? resource.mimeType : undefined;
+      const imgSrc = mimeType?.startsWith("image/")
+        ? toDataUrl(mimeType, resource.blob)
+        : undefined;
+      if (imgSrc) {
+        return (
+          <img
+            src={imgSrc}
+            alt={
+              typeof resource.uri === "string"
+                ? resource.uri
+                : "Tool resource image"
+            }
+            className="max-h-96 max-w-full rounded-md border border-border"
+          />
+        );
+      }
+      if (typeof resource.text === "string") {
+        return (
+          <TruncatedCodeBlock
+            code={resource.text}
+            language="text"
+            copyText={resource.text}
+          />
+        );
+      }
+      const uri = typeof resource.uri === "string" ? resource.uri : undefined;
+      return uri ? (
+        <div className="flex flex-col gap-0.5 rounded-md border border-border p-2">
+          <span className="break-all text-xs text-muted-foreground">{uri}</span>
+        </div>
+      ) : (
+        <TruncatedCodeBlock
+          code={JSON.stringify(block, null, 2)}
+          language="json"
+          copyText={JSON.stringify(block, null, 2)}
+        />
+      );
+    }
+    default:
+      return (
+        <TruncatedCodeBlock
+          code={JSON.stringify(block, null, 2)}
+          language="json"
+          copyText={JSON.stringify(block, null, 2)}
+        />
+      );
+  }
+}
+
+function McpContentBlocks({ blocks }: { blocks: McpContentBlock[] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {blocks.map((block, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: content blocks have stable order and no stable id
+        <McpContentBlockView key={index} block={block} />
+      ))}
+    </div>
+  );
+}
+
 export const ToolOutput = ({
   className,
   output,
   errorText,
   label,
+  rawContent,
   conversations,
   ...props
 }: ToolOutputProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelText = label ?? (errorText ? "Error" : "Response");
+
+  const richBlocks = rawContent?.filter((block) => block.type !== "text");
+  const hasRichContent = Boolean(richBlocks && richBlocks.length > 0);
 
   if (!(output || errorText || conversations)) {
     return null;
@@ -458,6 +598,19 @@ export const ToolOutput = ({
   }
 
   const accent = errorText ? "bg-destructive" : "bg-emerald-400";
+
+  if (hasRichContent && !errorText && rawContent) {
+    return (
+      <div
+        ref={containerRef}
+        className={cn("px-3 pb-3 pt-2 space-y-1.5", className)}
+        {...props}
+      >
+        <SectionLabel accent={accent}>{labelText}</SectionLabel>
+        <McpContentBlocks blocks={rawContent} />
+      </div>
+    );
+  }
 
   return (
     <div

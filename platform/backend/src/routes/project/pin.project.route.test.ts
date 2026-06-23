@@ -48,7 +48,9 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
     });
     expect(pin.statusCode).toBe(200);
     let list = await projectService.list({ organizationId, userId: owner.id });
-    expect(list.find((p) => p.id === project.id)?.pinnedAt).toBeInstanceOf(Date);
+    expect(list.find((p) => p.id === project.id)?.pinnedAt).toBeInstanceOf(
+      Date,
+    );
 
     const unpin = await app.inject({
       method: "DELETE",
@@ -76,8 +78,12 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
 
     actingUser = member;
     expect(
-      (await app.inject({ method: "PUT", url: `/api/projects/${project.id}/pin` }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/api/projects/${project.id}/pin`,
+        })
+      ).statusCode,
     ).toBe(200);
 
     const memberList = await projectService.list({

@@ -191,7 +191,8 @@ export const AUDIT_DECISIONS = {
   },
   projectPinsTable: {
     audited: false,
-    reason: "per-user pin on a project; personal preference, not an access change",
+    reason:
+      "per-user pin on a project; personal preference, not an access change",
   },
   conversationShareTeamsTable: {
     audited: false,

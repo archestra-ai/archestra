@@ -113,7 +113,6 @@ export function McpAppSection({
    * forwarded into the iframe (they are not app data).
    */
   appId?: string;
-  /** Human-readable app name for the card header (owned apps); falls back to the short tool name. */
   appName?: string | null;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;

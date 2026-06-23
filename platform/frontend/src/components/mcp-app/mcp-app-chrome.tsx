@@ -42,15 +42,11 @@ export function McpAppTopBar({
   right,
   switcher,
 }: {
-  /** Actions to the left of the address pill. */
   left?: React.ReactNode;
   /** Address-pill content: a string renders as the app name, a node as-is. */
   label?: React.ReactNode;
-  /** Icons inside the address pill, on the right. */
   actions?: React.ReactNode;
-  /** Actions to the right of the address pill. */
   right?: React.ReactNode;
-  /** When set, the pill becomes an app-switcher dropdown. */
   switcher?: McpAppSwitcher;
 }) {
   const labelNode =
@@ -122,19 +118,12 @@ export function McpAppTopBar({
   );
 }
 
-/** Shared visual props for the address-pill icon buttons (ghost, icon-sized). */
 const ICON_BUTTON_PROPS = {
   variant: "ghost",
   size: "icon",
   className: "h-6 w-6 text-muted-foreground",
 } as const;
 
-/**
- * Shared click button for the address pill — a single place for the ghost / icon
- * sizing so the per-action wrappers below just pass an icon, a label (used for
- * both `aria-label` and `title`), and an `onClick`. The lone link button
- * ({@link McpAppStandaloneButton}) reuses {@link ICON_BUTTON_PROPS} directly.
- */
 function McpAppIconButton({
   icon: Icon,
   label,
@@ -157,7 +146,6 @@ function McpAppIconButton({
   );
 }
 
-/** Top-bar control that opens the right panel and shows this app there. */
 export function McpAppSidebarButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton
@@ -168,14 +156,12 @@ export function McpAppSidebarButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Reload (refresh) icon button for the address pill. */
 export function McpAppRefreshButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton icon={RefreshCw} label="Reload app" onClick={onClick} />
   );
 }
 
-/** Exit-fullscreen icon for the address pill; render only while fullscreen. */
 export function McpAppFullscreenExitButton({
   onClick,
 }: {
@@ -190,7 +176,6 @@ export function McpAppFullscreenExitButton({
   );
 }
 
-/** Opens the owned app's standalone run page in a new tab. */
 export function McpAppStandaloneButton({ appId }: { appId: string }) {
   return (
     <Button
@@ -234,7 +219,6 @@ export function McpAppChangelogPill({
   );
 }
 
-/** Bottom bar linking an owned app's version to its page. */
 export function McpAppVersionBar({
   appId,
   version,

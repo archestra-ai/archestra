@@ -38,7 +38,6 @@ export function McpAppCard({
   bottomBar,
 }: {
   displayMode: McpUiDisplayMode;
-  /** Toggle inline ↔ fullscreen; invoked by the Escape key while fullscreen. */
   onToggleFullscreen: () => void;
   children?: React.ReactNode;
   /**
@@ -48,20 +47,15 @@ export function McpAppCard({
    */
   diagnostics?: React.ReactNode;
   size: { width: number; height: number } | null;
-  /** Viewport-derived max height for the inline card; reacts to window resize. */
   inlineCeiling: number;
-  /** When true, the app fills its parent container (used when portaled to the panel). */
   fillContainer?: boolean;
   /**
    * When set, the body renders this node — frozen to `frozenHeight`, frosted —
    * instead of `children`. Used in chat while the live iframe lives in the panel.
    */
   placeholder?: React.ReactNode;
-  /** Locked body height for the placeholder, so chat keeps the app's footprint. */
   frozenHeight?: number;
-  /** Top-bar controls (refresh, name, actions). Hidden when absent. */
   topBar?: React.ReactNode;
-  /** Bottom-bar controls (e.g. the app-version link). Hidden when absent. */
   bottomBar?: React.ReactNode;
 }) {
   const isFullscreen = displayMode === "fullscreen";
@@ -81,7 +75,6 @@ export function McpAppCard({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFullscreen, onToggleFullscreen]);
 
-  // Cover the entire viewport in fullscreen mode.
   useEffect(() => {
     if (!isFullscreen) {
       setBounds(null);

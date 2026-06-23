@@ -52,7 +52,6 @@ export function AppFrame({
   resourceUri?: string;
   /** Address-pill label; owned apps fall back to the resolved app name. */
   label?: string;
-  /** Extra address-pill buttons composed by the caller (e.g. open standalone). */
   actions?: ReactNode;
   fillContainer?: boolean;
   /** When false, render the bare runtime with no card/chrome (external run page). */

@@ -447,21 +447,21 @@ pub(crate) async fn run_loop(backend: Arc<Backend>, mut rx: mpsc::Receiver<Sessi
 async fn handle(backend: Arc<Backend>, msg: SessionMsg) {
     match msg {
         SessionMsg::Run { req, reply } => {
-            let result = catch_panic(backend.run(req)).await;
+            let result = catch_panic(&backend, backend.run(req)).await;
             let _ = reply.send(result);
         }
         SessionMsg::ReadArtifact { req, reply } => {
-            let result = catch_panic(backend.read_artifact(req)).await;
+            let result = catch_panic(&backend, backend.read_artifact(req)).await;
             let _ = reply.send(result);
         }
         SessionMsg::CheckSession { traceparent, reply } => {
-            let result = catch_panic(backend.check_session(traceparent)).await;
+            let result = catch_panic(&backend, backend.check_session(traceparent)).await;
             let _ = reply.send(result);
         }
     }
 }
 
-async fn catch_panic<T, Fut>(fut: Fut) -> Result<T>
+async fn catch_panic<T, Fut>(backend: &Backend, fut: Fut) -> Result<T>
 where
     Fut: std::future::Future<Output = Result<T>>,
 {
@@ -470,9 +470,44 @@ where
         .await
         .unwrap_or_else(|payload| {
             let message = panic_message(payload.as_ref());
-            tracing::error!(panic = message, "recovered a panic in a sandbox handler");
-            Err(SandboxError::Internal(format!("rust panic: {message}")))
+            Err(panic_to_error(backend.engine_fault_from_panic(message), message))
         })
+}
+
+/// classify a recovered handler panic. a backend that `unwrap()`s a transient
+/// engine fault (e.g. the dagger SDK on a stale-attachables timeout) escapes as
+/// a panic instead of a typed error; re-tag the recognised faults as
+/// `EngineUnreachable` so the respawn/retry path fires, and keep everything else
+/// a fatal `Internal` so genuine bugs aren't silently retried.
+///
+/// both arms carry a low-cardinality `recovered` field so the two outcomes are
+/// queryable without grepping free text: the fault classifier is a substring
+/// match against an upstream message, so if that wording ever drifts a panic
+/// that used to recover silently flips to `recovered = false` here — that shift
+/// is the regression signal to alert on.
+fn panic_to_error(fault: Option<EngineFault>, message: &str) -> SandboxError {
+    match fault {
+        Some(fault) => {
+            tracing::warn!(
+                panic = message,
+                ?fault,
+                recovered = true,
+                "recovered an engine fault from a sandbox handler panic"
+            );
+            SandboxError::EngineUnreachable {
+                fault,
+                message: format!("rust panic: {message}"),
+            }
+        }
+        None => {
+            tracing::error!(
+                panic = message,
+                recovered = false,
+                "recovered a panic in a sandbox handler"
+            );
+            SandboxError::Internal(format!("rust panic: {message}"))
+        }
+    }
 }
 
 fn panic_message(payload: &(dyn Any + Send)) -> &str {
@@ -585,6 +620,29 @@ mod tests {
         // read_artifact replays the command log before exporting, so a generic
         // engine error (which may have run some of that history) is not retried.
         assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+    }
+
+    #[test]
+    fn panic_to_error_retags_recovered_engine_fault_for_retry() {
+        // dagger-sdk panics (instead of returning a typed error) on a
+        // stale-attachables timeout; the recovered fault must re-enter the
+        // respawn/retry path even for command execution.
+        let err = panic_to_error(
+            Some(EngineFault::StaleAttachables),
+            "called `Result::unwrap()` on an `Err` value: waiting for client session attachables",
+        );
+        assert!(is_stale_attachables_error(&err));
+        assert_eq!(
+            retry_reason(SessionOperation::Run, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+    }
+
+    #[test]
+    fn panic_to_error_keeps_unrecognised_panic_fatal() {
+        let err = panic_to_error(None, "index out of bounds: the len is 0 but the index is 1");
+        assert!(matches!(err, SandboxError::Internal(_)));
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
     }
 

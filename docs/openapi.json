@@ -970,13 +970,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -5259,13 +5266,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -6921,13 +6935,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -8071,13 +8092,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -9221,13 +9249,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -10371,13 +10406,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -14513,13 +14555,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -16847,13 +16896,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -18141,13 +18197,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -22622,13 +22685,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -24363,13 +24433,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -25566,13 +25643,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -26769,13 +26853,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -27972,13 +28063,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -32301,13 +32399,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -34745,13 +34850,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -63677,13 +63789,20 @@
                         "type": "object",
                         "properties": {
                           "finish_reason": {
-                            "type": "string",
-                            "enum": [
-                              "stop",
-                              "length",
-                              "tool_calls",
-                              "content_filter",
-                              "function_call"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "stop",
+                                  "length",
+                                  "tool_calls",
+                                  "content_filter",
+                                  "function_call"
+                                ]
+                              },
+                              {
+                                "type": "string"
+                              }
                             ]
                           },
                           "index": {
@@ -65366,13 +65485,20 @@
                         "type": "object",
                         "properties": {
                           "finish_reason": {
-                            "type": "string",
-                            "enum": [
-                              "stop",
-                              "length",
-                              "tool_calls",
-                              "content_filter",
-                              "function_call"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "stop",
+                                  "length",
+                                  "tool_calls",
+                                  "content_filter",
+                                  "function_call"
+                                ]
+                              },
+                              {
+                                "type": "string"
+                              }
                             ]
                           },
                           "index": {
@@ -99042,13 +99168,20 @@
                         "type": "object",
                         "properties": {
                           "finish_reason": {
-                            "type": "string",
-                            "enum": [
-                              "stop",
-                              "length",
-                              "tool_calls",
-                              "content_filter",
-                              "function_call"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "stop",
+                                  "length",
+                                  "tool_calls",
+                                  "content_filter",
+                                  "function_call"
+                                ]
+                              },
+                              {
+                                "type": "string"
+                              }
                             ]
                           },
                           "index": {
@@ -100479,13 +100612,20 @@
                         "type": "object",
                         "properties": {
                           "finish_reason": {
-                            "type": "string",
-                            "enum": [
-                              "stop",
-                              "length",
-                              "tool_calls",
-                              "content_filter",
-                              "function_call"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "stop",
+                                  "length",
+                                  "tool_calls",
+                                  "content_filter",
+                                  "function_call"
+                                ]
+                              },
+                              {
+                                "type": "string"
+                              }
                             ]
                           },
                           "index": {
@@ -118064,13 +118204,20 @@
                                       "type": "object",
                                       "properties": {
                                         "finish_reason": {
-                                          "type": "string",
-                                          "enum": [
-                                            "stop",
-                                            "length",
-                                            "tool_calls",
-                                            "content_filter",
-                                            "function_call"
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "enum": [
+                                                "stop",
+                                                "length",
+                                                "tool_calls",
+                                                "content_filter",
+                                                "function_call"
+                                              ]
+                                            },
+                                            {
+                                              "type": "string"
+                                            }
                                           ]
                                         },
                                         "index": {
@@ -119279,13 +119426,20 @@
                                       "type": "object",
                                       "properties": {
                                         "finish_reason": {
-                                          "type": "string",
-                                          "enum": [
-                                            "stop",
-                                            "length",
-                                            "tool_calls",
-                                            "content_filter",
-                                            "function_call"
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "enum": [
+                                                "stop",
+                                                "length",
+                                                "tool_calls",
+                                                "content_filter",
+                                                "function_call"
+                                              ]
+                                            },
+                                            {
+                                              "type": "string"
+                                            }
                                           ]
                                         },
                                         "index": {
@@ -135130,13 +135284,20 @@
                                 "type": "object",
                                 "properties": {
                                   "finish_reason": {
-                                    "type": "string",
-                                    "enum": [
-                                      "stop",
-                                      "length",
-                                      "tool_calls",
-                                      "content_filter",
-                                      "function_call"
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "stop",
+                                          "length",
+                                          "tool_calls",
+                                          "content_filter",
+                                          "function_call"
+                                        ]
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
                                     ]
                                   },
                                   "index": {
@@ -136345,13 +136506,20 @@
                                 "type": "object",
                                 "properties": {
                                   "finish_reason": {
-                                    "type": "string",
-                                    "enum": [
-                                      "stop",
-                                      "length",
-                                      "tool_calls",
-                                      "content_filter",
-                                      "function_call"
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "stop",
+                                          "length",
+                                          "tool_calls",
+                                          "content_filter",
+                                          "function_call"
+                                        ]
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
                                     ]
                                   },
                                   "index": {

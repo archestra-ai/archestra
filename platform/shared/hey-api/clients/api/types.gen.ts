@@ -299,7 +299,7 @@ export type OpenAiChatCompletionRequestInput = {
 export type OpenAiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -1801,7 +1801,7 @@ export type CerebrasChatCompletionRequestInput = {
 export type CerebrasChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -2266,7 +2266,7 @@ export type MistralChatCompletionRequestInput = {
 export type MistralChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -2623,7 +2623,7 @@ export type PerplexityChatCompletionRequestInput = {
 export type PerplexityChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -2980,7 +2980,7 @@ export type GroqChatCompletionRequestInput = {
 export type GroqChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -3337,7 +3337,7 @@ export type OpenrouterChatCompletionRequestInput = {
 export type OpenrouterChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -4518,7 +4518,7 @@ export type DeepSeekChatCompletionRequestInput = {
 export type DeepSeekChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -5231,7 +5231,7 @@ export type XaiChatCompletionRequestInput = {
 export type XaiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -5609,7 +5609,7 @@ export type OpenAiChatCompletionRequest = {
 export type OpenAiChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -7111,7 +7111,7 @@ export type CerebrasChatCompletionRequest = {
 export type CerebrasChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -7576,7 +7576,7 @@ export type MistralChatCompletionRequest = {
 export type MistralChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -7933,7 +7933,7 @@ export type PerplexityChatCompletionRequest = {
 export type PerplexityChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -8290,7 +8290,7 @@ export type GroqChatCompletionRequest = {
 export type GroqChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -8647,7 +8647,7 @@ export type OpenrouterChatCompletionRequest = {
 export type OpenrouterChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -9828,7 +9828,7 @@ export type DeepSeekChatCompletionRequest = {
 export type DeepSeekChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -10541,7 +10541,7 @@ export type XaiChatCompletionRequest = {
 export type XaiChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index: number;
         logprobs: unknown;
         /**
@@ -18407,7 +18407,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
     200: {
         id: string;
         choices: Array<{
-            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index: number;
             logprobs: unknown;
             /**
@@ -18907,7 +18907,7 @@ export type AzureChatCompletionsWithAgentResponses = {
     200: {
         id: string;
         choices: Array<{
-            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index: number;
             logprobs: unknown;
             /**
@@ -28016,7 +28016,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
     200: {
         id: string;
         choices: Array<{
-            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index: number;
             logprobs: unknown;
             /**
@@ -28463,7 +28463,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
     200: {
         id: string;
         choices: Array<{
-            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
             index: number;
             logprobs: unknown;
             /**
@@ -32386,7 +32386,7 @@ export type GetInteractionsResponses = {
             response: {
                 id: string;
                 choices: Array<{
-                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index: number;
                     logprobs: unknown;
                     /**
@@ -32611,7 +32611,7 @@ export type GetInteractionsResponses = {
             response: {
                 id: string;
                 choices: Array<{
-                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                     index: number;
                     logprobs: unknown;
                     /**
@@ -35816,7 +35816,7 @@ export type GetInteractionResponses = {
         response: {
             id: string;
             choices: Array<{
-                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index: number;
                 logprobs: unknown;
                 /**
@@ -36041,7 +36041,7 @@ export type GetInteractionResponses = {
         response: {
             id: string;
             choices: Array<{
-                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
                 index: number;
                 logprobs: unknown;
                 /**

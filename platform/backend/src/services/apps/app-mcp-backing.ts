@@ -124,6 +124,12 @@ export async function syncAppBacking(app: App): Promise<void> {
     if (server.scope !== app.scope) {
       await McpServerModel.setScope(server.id, app.scope);
     }
+    // Keep the backing server name in lockstep with the app. constructServerName
+    // leaves non-local types unchanged, so an app server's name has no scope
+    // suffix and tracks app.name exactly.
+    if (server.name !== app.name) {
+      await McpServerModel.update(server.id, { name: app.name });
+    }
     await McpServerModel.setTeam(server.id, teamIds[0] ?? null);
     if (server.catalogId) {
       // The registry card and tool isolation read the catalog's name/scope/

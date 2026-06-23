@@ -216,9 +216,9 @@ describe("MCP backing for apps", () => {
     const catalog = await InternalMcpCatalogModel.findById(catalogId);
     expect(catalog?.name).toBe("Renamed Dashboard");
     expect(catalog?.scope).toBe("org");
-    expect((await McpServerModel.findById(created!.mcpServerId!))?.scope).toBe(
-      "org",
-    );
+    const renamedServer = await McpServerModel.findById(created!.mcpServerId!);
+    expect(renamedServer?.scope).toBe("org");
+    expect(renamedServer?.name).toBe("Renamed Dashboard");
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

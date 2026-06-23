@@ -1,6 +1,11 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "xlsx-comment-injection"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake"]
+
+# Starts the harness-owned `acme_it` synthetic MCP (fixed, controlled content) and registers it to every
+# lane's agent. It serves stateless data, so one shared instance is safe across concurrent lanes -- the
+# it-license-rollup / it-audit-resist-injection / access-request-intake tasks grade its tool calls.
+fixture_mcp = true
 
 # These tasks don't mutate shared backend state (the skill/tool catalog), and the skill surface is
 # large + web-pinned -- so seed one backend once and let concurrent lanes share it. Sandbox workspaces
@@ -27,8 +32,9 @@ repo = "github.com/openai/skills"
 path = "skills"
 ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
 
-# Benchmark-owned skills that gate decode-cipher and xlsx-live-formulas, imported from GitHub by
-# commit SHA. cipher-decoder is pinned to its latest change on this branch; sales-ledger to PR #5672.
+# Benchmark-owned skills that gate decode-cipher, xlsx-live-formulas, and access-request-intake,
+# imported from GitHub by commit SHA. cipher-decoder is pinned to its latest change on this branch;
+# sales-ledger to PR #5672.
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/cipher-decoder"
@@ -38,6 +44,13 @@ ref = "5ae74172add0f2e3beb0d783dc132e1d8803b6e2"
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/sales-ledger"
 ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
+
+# Drives the access-request-intake elicitation flow. Pinned to a pushed SHA so the GitHub import
+# resolves; retarget to the merge SHA after this lands.
+[[skills]]
+repo = "github.com/archestra-ai/archestra"
+path = "archestra-bench/skills/access-request-intake"
+ref = "9c102d04d70d35066a79c5349ec8c5225732b3e4"
 
 # Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
 # requires them). Each must list tools without auth or env setup hard-fails naming it.

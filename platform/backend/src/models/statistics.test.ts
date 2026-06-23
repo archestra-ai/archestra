@@ -900,5 +900,131 @@ describe("StatisticsModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0].cost).toBeCloseTo(0.15);
     });
+
+    test("buckets 90d data into 3-day windows without projecting timestamps into the future", () => {
+      // Regression guard: the old day-bucketing treated "days since the epoch"
+      // as "day of year" and added it to Jan 1 of the row's year, projecting
+      // 90d buckets ~56 years into the future (e.g. 2024 -> 2080).
+      const data = [
+        {
+          timeBucket: "2024-02-02T00:00:00.000Z",
+          model: "gpt-4",
+          requests: 1,
+          inputTokens: 10,
+          outputTokens: 5,
+          cost: 0.01,
+        },
+        {
+          timeBucket: "2024-02-03T00:00:00.000Z",
+          model: "gpt-4",
+          requests: 2,
+          inputTokens: 20,
+          outputTokens: 10,
+          cost: 0.02,
+        },
+        {
+          timeBucket: "2024-02-10T00:00:00.000Z",
+          model: "gpt-4",
+          requests: 4,
+          inputTokens: 40,
+          outputTokens: 20,
+          cost: 0.04,
+        },
+      ];
+
+      const result = StatisticsModel.groupTimeSeries(data, "90d", "model");
+
+      // Every bucket timestamp must stay in the input's year, not decades later.
+      for (const row of result) {
+        expect(new Date(row.timeBucket).getUTCFullYear()).toBe(2024);
+      }
+      // Feb 2 and Feb 3 share the 3-day window starting Feb 2 (UTC, epoch-aligned);
+      // Feb 10 falls in a later window.
+      expect(result).toHaveLength(2);
+      const [first, second] = result;
+      expect(first.timeBucket).toBe("2024-02-02T00:00:00.000Z");
+      expect(first.requests).toBe(3);
+      expect(first.cost).toBeCloseTo(0.03);
+      expect(second.timeBucket).toBe("2024-02-08T00:00:00.000Z");
+      expect(second.requests).toBe(4);
+      // No cost is lost during re-bucketing.
+      const totalCost = result.reduce((sum, row) => sum + row.cost, 0);
+      expect(totalCost).toBeCloseTo(0.07);
+    });
+
+    test("aligns 7d buckets to UTC 6-hour boundaries", () => {
+      const data = [
+        {
+          timeBucket: "2024-01-15T14:00:00.000Z",
+          model: "gpt-4",
+          requests: 1,
+          inputTokens: 10,
+          outputTokens: 5,
+          cost: 0.01,
+        },
+        {
+          timeBucket: "2024-01-15T17:00:00.000Z",
+          model: "gpt-4",
+          requests: 1,
+          inputTokens: 10,
+          outputTokens: 5,
+          cost: 0.01,
+        },
+      ];
+
+      const result = StatisticsModel.groupTimeSeries(data, "7d", "model");
+
+      // 14:00 and 17:00 both fall in the 12:00-18:00 UTC window.
+      expect(result).toHaveLength(1);
+      expect(result[0].timeBucket).toBe("2024-01-15T12:00:00.000Z");
+      expect(result[0].requests).toBe(2);
+    });
+  });
+
+  describe("getCostSavingsStatistics", () => {
+    test("reports real spend as actual cost and reconciles the savings breakdown", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      // Real spend 1.00; the same usage would have cost 1.50 on the original
+      // model (0.50 optimization savings); TOON saved 0.20; cache saved 0.30.
+      await makeInteraction(agent.id, {
+        cost: "1.00",
+        baselineCost: "1.50",
+        toonCostSavings: "0.20",
+        cacheSavings: "0.30",
+      });
+
+      const result = await StatisticsModel.getCostSavingsStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+
+      // Actual cost is the real spend — NOT real spend minus toon savings (the
+      // savings are already baked into `cost`, so subtracting them double-counts).
+      expect(result.totalActualCost).toBeCloseTo(1.0);
+      expect(result.totalOptimizationSavings).toBeCloseTo(0.5);
+      expect(result.totalToonSavings).toBeCloseTo(0.2);
+      expect(result.totalCacheSavings).toBeCloseTo(0.3);
+      // Non-optimized cost sits above actual by the sum of all three savings.
+      expect(result.totalBaselineCost).toBeCloseTo(1.0 + 0.5 + 0.2 + 0.3);
+      expect(result.totalSavings).toBeCloseTo(0.5 + 0.2 + 0.3);
+
+      // The per-point gap between the non-optimized and actual lines must equal
+      // the stacked savings breakdown, so the two charts reconcile.
+      expect(result.timeSeries).toHaveLength(1);
+      const point = result.timeSeries[0];
+      expect(point.actualCost).toBeCloseTo(1.0);
+      expect(point.baselineCost - point.actualCost).toBeCloseTo(
+        point.optimizationSavings + point.toonSavings + point.cacheSavings,
+      );
+    });
   });
 });

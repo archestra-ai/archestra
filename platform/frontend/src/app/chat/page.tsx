@@ -7,16 +7,9 @@ import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
-  Download,
-  FileText,
-  Globe,
   MicIcon,
-  MoreVertical,
-  PanelRight,
   PaperclipIcon,
   Plus,
-  Share2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -35,17 +28,18 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
-  deriveCanvasesFromMessages,
+  deriveAppsFromMessages,
 } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
+import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
-import { PinnedCanvasProvider } from "@/components/chat/pinned-canvas-context";
 import {
   PlaywrightInstallDialog,
   usePlaywrightSetupRequired,
@@ -71,12 +65,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -84,8 +72,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -122,7 +108,6 @@ import {
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
-  getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
@@ -283,8 +268,8 @@ export function ChatPageContent({
   // is re-opened via the header toggle.
   const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("files");
 
-  // Independent of artifact/browser open state — toggled when the canvas tab is selected.
-  const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
+  // Independent of artifact/browser open state — toggled when the Apps tab is selected.
+  const [isAppsTabOpen, setIsAppsTabOpen] = useState(false);
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
@@ -763,15 +748,15 @@ export function ChatPageContent({
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
   );
-  // Derive the MCP App canvas list from the conversation itself so the sidebar
-  // selector is deterministic and survives transient section unmounts (the
-  // previous mount-effect registry could empty when a single canvas's section
-  // briefly unmounted).
+  // Derive the MCP App list from the conversation itself so the panel selector
+  // is deterministic and survives transient section unmounts (the previous
+  // mount-effect registry could empty when a single app's section briefly
+  // unmounted).
   const { getToolShortName: getArchestraToolShortName } =
     useArchestraMcpIdentity();
-  const mcpCanvases = useMemo(
+  const mcpApps = useMemo(
     () =>
-      deriveCanvasesFromMessages(
+      deriveAppsFromMessages(
         messages,
         chatSession?.earlyToolUiStarts ?? {},
         getArchestraToolShortName,
@@ -1309,19 +1294,19 @@ export function ChatPageContent({
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
-    isArtifactOpen || isBrowserPanelVisible || isCanvasTabOpen;
+    isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen;
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
   useEffect(() => {
-    if (isCanvasTabOpen) {
-      setActiveRightTab("canvas");
+    if (isAppsTabOpen) {
+      setActiveRightTab("apps");
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
       setActiveRightTab("files");
     }
-  }, [isArtifactOpen, isBrowserPanelVisible, isCanvasTabOpen]);
+  }, [isArtifactOpen, isBrowserPanelVisible, isAppsTabOpen]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
@@ -1329,7 +1314,7 @@ export function ChatPageContent({
       if (tab === "files") {
         setIsArtifactOpen(true);
         setIsBrowserPanelOpen(false);
-        setIsCanvasTabOpen(false);
+        setIsAppsTabOpen(false);
         if (conversationId) {
           localStorage.setItem(
             conversationStorageKeys(conversationId).artifactOpen,
@@ -1340,7 +1325,7 @@ export function ChatPageContent({
       } else if (tab === "browser") {
         setIsBrowserPanelOpen(true);
         setIsArtifactOpen(false);
-        setIsCanvasTabOpen(false);
+        setIsAppsTabOpen(false);
         if (conversationId) {
           localStorage.setItem(
             conversationStorageKeys(conversationId).artifactOpen,
@@ -1349,8 +1334,8 @@ export function ChatPageContent({
         }
         localStorage.setItem(BROWSER_OPEN_KEY, "true");
       } else {
-        // canvas tab — doesn't own artifact/browser visibility
-        setIsCanvasTabOpen(true);
+        // apps tab — doesn't own artifact/browser visibility
+        setIsAppsTabOpen(true);
         setIsArtifactOpen(false);
         setIsBrowserPanelOpen(false);
         if (conversationId) {
@@ -1368,7 +1353,7 @@ export function ChatPageContent({
   const closeRightPanel = useCallback(() => {
     setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
-    setIsCanvasTabOpen(false);
+    setIsAppsTabOpen(false);
     if (conversationId) {
       localStorage.setItem(
         conversationStorageKeys(conversationId).artifactOpen,
@@ -1395,19 +1380,6 @@ export function ChatPageContent({
     closeRightPanel,
     openRightPanelTab,
   ]);
-
-  // Auto-open the sidebar on the MCP App tab when the active conversation has
-  // a pinned canvas — fires once per conversation switch.
-  const autoOpenedForConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!conversationId || typeof window === "undefined") return;
-    if (autoOpenedForConversationRef.current === conversationId) return;
-    const key = conversationStorageKeys(conversationId).pinnedCanvas;
-    if (localStorage.getItem(key)) {
-      autoOpenedForConversationRef.current = conversationId;
-      openRightPanelTab("canvas");
-    }
-  }, [conversationId, openRightPanelTab]);
 
   const browserAutoOpenConversationRef = useRef<string | undefined>(undefined);
   const seenBrowserToolCallIdsRef = useRef<Set<string>>(new Set());
@@ -1870,146 +1842,37 @@ export function ChatPageContent({
   }
 
   return (
-    <PinnedCanvasProvider
-      conversationId={conversationId}
-      canvases={mcpCanvases}
-      onShowInSidebar={() => openRightPanelTab("canvas" as RightPanelTab)}
+    <AppsProvider
+      apps={mcpApps}
+      onShowInSidebar={() => openRightPanelTab("apps" as RightPanelTab)}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex flex-col h-full min-h-0">
             <StreamTimeoutWarning status={status} messages={messages} />
 
-            <div
-              className={cn(
-                "sticky top-0 z-10 bg-background border-b p-2",
-                !conversationId && "hidden",
-              )}
-            >
-              <div className="relative flex items-center justify-between gap-2">
-                {/* Left side - conversation title */}
-                {conversationId && conversation && (
-                  <div className="flex items-center flex-shrink min-w-0">
-                    {/* Skip TruncatedTooltip while the title animates: its
-                        resize measurement re-renders on every TypingText tick,
-                        which loops past React's nested-update cap. */}
-                    {headerAnimatingTitles.has(conversation.id) ? (
-                      <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                        <TypingText
-                          text={getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
-                          )}
-                          typingSpeed={35}
-                          showCursor
-                          cursorClassName="bg-muted-foreground"
-                        />
-                      </h1>
-                    ) : (
-                      <TruncatedTooltip
-                        content={getConversationDisplayTitle(
-                          conversation.title,
-                          conversation.messages,
-                        )}
-                      >
-                        <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                          {getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
-                          )}
-                        </h1>
-                      </TruncatedTooltip>
-                    )}
-                  </div>
-                )}
-                {/* Right side - desktop: panel toggle */}
-                <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleRightPanel}
-                    className="h-8 w-8"
-                    title={isRightPanelOpen ? "Close panel" : "Open panel"}
-                    aria-pressed={isRightPanelOpen}
-                  >
-                    <PanelRight className="h-4 w-4" />
-                    <span className="sr-only">
-                      {isRightPanelOpen ? "Close panel" : "Open panel"}
-                    </span>
-                  </Button>
-                </div>
-                {/* Right side - mobile: 3-dot dropdown */}
-                <div className="flex md:hidden items-center gap-2 flex-shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="More options"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">More options</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canManageShare && (
-                        <DropdownMenuItem
-                          onSelect={() => setIsShareDialogOpen(true)}
-                        >
-                          {isShared ? (
-                            <>
-                              <Users className="h-4 w-4 text-primary" />
-                              <span className="text-primary">Shared</span>
-                            </>
-                          ) : (
-                            <>
-                              <Share2 className="h-4 w-4" />
-                              Share
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {conversationId && messages.length > 0 && (
-                        <DropdownMenuItem onSelect={handleExportMarkdown}>
-                          <Download className="h-4 w-4" />
-                          Export Markdown
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          if (isArtifactOpen) {
-                            closeRightPanel();
-                          } else {
-                            openRightPanelTab("files");
-                          }
-                        }}
-                      >
-                        <FileText className="h-4 w-4" />
-                        {isArtifactOpen ? "Hide Files" : "Show Files"}
-                      </DropdownMenuItem>
-                      {showBrowserButton && (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (isBrowserPanelVisible) {
-                              closeRightPanel();
-                            } else {
-                              openRightPanelTab("browser");
-                            }
-                          }}
-                          disabled={isPlaywrightSetupVisible}
-                        >
-                          <Globe className="h-4 w-4" />
-                          {isBrowserPanelVisible
-                            ? "Hide Browser"
-                            : "Show Browser"}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
+            <ConversationHeader
+              conversationId={conversationId}
+              conversation={conversation}
+              messageCount={messages.length}
+              isTitleAnimating={
+                !!conversation && headerAnimatingTitles.has(conversation.id)
+              }
+              canManageShare={canManageShare}
+              isShared={isShared}
+              onShare={() => setIsShareDialogOpen(true)}
+              onExportMarkdown={handleExportMarkdown}
+              panel={{
+                isOpen: isRightPanelOpen,
+                isArtifactOpen,
+                isBrowserVisible: isBrowserPanelVisible,
+                showBrowserButton,
+                isPlaywrightSetupVisible,
+                onToggle: toggleRightPanel,
+                onClose: closeRightPanel,
+                onOpenTab: openRightPanelTab,
+              }}
+            />
 
             {/* Mobile: Inline artifact/browser panel below header */}
             {isRightPanelOpen && (
@@ -2357,42 +2220,6 @@ export function ChatPageContent({
             onTabChange={openRightPanelTab}
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-            headerActions={
-              conversationId && messages.length > 0 ? (
-                <div className="flex items-center gap-1">
-                  {canManageShare && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsShareDialogOpen(true)}
-                      className="text-xs h-7"
-                    >
-                      {isShared ? (
-                        <>
-                          <Users className="h-3 w-3 mr-1 text-primary" />
-                          <span className="text-primary">Shared</span>
-                        </>
-                      ) : (
-                        <>
-                          <Share2 className="h-3 w-3 mr-1" />
-                          Share
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleExportMarkdown}
-                    className="text-xs h-7"
-                    title="Download chat as Markdown"
-                  >
-                    <Download className="h-3 w-3 mr-1" />
-                    Markdown
-                  </Button>
-                </div>
-              ) : undefined
-            }
             artifact={conversation?.artifact}
             conversationId={conversationId}
             agentId={browserToolsAgentId}
@@ -2476,7 +2303,7 @@ export function ChatPageContent({
           />
         </StandardDialog>
       </div>
-    </PinnedCanvasProvider>
+    </AppsProvider>
   );
 }
 

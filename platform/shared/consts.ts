@@ -31,10 +31,11 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
 /**
- * Max length (characters) of a project's display name. Mirrors the existing
- * limit enforced by the projects API and the create/edit forms.
+ * Max length (characters) of a project's display name. Kept short so project
+ * lists, headers, and dialogs stay readable. Enforced by the projects API and
+ * the create/edit forms.
  */
-export const PROJECT_NAME_MAX_LENGTH = 256;
+export const PROJECT_NAME_MAX_LENGTH = 64;
 
 /**
  * Max length (characters) of a project's description. Kept to roughly a

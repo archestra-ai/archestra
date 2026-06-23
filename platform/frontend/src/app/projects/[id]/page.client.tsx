@@ -405,8 +405,11 @@ function EditProjectDialog({
       description: project.description ?? "",
       icon: project.icon,
     },
+    mode: "onChange",
   });
   const icon = form.watch("icon");
+  const name = form.watch("name");
+  const description = form.watch("description");
   const initialVisibility: ProjectVisibility = project.visibility ?? "none";
   const [visibility, setVisibility] =
     useState<ProjectVisibility>(initialVisibility);
@@ -437,6 +440,9 @@ function EditProjectDialog({
 
   const isPending = updateProject.isPending || setShare.isPending;
   const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
+  const hasLengthError =
+    name.length > PROJECT_NAME_MAX_LENGTH ||
+    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
     if (teamSelectionMissing) return;
@@ -487,7 +493,8 @@ function EditProjectDialog({
             type="submit"
             disabled={
               isPending ||
-              !form.watch("name").trim().length ||
+              !name.trim().length ||
+              hasLengthError ||
               teamSelectionMissing
             }
           >
@@ -506,19 +513,37 @@ function EditProjectDialog({
           <Input
             placeholder="Project name"
             maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
             {...form.register("name", {
-              required: true,
-              maxLength: PROJECT_NAME_MAX_LENGTH,
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
             })}
           />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
           <Textarea
             placeholder="What is this project about?"
             rows={3}
             maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.description}
             {...form.register("description", {
-              maxLength: PROJECT_DESCRIPTION_MAX_LENGTH,
+              maxLength: {
+                value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+              },
             })}
           />
+          {form.formState.errors.description?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          )}
         </div>
       </div>
 

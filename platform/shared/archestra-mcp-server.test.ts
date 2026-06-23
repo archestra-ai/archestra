@@ -71,13 +71,21 @@ describe("archestra MCP tool names", () => {
     expect(isAgentTool("archestra__whoami")).toBe(false);
   });
 
-  test("flags the skill, sandbox, and app runtime path as always-exposed", () => {
+  test("flags the skill, sandbox, persistent-files, and app runtime path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
       "load_skill",
       "run_command",
       "download_file",
       "upload_file",
+      // persistent-files (Projects) surface — all top-level, including
+      // delete_file (deleting a file is part of the everyday file flow here,
+      // unlike delete_app below).
+      "search_files",
+      "read_file",
+      "save_result",
+      "edit_file",
+      "delete_file",
       "scaffold_app",
       "edit_app",
       "read_app",

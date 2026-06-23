@@ -161198,6 +161198,25 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "derived_multiplier",
+                              "default"
+                            ]
+                          },
+                          "pricePerMillionCacheRead": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "pricePerMillionCacheWrite": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "cachePriceSource": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "custom",
+                              "models_dev",
+                              "derived_multiplier",
                               "default"
                             ]
                           }
@@ -161210,7 +161229,10 @@
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
                           "isCustomPrice",
-                          "priceSource"
+                          "priceSource",
+                          "pricePerMillionCacheRead",
+                          "pricePerMillionCacheWrite",
+                          "cachePriceSource"
                         ],
                         "additionalProperties": false
                       },
@@ -161842,11 +161864,27 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "cacheReadPricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "cacheWritePricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "customPricePerMillionInput": {
                         "nullable": true,
                         "type": "string"
                       },
                       "customPricePerMillionOutput": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "customPricePerMillionCacheRead": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "customPricePerMillionCacheWrite": {
                         "nullable": true,
                         "type": "string"
                       },
@@ -161928,6 +161966,25 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "derived_multiplier",
+                          "default"
+                        ]
+                      },
+                      "pricePerMillionCacheRead": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "pricePerMillionCacheWrite": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "cachePriceSource": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "custom",
+                          "models_dev",
+                          "derived_multiplier",
                           "default"
                         ]
                       },
@@ -161947,8 +162004,12 @@
                       "supportsToolCalling",
                       "promptPricePerToken",
                       "completionPricePerToken",
+                      "cacheReadPricePerToken",
+                      "cacheWritePricePerToken",
                       "customPricePerMillionInput",
                       "customPricePerMillionOutput",
+                      "customPricePerMillionCacheRead",
+                      "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
                       "discoveredViaLlmProxy",
@@ -161961,6 +162022,9 @@
                       "pricePerMillionOutput",
                       "isCustomPrice",
                       "priceSource",
+                      "pricePerMillionCacheRead",
+                      "pricePerMillionCacheWrite",
+                      "cachePriceSource",
                       "isFree"
                     ],
                     "additionalProperties": false
@@ -162228,6 +162292,14 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "customPricePerMillionCacheRead": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "customPricePerMillionCacheWrite": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "ignored": {
                     "type": "boolean"
                   },
@@ -162373,11 +162445,27 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "cacheReadPricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "cacheWritePricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "customPricePerMillionInput": {
                       "nullable": true,
                       "type": "string"
                     },
                     "customPricePerMillionOutput": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "customPricePerMillionCacheRead": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "customPricePerMillionCacheWrite": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -162420,8 +162508,12 @@
                     "supportsToolCalling",
                     "promptPricePerToken",
                     "completionPricePerToken",
+                    "cacheReadPricePerToken",
+                    "cacheWritePricePerToken",
                     "customPricePerMillionInput",
                     "customPricePerMillionOutput",
+                    "customPricePerMillionCacheRead",
+                    "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
                     "discoveredViaLlmProxy",

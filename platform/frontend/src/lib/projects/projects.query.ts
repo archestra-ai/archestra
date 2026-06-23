@@ -1,7 +1,17 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { getApiErrorType, handleApiError } from "@/lib/utils";
+
+/**
+ * A project the user is viewing can vanish — deleted in this tab, or by someone
+ * else who shared it. The detail page already renders that gracefully ("Project
+ * not found."), so a not-found is an expected empty state, not an error worth a
+ * toast + Sentry capture. Other failures still surface normally.
+ */
+function isProjectNotFound(error: unknown): boolean {
+  return getApiErrorType(error) === "api_not_found_error";
+}
 
 const {
   createProject,
@@ -37,7 +47,7 @@ export function useProject(id: string | undefined) {
         path: { id: id as string },
       });
       if (error) {
-        handleApiError(error);
+        if (!isProjectNotFound(error)) handleApiError(error);
         return null;
       }
       return data;
@@ -54,7 +64,7 @@ export function useProjectConversations(id: string | undefined) {
         path: { id: id as string },
       });
       if (error) {
-        handleApiError(error);
+        if (!isProjectNotFound(error)) handleApiError(error);
         return null;
       }
       return data;
@@ -73,7 +83,7 @@ export function useProjectFiles(id: string | undefined) {
         path: { id: id as string },
       });
       if (error) {
-        handleApiError(error);
+        if (!isProjectNotFound(error)) handleApiError(error);
         return null;
       }
       return data;
@@ -171,7 +181,11 @@ export function useDeleteProject() {
       toast.success(
         "Project deleted — its chats were kept as ordinary conversations.",
       );
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      // Refresh only the project LIST. `exact` keeps this from prefix-matching
+      // — and thus refetching — the deleted project's own detail/conversations/
+      // files queries, which are still mounted for the instant before we
+      // navigate away and would 404 on the now-gone id.
+      queryClient.invalidateQueries({ queryKey: ["projects"], exact: true });
     },
   });
 }

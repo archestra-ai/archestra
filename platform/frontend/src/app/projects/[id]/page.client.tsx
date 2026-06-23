@@ -49,6 +49,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import {
   useDeleteProject,
   useProject,
@@ -200,9 +201,9 @@ function ProjectChatInput({ projectId }: { projectId: string }) {
 
   return (
     <NewChatComposer
-      onSubmitPrompt={(text) =>
+      onSubmitPrompt={(text, agentId) =>
         router.push(
-          `/chat?project=${projectId}&user_prompt=${encodeURIComponent(text)}`,
+          buildProjectChatHandoffUrl({ projectId, prompt: text, agentId }),
         )
       }
     />

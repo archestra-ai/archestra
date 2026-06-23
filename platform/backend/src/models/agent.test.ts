@@ -3010,4 +3010,62 @@ describe("AgentModel", () => {
       expect(fetched?.passthroughHeaders).toEqual(["x-request-id"]);
     });
   });
+
+  describe("accessAllTools / toolExposureMode normalization", () => {
+    test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async () => {
+      const agent = await AgentModel.create({
+        name: "All Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+        toolExposureMode: "full",
+      });
+
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("create leaves toolExposureMode untouched when accessAllTools is false", async () => {
+      const agent = await AgentModel.create({
+        name: "Custom Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      expect(agent.toolExposureMode).toBe("full");
+    });
+
+    test("update coerces toolExposureMode to search_and_run_only when accessAllTools is enabled", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        accessAllTools: true,
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("update keeps an all-tools agent on search_and_run_only even when full is requested", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        toolExposureMode: "full",
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
+    });
+  });
 });

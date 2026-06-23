@@ -42117,7 +42117,10 @@ export type GetLlmModelsResponses = {
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'default';
+            priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+            pricePerMillionCacheRead: string | null;
+            pricePerMillionCacheWrite: string | null;
+            cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
         };
         isBest?: boolean;
         isFree: boolean;
@@ -42298,8 +42301,12 @@ export type GetModelsWithApiKeysResponses = {
         supportsToolCalling: boolean | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
+        cacheReadPricePerToken: string | null;
+        cacheWritePricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        customPricePerMillionCacheRead: string | null;
+        customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;
@@ -42317,7 +42324,10 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
-        priceSource: 'custom' | 'models_dev' | 'default';
+        priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+        pricePerMillionCacheRead: string | null;
+        pricePerMillionCacheWrite: string | null;
+        cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
         isFree: boolean;
     }>;
 };
@@ -42328,6 +42338,8 @@ export type UpdateModelData = {
     body: {
         customPricePerMillionInput?: string | null;
         customPricePerMillionOutput?: string | null;
+        customPricePerMillionCacheRead?: string | null;
+        customPricePerMillionCacheWrite?: string | null;
         ignored?: boolean;
         embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
@@ -42421,8 +42433,12 @@ export type UpdateModelResponses = {
         supportsToolCalling: boolean | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
+        cacheReadPricePerToken: string | null;
+        cacheWritePricePerToken: string | null;
         customPricePerMillionInput: string | null;
         customPricePerMillionOutput: string | null;
+        customPricePerMillionCacheRead: string | null;
+        customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         discoveredViaLlmProxy: boolean;

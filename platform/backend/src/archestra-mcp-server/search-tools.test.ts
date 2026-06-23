@@ -7,6 +7,7 @@ import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -345,6 +346,51 @@ describe("search_tools", () => {
     });
   });
 
+  test("on zero matches, hints the sandbox fallback when the sandbox is usable", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Sandbox Search Agent",
+        organizationId: org.id,
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "zzqqxyzznomatch", limit: 10 },
+        context,
+      );
+
+      const structuredContent =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structuredContent.matchCount).toBe(0);
+      expect(structuredContent.hint).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      expect(structuredContent.hint).toContain("fall back");
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
+  });
+
   test("excludes always-exposed tools but keeps authoring tools searchable", async ({
     makeAgent,
     makeMember,
@@ -474,9 +520,57 @@ describe("search_tools", () => {
         expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
         expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
         expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+        // Persistent-files tools surface too while the Projects feature is on.
+        expect(names).toContain(TOOL_READ_FILE_FULL_NAME);
       } finally {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
+      }
+    });
+
+    test("drops persistent-files tools from discovery when the Projects feature is off, keeping sandbox-runtime tools", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      const originalProjectsEnabled = config.projects.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "admin" });
+        const agent = await makeAgent({
+          name: "Projects Discovery Agent",
+          organizationId: org.id,
+          accessAllTools: true,
+        });
+        // Seed with the Projects feature on so the persistent-files catalog rows
+        // exist, then turn it off: the rows persist but discovery must drop them.
+        (config.projects as { enabled: boolean }).enabled = true;
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+        (config.projects as { enabled: boolean }).enabled = false;
+
+        const names = await searchSandboxTools({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
+
+        // Runtime tools follow the runtime flag — still discoverable.
+        expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+        expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+        expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+        // Persistent-files tools follow the Projects flag — gone.
+        expect(names).not.toContain(TOOL_READ_FILE_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+        (config.projects as { enabled: boolean }).enabled =
+          originalProjectsEnabled;
       }
     });
 

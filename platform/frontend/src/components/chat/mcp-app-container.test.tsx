@@ -53,8 +53,8 @@ import {
   clearAllAppDiagnostics,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
+import { AppsProvider, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
-import { PinnedCanvasProvider, usePinnedCanvas } from "./pinned-canvas-context";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -283,9 +283,9 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     vi.clearAllMocks();
   });
 
-  // Drives the canvas into the sidebar portal so renderInSidebar becomes true.
+  // Drives the app into the sidebar portal so renderInSidebar becomes true.
   function SidebarDriver({ target }: { target: HTMLElement }) {
-    const { setPortalTarget, select } = usePinnedCanvas();
+    const { setPortalTarget, select } = useApps();
     useEffect(() => {
       setPortalTarget(target);
       select("tc1");
@@ -340,9 +340,8 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     await act(async () => {
       render(
         sidebar ? (
-          <PinnedCanvasProvider
-            conversationId="conv-1"
-            canvases={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+          <AppsProvider
+            apps={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
           >
             <SidebarDriver target={document.body} />
             <McpAppSection
@@ -350,7 +349,7 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
               toolCallId="tc1"
               preloadedResource={preloadedResource}
             />
-          </PinnedCanvasProvider>
+          </AppsProvider>
         ) : (
           <McpAppSection
             {...defaultProps}
@@ -422,13 +421,13 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
   });
 
-  it("hints no cap to the guest when the canvas fills the sidebar", async () => {
+  it("hints no cap to the guest when the app fills the sidebar", async () => {
     const bridge = await renderReadyApp(2000, { sidebar: true });
     expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
 });
 
-describe("McpAppSection sidebar pinning", () => {
+describe("McpAppSection sidebar hosting", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
 
   beforeEach(() => {
@@ -436,25 +435,24 @@ describe("McpAppSection sidebar pinning", () => {
     clearAllAppDiagnostics();
   });
 
-  // Opens the sidebar canvas host (portalTarget) without selecting any canvas,
-  // so an owned-app section renders its "Show in sidebar" placeholder.
+  // Opens the sidebar app host (portalTarget) so the selected owned-app section
+  // portals its iframe into the target.
   function SidebarHost({ target }: { target: HTMLElement }) {
-    const { setPortalTarget } = usePinnedCanvas();
+    const { setPortalTarget } = useApps();
     useEffect(() => {
       setPortalTarget(target);
     }, [setPortalTarget, target]);
     return null;
   }
 
-  it("pins an owned-app render into the sidebar canvas host", async () => {
+  it("hosts an owned-app render in the sidebar app host", async () => {
     const target = document.createElement("div");
     document.body.appendChild(target);
 
     await act(async () => {
       render(
-        <PinnedCanvasProvider
-          conversationId="conv-1"
-          canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+        <AppsProvider
+          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
         >
           <SidebarHost target={target} />
           <McpAppSection
@@ -463,11 +461,11 @@ describe("McpAppSection sidebar pinning", () => {
             toolCallId="tc1"
             preloadedResource={preloadedResource}
           />
-        </PinnedCanvasProvider>,
+        </AppsProvider>,
       );
     });
 
-    // Opening the canvas host auto-selects the sole canvas, portaling the live
+    // Opening the app host auto-selects the sole app, portaling the live
     // owned-app iframe into the sidebar target (not left inline).
     expect(target.querySelector("iframe")).toBeInTheDocument();
     expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
@@ -475,7 +473,7 @@ describe("McpAppSection sidebar pinning", () => {
     target.remove();
   });
 
-  it("keeps the diagnostics badge out of the stretched canvas wrapper when pinned", async () => {
+  it("keeps the diagnostics badge out of the stretched app wrapper when hosted", async () => {
     // The error badge must not share the fill-container wrapper with the iframe:
     // that wrapper applies `[&>div]:!h-full`, so a badge inside it gets stretched
     // to full height and shoves the iframe below the sidebar fold (blank render).
@@ -488,9 +486,8 @@ describe("McpAppSection sidebar pinning", () => {
 
     await act(async () => {
       render(
-        <PinnedCanvasProvider
-          conversationId="conv-1"
-          canvases={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+        <AppsProvider
+          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
         >
           <SidebarHost target={target} />
           <McpAppSection
@@ -499,7 +496,7 @@ describe("McpAppSection sidebar pinning", () => {
             toolCallId="tc1"
             preloadedResource={preloadedResource}
           />
-        </PinnedCanvasProvider>,
+        </AppsProvider>,
       );
     });
 
@@ -524,18 +521,19 @@ describe("McpAppSection sidebar pinning", () => {
     target.remove();
   });
 
-  it("offers a Show in sidebar control for a second, unselected canvas", async () => {
+  it("offers a Show in sidebar control for a second, unselected app", async () => {
     const user = userEvent.setup();
     const target = document.createElement("div");
     document.body.appendChild(target);
 
     await act(async () => {
       render(
-        <PinnedCanvasProvider
-          conversationId="conv-1"
-          canvases={[
-            { toolCallId: "tc1", label: "First App", createdAt: 0 },
-            { toolCallId: "tc2", label: "Second App", createdAt: 1 },
+        // tc1 is the latest (greatest createdAt), so it becomes the default
+        // selection and the rendered tc2 section stays unselected.
+        <AppsProvider
+          apps={[
+            { toolCallId: "tc1", label: "First App", createdAt: 1 },
+            { toolCallId: "tc2", label: "Second App", createdAt: 0 },
           ]}
         >
           <SidebarHost target={target} />
@@ -545,17 +543,17 @@ describe("McpAppSection sidebar pinning", () => {
             toolCallId="tc2"
             preloadedResource={preloadedResource}
           />
-        </PinnedCanvasProvider>,
+        </AppsProvider>,
       );
     });
 
-    // tc1 auto-selected, so tc2 shows the placeholder control; clicking it
-    // selects tc2 and portals its canvas into the sidebar target.
-    const pinButton = screen.getByRole("button", { name: /show in sidebar/i });
+    // tc1 auto-selected (latest), so tc2 shows the placeholder control; clicking
+    // it selects tc2 and portals its iframe into the sidebar target.
+    const showButton = screen.getByRole("button", { name: /show in sidebar/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
 
     await act(async () => {
-      await user.click(pinButton);
+      await user.click(showButton);
     });
 
     expect(target.querySelector("iframe")).toBeInTheDocument();

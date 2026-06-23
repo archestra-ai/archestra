@@ -1,6 +1,7 @@
 import {
   isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
+  TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -13,6 +14,7 @@ import {
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
@@ -33,7 +35,7 @@ const SearchToolsArgsSchema = z
       .min(1)
       .max(200)
       .describe(
-        "Keywords describing the capability you need, e.g. 'send slack message' or 'search repositories'. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions, so pass several relevant words and include the server name (e.g. 'github') to narrow results.",
+        "Keywords for the capability you need — combine the action (verb + object) with the server/product name when you know it, e.g. 'github search repositories' or 'slack send message'. Avoid querying with a bare product/server name on its own. Results are keyword-ranked across tool names, descriptions, and argument names/descriptions. If nothing fits, reformulate with different keywords and search again rather than settling for a poor match.",
       ),
     limit: z
       .number()
@@ -200,12 +202,23 @@ const registry = defineArchestraTools([
       const matchCount = matches.length;
       const tools = matches.slice(0, args.limit).map(toSearchResult);
       const truncated = matchCount > tools.length;
+      // Only relevant to the zero-match hint, so resolve it lazily to avoid an
+      // extra permission/assignment lookup on every successful search.
+      const sandboxAvailable =
+        matchCount === 0 && context.organizationId != null
+          ? await isSkillSandboxAvailableForAgent({
+              userId: context.userId,
+              organizationId: context.organizationId,
+              agentId: context.agentId,
+            })
+          : false;
       const hint = buildSearchHint({
         matchCount,
         truncated,
         limit: args.limit,
         searchableTools,
         unmatchedTerms,
+        sandboxAvailable,
       });
 
       const structured = {
@@ -778,17 +791,30 @@ function buildSearchHint(params: {
   limit: number;
   searchableTools: SearchCandidate[];
   unmatchedTerms: string[];
+  sandboxAvailable: boolean;
 }): string | null {
-  const { limit, matchCount, searchableTools, truncated, unmatchedTerms } =
-    params;
+  const {
+    limit,
+    matchCount,
+    sandboxAvailable,
+    searchableTools,
+    truncated,
+    unmatchedTerms,
+  } = params;
   const parts: string[] = [];
 
   if (matchCount === 0) {
     const servers = availableServerNames(searchableTools);
     const serverHint =
       servers.length > 0 ? ` Available servers: ${servers.join(", ")}.` : "";
+    const runCommand = archestraMcpBranding.getToolName(
+      TOOL_RUN_COMMAND_SHORT_NAME,
+    );
+    const sandboxHint = sandboxAvailable
+      ? ` If no tool fits, you can fall back to \`${runCommand}\` to do the work with command line tools.`
+      : "";
     parts.push(
-      `No tools matched. Try broader or different keywords, or switch mode.${serverHint}`,
+      `No tools matched. Try broader or different keywords, or switch mode.${serverHint}${sandboxHint}`,
     );
   } else if (truncated) {
     parts.push(

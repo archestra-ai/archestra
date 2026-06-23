@@ -36,7 +36,7 @@ jobs:
       (github.event_name == 'pull_request' &&
       github.event.label.name == 'run-benchmark' &&
       github.event.pull_request.head.repo.fork != true)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # checkout
       id-token: write # Workload Identity Federation + GKE credentials

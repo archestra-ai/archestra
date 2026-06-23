@@ -129,31 +129,6 @@ export function providerRequiresPerUserCredential(
   return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
 }
 
-/**
- * Providers temporarily hidden from the configuration UI so users can't select
- * or set them up, without ripping out the provider's backend/runtime code.
- *
- * GitHub Copilot is hidden because its credential is per-user (see
- * PROVIDERS_REQUIRING_PER_USER_CREDENTIAL): each person must sign in with their
- * own GitHub account, and a key/model configured by one user isn't visible to
- * anyone else. That makes the Model Providers and Models pages look broken to
- * everyone but the configuring user. Hiding it from selection sidesteps the
- * confusion until per-user UX is improved.
- *
- * To re-expose a provider, remove it from this set — nothing else needs to
- * change. An already-configured key for a hidden provider is still shown when
- * editing it (so existing setups remain manageable).
- */
-export const TEMPORARILY_HIDDEN_LLM_PROVIDERS = new Set<SupportedProvider>([
-  "github-copilot",
-]);
-
-export function isLlmProviderTemporarilyHidden(
-  provider: SupportedProvider,
-): boolean {
-  return TEMPORARILY_HIDDEN_LLM_PROVIDERS.has(provider);
-}
-
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;

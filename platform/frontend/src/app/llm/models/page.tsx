@@ -7,6 +7,7 @@ import {
   type ModelInputModality,
   type ModelOutputModality,
   OUTPUT_MODALITY_OPTIONS,
+  providerRequiresPerUserCredential,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -34,6 +35,7 @@ import {
   EmbeddingModelBadge,
   FreeModelBadge,
   LatestModelBadge,
+  PerUserModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { PageLayout } from "@/components/page-layout";
@@ -213,6 +215,9 @@ export default function ModelsPage() {
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
                 {row.original.isBest && <BestModelBadge />}
+                {providerRequiresPerUserCredential(provider) && (
+                  <PerUserModelBadge />
+                )}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
                 )}

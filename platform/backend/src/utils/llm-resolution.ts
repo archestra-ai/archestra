@@ -66,6 +66,28 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
 
+  // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
+  // its credential is resolved per-user at request time, so an explicit pick is
+  // honored by model alone: the key is not pinned and need not be linked to the
+  // picked key (which, for a member who hasn't connected, is some other
+  // provider's key the picker carried over). The acting user's own credential is
+  // resolved when the message is sent — or a connect prompt is surfaced if they
+  // haven't linked one.
+  if (params.explicitModelId) {
+    const explicitModel = await ModelModel.findById(params.explicitModelId);
+    if (
+      explicitModel &&
+      providerRequiresPerUserCredential(explicitModel.provider)
+    ) {
+      return {
+        modelId: explicitModel.id,
+        chatApiKeyId: null,
+        selectedModel: explicitModel.modelId,
+        selectedProvider: explicitModel.provider,
+      };
+    }
+  }
+
   const member = await MemberModel.getByUserId(userId, organizationId);
   const organization = await OrganizationModel.getById(organizationId);
 

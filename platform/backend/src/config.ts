@@ -766,10 +766,11 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * ships-dark/preview feature at once while keeping per-feature opt-out intact
  * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
  *
- * Beta only flips the *intent* to enable — infra-gated features still need their
- * backing setup to actually run: the sandbox/hooks need a Dagger runner host,
- * and the cloud auth modes (Bedrock IAM, Azure/Vertex Entra) need the relevant
- * provider configured with credentials present.
+ * This backs ships-dark *product* features only. It deliberately does NOT touch
+ * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
+ * deployment configuration rather than preview features. Beta only flips the
+ * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
+ * host present to actually run.
  *
  * @public — exported for testability
  */
@@ -938,18 +939,16 @@ const config = {
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
-      azureFoundryEntraIdEnabled: betaFeatureEnabled(
-        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED,
-      ),
+      azureFoundryEntraIdEnabled:
+        process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
+        "true",
     },
     gemini: {
       baseUrl:
         process.env.ARCHESTRA_GEMINI_BASE_URL ||
         "https://generativelanguage.googleapis.com",
       vertexAi: {
-        enabled: betaFeatureEnabled(
-          process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED,
-        ),
+        enabled: process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED === "true",
         project: process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT || "",
         location:
           process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION || "us-central1",
@@ -1035,9 +1034,7 @@ const config = {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
       /** Enable AWS IAM authentication (IRSA, env vars, instance profile) instead of API key */
-      iamAuthEnabled: betaFeatureEnabled(
-        process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED,
-      ),
+      iamAuthEnabled: process.env.ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED === "true",
       /** Explicit AWS region override; falls back to extracting from base URL */
       region: process.env.ARCHESTRA_BEDROCK_REGION || "",
       /** Comma-separated list of provider prefixes to include (e.g., "anthropic,amazon"). Empty = allow all. */
@@ -1060,9 +1057,8 @@ const config = {
       responsesApiVersion:
         process.env.ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION ||
         "2025-04-01-preview",
-      entraIdEnabled: betaFeatureEnabled(
-        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED,
-      ),
+      entraIdEnabled:
+        process.env.ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED === "true",
     },
   },
   chat: {

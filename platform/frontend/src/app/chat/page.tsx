@@ -7,17 +7,9 @@ import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
-  Download,
-  FileText,
-  Globe,
   MicIcon,
-  MoreHorizontal,
-  MoreVertical,
-  PanelRight,
   PaperclipIcon,
   Plus,
-  Share2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -45,6 +37,7 @@ import {
   deriveAppsFromMessages,
 } from "@/components/chat/chat-messages.utils";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
+import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
@@ -72,12 +65,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -85,8 +72,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { TypingText } from "@/components/ui/typing-text";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -123,7 +108,6 @@ import {
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
-  getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
@@ -1867,177 +1851,28 @@ export function ChatPageContent({
           <div className="flex flex-col h-full min-h-0">
             <StreamTimeoutWarning status={status} messages={messages} />
 
-            <div
-              className={cn(
-                "sticky top-0 z-10 bg-background border-b p-2",
-                !conversationId && "hidden",
-              )}
-            >
-              <div className="relative flex min-h-8 items-center justify-between gap-2">
-                {/* Left side - conversation title + actions */}
-                <div className="flex items-center gap-1 min-w-0">
-                  {conversationId && conversation && (
-                    <div className="flex items-center flex-shrink min-w-0">
-                      {/* Skip TruncatedTooltip while the title animates: its
-                          resize measurement re-renders on every TypingText tick,
-                          which loops past React's nested-update cap. */}
-                      {headerAnimatingTitles.has(conversation.id) ? (
-                        <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                          <TypingText
-                            text={getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )}
-                            typingSpeed={35}
-                            showCursor
-                            cursorClassName="bg-muted-foreground"
-                          />
-                        </h1>
-                      ) : (
-                        <TruncatedTooltip
-                          content={getConversationDisplayTitle(
-                            conversation.title,
-                            conversation.messages,
-                          )}
-                        >
-                          <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
-                            {getConversationDisplayTitle(
-                              conversation.title,
-                              conversation.messages,
-                            )}
-                          </h1>
-                        </TruncatedTooltip>
-                      )}
-                    </div>
-                  )}
-                  {/* Desktop: chat actions (Share / Export) next to the title */}
-                  {conversationId && messages.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="hidden md:inline-flex h-7 w-7 flex-shrink-0"
-                          title="Chat actions"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Chat actions</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {canManageShare && (
-                          <DropdownMenuItem
-                            onSelect={() => setIsShareDialogOpen(true)}
-                          >
-                            {isShared ? (
-                              <>
-                                <Users className="h-4 w-4 text-primary" />
-                                <span className="text-primary">Shared</span>
-                              </>
-                            ) : (
-                              <>
-                                <Share2 className="h-4 w-4" />
-                                Share
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onSelect={handleExportMarkdown}>
-                          <Download className="h-4 w-4" />
-                          Export Markdown
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-                {/* Right side - desktop: open panel (hidden while open; the
-                    panel's own close button is the only way to close it) */}
-                {!isRightPanelOpen && (
-                  <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={toggleRightPanel}
-                      className="h-8 w-8"
-                      title="Open panel"
-                    >
-                      <PanelRight className="h-4 w-4" />
-                      <span className="sr-only">Open panel</span>
-                    </Button>
-                  </div>
-                )}
-                {/* Right side - mobile: 3-dot dropdown */}
-                <div className="flex md:hidden items-center gap-2 flex-shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="More options"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                        <span className="sr-only">More options</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canManageShare && (
-                        <DropdownMenuItem
-                          onSelect={() => setIsShareDialogOpen(true)}
-                        >
-                          {isShared ? (
-                            <>
-                              <Users className="h-4 w-4 text-primary" />
-                              <span className="text-primary">Shared</span>
-                            </>
-                          ) : (
-                            <>
-                              <Share2 className="h-4 w-4" />
-                              Share
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {conversationId && messages.length > 0 && (
-                        <DropdownMenuItem onSelect={handleExportMarkdown}>
-                          <Download className="h-4 w-4" />
-                          Export Markdown
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          if (isArtifactOpen) {
-                            closeRightPanel();
-                          } else {
-                            openRightPanelTab("files");
-                          }
-                        }}
-                      >
-                        <FileText className="h-4 w-4" />
-                        {isArtifactOpen ? "Hide Files" : "Show Files"}
-                      </DropdownMenuItem>
-                      {showBrowserButton && (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (isBrowserPanelVisible) {
-                              closeRightPanel();
-                            } else {
-                              openRightPanelTab("browser");
-                            }
-                          }}
-                          disabled={isPlaywrightSetupVisible}
-                        >
-                          <Globe className="h-4 w-4" />
-                          {isBrowserPanelVisible
-                            ? "Hide Browser"
-                            : "Show Browser"}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
+            <ConversationHeader
+              conversationId={conversationId}
+              conversation={conversation}
+              messageCount={messages.length}
+              isTitleAnimating={
+                !!conversation && headerAnimatingTitles.has(conversation.id)
+              }
+              canManageShare={canManageShare}
+              isShared={isShared}
+              onShare={() => setIsShareDialogOpen(true)}
+              onExportMarkdown={handleExportMarkdown}
+              panel={{
+                isOpen: isRightPanelOpen,
+                isArtifactOpen,
+                isBrowserVisible: isBrowserPanelVisible,
+                showBrowserButton,
+                isPlaywrightSetupVisible,
+                onToggle: toggleRightPanel,
+                onClose: closeRightPanel,
+                onOpenTab: openRightPanelTab,
+              }}
+            />
 
             {/* Mobile: Inline artifact/browser panel below header */}
             {isRightPanelOpen && (

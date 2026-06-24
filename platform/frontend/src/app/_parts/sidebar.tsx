@@ -664,7 +664,8 @@ export function AppSidebar() {
                   ...resolved,
                   subItems: resolved.subItems.filter((sub) => {
                     // With projects on, schedules are managed per-project on the
-                    // project detail page, so the standalone entry is hidden.
+                    // project detail page (the per-project runs view), so the
+                    // standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;
                     return true;
                   }),

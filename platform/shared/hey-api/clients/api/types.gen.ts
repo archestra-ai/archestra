@@ -25531,6 +25531,7 @@ export type GetConfigResponses = {
             fullWhiteLabeling: boolean;
         };
         features: {
+            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             agentSkillsEnabled: boolean;
@@ -42224,6 +42225,8 @@ export type GetLlmModelsResponses = {
         isBest?: boolean;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
+        requiresUserConnection?: boolean;
+        isConnected?: boolean;
     }>;
 };
 
@@ -54246,6 +54249,178 @@ export type GetProjectFilesResponses = {
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
 
+export type GetProjectInstructionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/instructions';
+};
+
+export type GetProjectInstructionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectInstructionsError = GetProjectInstructionsErrors[keyof GetProjectInstructionsErrors];
+
+export type GetProjectInstructionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        content: string;
+    };
+};
+
+export type GetProjectInstructionsResponse = GetProjectInstructionsResponses[keyof GetProjectInstructionsResponses];
+
+export type SetProjectInstructionsData = {
+    body: {
+        content: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/instructions';
+};
+
+export type SetProjectInstructionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetProjectInstructionsError = SetProjectInstructionsErrors[keyof SetProjectInstructionsErrors];
+
+export type SetProjectInstructionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type SetProjectInstructionsResponse = SetProjectInstructionsResponses[keyof SetProjectInstructionsResponses];
+
 export type GetProjectConversationsData = {
     body?: never;
     path: {
@@ -61637,6 +61812,9 @@ export type GetToolsWithAssignmentsResponses = {
             parameters?: {
                 [key: string]: unknown;
             };
+            annotations: {
+                [key: string]: unknown;
+            } | null;
             catalogId: string | null;
             createdAt: string;
             updatedAt: string;

@@ -17,6 +17,7 @@ use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_
 use crate::client::{AgentCreate, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
+use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
 use crate::interactions::extract_effective_prompts;
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
@@ -372,12 +373,16 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     let mut shared_setups: Vec<Option<HashMap<String, SharedLaneSetup>>> =
         plan.iter().map(|_| None).collect();
     let mut shared_instances: Vec<Instance> = Vec::new();
+    let mut shared_fixtures: Vec<FixtureMcp> = Vec::new();
     let mut infra: Vec<RunResult> = Vec::new();
     for (i, env_plan) in plan.iter().enumerate() {
         if env_plan.share_backend() {
             match setup_shared_env(env_plan, &ctx).await {
-                Ok((instance, setups)) => {
+                Ok((instance, fixture, setups)) => {
                     shared_instances.push(instance);
+                    if let Some(fixture) = fixture {
+                        shared_fixtures.push(fixture);
+                    }
                     shared_setups[i] = Some(setups);
                 }
                 Err(e) => infra.extend(infra_results(env_plan, &ctx, &progress, &e)),
@@ -463,6 +468,9 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
         .collect()
         .await;
 
+    for fixture in &shared_fixtures {
+        fixture.stop().await;
+    }
     for instance in &shared_instances {
         let _ = instance.shutdown().await;
     }
@@ -502,7 +510,14 @@ async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
 async fn setup_shared_env(
     env_plan: &EnvPlan,
     ctx: &RunCtx,
-) -> Result<(Instance, HashMap<String, SharedLaneSetup>), String> {
+) -> Result<
+    (
+        Instance,
+        Option<FixtureMcp>,
+        HashMap<String, SharedLaneSetup>,
+    ),
+    String,
+> {
     let env = &env_plan.env;
     let log_path = ctx
         .root_run_dir
@@ -623,6 +638,39 @@ async fn setup_shared_env(
         }
     }
 
+    // One harness-owned synthetic MCP for the whole shared backend: it serves fixed, stateless content
+    // (see fixture_mcp.rs), so a single instance registered to every lane's agent is safe under
+    // concurrency -- mirroring how the public distractor MCPs above are seeded once for all agents.
+    let fixture = if env.fixture_mcp {
+        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
+        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
+            Ok(fixture) => {
+                if let Err(e) = register_remote_mcp(
+                    &client,
+                    fixture.name(),
+                    fixture.base_url(),
+                    "org",
+                    Some(agent_ids.as_slice()),
+                )
+                .await
+                {
+                    fixture.stop().await;
+                    stop_mcps(&setups).await;
+                    let _ = instance.shutdown().await;
+                    return Err(e.to_string());
+                }
+                Some(fixture)
+            }
+            Err(e) => {
+                stop_mcps(&setups).await;
+                let _ = instance.shutdown().await;
+                return Err(e.to_string());
+            }
+        }
+    } else {
+        None
+    };
+
     if let Err(e) = client.warm_user_token().await {
         warn!("warm_user_token failed; lanes may race gateway-token insert (non-fatal): {e}");
     }
@@ -645,7 +693,7 @@ async fn setup_shared_env(
         })
         .collect();
 
-    Ok((instance, lane_setups))
+    Ok((instance, fixture, lane_setups))
 }
 
 async fn run_isolated_lane(
@@ -765,6 +813,51 @@ async fn run_isolated_lane(
         }
     }
 
+    let fixture_mcp = if env.fixture_mcp {
+        // Isolated-lane fixture: one server per lane, torn down with the lane. Shared-backend envs start
+        // the fixture once in setup_shared_env instead; both are supported.
+        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
+            Ok(fixture) => {
+                if let Err(e) = register_remote_mcp(
+                    &client,
+                    fixture.name(),
+                    fixture.base_url(),
+                    "org",
+                    Some(std::slice::from_ref(&agent_id)),
+                )
+                .await
+                {
+                    fixture.stop().await;
+                    mcp.stop().await;
+                    let _ = instance.shutdown().await;
+                    return infra_results_for_lane(
+                        &env,
+                        &tasks,
+                        &lane,
+                        &ctx,
+                        &progress,
+                        &e.to_string(),
+                    );
+                }
+                Some(fixture)
+            }
+            Err(e) => {
+                mcp.stop().await;
+                let _ = instance.shutdown().await;
+                return infra_results_for_lane(
+                    &env,
+                    &tasks,
+                    &lane,
+                    &ctx,
+                    &progress,
+                    &e.to_string(),
+                );
+            }
+        }
+    } else {
+        None
+    };
+
     let results = run_lane(
         client,
         env,
@@ -779,6 +872,9 @@ async fn run_isolated_lane(
         progress,
     )
     .await;
+    if let Some(fixture) = &fixture_mcp {
+        fixture.stop().await;
+    }
     let _ = instance.shutdown().await;
     results
 }
@@ -2671,6 +2767,7 @@ mod tests {
             tasks,
             tools: vec![],
             share_backend: false,
+            fixture_mcp: false,
             platform: crate::config::types::PlatformConfig::default(),
         }
     }

@@ -110,6 +110,14 @@ class ProjectService {
       candidates = candidates.filter(
         (c) => c.project.visibility === "organization",
       );
+    } else {
+      // "All": an admin sees the whole org EXCEPT other members' PRIVATE
+      // projects — those live under Personal → Other users (mirrors the Agents
+      // filter, where "All types" hides other users' personal agents). Only
+      // affects admins; non-admins have no oversight candidates to drop.
+      candidates = candidates.filter(
+        (c) => !(c.viewerRole === "admin" && c.project.visibility === null),
+      );
     }
 
     // admin "My / Other users" owner sub-filter (honored upstream for admins only).
@@ -263,6 +271,50 @@ class ProjectService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The project's instructions text ("" when never saved). Readable by anyone
+   * with project access — the instructions steer every chat in the project.
+   */
+  async getInstructions(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<{ content: string }> {
+    // Instructions are project config (not chats), so a project admin overseeing
+    // a foreign project may read them too — same gate as the project detail/files.
+    const { project } = await this.requireViewable({
+      ...params,
+      allowAdminOversight: true,
+    });
+    const content = await fileStore.readProjectInstructions({
+      organizationId: params.organizationId,
+      projectId: project.id,
+    });
+    return { content: content ?? "" };
+  }
+
+  /**
+   * Create or replace the project's instructions (owner only). The first save
+   * materializes the real `instructions.md` file; empty content is kept (an
+   * empty file is simply not injected into chats), never deleted.
+   */
+  async setInstructions(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    content: string;
+  }): Promise<void> {
+    // Writing instructions is project management (like edit/share/delete), so the
+    // owner or a project admin may do it.
+    const project = await this.requireManageable(params);
+    await fileStore.writeProjectInstructions({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      projectId: project.id,
+      content: params.content,
+    });
   }
 
   /** Upsert (or remove, when visibility is null) the project's share. */

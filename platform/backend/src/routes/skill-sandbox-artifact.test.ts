@@ -1,7 +1,10 @@
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  PROJECT_INSTRUCTIONS_FILENAME,
+} from "@archestra/shared";
 import config from "@/config";
 import { FileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -657,6 +660,36 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     expect(del.statusCode).toBe(200);
     expect(await FileModel.findById(produced.id)).toBeNull();
+  });
+
+  test("the project instructions file cannot be deleted via the route (409)", async () => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "instr-undeletable",
+      description: null,
+    });
+    await fileStore.writeProjectInstructions({
+      organizationId,
+      userId: user.id,
+      projectId: project.id,
+      content: "do not delete me",
+    });
+    const row = await FileModel.findByProjectAndName({
+      organizationId,
+      projectId: project.id,
+      filename: PROJECT_INSTRUCTIONS_FILENAME,
+    });
+    expect(row).not.toBeNull();
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${row?.id}`,
+    });
+    expect(del.statusCode).toBe(409);
+    // still there
+    expect(await FileModel.findById(row?.id ?? "")).not.toBeNull();
   });
 });
 

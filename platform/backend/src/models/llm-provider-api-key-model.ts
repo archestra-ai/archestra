@@ -410,6 +410,60 @@ class LlmProviderApiKeyModelLinkModel {
     }));
   }
   /**
+   * Get a per-user provider's models that have been synced by ANY member of the
+   * org (across every member's personal key for that provider).
+   *
+   * Per-user providers (GitHub Copilot) catalogue the same models for everyone —
+   * only the credential is resolved per-user at request time — so the picker for
+   * a member who hasn't connected should still list the provider's models
+   * (flagged "connect your account") rather than show an empty list. Scoping to
+   * org keys keeps it to models that have actually been connected in this org.
+   * A model is `isBest` if any linked key in the org marks it so.
+   */
+  static async getOrgModelsForPerUserProvider(
+    organizationId: string,
+    provider: SupportedProvider,
+  ): Promise<Array<{ model: Model; isBest: boolean }>> {
+    const results = await db
+      .select({
+        model: schema.modelsTable,
+        isBest:
+          sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
+            "is_best_agg",
+          ),
+      })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.llmProviderApiKeyModelsTable.apiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, provider),
+          eq(schema.modelsTable.provider, provider),
+        ),
+      )
+      .groupBy(schema.modelsTable.id)
+      .orderBy(
+        asc(schema.modelsTable.provider),
+        asc(schema.modelsTable.modelId),
+      );
+
+    return results.map((r) => ({
+      model: r.model,
+      isBest: r.isBest,
+    }));
+  }
+
+  /**
    * Get the "best" model for a specific API key.
    * Returns the model marked with is_best=true, or falls back to the first model.
    */

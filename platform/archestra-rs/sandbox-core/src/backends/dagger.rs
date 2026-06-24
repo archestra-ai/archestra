@@ -496,8 +496,11 @@ fn spawn_channel_keepalive(
 
 /// Tick `ping` every `interval` until the shutdown broadcast fires. The transport
 /// ping is injected so the loop's control flow is testable without a live engine.
-async fn keepalive_loop<F, Fut>(interval: Duration, mut shutdown: broadcast::Receiver<()>, mut ping: F)
-where
+async fn keepalive_loop<F, Fut>(
+    interval: Duration,
+    mut shutdown: broadcast::Receiver<()>,
+    mut ping: F,
+) where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
@@ -1273,7 +1276,10 @@ mod tests {
 
         let returned = tokio::time::timeout(Duration::from_secs(5), proc.shutdown()).await;
         assert!(returned.is_ok(), "shutdown() must return promptly");
-        assert!(process_finished(pid), "shutdown() must reap the exited child");
+        assert!(
+            process_finished(pid),
+            "shutdown() must reap the exited child"
+        );
         std::fs::remove_file(&script).ok();
     }
 

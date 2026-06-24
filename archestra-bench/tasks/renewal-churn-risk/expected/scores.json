@@ -1,0 +1,77 @@
+{
+  "ACC-01": {
+    "arr_usd": 320000,
+    "score": 82.833333,
+    "top_driver": "usage_decline"
+  },
+  "ACC-02": {
+    "arr_usd": 540000,
+    "score": 66.166667,
+    "top_driver": "billing"
+  },
+  "ACC-03": {
+    "arr_usd": 180000,
+    "score": 64.166667,
+    "top_driver": "support_load"
+  },
+  "ACC-04": {
+    "arr_usd": 95000,
+    "score": 71.0,
+    "top_driver": "usage_decline"
+  },
+  "ACC-05": {
+    "arr_usd": 410000,
+    "score": 41.0,
+    "top_driver": "support_load"
+  },
+  "ACC-06": {
+    "arr_usd": 60000,
+    "score": 23.133333,
+    "top_driver": "billing"
+  },
+  "ACC-07": {
+    "arr_usd": 270000,
+    "score": 2.727273,
+    "top_driver": "usage_decline"
+  },
+  "ACC-08": {
+    "arr_usd": 130000,
+    "score": 15.944444,
+    "top_driver": "support_load"
+  },
+  "ACC-09": {
+    "arr_usd": 200000,
+    "score": 0.5,
+    "top_driver": "usage_decline"
+  },
+  "ACC-10": {
+    "arr_usd": 75000,
+    "score": 1.0,
+    "top_driver": "usage_decline"
+  },
+  "ACC-11": {
+    "arr_usd": 350000,
+    "score": 8.904762,
+    "top_driver": "support_load"
+  },
+  "ACC-12": {
+    "arr_usd": 50000,
+    "score": 12.666667,
+    "top_driver": "billing"
+  },
+  "ACC-13": {
+    "arr_usd": 160000,
+    "score": 0.0,
+    "top_driver": "usage_decline"
+  },
+  "ACC-14": {
+    "arr_usd": 90000,
+    "score": 1.142857,
+    "top_driver": "usage_decline"
+  },
+  "ACC-15": {
+    "arr_usd": 140000,
+    "score": 10.438596,
+    "top_driver": "support_load"
+  }
+}

@@ -24,6 +24,10 @@ Holders of `project:admin` get the agents-style owner sub-filter under **Persona
 
 `project:admin` is additive oversight, not a standalone role: it lets a holder discover other members' projects and act on the project and its files, but never read their chats, and it does not by itself grant schedule control. It layers on the standard `project` permissions — to edit or delete a foreign project a custom role also needs `project:update` / `project:delete` (and `project:read` to see it); to manage that project's scheduled runs it needs `scheduledTask:admin`. The predefined Admin role already holds all of these. Configure custom roles from [Access Control](./platform-access-control).
 
+## Instructions
+
+Every project has an instructions file (`instructions.md`) whose contents are prepended to the system prompt of every chat in the project, so standing guidance — domain context, house style, constraints the agent must always follow — applies to every conversation without being repeated in each prompt. Edit it from the pinned entry at the top of the project's Files panel; owner edits take effect on the next message in any of the project's chats, and empty instructions add nothing. Once saved it is an ordinary project file that agents can read and update, but it cannot be deleted — clear its contents to remove the guidance.
+
 ## Files
 
 In a project chat, the files an agent produces (`save_result`, `download_file`) are saved to the project, so anyone with project access can reach them — unlike a personal chat, whose files stay scoped to the conversation that produced them. The chat's Files panel shows the files created in that chat and its attachments, and in a project chat it also lists the project's files; the project page is where you browse a project's full set.

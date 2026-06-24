@@ -1,0 +1,44 @@
+[[stages]]
+text = """We persist the agent sandbox's `run_command` output so a session can be replayed later: each command's stdout, stderr, exit code and timing go to Postgres. The code path is the `appendCommand` method in `models/skill-sandbox-replay-event.ts`.
+
+I've attached a snapshot of the relevant backend source as a `.tar.gz`. Review this persistence path and decide whether it's safe to ship. Call submit_result with:
+
+- `verdict`: exactly one of
+  - `approve` -- no blocking issue
+  - `decline:nul-persistence` -- persisted output can contain bytes the chosen column type can't store
+  - `decline:output-not-truncated` -- output size is unbounded and can break the write
+  - `decline:no-timeout` -- the command can run unbounded
+  - `decline:unawaited-write` -- the DB write isn't awaited and can lose data
+  - `decline:missing-validation` -- inserted values are unvalidated
+  - `decline:stderr-ordering` -- stdout/stderr ordering isn't preserved
+- `rationale`: one or two sentences explaining your verdict in your own words.
+
+If you decline, pick the single most serious blocking reason. Example shape: result = {"verdict": "...", "rationale": "..."}."""
+
+  [[stages.files]]
+  src = "backend-src.tar.gz"
+  dest = "/home/sandbox/attachments/backend-src.tar.gz"
+  mime_type = "application/gzip"
+
+[result_schema]
+type = "object"
+required = ["verdict", "rationale"]
+additionalProperties = false
+
+  [result_schema.properties.verdict]
+  enum = [
+    "approve",
+    "decline:nul-persistence",
+    "decline:output-not-truncated",
+    "decline:no-timeout",
+    "decline:unawaited-write",
+    "decline:missing-validation",
+    "decline:stderr-ordering",
+  ]
+
+  [result_schema.properties.rationale]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = []

@@ -5,6 +5,7 @@ import { SkillModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
   buildAgentSystemPrompt,
+  PROJECT_INSTRUCTIONS_PREFIX,
   TOOL_DENIAL_INSTRUCTION,
   TOOL_UI_RESULT_INSTRUCTION,
 } from "./agent-system-prompt";
@@ -249,6 +250,59 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt?.endsWith("SESSION-CONTEXT-MARKER")).toBe(true);
+  });
+
+  test("injects project instructions right after the agent's own prompt", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      projectInstructions: "PROJECT-RULES-MARKER",
+    });
+
+    // Present, framed by the canonical prefix, and positioned after the agent
+    // prompt but before the denial instruction.
+    expect(prompt).toContain(PROJECT_INSTRUCTIONS_PREFIX);
+    expect(prompt).toContain("PROJECT-RULES-MARKER");
+    expect(prompt).toBe(
+      `You are helpful.\n\n${PROJECT_INSTRUCTIONS_PREFIX}\n\nPROJECT-RULES-MARKER\n\n${TOOL_DENIAL_INSTRUCTION}`,
+    );
+  });
+
+  test("omits the project instructions section when none are given", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).not.toContain(PROJECT_INSTRUCTIONS_PREFIX);
   });
 
   test("returns the denial instruction alone for an agent with no base prompt or tools", async ({

@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { userHasPermission } from "@/auth/utils";
 import {
   KbChunkModel,
@@ -39,8 +40,12 @@ function buildDocumentAccessControlList(params: {
   switch (params.visibility) {
     case "org-wide":
       return ["org:*"];
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     case "team-scoped":
       return params.teamIds.map((id): AclEntry => `team:${id}`);
+    // SPDX-SnippetEnd
   }
 }
 
@@ -50,9 +55,13 @@ export function buildUserAccessControlList(params: {
 }): AclEntry[] {
   const acl: AclEntry[] = ["org:*", `user_email:${params.userEmail}`];
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   for (const teamId of params.teamIds) {
     acl.push(`team:${teamId}`);
   }
+  // SPDX-SnippetEnd
 
   return acl;
 }
@@ -165,6 +174,9 @@ class KnowledgeSourceAccessControlService {
       return true;
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     if (source.visibility !== "team-scoped") {
       return true;
     }
@@ -172,6 +184,7 @@ class KnowledgeSourceAccessControlService {
     return source.teamIds.some((teamId) =>
       accessControl.teamIds.includes(teamId),
     );
+    // SPDX-SnippetEnd
   }
 }
 

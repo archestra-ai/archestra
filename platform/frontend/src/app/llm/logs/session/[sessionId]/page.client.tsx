@@ -109,6 +109,13 @@ export default function SessionDetailPage({
 
   // Session metadata from API
   const sessionSource = sessionData?.sessionSource;
+  // Badge label for the Claude clients (Code and Desktop); null for other sources.
+  const claudeSourceLabel =
+    sessionSource === "claude_code"
+      ? "Claude Code"
+      : sessionSource === "claude_desktop"
+        ? "Claude Desktop"
+        : null;
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 
@@ -175,12 +182,12 @@ export default function SessionDetailPage({
         title={sessionTitle || "Session"}
         badges={
           <>
-            {sessionSource === "claude_code" && (
+            {claudeSourceLabel && (
               <Badge
                 variant="secondary"
                 className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
               >
-                Claude Code
+                {claudeSourceLabel}
               </Badge>
             )}
             <SourceBadge source={sessionData?.source} />

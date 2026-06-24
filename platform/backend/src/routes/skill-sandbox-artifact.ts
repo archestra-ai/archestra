@@ -5,7 +5,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
-import { fileStore } from "@/skills-sandbox/file-store";
+import { FileNotDeletableError, fileStore } from "@/skills-sandbox/file-store";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import {
   ApiError,
@@ -147,22 +147,38 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
       async ({ params: { artifactId }, organizationId, user }) => {
-        let deleted = await fileStore.delete({
-          ref: artifactId,
-          organizationId,
-          userId: user.id,
-        });
-        // A project admin may also delete a foreign project's files (oversight),
-        // mirroring the read path — project-scoped files only, never personal.
-        // Checked lazily so the normal path pays no extra permission lookup.
-        if (
-          !deleted &&
-          (await userHasPermission(user.id, organizationId, "project", "admin"))
-        ) {
-          deleted = await fileStore.deleteProjectScopedForAdmin({
+        let deleted: boolean;
+        try {
+          deleted = await fileStore.delete({
             ref: artifactId,
             organizationId,
+            userId: user.id,
           });
+          // A project admin may also delete a foreign project's files (oversight),
+          // mirroring the read path — project-scoped files only, never personal.
+          // Checked lazily so the normal path pays no extra permission lookup.
+          // Inside the try so the instructions-file guard below still applies.
+          if (
+            !deleted &&
+            (await userHasPermission(
+              user.id,
+              organizationId,
+              "project",
+              "admin",
+            ))
+          ) {
+            deleted = await fileStore.deleteProjectScopedForAdmin({
+              ref: artifactId,
+              organizationId,
+            });
+          }
+        } catch (error) {
+          // The project instructions file is never deletable; surface it as a
+          // conflict rather than a generic 500.
+          if (error instanceof FileNotDeletableError) {
+            throw new ApiError(409, error.message);
+          }
+          throw error;
         }
         if (!deleted) {
           throw new ApiError(404, "Artifact not found");

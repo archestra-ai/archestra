@@ -625,24 +625,22 @@ pub fn bench_postgres_unavailable_message(
     }
 }
 
-/// Which Dagger host to use, decided purely from booleans so the ladder is unit-testable.
+/// Which local-ladder tier to use, decided purely from booleans so it is unit-testable. The explicit
+/// override is handled before this (it short-circuits the whole ladder), so it isn't a variant here.
 #[derive(Debug, PartialEq, Eq)]
 enum RunnerChoice {
-    Explicit(String),
     Managed,
     K8s,
     None,
 }
 
-/// The local resolution ladder (no I/O): an explicit override wins; else the runner-managed engine
-/// when Docker can run it and the image is already pulled; else the dev-stack port-forward when it is
-/// listening; else nothing.
-fn decide_runner(explicit: Option<String>, managed_runnable: bool, k8s_open: bool) -> RunnerChoice {
-    match (explicit, managed_runnable, k8s_open) {
-        (Some(host), _, _) => RunnerChoice::Explicit(host),
-        (None, true, _) => RunnerChoice::Managed,
-        (None, false, true) => RunnerChoice::K8s,
-        (None, false, false) => RunnerChoice::None,
+/// The local resolution ladder (no I/O): the runner-managed engine when Docker can run it and the
+/// image is already pulled; else the dev-stack port-forward when it is listening; else nothing.
+fn decide_runner(managed_runnable: bool, k8s_open: bool) -> RunnerChoice {
+    match (managed_runnable, k8s_open) {
+        (true, _) => RunnerChoice::Managed,
+        (false, true) => RunnerChoice::K8s,
+        (false, false) => RunnerChoice::None,
     }
 }
 
@@ -651,22 +649,20 @@ fn decide_runner(explicit: Option<String>, managed_runnable: bool, k8s_open: boo
 async fn resolve_runner_host(dagger_compose: &Path) -> Result<String, LifecycleError> {
     RESOLVED_RUNNER_HOST
         .get_or_try_init(|| async {
-            let explicit = env_override(RUNNER_HOST_ENV);
-            // Read the engine tag up front: a misconfigured compose fails clearly here, and the
-            // `image_present` probe and the unavailable message then share one source of truth.
+            // The explicit override wins outright and must not depend on the local compose file (the
+            // prod image sets a `kube-pod://` host and ships no compose), so return before reading it.
+            if let Some(host) = env_override(RUNNER_HOST_ENV) {
+                info!("sandbox: explicit Dagger runner host {host} (ladder skipped)");
+                return Ok(host);
+            }
+            // Only the local ladder needs the engine tag; reading it here lets a misconfigured compose
+            // fail clearly, and the `image_present` probe and the unavailable message share one source.
             let tag = engine_tag(dagger_compose)?;
-            // Short-circuit the probes the ladder won't reach (don't run `docker info` when an
-            // explicit host is set, don't probe k8s once the managed engine is chosen).
-            let managed_runnable =
-                explicit.is_none() && docker_running().await && image_present(&tag).await;
-            let k8s_open = explicit.is_none()
-                && !managed_runnable
-                && tcp_open(K8S_DAGGER_PROBE_ADDR, Duration::from_secs(1)).await;
-            match decide_runner(explicit, managed_runnable, k8s_open) {
-                RunnerChoice::Explicit(host) => {
-                    info!("sandbox: explicit Dagger runner host {host} (ladder skipped)");
-                    Ok(host)
-                }
+            let managed_runnable = docker_running().await && image_present(&tag).await;
+            // Don't probe k8s once the managed engine is chosen.
+            let k8s_open =
+                !managed_runnable && tcp_open(K8S_DAGGER_PROBE_ADDR, Duration::from_secs(1)).await;
+            match decide_runner(managed_runnable, k8s_open) {
                 RunnerChoice::Managed => {
                     ensure_bench_dagger(dagger_compose).await?;
                     info!("sandbox: runner-managed Dagger engine on {MANAGED_DAGGER_HOST}");
@@ -1018,14 +1014,11 @@ mod tests {
     }
 
     #[test]
-    fn test_decide_runner_prefers_explicit_then_managed_then_k8s() {
-        assert_eq!(
-            decide_runner(Some("kube-pod://x".to_string()), true, true),
-            RunnerChoice::Explicit("kube-pod://x".to_string())
-        );
-        assert_eq!(decide_runner(None, true, true), RunnerChoice::Managed);
-        assert_eq!(decide_runner(None, false, true), RunnerChoice::K8s);
-        assert_eq!(decide_runner(None, false, false), RunnerChoice::None);
+    fn test_decide_runner_prefers_managed_then_k8s_then_none() {
+        assert_eq!(decide_runner(true, true), RunnerChoice::Managed);
+        assert_eq!(decide_runner(true, false), RunnerChoice::Managed);
+        assert_eq!(decide_runner(false, true), RunnerChoice::K8s);
+        assert_eq!(decide_runner(false, false), RunnerChoice::None);
     }
 
     #[test]

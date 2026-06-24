@@ -70,20 +70,22 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Read the cached boot status only — never trigger a sandbox probe here.
-      // Shared across both 200 branches so the sandbox field can't be carried by
-      // one and dropped by the other.
-      const ok200 = {
+      // Build the shared 200 fields at the moment of responding, reading the
+      // cached boot status only — never triggering a sandbox probe. A single
+      // definition keeps the two 200 branches from diverging; calling it per
+      // branch keeps the snapshot consistent with the response (no stale read
+      // held across the DB await below).
+      const ready200 = () => ({
         name,
         version,
         ...mapSandboxStatus(skillSandboxRuntimeService.bootStatus),
-      };
+      });
 
       // Maintenance mode must stay available while the database is offline or
       // being upgraded, so readiness intentionally skips the DB probe here.
       if (config.maintenanceMode) {
         return reply.send({
-          ...ok200,
+          ...ready200(),
           status: "maintenance",
           database: "not_checked",
         });
@@ -101,7 +103,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      return reply.send({ ...ok200, status: "ok", database: "connected" });
+      return reply.send({ ...ready200(), status: "ok", database: "connected" });
     },
   );
 };

@@ -5,12 +5,14 @@ import type { ChatMessage, ChatMessagePart } from "@/types";
  * Rewrite materialized messages into a shape the target provider's SDK accepts
  * before `convertToModelMessages`.
  *
- * Text-document file parts (CSV/JSON/Markdown/…) are handled three ways:
+ * Text-document file parts (CSV/JSON/Markdown/…) are handled four ways:
  * - `anthropic`/`bedrock`: rewrite the document part's mediaType to text/plain
  *   (their SDKs relay text/plain documents natively).
- * - `gemini`/`cohere`: pass through — @ai-sdk/google inlines any file part as
- *   inlineData and @ai-sdk/cohere routes text/JSON documents into its native
- *   `documents` path, so the document survives as a document.
+ * - `cohere`: @ai-sdk/cohere accepts only `text/*` and `application/json`
+ *   documents, so rewrite the two upload-allowed types it rejects
+ *   (`application/csv`, `application/vnd.ms-excel`) to text/plain and pass the
+ *   rest through to its native `documents` path.
+ * - `gemini`: pass through — @ai-sdk/google inlines any file part as inlineData.
  * - every other provider (OpenAI-compatible, groq, xai, mistral, cerebras, …):
  *   the SDK throws `UnsupportedFunctionalityError` for any non-image/-pdf file
  *   part — including text/plain — so the document is inlined as a `text` part
@@ -36,21 +38,17 @@ export function prepareMessagesForProvider(params: {
       );
   }
 
-  // Providers whose SDK relays a text-document file part as a document — leave
-  // the file part intact (anthropic/bedrock handled above with a rewrite).
-  if (NATIVE_TEXT_DOCUMENT_PROVIDERS.has(provider)) {
+  if (provider === "cohere") {
+    return messages.map(normalizeCohereMessageFileParts);
+  }
+
+  // @ai-sdk/google inlines any file part as inlineData — the document survives.
+  if (provider === "gemini") {
     return messages;
   }
 
   return messages.map(inlineTextDocumentMessageFileParts);
 }
-
-const NATIVE_TEXT_DOCUMENT_PROVIDERS: ReadonlySet<SupportedProvider> = new Set([
-  "anthropic",
-  "bedrock",
-  "gemini",
-  "cohere",
-]);
 
 // ===== Inline-as-text path (providers that reject document file parts) =====
 
@@ -85,9 +83,11 @@ function inlineTextDocumentFilePart(part: ChatMessagePart): ChatMessagePart {
     part.mediaType,
   );
   if (decoded === null) {
-    // Not a base64 data: URL we can decode (e.g. an unresolved ref). Leave the
-    // part as-is; the provider SDK will reject it and the error mapper names the
-    // unsupported media type rather than us inlining garbage.
+    // Either not a base64 data: URL we can decode (e.g. an unresolved ref), or
+    // the bytes are not valid UTF-8 (e.g. a binary .xls mislabeled as a text
+    // document). Leave the part as-is rather than inlining replacement-char
+    // garbage — the provider SDK rejects it and the error mapper names the
+    // unsupported media type.
     return part;
   }
 
@@ -118,9 +118,11 @@ export function isInlineableTextDocumentMimeType(mediaType: string): boolean {
   );
 }
 
-// Decodes the base64 body of a `data:<mediaType>;base64,...` URL to UTF-8.
+// Decodes the base64 body of a `data:<mediaType>;base64,...` URL as UTF-8.
 // Returns null for any other URL shape (the pipeline always produces this exact
-// form; see materialize-attachments + normalizeDataUrlMediaType).
+// form; see materialize-attachments + normalizeDataUrlMediaType) OR when the
+// bytes are not valid UTF-8 — a fatal decoder rejects binary content so we never
+// inline replacement-character garbage as authoritative attachment text.
 function decodeBase64DataUrlText(
   url: string | undefined,
   mediaType: string,
@@ -129,7 +131,12 @@ function decodeBase64DataUrlText(
   if (!url?.startsWith(prefix)) {
     return null;
   }
-  return Buffer.from(url.slice(prefix.length), "base64").toString("utf-8");
+  const bytes = Buffer.from(url.slice(prefix.length), "base64");
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 // ===== Anthropic =====
@@ -224,6 +231,55 @@ function normalizeBedrockFilePart(part: ChatMessagePart): ChatMessagePart {
 // document list — normalize to text/plain so the AI SDK can relay them.
 function isBedrockTextNormalizableMimeType(mediaType: string): boolean {
   return mediaType === "application/json" || mediaType === "application/csv";
+}
+
+// ===== Cohere =====
+
+function normalizeCohereMessageFileParts(message: ChatMessage): ChatMessage {
+  if (!message.parts?.length) {
+    return message;
+  }
+
+  let changed = false;
+  const parts = message.parts.map((part) => {
+    const normalizedPart = normalizeCohereFilePart(part);
+    if (normalizedPart !== part) {
+      changed = true;
+    }
+    return normalizedPart;
+  });
+
+  return changed ? { ...message, parts } : message;
+}
+
+function normalizeCohereFilePart(part: ChatMessagePart): ChatMessagePart {
+  if (
+    part.type !== "file" ||
+    typeof part.mediaType !== "string" ||
+    !isCohereTextNormalizableMimeType(part.mediaType)
+  ) {
+    return part;
+  }
+
+  return {
+    ...part,
+    mediaType: "text/plain",
+    url: normalizeDataUrlMediaType({
+      url: typeof part.url === "string" ? part.url : undefined,
+      fromMediaType: part.mediaType,
+      toMediaType: "text/plain",
+    }),
+  };
+}
+
+// @ai-sdk/cohere accepts only `text/*` and `application/json` document parts.
+// These two upload-allowed text mimes fall outside that set, so rewrite them to
+// text/plain; `text/csv`, `text/markdown`, `text/plain`, `application/json` pass
+// through to Cohere's native `documents` handling.
+function isCohereTextNormalizableMimeType(mediaType: string): boolean {
+  return (
+    mediaType === "application/csv" || mediaType === "application/vnd.ms-excel"
+  );
 }
 
 // Bedrock rejects user messages that contain a file/document block but no text

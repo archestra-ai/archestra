@@ -375,6 +375,10 @@ class SandboxRuntimeService {
       return await new Promise<T>((resolve, reject) => {
         backstopHandle = setTimeout(() => {
           if (this.status !== "stopped") this.setStatus("error");
+          // Count it here: the rejection below is already a SandboxRuntimeError,
+          // so normalizeError short-circuits and never reaches its
+          // engine_unreachable counter for the backstop path.
+          metrics.sandbox.reportRuntimeError({ code: "engine_unreachable" });
           logger.error(
             { totalMs },
             "[SandboxRuntime] native call exceeded backstop — engine assumed wedged",

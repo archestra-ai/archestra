@@ -181,9 +181,6 @@ const MANAGED_DAGGER_WAIT: Duration = Duration::from_secs(30);
 static BENCH_PG_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 /// Provision the runner-managed Dagger engine at most once per process (same rationale as above).
 static BENCH_DAGGER_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
-/// Start the managed-engine log follower at most once per process; the engine is process-wide and
-/// shared across all lanes, so one follower covers the whole run.
-static BENCH_DAGGER_LOGS_STARTED: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 /// The Dagger runner host. The first *successful* resolution is cached and shared across all lanes
 /// so they cannot split across tiers within a run; a failed attempt does not poison the cell
 /// (`get_or_try_init` leaves it empty on `Err`), so a transient hiccup lets the next lane re-resolve.
@@ -800,7 +797,25 @@ async fn ensure_bench_dagger(compose_file: &Path) -> Result<(), LifecycleError> 
 /// crash mid-run is root-causeable (OOM vs panic) and correlatable with the backend log's timestamps.
 const DAGGER_ENGINE_LOG_FILE: &str = "dagger.engine.log";
 
-/// Stream the managed Dagger engine's logs into the run dir for the duration of the run.
+/// A running managed-engine log follower. Stopped explicitly at run end via [`Self::stop`]; also
+/// registered in the teardown registry so SIGINT/SIGTERM reaps it. Stopping deregisters first, so the
+/// signal path and the normal path never double-kill.
+pub struct DaggerLogsGuard {
+    teardown_id: u64,
+    proc: Arc<Mutex<Option<Child>>>,
+}
+
+impl DaggerLogsGuard {
+    /// Kill the follower and drop it from the teardown registry. Idempotent — a later `shutdown_all`
+    /// finds the child already taken and the id already gone.
+    pub async fn stop(self) {
+        kill_child(&self.proc, "managed Dagger engine log follower").await;
+        deregister(self.teardown_id);
+    }
+}
+
+/// Stream the managed Dagger engine's logs into the run dir for the duration of the run, returning a
+/// guard the caller stops at run end (`None` when capture was skipped or could not start).
 ///
 /// MANAGED TIER ONLY: the engine is a local `docker compose` container we can `logs -f`. For the k8s
 /// port-forward tier and explicit `kube-pod://`/env-override hosts there is no local container to
@@ -808,21 +823,23 @@ const DAGGER_ENGINE_LOG_FILE: &str = "dagger.engine.log";
 /// so this reads the cached host rather than re-deciding.
 ///
 /// NON-FATAL: this is pure diagnostics. If `docker`/compose is missing or the follower fails to
-/// spawn, warn and continue — never fail or block a run on log capture. Started once per process
-/// ([`BENCH_DAGGER_LOGS_STARTED`]); the follower handle joins the same teardown registry that kills
-/// the backend, so it dies at run end and on SIGINT/SIGTERM.
-pub async fn capture_managed_dagger_logs(dagger_compose: &Path, root_run_dir: &Path) {
+/// spawn, warn and continue — never fail or block a run on log capture. The follower also joins the
+/// teardown registry, so SIGINT/SIGTERM reaps it even before [`DaggerLogsGuard::stop`] runs.
+pub async fn capture_managed_dagger_logs(
+    dagger_compose: &Path,
+    root_run_dir: &Path,
+) -> Option<DaggerLogsGuard> {
     if RESOLVED_RUNNER_HOST.get().map(String::as_str) != Some(MANAGED_DAGGER_HOST) {
         info!("sandbox: engine-log capture is managed-tier only; skipped for the resolved host");
-        return;
+        return None;
     }
-    BENCH_DAGGER_LOGS_STARTED
-        .get_or_init(|| async {
-            if let Err(e) = spawn_dagger_log_follower(dagger_compose, root_run_dir).await {
-                warn!("could not capture managed Dagger engine logs (continuing): {e}");
-            }
-        })
-        .await;
+    match spawn_dagger_log_follower(dagger_compose, root_run_dir).await {
+        Ok(guard) => Some(guard),
+        Err(e) => {
+            warn!("could not capture managed Dagger engine logs (continuing): {e}");
+            None
+        }
+    }
 }
 
 /// Spawn the detached `docker compose ... logs -f --no-color --timestamps` follower, teeing both
@@ -832,7 +849,7 @@ pub async fn capture_managed_dagger_logs(dagger_compose: &Path, root_run_dir: &P
 async fn spawn_dagger_log_follower(
     dagger_compose: &Path,
     root_run_dir: &Path,
-) -> Result<(), std::io::Error> {
+) -> Result<DaggerLogsGuard, std::io::Error> {
     let log_path = root_run_dir.join(DAGGER_ENGINE_LOG_FILE);
     let log_file = std::fs::File::create(&log_path)?;
     info!(
@@ -848,10 +865,9 @@ async fn spawn_dagger_log_follower(
         .stdin(std::process::Stdio::null())
         .process_group(0);
     let child = cmd.spawn()?;
-    register(Teardown::DaggerLogs {
-        proc: Arc::new(Mutex::new(Some(child))),
-    });
-    Ok(())
+    let proc = Arc::new(Mutex::new(Some(child)));
+    let teardown_id = register(Teardown::DaggerLogs { proc: proc.clone() });
+    Ok(DaggerLogsGuard { teardown_id, proc })
 }
 
 /// Names what the resolution ladder tried and how to fix it, in the style of

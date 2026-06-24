@@ -200,6 +200,57 @@ describe("prepareMessagesForProvider", () => {
     expect(messages[0]).toBe(message);
   });
 
+  it.each([
+    "application/csv",
+    "application/vnd.ms-excel",
+  ] as const)("rewrites %s to text/plain for cohere (it rejects these natively)", (mediaType) => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "cohere",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType,
+              filename: "report.csv",
+              url: `data:${mediaType};base64,YSxiLGM=`,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      url: "data:text/plain;base64,YSxiLGM=",
+    });
+  });
+
+  it("leaves an invalid-UTF-8 text-document file part unchanged for convert providers", () => {
+    // `//4=` is base64 for bytes [0xFF, 0xFE] — not valid UTF-8 (a binary file
+    // mislabeled as a text document). It must NOT be inlined as garbage text.
+    const message = {
+      role: "user" as const,
+      parts: [
+        {
+          type: "file",
+          mediaType: "application/vnd.ms-excel",
+          filename: "book.xls",
+          url: "data:application/vnd.ms-excel;base64,//4=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "openai",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
   const pdfFilePart = {
     type: "file",
     mediaType: "application/pdf",

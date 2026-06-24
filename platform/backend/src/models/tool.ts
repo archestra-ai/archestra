@@ -122,21 +122,6 @@ class ToolModel {
     return updatedTool || null;
   }
 
-  /**
-   * Rename an app backing catalog's launch tool so its slugified gateway name
-   * tracks the app on rename (an app catalog holds exactly one tool, so this
-   * targets it by catalog).
-   */
-  static async renameToolsByCatalogId(
-    catalogId: string,
-    name: string,
-  ): Promise<void> {
-    await db
-      .update(schema.toolsTable)
-      .set({ name, updatedAt: new Date() })
-      .where(eq(schema.toolsTable.catalogId, catalogId));
-  }
-
   /** Mark a tool as currently auto-configuring policies (sets loading timestamp) */
   static async setAutoConfiguringState(id: string): Promise<void> {
     await db

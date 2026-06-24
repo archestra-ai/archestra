@@ -17,14 +17,14 @@ import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { McpCatalogForm } from "../../_parts/mcp-catalog-form";
-import type { McpCatalogFormValues } from "../../_parts/mcp-catalog-form.types";
+import { ArchestraCatalogTab } from "../_parts/archestra-catalog-tab";
+import { SetupStepper } from "../_parts/catalog-setup-wizard";
+import { McpCatalogForm } from "../_parts/mcp-catalog-form";
+import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
 import {
   buildCloneFormValues,
   transformFormToApiData,
-} from "../../_parts/mcp-catalog-form.utils";
-import { ArchestraCatalogTab } from "../_parts/archestra-catalog-tab";
-import { SetupStepper } from "../_parts/catalog-setup-wizard";
+} from "../_parts/mcp-catalog-form.utils";
 
 type SourceSubStep = "source" | "configure";
 
@@ -63,7 +63,7 @@ export default function NewMcpCatalogItemPage() {
 
     // Continue the setup wizard on the created item: test the connection,
     // review tools, configure guardrails.
-    router.push(`/mcp/registry/beta/${createdItem.id}/edit?step=test`);
+    router.push(`/mcp/registry/${createdItem.id}/edit?step=test`);
   };
 
   const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {
@@ -80,7 +80,7 @@ export default function NewMcpCatalogItemPage() {
         className="-ml-2 text-muted-foreground"
         asChild
       >
-        <Link href="/mcp/registry/beta">
+        <Link href="/mcp/registry">
           <ArrowLeft className="h-4 w-4" />
           MCP Registry
         </Link>
@@ -182,7 +182,7 @@ export default function NewMcpCatalogItemPage() {
               <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
                 {cloneSourceId ? (
                   <Button variant="outline" type="button" asChild>
-                    <Link href="/mcp/registry/beta">Cancel</Link>
+                    <Link href="/mcp/registry">Cancel</Link>
                   </Button>
                 ) : (
                   <Button

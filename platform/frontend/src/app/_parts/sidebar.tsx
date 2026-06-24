@@ -642,7 +642,6 @@ export function AppSidebar() {
     // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
       Connect: "/connection_beta",
-      "MCP Registry": "/mcp/registry/beta",
     };
     return contentNavGroups
       .filter((group) => group.label !== "Apps" || appsEnabled)

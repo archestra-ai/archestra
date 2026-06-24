@@ -77,7 +77,7 @@ describe("McpRegistryServerDetailPage", () => {
     // Back link
     expect(
       screen.getByRole("link", { name: /back to mcp registry/i }),
-    ).toHaveAttribute("href", "/mcp/registry/beta");
+    ).toHaveAttribute("href", "/mcp/registry");
   });
 
   it("shows a not-found state when the server is not in the catalog", () => {

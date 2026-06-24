@@ -56,17 +56,13 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import {
   fetchCatalogTools,
-  useRefreshInternalMcpCatalogImage,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
-import {
-  clearCatalogEditParam,
-  setCatalogEditParam,
-} from "./catalog-edit-link";
+import { clearCatalogEditParam } from "./catalog-edit-link";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import {
   computeDeploymentStatusSummary,
@@ -74,10 +70,6 @@ import {
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
-import {
-  McpServerSettingsDialog,
-  type SettingsPage,
-} from "./mcp-server-settings-dialog";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -115,20 +107,7 @@ export type McpServerCardProps = {
     }>,
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
-  onDetails: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  /** Clone this catalog item into the create form. Omit to hide the button. */
-  onClone?: () => void;
-  onRestartPodsStarted?: (serverIds: string[]) => void;
-  onRestartPodsFailed?: (serverIds: string[]) => void;
   onCancelInstallation?: (serverId: string) => void;
-  /** Called when user wants to add a personal connection from manage dialog. */
-  onAddPersonalConnection?: () => void;
-  /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string) => void;
-  /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: () => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
 };
@@ -149,16 +128,7 @@ export function McpServerCard({
   onInstallRemoteServer,
   onInstallLocalServer,
   onReinstall,
-  onDetails: _onDetails,
-  onEdit: _onEdit,
-  onDelete,
-  onClone,
-  onRestartPodsStarted,
-  onRestartPodsFailed,
   onCancelInstallation,
-  onAddPersonalConnection,
-  onAddSharedConnection,
-  onAddOrgConnection,
   isBuiltInPlaywright = false,
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
@@ -170,12 +140,6 @@ export function McpServerCard({
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  // Cloning creates a new registry entry, so it's gated on the same permission
-  // the create-catalog endpoint requires (mcpRegistry:create), not the broader
-  // mcpServerInstallation:admin.
-  const { data: userCanCreateCatalogItem } = useHasPermissions({
-    mcpRegistry: ["create"],
-  });
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
   // Environment label shown next to the title. Only surfaced once the org has
@@ -243,37 +207,31 @@ export function McpServerCard({
   })();
 
   // Dialog state
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [settingsInitialPage, setSettingsInitialPage] = useState<
-    SettingsPage | undefined
-  >(undefined);
-  const [logsInitialServerId, setLogsInitialServerId] = useState<string | null>(
-    null,
-  );
   const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false);
   // Shown when a shared `?edit=<id>` link targets this item but the current
   // user can't edit it.
   const [editNoAccessOpen, setEditNoAccessOpen] = useState(false);
 
-  const openSettingsPage = (page: SettingsPage) => {
-    setSettingsInitialPage(page);
-    setSettingsDialogOpen(true);
-  };
-
-  // ── Shareable edit deep-link (`?edit=<catalogId>`) ──────────────────────
-  // The pencil opens the Configuration page and writes `?edit=<id>` so the
-  // address bar can be copied and shared. Opening a shared link auto-opens the
-  // editor for users who can edit, or a "no access" dialog for everyone else.
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Navigate to the catalog item detail page, optionally on a specific tab
+  // and with a pre-selected install for the logs view.
+  const goToItemPage = (tab?: string, serverId?: string) => {
+    const params = new URLSearchParams();
+    if (tab) params.set("tab", tab);
+    if (serverId) params.set("server", serverId);
+    const qs = params.toString();
+    router.push(`/mcp/registry/${item.id}${qs ? `?${qs}` : ""}`);
+  };
+
+  // ── Shareable edit deep-link (`?edit=<catalogId>`) ──────────────────────
+  // Legacy links: the editor now lives on the item detail page, so a shared
+  // `?edit=<id>` link redirects there for users who can edit, and shows a
+  // "no access" dialog for everyone else.
   const editParam = searchParams.get(MCP_CATALOG_EDIT_QUERY_PARAM);
   const deepLinkHandledRef = useRef(false);
-
-  const writeEditParam = () => {
-    const qs = setCatalogEditParam(searchParams.toString(), item.id);
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
 
   const clearEditParam = () => {
     if (!searchParams.get(MCP_CATALOG_EDIT_QUERY_PARAM)) return;
@@ -281,19 +239,8 @@ export function McpServerCard({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  const openEditorConfiguration = () => {
-    // Opening via the pencil writes `?edit=<id>`, which would otherwise wake
-    // the auto-open effect below. Mark the deep-link as already handled so the
-    // manual and shared-link paths don't both fire.
-    deepLinkHandledRef.current = true;
-    writeEditParam();
-    openSettingsPage("configuration");
-  };
-
-  // Auto-open on a shared link. One-shot per mount (ref-guarded): a shared link
-  // is resolved at most once, so a client-side change of `?edit` to a different
-  // id without a remount won't re-trigger it. Runs only after the edit-
-  // permission check resolves so non-editors aren't briefly shown the form.
+  // Resolve a shared link once per mount, after the edit-permission check
+  // resolves so non-editors aren't redirected to a form they can't use.
   // Builtin items aren't editable, so canEditCatalog is false for them.
   useEffect(() => {
     if (deepLinkHandledRef.current) return;
@@ -301,12 +248,11 @@ export function McpServerCard({
     if (editParam !== item.id) return;
     deepLinkHandledRef.current = true;
     if (canEditCatalog) {
-      setSettingsInitialPage("configuration");
-      setSettingsDialogOpen(true);
+      router.replace(`/mcp/registry/${item.id}/edit`);
     } else {
       setEditNoAccessOpen(true);
     }
-  }, [editParam, item.id, canEditCatalog, canEditCatalogLoading]);
+  }, [editParam, item.id, canEditCatalog, canEditCatalogLoading, router]);
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -398,30 +344,6 @@ export function McpServerCard({
     </Button>
   ) : null;
 
-  // Aggregate all installations for this catalog item (for logs dropdown).
-  let localInstalls: NonNullable<typeof allMcpServers> = [];
-  if (variant === "local" && allMcpServers && allMcpServers.length > 0) {
-    localInstalls = allServersForCatalog
-      .filter(({ serverType }) => serverType === "local")
-      .sort((a, b) => {
-        // Sort by createdAt ascending (oldest first, most recent last)
-        return (
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      });
-  }
-
-  // All installations for this catalog item (local + remote, for Inspector)
-  const allInstalls =
-    localInstalls.length > 0
-      ? localInstalls
-      : allServersForCatalog
-          .slice()
-          .sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-          );
-
   const userFlaggedInstalls = allServersForCatalog.filter(
     (s) => s.reinstallRequired && s.ownerId === currentUserId,
   );
@@ -481,20 +403,6 @@ export function McpServerCard({
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const triggerCatalogReinstall = () =>
     reinstallCatalogMutation.mutate(item.id);
-  const refreshImageMutation = useRefreshInternalMcpCatalogImage();
-  const showRefreshImage =
-    variant === "local" &&
-    allServersForCatalog.some((server) => server.serverType === "local") &&
-    canEditCatalog;
-  const triggerRefreshImage = () => {
-    const restartServerIds = allServersForCatalog
-      .filter((server) => server.serverType === "local")
-      .map((server) => server.id);
-    onRestartPodsStarted?.(restartServerIds);
-    refreshImageMutation.mutate(item.id, {
-      onError: () => onRestartPodsFailed?.(restartServerIds),
-    });
-  };
 
   // Show ONE Reinstall button. For admins on a multi-tenant local catalog,
   // a single click drives both the per-install input collection (existing
@@ -525,9 +433,6 @@ export function McpServerCard({
     // Tenant or admin without a catalog flag — existing per-install flow.
     return triggerReinstall();
   };
-
-  // Check if logs are available (local variant with at least one installation)
-  const isLogsAvailable = variant === "local";
 
   // Collect server IDs for deployment status indicator.
   const deploymentServerIds = allServersForCatalog
@@ -599,7 +504,7 @@ export function McpServerCard({
       size="icon"
       className="h-8 w-8"
       data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
-      onClick={openEditorConfiguration}
+      onClick={() => goToItemPage()}
     >
       <Pencil className="h-4 w-4" />
     </Button>
@@ -662,7 +567,7 @@ export function McpServerCard({
     (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
 
   const compactInfoRow = hasCompactInfoContent ? (
-    <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
+    <div className="flex items-center gap-3 text-sm text-muted-foreground">
       {showAuthorAvatar && (
         <>
           <TooltipProvider>
@@ -701,7 +606,7 @@ export function McpServerCard({
           {deploymentSummary ? (
             <button
               type="button"
-              onClick={() => openSettingsPage("debug-logs")}
+              onClick={() => goToItemPage("logs")}
               className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
             >
               <DeploymentStatusDot state={deploymentSummary.overallState} />
@@ -724,7 +629,7 @@ export function McpServerCard({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={() => openSettingsPage("connections")}
+                onClick={() => goToItemPage("credentials")}
                 className="inline-flex items-center rounded-full"
               >
                 <ResourceVisibilityBadge
@@ -789,7 +694,7 @@ export function McpServerCard({
                 <TooltipTrigger asChild>
                   <Avatar
                     className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => openSettingsPage("connections")}
+                    onClick={() => goToItemPage("credentials")}
                     data-testid={getManageCredentialsButtonTestId(item.name)}
                   >
                     <AvatarFallback className="text-muted-foreground bg-muted">
@@ -953,51 +858,6 @@ export function McpServerCard({
 
   const dialogs = (
     <>
-      <McpServerSettingsDialog
-        open={settingsDialogOpen}
-        onOpenChange={(open) => {
-          setSettingsDialogOpen(open);
-          if (!open) {
-            setLogsInitialServerId(null);
-            setSettingsInitialPage(undefined);
-            // Drop the shareable `?edit` param when the editor closes.
-            clearEditParam();
-          }
-        }}
-        initialPage={settingsInitialPage}
-        item={item}
-        variant={variant}
-        showConnections={!isBuiltinVariant}
-        connectionCount={allServersForCatalog.length}
-        showDebug={isLogsAvailable}
-        showInspector
-        showYaml={variant === "local"}
-        onAddPersonalConnection={onAddPersonalConnection}
-        onAddSharedConnection={onAddSharedConnection}
-        onAddOrgConnection={onAddOrgConnection}
-        installs={allInstalls}
-        deploymentStatuses={deploymentStatuses}
-        deploymentServerIds={deploymentServerIds}
-        onReinstall={triggerReinstall}
-        logsInitialServerId={logsInitialServerId}
-        hasPersonalConnection={hasPersonalConnection}
-        onConnect={
-          onAddPersonalConnection ??
-          (variant === "local" ? onInstallLocalServer : onInstallRemoteServer)
-        }
-        needsReinstall={
-          !!needsReinstall && !isInstalling && isCurrentUserAuthenticated
-        }
-        onDelete={!isPlaywrightVariant ? onDelete : undefined}
-        onClone={
-          userCanCreateCatalogItem && !isPlaywrightVariant ? onClone : undefined
-        }
-        onRestartPods={
-          showRefreshImage && !isInstalling ? triggerRefreshImage : undefined
-        }
-        isRestartingPods={refreshImageMutation.isPending}
-      />
-
       <Dialog
         open={editNoAccessOpen}
         onOpenChange={(open) => {
@@ -1106,11 +966,7 @@ export function McpServerCard({
                       size="sm"
                       className="h-auto p-0 text-destructive"
                       data-testid={`${E2eTestId.McpLogsViewButton}-${item.name}-default`}
-                      onClick={() => {
-                        setSettingsInitialPage("debug-logs");
-                        setLogsInitialServerId(failed.id);
-                        setSettingsDialogOpen(true);
-                      }}
+                      onClick={() => goToItemPage("logs", failed.id)}
                     >
                       View logs
                     </Button>
@@ -1119,10 +975,9 @@ export function McpServerCard({
                       size="sm"
                       className="h-auto p-0 text-destructive"
                       data-testid={`${E2eTestId.McpLogsEditConfigButton}-${item.name}-default`}
-                      onClick={() => {
-                        setSettingsInitialPage("configuration");
-                        setSettingsDialogOpen(true);
-                      }}
+                      onClick={() =>
+                        router.push(`/mcp/registry/${item.id}/edit`)
+                      }
                     >
                       Edit config
                     </Button>
@@ -1142,13 +997,7 @@ export function McpServerCard({
                 }
                 serverId={installedServer?.id}
                 deploymentStatuses={deploymentStatuses}
-                onMoreDetails={() => {
-                  setSettingsInitialPage("debug-logs");
-                  if (installedServer?.id) {
-                    setLogsInitialServerId(installedServer.id);
-                  }
-                  setSettingsDialogOpen(true);
-                }}
+                onMoreDetails={() => goToItemPage("logs", installedServer?.id)}
               />
             </div>
           </div>

@@ -206,7 +206,6 @@ const navigationItems = [
 // navigationItems `value`).
 const betaNavHrefs: Record<string, string> = {
   connect: "/connection_beta",
-  "mcp-registry": "/mcp/registry/beta",
 };
 
 interface ConversationSearchPaletteProps {

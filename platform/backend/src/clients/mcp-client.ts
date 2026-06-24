@@ -640,7 +640,7 @@ class McpClient {
         }
 
         if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
-          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const catalogDisplayName = tool.catalogName || catalogItem.name;
           const authError = this.buildExpiredAuthMessage(
             catalogDisplayName,
             tool.catalogId,
@@ -837,7 +837,7 @@ class McpClient {
 
         // For auth errors, return an actionable message with re-auth URL
         if (isAuthError && tool.catalogId) {
-          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const catalogDisplayName = tool.catalogName || catalogItem.name;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
             const [targetServer] = await McpServerModel.findByIdsBasic([
@@ -1690,7 +1690,7 @@ class McpClient {
     }
 
     // No server found - return an actionable error with install link
-    const catalogDisplayName = tool.catalogName || tool.catalogId;
+    const catalogDisplayName = tool.catalogName || catalogItem.name;
     const authError = this.buildAuthRequiredMessage(
       catalogDisplayName,
       tool.catalogId,
@@ -2352,7 +2352,7 @@ class McpClient {
         isAuthRelatedError(retryErrorMsg);
 
       if (isRetryAuthError && toolCatalogId) {
-        const catalogDisplayName = toolCatalogName || toolCatalogId;
+        const catalogDisplayName = toolCatalogName || catalogItem.name;
         const authError = this.buildExpiredAuthMessage(
           catalogDisplayName,
           toolCatalogId,

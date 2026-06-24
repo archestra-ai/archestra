@@ -1686,6 +1686,61 @@ describe("McpClient", () => {
         });
       });
 
+      test("shows the catalog name (not the catalog UUID) for an unassigned all-tools tool that needs auth", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({ email: "alltools-auth@example.com" });
+
+        // A catalog the agent was never assigned a tool from. In "All tools"
+        // mode the dispatcher pre-resolves the tool and passes it through as
+        // `availableTool`, so the assignment carries no catalogName.
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "Atlassian Cloud MCP",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.com/v1/mcp",
+        });
+
+        const availableTool = await ToolModel.createToolIfNotExists({
+          name: "atlassian-cloud-mcp__search_issues",
+          description: "Search Jira issues",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_alltools_auth",
+            name: availableTool.name,
+            arguments: { query: "test" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+          // Dynamic tool access: the tool is not assigned to the agent.
+          { availableTool },
+        );
+
+        expect(result.isError).toBe(true);
+        // The user-facing name must be the catalog's display name, never its UUID.
+        expect(result?.error).toContain(
+          'Authentication required for "Atlassian Cloud MCP"',
+        );
+        expect(result?.error).not.toContain(
+          `Authentication required for "${dynCatalog.id}"`,
+        );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: dynCatalog.id,
+            catalogName: "Atlassian Cloud MCP",
+          },
+        });
+      });
+
       test("returns install URL with team context when team token has no server", async ({
         makeUser,
         makeTeam,

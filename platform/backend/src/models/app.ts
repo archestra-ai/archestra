@@ -382,6 +382,21 @@ class AppModel {
     return count > 0;
   }
 
+  /**
+   * Hard-remove a just-created app and its version rows. Used only to roll back
+   * a create whose backing failed: a soft-delete would leave a ghost app row and
+   * — because `app_versions.app_id` is ON DELETE SET NULL — orphaned version
+   * bytes. The app never became visible, so there is nothing to preserve.
+   */
+  static async purge(id: string): Promise<void> {
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.appVersionsTable)
+        .where(eq(schema.appVersionsTable.appId, id));
+      await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
+    });
+  }
+
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
   static async findByIdForAudit(
     id: string,

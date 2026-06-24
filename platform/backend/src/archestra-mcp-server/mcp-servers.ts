@@ -166,7 +166,7 @@ const McpConfigToolSchema = z
     serverType: InsertInternalMcpCatalogSchema.shape.serverType
       .optional()
       .describe(
-        "Server type: local, remote, builtin, or app (a user-generated App backed by this catalog).",
+        "Server type: local, remote, or builtin. The `app` type is reserved for user-generated Apps (managed on the Apps surface) and cannot be created or edited through the MCP registry tools.",
       ),
     serverUrl: InsertInternalMcpCatalogSchema.shape.serverUrl
       .optional()
@@ -253,7 +253,7 @@ const SearchPrivateMcpRegistryOutputSchema = z.object({
           .nullable()
           .describe("The server description, if any."),
         serverType: InsertInternalMcpCatalogSchema.shape.serverType.describe(
-          "Whether the server is local, remote, builtin, or app (a user-generated App backed by this catalog).",
+          "Whether the server is local, remote, or builtin. App-backed catalogs use `app`, but are managed on the Apps surface and are not listed through the MCP registry tools.",
         ),
         serverUrl: z
           .string()

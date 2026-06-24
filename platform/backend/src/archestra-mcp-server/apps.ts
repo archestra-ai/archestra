@@ -364,7 +364,7 @@ const registry = defineArchestraTools([
         });
         app = await AppModel.findById(created.id);
       } catch (error) {
-        await AppModel.delete(created.id);
+        await AppModel.purge(created.id);
         // Name-uniqueness lives on the backing catalog now, so a conflict
         // surfaces as a unique-constraint error from the catalog insert.
         if (isUniqueConstraintError(error)) {

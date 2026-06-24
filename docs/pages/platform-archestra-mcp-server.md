@@ -407,7 +407,7 @@ Required RBAC permission: `mcpRegistry:read`
 | `items[].name` | `string` | Yes | The MCP server name. |
 | `items[].version` | `string \| null` | Yes | The version, if provided. |
 | `items[].description` | `string \| null` | Yes | The server description, if any. |
-| `items[].serverType` | `"local" \| "remote" \| "builtin" \| "app"` | Yes | Whether the server is local, remote, builtin, or app (a user-generated App backed by this catalog). |
+| `items[].serverType` | `"local" \| "remote" \| "builtin" \| "app"` | Yes | Whether the server is local, remote, or builtin. App-backed catalogs use `app`, but are managed on the Apps surface and are not listed through the MCP registry tools. |
 | `items[].serverUrl` | `string \| null` | Yes | The remote server URL, if applicable. |
 | `items[].repository` | `string \| null` | Yes | The repository URL, if available. |
 
@@ -483,7 +483,7 @@ Required RBAC permission: `mcpRegistry:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name. |
-| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, builtin, or app (a user-generated App backed by this catalog). |
+| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, or builtin. The `app` type is reserved for user-generated Apps (managed on the Apps surface) and cannot be created or edited through the MCP registry tools. |
 | `serverUrl` | `string \| null` | No | [Remote] The URL of the remote MCP server. |
 | `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
 | `authDescription` | `string \| null` | No | [Remote] How to set up authentication. |
@@ -543,7 +543,7 @@ Required RBAC permission: `mcpRegistry:create`
 | `labels[].value` | `string` | Yes | Label value. |
 | `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 | `environmentId` | `string \| null` | No | ID of the environment this server belongs to. Omit (or pass null) to leave it in the default environment. |
-| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, builtin, or app (a user-generated App backed by this catalog). |
+| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, or builtin. The `app` type is reserved for user-generated Apps (managed on the Apps surface) and cannot be created or edited through the MCP registry tools. |
 | `serverUrl` | `string \| null` | No | [Remote] The URL of the remote MCP server. |
 | `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
 | `authDescription` | `string \| null` | No | [Remote] How to set up authentication. |

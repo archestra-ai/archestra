@@ -293,7 +293,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
         });
       } catch (error) {
-        await AppModel.delete(created.id);
+        await AppModel.purge(created.id);
         if (isUniqueConstraintError(error)) {
           throw new ApiError(
             409,

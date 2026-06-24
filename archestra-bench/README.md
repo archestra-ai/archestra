@@ -247,8 +247,9 @@ second backend runs the already-built `dist/server.mjs` the main stack keeps fre
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
 
-**Dagger host resolution.** Before booting the backend, the runner resolves one Dagger host for the
-whole run (shared across lanes so they can't split across engines):
+**Dagger host resolution.** Before booting the backend, the runner resolves a Dagger host and shares
+the first successful result across lanes (so they can't split across engines; a failed attempt isn't
+cached and the next lane re-resolves):
 
 1. `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, when set, is used verbatim and the ladder is skipped
    (the prod-image / CI path supplies a `kube-pod://` host this way).

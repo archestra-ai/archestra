@@ -56,6 +56,9 @@ pub enum ClientError {
     Api(ArchestraApiError),
     Contract(ContractError),
     Config(String),
+    /// A terminal readiness failure that retrying cannot clear (the sandbox is disabled/unreachable).
+    /// Distinct from `Config` so callers fast-fail instead of polling out the readiness deadline.
+    SandboxFatal(String),
 }
 
 impl std::fmt::Display for ClientError {
@@ -64,6 +67,7 @@ impl std::fmt::Display for ClientError {
             ClientError::Api(e) => write!(f, "{e}"),
             ClientError::Contract(e) => write!(f, "{e}"),
             ClientError::Config(s) => write!(f, "config error: {s}"),
+            ClientError::SandboxFatal(s) => write!(f, "{s}"),
         }
     }
 }
@@ -299,9 +303,10 @@ impl EvalClient {
                             SandboxReadiness::Ready => return Ok(body),
                             // The sandbox is terminally broken (disabled/unreachable). Nothing runs a
                             // sandbox command during this poll, so the boot status is frozen and will
-                            // not recover — fail now instead of waiting out the deadline.
+                            // not recover — fail now instead of waiting out the deadline. A dedicated
+                            // variant (not Config) so the caller's retry loop treats this as terminal.
                             SandboxReadiness::Fatal(reason) => {
-                                return Err(ClientError::Config(format!(
+                                return Err(ClientError::SandboxFatal(format!(
                                     "{reason} — see backend log"
                                 )));
                             }

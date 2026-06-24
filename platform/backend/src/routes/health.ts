@@ -71,17 +71,21 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       // Read the cached boot status only — never trigger a sandbox probe here.
-      const sandbox = mapSandboxStatus(skillSandboxRuntimeService.bootStatus);
+      // Shared across both 200 branches so the sandbox field can't be carried by
+      // one and dropped by the other.
+      const ok200 = {
+        name,
+        version,
+        ...mapSandboxStatus(skillSandboxRuntimeService.bootStatus),
+      };
 
       // Maintenance mode must stay available while the database is offline or
       // being upgraded, so readiness intentionally skips the DB probe here.
       if (config.maintenanceMode) {
         return reply.send({
-          name,
+          ...ok200,
           status: "maintenance",
-          version,
           database: "not_checked",
-          ...sandbox,
         });
       }
 
@@ -97,13 +101,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      return reply.send({
-        name,
-        status: "ok",
-        version,
-        database: "connected",
-        ...sandbox,
-      });
+      return reply.send({ ...ok200, status: "ok", database: "connected" });
     },
   );
 };
@@ -134,5 +132,11 @@ export function mapSandboxStatus(status: SandboxRuntimeStatus): {
       return { sandbox: "unreachable", sandboxReason: "error" };
     case "stopped":
       return { sandbox: "unreachable", sandboxReason: "stopped" };
+    default:
+      return assertNever(status);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled sandbox runtime status "${value}".`);
 }

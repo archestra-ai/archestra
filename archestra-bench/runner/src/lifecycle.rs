@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info};
 
-use crate::client::EvalClient;
+use crate::client::{ClientError, EvalClient};
 
 /// A self-contained teardown for one backend instance: the process-group child and the database
 /// handle, decoupled from the `Instance` so cleanup can run even after the orchestration future is
@@ -149,8 +149,9 @@ const MANAGED_DAGGER_WAIT: Duration = Duration::from_secs(30);
 static BENCH_PG_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 /// Provision the runner-managed Dagger engine at most once per process (same rationale as above).
 static BENCH_DAGGER_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
-/// The Dagger runner host, resolved once and shared across all lanes so they cannot split across
-/// tiers (e.g. one lane on the managed engine, another on the k8s port-forward) within a run.
+/// The Dagger runner host. The first *successful* resolution is cached and shared across all lanes
+/// so they cannot split across tiers within a run; a failed attempt does not poison the cell
+/// (`get_or_try_init` leaves it empty on `Err`), so a transient hiccup lets the next lane re-resolve.
 static RESOLVED_RUNNER_HOST: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
 
 #[derive(Debug, thiserror::Error)]
@@ -422,14 +423,10 @@ impl Instance {
                     message,
                 });
             }
-            match self.client.wait_ready(5.0, 1.0).await {
-                Ok(_) => break,
-                Err(crate::client::ClientError::Api(e)) if (400..500).contains(&e.status) => {
-                    return Err(LifecycleError::NotReady(e.to_string()));
-                }
-                Err(e) => {
-                    last = Some(e.to_string());
-                }
+            match classify_ready_poll(self.client.wait_ready(5.0, 1.0).await) {
+                ReadyPoll::Ready => break,
+                ReadyPoll::Terminal(msg) => return Err(LifecycleError::NotReady(msg)),
+                ReadyPoll::Retry(msg) => last = Some(msg),
             }
             if tokio::time::Instant::now() >= deadline {
                 return Err(LifecycleError::NotReady(format!(
@@ -476,6 +473,27 @@ impl Instance {
                 .join("dagger")
                 .to_string_lossy(),
         )
+    }
+}
+
+/// Outcome of one readiness poll inside `connect`'s loop. Split out so the terminal-vs-retry
+/// decision is unit-testable: a fatal sandbox must abort immediately, not retry until the deadline.
+enum ReadyPoll {
+    Ready,
+    Terminal(String),
+    Retry(String),
+}
+
+fn classify_ready_poll<T>(result: Result<T, ClientError>) -> ReadyPoll {
+    match result {
+        Ok(_) => ReadyPoll::Ready,
+        Err(ClientError::Api(e)) if (400..500).contains(&e.status) => {
+            ReadyPoll::Terminal(e.to_string())
+        }
+        // A broken sandbox cannot recover by retrying (the boot status is frozen during the poll),
+        // so abort now instead of burning the whole readiness deadline.
+        Err(e @ ClientError::SandboxFatal(_)) => ReadyPoll::Terminal(e.to_string()),
+        Err(e) => ReadyPoll::Retry(e.to_string()),
     }
 }
 
@@ -628,8 +646,8 @@ fn decide_runner(explicit: Option<String>, managed_runnable: bool, k8s_open: boo
     }
 }
 
-/// Resolve the Dagger runner host once per process and share the result across all lanes, so a run
-/// cannot end up split across tiers. Memoized in [`RESOLVED_RUNNER_HOST`].
+/// Resolve the Dagger runner host and share the first successful result across all lanes, so a run
+/// cannot end up split across tiers. Memoized in [`RESOLVED_RUNNER_HOST`] (failures are not cached).
 async fn resolve_runner_host(dagger_compose: &Path) -> Result<String, LifecycleError> {
     RESOLVED_RUNNER_HOST
         .get_or_try_init(|| async {
@@ -723,12 +741,17 @@ fn engine_tag(compose_file: &Path) -> Result<String, LifecycleError> {
     let marker = format!("{DAGGER_ENGINE_IMAGE}:");
     contents
         .lines()
+        .map(str::trim_start)
+        // Only the `image:` key — never a comment that mentions the image (the marker appears in
+        // this file's own header), and never a trailing comment on the value.
+        .filter(|line| line.starts_with("image:"))
         .find_map(|line| line.split_once(marker.as_str()))
-        .map(|(_, rest)| rest.trim().trim_matches('"').to_string())
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        .map(|tag| tag.trim_matches('"').to_string())
         .filter(|tag| !tag.is_empty())
         .ok_or_else(|| {
             LifecycleError::DaggerUnavailable(format!(
-                "could not find `{DAGGER_ENGINE_IMAGE}:<tag>` in {}",
+                "could not find an `image: {DAGGER_ENGINE_IMAGE}:<tag>` line in {}",
                 compose_file.display()
             ))
         })
@@ -980,6 +1003,21 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_ready_poll_fatal_sandbox_aborts_but_transient_retries() {
+        // The regression guard for the connect() loop: a fatal sandbox must be terminal (abort now),
+        // while a plain Config (the normal "not ready yet" / inner-timeout signal) must keep polling.
+        assert!(matches!(
+            classify_ready_poll::<()>(Err(ClientError::SandboxFatal("sandbox unreachable".into()))),
+            ReadyPoll::Terminal(_)
+        ));
+        assert!(matches!(
+            classify_ready_poll::<()>(Err(ClientError::Config("not ready yet".into()))),
+            ReadyPoll::Retry(_)
+        ));
+        assert!(matches!(classify_ready_poll(Ok(())), ReadyPoll::Ready));
+    }
+
+    #[test]
     fn test_decide_runner_prefers_explicit_then_managed_then_k8s() {
         assert_eq!(
             decide_runner(Some("kube-pod://x".to_string()), true, true),
@@ -991,12 +1029,14 @@ mod tests {
     }
 
     #[test]
-    fn test_engine_tag_reads_the_compose_image() {
+    fn test_engine_tag_reads_the_image_line_not_a_comment() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("compose.yml");
+        // A comment mentioning `registry.dagger.io/engine:<tag>` precedes the real image line (as in
+        // the actual compose header) and a trailing comment follows the value — neither must leak in.
         std::fs::write(
             &path,
-            "services:\n  bench-dagger:\n    image: registry.dagger.io/engine:v9.9.9\n",
+            "# see registry.dagger.io/engine:<tag>\nservices:\n  bench-dagger:\n    image: registry.dagger.io/engine:v9.9.9 # pinned\n",
         )
         .unwrap();
         assert_eq!(engine_tag(&path).unwrap(), "v9.9.9");

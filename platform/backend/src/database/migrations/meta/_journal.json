@@ -2157,6 +2157,13 @@
       "when": 1782287892624,
       "tag": "0307_last_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "7",
+      "when": 1782307085912,
+      "tag": "0308_slim_lilith",
+      "breakpoints": true
     }
   ]
 }

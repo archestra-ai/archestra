@@ -173,7 +173,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteProject,
         description:
           "Delete a project (owner only). Its chats survive as ordinary " +
-          "conversations; its files are deleted with it.",
+          "conversations; its files and scheduled tasks are deleted with it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),

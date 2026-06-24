@@ -693,13 +693,26 @@ export function parseFileStorageS3Config(params: {
       "ARCHESTRA_FILE_STORAGE_S3_BUCKET is required when ARCHESTRA_FILE_STORAGE_PROVIDER=s3",
     );
   }
+  const accessKeyId = env.accessKeyId?.trim() || undefined;
+  const secretAccessKey = env.secretAccessKey?.trim() || undefined;
+  // Static credentials are all-or-nothing: a half-set pair would silently fall
+  // back to the AWS default credential chain (a different identity), so reject it
+  // loudly rather than resolve an unintended identity against the bucket.
+  if (
+    params.provider === "s3" &&
+    Boolean(accessKeyId) !== Boolean(secretAccessKey)
+  ) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID and ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY must be set together, or both omitted to use the AWS default credential chain",
+    );
+  }
   return {
     bucket,
     region: env.region?.trim() || "us-east-1",
     endpoint: env.endpoint?.trim() || undefined,
     forcePathStyle: env.forcePathStyle?.trim().toLowerCase() === "true",
-    accessKeyId: env.accessKeyId?.trim() || undefined,
-    secretAccessKey: env.secretAccessKey?.trim() || undefined,
+    accessKeyId,
+    secretAccessKey,
     keyPrefix: env.keyPrefix?.trim().replace(/^\/+|\/+$/g, "") ?? "",
   };
 }

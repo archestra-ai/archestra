@@ -1264,6 +1264,30 @@ describe("parseFileStorageS3Config", () => {
       parseFileStorageS3Config({ provider: "db", env: { ...env, bucket: undefined } }).bucket,
     ).toBe("");
   });
+  test("throws when only one of the credential pair is set under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({ provider: "s3", env: { ...env, secretAccessKey: undefined } }),
+    ).toThrow(/must be set together/);
+    expect(() =>
+      parseFileStorageS3Config({ provider: "s3", env: { ...env, accessKeyId: undefined } }),
+    ).toThrow(/must be set together/);
+  });
+  test("allows both credentials omitted under s3 (AWS default chain)", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: { ...env, accessKeyId: undefined, secretAccessKey: undefined },
+    });
+    expect(cfg.accessKeyId).toBeUndefined();
+    expect(cfg.secretAccessKey).toBeUndefined();
+  });
+  test("does not reject a partial credential pair when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, secretAccessKey: undefined },
+      }).accessKeyId,
+    ).toBe("AKIA");
+  });
 });
 
 describe("parseFileStorageFilesystemRoot", () => {

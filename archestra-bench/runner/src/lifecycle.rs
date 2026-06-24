@@ -577,6 +577,38 @@ fn resolve_bench_db_url(env: &HashMap<String, String>) -> (String, bool) {
 /// Bring the dedicated bench Postgres up and block until it is healthy. Idempotent: `docker compose
 /// up -d --wait` reconciles an already-running container and returns fast, and [`BENCH_PG_READY`]
 /// collapses concurrent callers into a single invocation.
+/// Failure of [`compose_up`], split so each caller can map the two cases onto its own error type:
+/// Docker couldn't be invoked at all, or the `up` ran but exited non-zero (stderr carried).
+enum ComposeUpError {
+    Spawn(std::io::Error),
+    Exit(String),
+}
+
+/// `docker compose -p <project> -f <file> up -d [extra]`, left detached. The shared primitive behind
+/// both bench sidecars (Postgres and the managed Dagger engine); each wraps it with its own
+/// `OnceCell`, error variant, and readiness step.
+async fn compose_up(
+    project: &str,
+    compose_file: &Path,
+    extra: &[&str],
+) -> Result<(), ComposeUpError> {
+    let compose = compose_file.to_string_lossy();
+    let output = Command::new("docker")
+        .args(["compose", "-p", project, "-f"])
+        .arg(compose.as_ref())
+        .args(["up", "-d"])
+        .args(extra)
+        .output()
+        .await
+        .map_err(ComposeUpError::Spawn)?;
+    if !output.status.success() {
+        return Err(ComposeUpError::Exit(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
 async fn ensure_bench_postgres(compose_file: &Path) -> Result<(), LifecycleError> {
     BENCH_PG_READY
         .get_or_try_init(|| async {
@@ -584,25 +616,16 @@ async fn ensure_bench_postgres(compose_file: &Path) -> Result<(), LifecycleError
                 "ensuring dedicated bench Postgres ({})",
                 compose_file.display()
             );
-            let compose = compose_file.to_string_lossy();
-            let output = Command::new("docker")
-                .args(["compose", "-p", BENCH_PG_COMPOSE_PROJECT, "-f"])
-                .arg(compose.as_ref())
-                .args(["up", "-d", "--wait"])
-                .output()
+            compose_up(BENCH_PG_COMPOSE_PROJECT, compose_file, &["--wait"])
                 .await
-                .map_err(|e| {
-                    LifecycleError::Config(format!(
+                .map_err(|e| match e {
+                    ComposeUpError::Spawn(e) => LifecycleError::Config(format!(
                         "failed to run `docker compose` for the bench Postgres (is Docker installed and running?): {e}"
-                    ))
-                })?;
-            if !output.status.success() {
-                return Err(LifecycleError::Postgres(format!(
-                    "could not start the dedicated bench Postgres: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                )));
-            }
-            Ok(())
+                    )),
+                    ComposeUpError::Exit(stderr) => LifecycleError::Postgres(format!(
+                        "could not start the dedicated bench Postgres: {stderr}"
+                    )),
+                })
         })
         .await
         .copied()
@@ -688,24 +711,16 @@ async fn ensure_bench_dagger(compose_file: &Path) -> Result<(), LifecycleError> 
                 "ensuring runner-managed Dagger engine ({})",
                 compose_file.display()
             );
-            let compose = compose_file.to_string_lossy();
-            let output = Command::new("docker")
-                .args(["compose", "-p", BENCH_DAGGER_COMPOSE_PROJECT, "-f"])
-                .arg(compose.as_ref())
-                .args(["up", "-d"])
-                .output()
+            compose_up(BENCH_DAGGER_COMPOSE_PROJECT, compose_file, &[])
                 .await
-                .map_err(|e| {
-                    LifecycleError::DaggerUnavailable(format!(
+                .map_err(|e| match e {
+                    ComposeUpError::Spawn(e) => LifecycleError::DaggerUnavailable(format!(
                         "failed to run `docker compose` for the managed Dagger engine (is Docker running?): {e}"
-                    ))
+                    )),
+                    ComposeUpError::Exit(stderr) => LifecycleError::DaggerUnavailable(format!(
+                        "could not start the runner-managed Dagger engine: {stderr}"
+                    )),
                 })?;
-            if !output.status.success() {
-                return Err(LifecycleError::DaggerUnavailable(format!(
-                    "could not start the runner-managed Dagger engine: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                )));
-            }
             // `docker compose up` returns once the container is running, not once the engine has
             // bound its TCP port; poll the published port directly (the engine image ships no usable
             // in-container health tool to hang a compose `--wait` healthcheck on).

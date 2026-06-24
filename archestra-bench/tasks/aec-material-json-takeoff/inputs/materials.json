@@ -1,0 +1,203 @@
+[
+  {
+    "material_id": "M-001",
+    "trade": "Concrete",
+    "level": "L03",
+    "description": "Slab on grade",
+    "quantity": "6,510",
+    "unit": "SF",
+    "unit_cost": 324.36,
+    "spec_section": "09 27 00"
+  },
+  {
+    "material_id": "M-002",
+    "trade": "Masonry",
+    "level": "L03",
+    "description": "CMU partition",
+    "quantity": "4580",
+    "unit": "LF",
+    "unit_cost": 419.33,
+    "spec_section": "26 13 00"
+  },
+  {
+    "material_id": "M-003",
+    "trade": "Structural Steel",
+    "level": "L02",
+    "description": "Roof joists",
+    "quantity": "3790",
+    "unit": "CY",
+    "unit_cost": 438.04,
+    "spec_section": "04 15 00"
+  },
+  {
+    "material_id": "M-004",
+    "trade": "Drywall",
+    "level": "L01",
+    "description": "Type X gyp board",
+    "quantity": "8,352",
+    "unit": "SF",
+    "unit_cost": 245.18,
+    "spec_section": null
+  },
+  {
+    "material_id": "M-005",
+    "trade": "Electrical",
+    "level": "Roof",
+    "description": "Panelboards",
+    "quantity": "8,794",
+    "unit": "LF",
+    "unit_cost": 264.51,
+    "spec_section": "03 86 00"
+  },
+  {
+    "material_id": "M-006",
+    "trade": "Concrete",
+    "level": "L01",
+    "description": "Slab on grade",
+    "quantity": "5,575",
+    "unit": "LF",
+    "unit_cost": 417.15,
+    "spec_section": "09 17 00"
+  },
+  {
+    "material_id": "M-007",
+    "trade": "Masonry",
+    "level": "Roof",
+    "description": "CMU partition",
+    "quantity": "7553",
+    "unit": "CY",
+    "unit_cost": 448.89,
+    "spec_section": "09 61 00"
+  },
+  {
+    "material_id": "M-008",
+    "trade": "Structural Steel",
+    "level": "L01",
+    "description": "Beam framing",
+    "quantity": "8039",
+    "unit": "LF",
+    "unit_cost": 80.68,
+    "spec_section": "03 15 00"
+  },
+  {
+    "material_id": "M-009",
+    "trade": "Drywall",
+    "level": "Roof",
+    "description": "Shaft wall assembly",
+    "quantity": "9,050",
+    "unit": "LF",
+    "unit_cost": 395.7,
+    "spec_section": ""
+  },
+  {
+    "material_id": "M-010",
+    "trade": "Electrical",
+    "level": "L01",
+    "description": "Panelboards",
+    "quantity": "6693",
+    "unit": "CY",
+    "unit_cost": 239.99,
+    "spec_section": "04 59 00"
+  },
+  {
+    "material_id": "M-011",
+    "trade": "Concrete",
+    "level": "L01",
+    "description": "Footings",
+    "quantity": "5312",
+    "unit": "SF",
+    "unit_cost": 135.05,
+    "spec_section": "04 57 00"
+  },
+  {
+    "material_id": "M-012",
+    "trade": "Masonry",
+    "level": "Roof",
+    "description": "Brick veneer",
+    "quantity": "9810",
+    "unit": "SF",
+    "unit_cost": 238.0,
+    "spec_section": null,
+    "status": "void"
+  },
+  {
+    "material_id": "M-013",
+    "trade": "Structural Steel",
+    "level": "Roof",
+    "description": "Beam framing",
+    "quantity": "9,604",
+    "unit": "SF",
+    "unit_cost": 324.1,
+    "spec_section": "04 69 00"
+  },
+  {
+    "material_id": "M-014",
+    "trade": "Drywall",
+    "level": "L02",
+    "description": "Type X gyp board",
+    "quantity": "6140",
+    "unit": "EA",
+    "unit_cost": 383.89,
+    "spec_section": "03 22 00"
+  },
+  {
+    "material_id": "M-015",
+    "trade": "Electrical",
+    "level": "L01",
+    "description": "Light fixtures",
+    "quantity": "7,662",
+    "unit": "CY",
+    "unit_cost": 116.76,
+    "spec_section": null
+  },
+  {
+    "material_id": "M-016",
+    "trade": "Concrete",
+    "level": "L03",
+    "description": "Footings",
+    "quantity": "3,446",
+    "unit": "EA",
+    "unit_cost": 406.85,
+    "spec_section": "26 87 00"
+  },
+  {
+    "material_id": "M-017",
+    "trade": "Masonry",
+    "level": "L01",
+    "description": "Brick veneer",
+    "quantity": "5,464",
+    "unit": "CY",
+    "unit_cost": 89.24,
+    "spec_section": "09 40 00"
+  },
+  {
+    "material_id": "M-018",
+    "trade": "Structural Steel",
+    "level": "L02",
+    "description": "Beam framing",
+    "quantity": "3,074",
+    "unit": "SF",
+    "unit_cost": 99.42,
+    "spec_section": "   "
+  },
+  {
+    "material_id": "M-019",
+    "trade": "Drywall",
+    "level": "L02",
+    "description": "Type X gyp board",
+    "quantity": "2,272",
+    "unit": "CY",
+    "unit_cost": 95.94,
+    "spec_section": "05 76 00"
+  },
+  {
+    "material_id": "M-020",
+    "trade": "Electrical",
+    "level": "L03",
+    "description": "Panelboards",
+    "quantity": "2,358",
+    "unit": "CY",
+    "unit_cost": 287.7,
+    "spec_section": "26 19 00"
+  }
+]

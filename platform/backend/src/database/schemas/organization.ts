@@ -302,7 +302,7 @@ const organizationsTable = pgTable("organization", {
   /**
    * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
    * to every agent in the org and added to all new agents. Flipped on
-   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   * by the "Enable and create a new skill" empty-state button on /skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
 

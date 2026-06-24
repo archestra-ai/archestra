@@ -1,14 +1,12 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
+import { AppFrame } from "@/components/mcp-app/app-frame";
+import { McpAppStandaloneButton } from "@/components/mcp-app/mcp-app-chrome";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { AppRuntimeFrame } from "../_parts/app-runtime-frame";
 import { AppSettingsForm } from "../_parts/app-settings-form";
 import { AppShareTab } from "../_parts/app-share-tab";
 import { AppToolsTab } from "../_parts/app-tools-tab";
@@ -45,14 +43,6 @@ export default function AppDetailPage({ appId }: { appId: string }) {
         </span>
       }
       description={app?.description ?? ""}
-      actionButton={
-        <Button asChild variant="outline">
-          <Link href={`/apps/${appId}/run`}>
-            <ExternalLink className="h-4 w-4" />
-            Open standalone
-          </Link>
-        </Button>
-      }
     >
       <Tabs defaultValue="preview">
         <TabsList>
@@ -64,8 +54,12 @@ export default function AppDetailPage({ appId }: { appId: string }) {
         </TabsList>
 
         <TabsContent value="preview">
-          <div className="min-h-[400px] overflow-hidden rounded-lg border">
-            <AppRuntimeFrame appId={appId} />
+          <div className="h-[70vh] min-h-[400px] overflow-hidden rounded-lg border">
+            <AppFrame
+              endpoint={{ kind: "app", appId }}
+              fillContainer
+              actions={<McpAppStandaloneButton appId={appId} />}
+            />
           </div>
         </TabsContent>
 

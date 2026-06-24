@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 import {
   COMMUNITY_DOCS_URL,
@@ -119,6 +120,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/knowledge",
     "/audit",
     "/connection",
+    "/connection_beta",
   ];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -202,10 +204,7 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/triggers") &&
-          !pathname.startsWith("/agents/skills"),
+        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
         subItems: [
           {
             title: "Scheduled Tasks",
@@ -217,17 +216,16 @@ const contentNavGroups: NavGroup[] = [
       },
       {
         title: "Skills",
-        url: "/agents/skills",
+        url: "/skills",
         icon: Sparkles,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents/skills"),
+        customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
         title: "Messaging Channels",
-        url: "/agents/triggers",
+        url: "/messaging-channels",
         icon: Inbox,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents/triggers"),
+          pathname.startsWith("/messaging-channels"),
       },
     ],
   },
@@ -286,9 +284,10 @@ const contentNavGroups: NavGroup[] = [
         subItems: [
           {
             title: "Model Providers",
-            url: "/llm/model-providers/api-keys",
+            url: "/llm/model-providers",
             customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/model-providers"),
+              pathname.startsWith("/llm/model-providers") ||
+              pathname.startsWith("/llm/models"),
           },
           {
             title: "Credentials",
@@ -586,7 +585,11 @@ export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
+  // SPDX-SnippetEnd
   // GitHub stars are cosmetic and external, so defer them until after the
   // authenticated shell data has had a chance to load.
   const { data: starCount } = useGithubStars({
@@ -613,6 +616,9 @@ export function AppSidebar() {
   const chatListFadeIn = useOnce();
   // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
   const appsEnabled = useFeature("appsEnabled") === true;
+  // ARCHESTRA_BETA master switch — when on, the new connection page is the
+  // default Connect destination.
+  const betaEnabled = useFeature("betaEnabled") === true;
 
   // Projects exist only when the projects feature is on.
   const filteredChatsNavItems = React.useMemo(
@@ -625,6 +631,11 @@ export function AppSidebar() {
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
+    // With ARCHESTRA_BETA on, these nav items point at their beta routes.
+    const betaNavUrls: Record<string, string> = {
+      Connect: "/connection_beta",
+      MCPs: "/mcp/registry/beta",
+    };
     return contentNavGroups
       .filter((group) => group.label !== "Apps" || appsEnabled)
       .map((group) => ({
@@ -634,24 +645,26 @@ export function AppSidebar() {
             if (item.title === "Connect" && !showConnect) return false;
             // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env
             // var. It's a top-level item now, so gate it here (not in subItems).
-            if (item.url === "/agents/skills" && !skillsEnabled) return false;
+            if (item.url === "/skills" && !skillsEnabled) return false;
             return true;
           })
-          .map((item) =>
-            item.subItems
+          .map((item) => {
+            const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
+            const resolved = betaUrl ? { ...item, url: betaUrl } : item;
+            return resolved.subItems
               ? {
-                  ...item,
-                  subItems: item.subItems.filter((sub) => {
+                  ...resolved,
+                  subItems: resolved.subItems.filter((sub) => {
                     // With projects on, schedules are managed per-project on the
                     // project detail page, so the standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;
                     return true;
                   }),
                 }
-              : item,
-          ),
+              : resolved;
+          }),
       }));
-  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled]);
+  }, [showConnect, skillsEnabled, appsEnabled, projectsEnabled, betaEnabled]);
 
   return (
     <Sidebar collapsible="icon">

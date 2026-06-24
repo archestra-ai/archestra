@@ -113,4 +113,36 @@ describe("useMcpInstallOrchestrator", () => {
       "https://posthog.example.com/oauth/authorize",
     );
   });
+
+  it("captures the return URL when starting OAuth for a first-time install", async () => {
+    const { result } = renderHook(() => useMcpInstallOrchestrator());
+
+    // Opening the OAuth confirmation dialog should not start OAuth yet.
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-posthog");
+    });
+    expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.handleOAuthConfirm({
+        scope: "personal",
+        teamId: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        catalogId: "catalog-posthog",
+      });
+    });
+
+    // New behavior: first-time installs remember where they started so the
+    // callback can return the user there (e.g. a chat conversation) instead of
+    // the registry. This is not a re-auth flow.
+    expect(setOAuthReturnUrlMock).toHaveBeenCalledWith(window.location.href);
+    expect(setOAuthMcpServerIdMock).not.toHaveBeenCalled();
+    expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
+      "https://posthog.example.com/oauth/authorize",
+    );
+  });
 });

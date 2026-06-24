@@ -30,6 +30,38 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
+/**
+ * Max length (characters) of a project's display name. Kept short so project
+ * lists, headers, and dialogs stay readable. Enforced by the projects API and
+ * the create/edit forms.
+ */
+export const PROJECT_NAME_MAX_LENGTH = 64;
+
+/**
+ * Max length (characters) of a project's description. Kept to roughly a
+ * sentence or two so it stays a short blurb in project cards/headers rather
+ * than a wall of text. Enforced by the projects API and the create/edit forms.
+ */
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 200;
+
+/**
+ * Filename of a project's instructions file. Once saved it is an ordinary,
+ * available project file — listed, readable, and writable through the normal
+ * file surfaces like any other — with one special rule: it cannot be deleted
+ * (emptying it is how its guidance is removed). Its content is injected into the
+ * system prompt of every chat in the project, and it is surfaced as a pinned,
+ * editable entry in the project's Files panel.
+ */
+export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
+
+/**
+ * Max length (characters) the instructions editor / API accepts in one save. It
+ * is injected into every turn's system prompt, so the UI editing path is
+ * deliberately bounded. (Agent writes via the generic file tools are bounded
+ * instead by the sandbox artifact byte limit.)
+ */
+export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
+
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";

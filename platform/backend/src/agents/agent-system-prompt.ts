@@ -21,6 +21,11 @@ import type { ToolExposureMode } from "@/types";
 export const TOOL_DENIAL_INSTRUCTION =
   "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
+/** @public — canonical preamble for a project's instructions, asserted by the
+ * assembler tests. */
+export const PROJECT_INSTRUCTIONS_PREFIX =
+  "The following are the project's instructions. Treat them as standing guidance for this conversation, second only to the user's direct messages.";
+
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_UI_RESULT_INSTRUCTION =
   "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
@@ -48,6 +53,11 @@ export async function buildAgentSystemPrompt(params: {
   user?: { name: string; email: string };
   /** Context injected by SessionStart hooks (chat only), appended last. */
   hookSessionContext?: string;
+  /**
+   * The project's instructions (chat in a project only), injected just after the
+   * agent's own prompt. Empty/absent leaves the prompt unchanged.
+   */
+  projectInstructions?: string;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -57,6 +67,7 @@ export async function buildAgentSystemPrompt(params: {
     agentId,
     user,
     hookSessionContext,
+    projectInstructions,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -87,10 +98,15 @@ export async function buildAgentSystemPrompt(params: {
     ? buildSandboxFallbackInstruction()
     : null;
 
+  const projectInstructionsPrompt = projectInstructions
+    ? `${PROJECT_INSTRUCTIONS_PREFIX}\n\n${projectInstructions}`
+    : null;
+
   return (
     [
       toolLoadingInstructions,
       renderedPrompt,
+      projectInstructionsPrompt,
       skillCatalogPrompt,
       sandboxFallbackInstruction,
       TOOL_DENIAL_INSTRUCTION,

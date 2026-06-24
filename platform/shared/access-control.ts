@@ -57,7 +57,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "admin"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -378,8 +378,10 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:delete": "Delete chat conversations",
   "project:read": "View projects and the chats inside them",
   "project:create": "Create projects",
-  "project:update": "Edit project descriptions and sharing",
+  "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
+  "project:admin":
+    "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -1325,6 +1327,14 @@ export const requiredEndpointPermissionsMap: Partial<
   // `downloadable` and then 403 on every fetch. Project membership is still
   // enforced in the handler (projectService.listFiles -> requireReadable).
   [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Instructions are plain project metadata (not a sandbox byte surface), so the
+  // GET needs only project read — every project reader can see the instructions
+  // that steer the project's chats. Editing is owner-only, enforced in the
+  // handler on top of project:update.
+  [RouteId.GetProjectInstructions]: { project: ["read"] },
+  [RouteId.SetProjectInstructions]: { project: ["update"] },
+  [RouteId.PinProject]: { project: ["read"] },
+  [RouteId.UnpinProject]: { project: ["read"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
@@ -1408,12 +1418,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
-  "/agents/triggers": { agentTrigger: ["read"] },
-  "/agents/triggers/slack": { agentTrigger: ["read"] },
-  "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
-  "/agents/triggers/email": { agentTrigger: ["read"] },
-  "/agents/skills": { skill: ["read"] },
-  "/agents/skills/new": { skill: ["create"] },
+  "/messaging-channels": { agentTrigger: ["read"] },
+  "/messaging-channels/slack": { agentTrigger: ["read"] },
+  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
+  "/messaging-channels/email": { agentTrigger: ["read"] },
+  "/skills": { skill: ["read"] },
+  "/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
 
   // Apps
@@ -1424,8 +1434,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/model-providers/api-keys": { llmProviderApiKey: ["read"] },
-  "/llm/model-providers/models": { llmModel: ["read"] },
+  "/llm/model-providers": { llmProviderApiKey: ["read"] },
+  "/llm/models": { llmModel: ["read"] },
   "/llm/credentials/virtual-keys": {
     llmVirtualKey: ["read"],
     llmProviderApiKey: ["read"],

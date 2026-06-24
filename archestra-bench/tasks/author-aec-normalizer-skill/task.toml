@@ -1,0 +1,70 @@
+[[stages]]
+text = """I keep getting material exports from suppliers and every one's shaped a little differently,
+which is driving me nuts -- our upload tool only takes one fixed format, so I end up reshaping each
+file by hand. I'd like to fix this for good with a reusable Agent Skill in this instance's library
+that I can keep pointing at whatever a supplier sends.
+
+Could you author a new Agent Skill named exactly `aec-normalizer-{{cell}}` -- a proper registered
+skill in the library, not a throwaway script left in the workspace. Its SKILL.md frontmatter should
+carry that name and a short description, and it should bundle a `scripts/normalize.py` that takes a
+vendor-export JSON path as its first argument and prints our standard upload rows.
+
+I've attached vendor_v1.json as a typical example. Our upload format is CSV-style rows with these
+columns, in order: material_name, quantity, unit_cost_cents, level. For each vendor row: trim the
+spaces around the material name; the quantity comes as a comma-formatted string, so turn it into a
+plain whole number; the unit cost is in dollars, so convert it to whole cents (times 100, rounded);
+and uppercase the level.
+
+Go ahead and create it and run it on vendor_v1.json so I can eyeball the output. Don't submit anything
+yet -- I've got another file coming."""
+
+  [[stages.files]]
+  src = "vendor_v1.json"
+  dest = "/home/sandbox/attachments/vendor_v1.json"
+  mime_type = "application/json"
+
+[[stages]]
+text = """Okay, a new supplier just sent over vendor_v2.json and naturally it's shaped totally
+differently from the last one -- different field names, and some of it's nested. The target upload
+format is the same as before (material_name, quantity, unit_cost_cents, level, same rules).
+
+Can you update that same skill in place so it handles this new shape too, run it on vendor_v2.json,
+and then send me the normalized rows for this file? Call submit_result with
+result = {"rows": [{"material_name": "...", "quantity": 0, "unit_cost_cents": 0, "level": "..."}, ...]}
+in the same order as the rows appear in the file."""
+
+  [[stages.files]]
+  src = "vendor_v2.json"
+  dest = "/home/sandbox/attachments/vendor_v2.json"
+  mime_type = "application/json"
+
+[result_schema]
+type = "object"
+required = ["rows"]
+additionalProperties = false
+
+  [result_schema.properties.rows]
+  type = "array"
+
+    [result_schema.properties.rows.items]
+    type = "object"
+    required = ["material_name", "quantity", "unit_cost_cents", "level"]
+    additionalProperties = false
+
+      [result_schema.properties.rows.items.properties.material_name]
+      type = "string"
+
+      [result_schema.properties.rows.items.properties.quantity]
+      type = "integer"
+
+      [result_schema.properties.rows.items.properties.unit_cost_cents]
+      type = "integer"
+
+      [result_schema.properties.rows.items.properties.level]
+      type = "string"
+
+[state]
+rest = ["/api/skills?search=aec-normalizer-{{cell}}&limit=100"]
+
+[verifier]
+deps = []

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { z } from "zod";
 import { DOMAIN_VALIDATION_REGEX } from "./incoming-email";
 

@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import db from "@/database";
+import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {
   buildDiscoveryUrls,
   discoverOAuthEndpoints,
@@ -893,5 +894,189 @@ describe("OAuth routes", () => {
     expect(requestBody.get("grant_type")).toBe("refresh_token");
     expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
     expect(requestBody.has("resource")).toBe(false);
+  });
+});
+
+describe("OAuth dynamic client registration client name", () => {
+  // Stubs an authenticated request context so request.organizationId resolves
+  // to a fresh org per test, which the brand-name resolution reads under
+  // white-labeling.
+  const ctx = useRouteTestApp(oauthRoutes);
+  const originalFetch = globalThis.fetch;
+  const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
+
+  beforeEach(() => {
+    cacheManager.start();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  // Every non-registration request resolves auth-server metadata advertising a
+  // registration endpoint; the registration POST returns a freshly issued
+  // client id. Returns the mock so the test can read back the client metadata
+  // that was sent.
+  const mockRegistrationFlow = (): Mock => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === REGISTRATION_ENDPOINT) {
+        return {
+          ok: true,
+          json: async () => ({ client_id: "registered-client-id" }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          registration_endpoint: REGISTRATION_ENDPOINT,
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+    return fetchMock;
+  };
+
+  const readRegisteredClientName = (fetchMock: Mock): string => {
+    const registrationCall = fetchMock.mock.calls.find(
+      ([input]) => String(input) === REGISTRATION_ENDPOINT,
+    );
+    return JSON.parse(String(registrationCall?.[1]?.body)).client_name;
+  };
+
+  // A catalog item without a client_id, so the initiate flow performs dynamic
+  // client registration (which is where the consent-screen client name is set).
+  const makeDcrCatalog = (
+    makeInternalMcpCatalog: (
+      overrides?: Record<string, unknown>,
+    ) => Promise<{ id: string; name: string }>,
+    name: string,
+  ) =>
+    makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name,
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+
+  test("ignores the org app name and uses the default brand when full white-labeling is off", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = false;
+    // App name is set, but without the white-labeling license it must not leak
+    // into the consent screen.
+    await db
+      .update(schema.organizationsTable)
+      .set({ appName: "Contoso Copilot" })
+      .where(eq(schema.organizationsTable.id, ctx.organizationId));
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Archestra Platform - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
+  });
+
+  test("uses the organization's white-label app name when full white-labeling is on", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+    await db
+      .update(schema.organizationsTable)
+      .set({ appName: "Contoso Copilot" })
+      .where(eq(schema.organizationsTable.id, ctx.organizationId));
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Contoso Copilot - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
+  });
+
+  test("falls back to the default brand when white-labeling is on but no app name is set", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+
+    try {
+      const catalog = await makeDcrCatalog(
+        makeInternalMcpCatalog,
+        "Acme Cloud",
+      );
+      const fetchMock = mockRegistrationFlow();
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(readRegisteredClientName(fetchMock)).toBe(
+        "Archestra Platform - Acme Cloud",
+      );
+    } finally {
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
   });
 });

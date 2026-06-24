@@ -66,6 +66,28 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
 
+  // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
+  // its credential is resolved per-user at request time, so an explicit pick is
+  // honored by model alone: the key is not pinned and need not be linked to the
+  // picked key (which, for a member who hasn't connected, is some other
+  // provider's key the picker carried over). The acting user's own credential is
+  // resolved when the message is sent — or a connect prompt is surfaced if they
+  // haven't linked one.
+  if (params.explicitModelId) {
+    const explicitModel = await ModelModel.findById(params.explicitModelId);
+    if (
+      explicitModel &&
+      providerRequiresPerUserCredential(explicitModel.provider)
+    ) {
+      return {
+        modelId: explicitModel.id,
+        chatApiKeyId: null,
+        selectedModel: explicitModel.modelId,
+        selectedProvider: explicitModel.provider,
+      };
+    }
+  }
+
   const member = await MemberModel.getByUserId(userId, organizationId);
   const organization = await OrganizationModel.getById(organizationId);
 
@@ -97,7 +119,14 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     if (model) {
       return {
         modelId: model.id,
-        chatApiKeyId: resolved.apiKeyId ?? null,
+        // A per-user provider model never pins a key: the resolved key (e.g. the
+        // admin's, when the org default points at a Copilot model) belongs to
+        // whoever configured it and isn't usable by — or visible to — the acting
+        // user. Persist the model alone; the acting user's own credential is
+        // resolved per-user at request time (or a connect prompt is surfaced).
+        chatApiKeyId: providerRequiresPerUserCredential(model.provider)
+          ? null
+          : (resolved.apiKeyId ?? null),
         selectedModel: model.modelId,
         selectedProvider: model.provider,
       };

@@ -14,6 +14,8 @@ import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
@@ -711,6 +713,23 @@ async function findAccessibleTriggerOrThrow(params: {
   );
   if (isScheduledTaskAdmin) {
     return trigger;
+  }
+
+  // Project members may read the runs of a schedule that belongs to a project
+  // they can access. Reuses the same ProjectShareModel.userCanAccessProject
+  // check that backs GET /api/projects/:id (via projectService.requireViewable).
+  if (trigger.projectId) {
+    const project = await ProjectModel.findById(trigger.projectId);
+    if (
+      project &&
+      (await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      return trigger;
+    }
   }
 
   throw new ApiError(403, "You do not have access to this scheduled task");

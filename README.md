@@ -1,5 +1,3 @@
-<img alt="Open Source AI Platform for your Company" src="logo.png"/>
-
 # Archestra.AI Open Source AI Platform
 
 <div align="center">

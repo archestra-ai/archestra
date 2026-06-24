@@ -4,7 +4,6 @@
 
 <div align="center">
 
-[![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
 <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
 <img alt="Github Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
 [![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)

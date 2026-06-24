@@ -53,10 +53,14 @@ const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your 
 // rather than hunting for a submit tool and looping on the "more steps" rejection.
 const CONTINUE_INSTRUCTION: &str =
     "When you've finished this step, tell me where things stand and wait for my next message.";
-// One-shot follow-up sent when a lane ends its turn without submitting. The nudge runs on the final
-// stage (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this only calls out the
-// omission.
-const SUBMIT_NUDGE: &str = "You ended your turn without submitting a result. The task is not complete until you submit it.";
+// Follow-up sent when a lane ends its turn without submitting -- whether it solved the task and only
+// reported in chat, or stopped to ask a clarifying question. Voiced as a hands-off user so the latter
+// case gets an answer ("use your judgment, keep going") rather than stalling. Runs on the final stage
+// (submission open), so drive_stage still appends SUBMIT_INSTRUCTION; this stays tool-agnostic.
+const SUBMIT_NUDGE: &str = "I don't have anything to add -- use your best judgment, finish it however you think is best, and submit the result once it's ready.";
+// Upper bound on submit-nudges before the run ends regardless, so a model that keeps asking or looping
+// still terminates.
+const MAX_SUBMIT_NUDGES: usize = 3;
 const STATE_NAME: &str = "state.json";
 const MAX_WORKERS_CAP: usize = 4;
 // Last-resort net for a wedged backend: if the chat stream emits nothing for this long, give up on
@@ -1648,16 +1652,26 @@ async fn grade_rollout(
             .await;
     }
 
-    // Safety net: a model often solves the task and reports the answer in chat, then ends its turn
-    // without ever calling the submit tool. Prompt it once more whenever the rollout terminated with
-    // nothing submitted, regardless of `finish_reason` -- a voluntary `stop`, a repeat-breaker
-    // `tool-calls` termination, an empty `other`, or a truncated `length` all reach here, and the
-    // weaker-model failure modes (repeat-breaker, empty response) are exactly the ones that most need
-    // the nudge. Bounded to a single extra turn. Hard errors and hit limits are still excluded by
-    // `stage_error.is_none()`, so a rollout that genuinely failed still terminates.
-    if stage_error.is_none() && !bench_mcp.has_submission(rollout_key).await {
+    // Safety net: a capable model often solves the task and reports the answer in chat, or stops to
+    // ask a clarifying question, then ends its turn without ever calling the submit tool. As long as
+    // it stopped voluntarily (clean `stop`) with nothing submitted, re-prompt it as a hands-off user
+    // and let it continue -- bounded to MAX_SUBMIT_NUDGES turns so a model that keeps asking or
+    // refusing still terminates, and only on a clean `stop` so an error/limit still ends the run.
+    let mut nudges_sent = 0usize;
+    loop {
+        let submitted = bench_mcp.has_submission(rollout_key).await;
+        if !should_nudge(
+            run.finish_reason.as_deref(),
+            submitted,
+            stage_error.is_some(),
+            nudges_sent,
+            MAX_SUBMIT_NUDGES,
+        ) {
+            break;
+        }
+        nudges_sent += 1;
         artifacts
-            .append("submit_nudge", serde_json::json!({}))
+            .append("submit_nudge", serde_json::json!({ "attempt": nudges_sent }))
             .await;
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),
@@ -2015,6 +2029,20 @@ fn stage_message(stage_text: &str, submission_open: bool) -> String {
     format!("{stage_text}\n\n{trailer}")
 }
 
+/// Whether to send another submit-nudge. We re-prompt only when the lane voluntarily ended its turn
+/// (`stop`) without submitting and nudges remain; any error/limit or non-`stop` finish ends the run,
+/// and a recorded submission means we're done. Keeps the runaway bound and the clean-exit guards in
+/// one testable place.
+fn should_nudge(
+    finish_reason: Option<&str>,
+    submitted: bool,
+    had_error: bool,
+    nudges_sent: usize,
+    cap: usize,
+) -> bool {
+    !had_error && !submitted && finish_reason == Some("stop") && nudges_sent < cap
+}
+
 async fn drive_stage(
     client: &EvalClient,
     conversation_id: &str,
@@ -2043,6 +2071,11 @@ async fn drive_stage(
     let text = stage_message(&expand_runtime(&stage.text, runtime), submission_open);
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
+    // `apply_chat_event` only ever sets `finish_reason` (on a finish event) and never clears it, so
+    // reset it per turn here -- otherwise a turn that closes without a finish event would retain the
+    // prior turn's value. Keeps the returned `finish_reason` scoped to this turn for the submit-nudge
+    // loop's `stop` guard.
+    run.finish_reason = None;
 
     let mut stream = client
         .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
@@ -2935,6 +2968,37 @@ mod tests {
         assert_eq!(msg, format!("do the thing\n\n{CONTINUE_INSTRUCTION}"));
         assert!(!msg.contains(SUBMIT_INSTRUCTION));
         assert!(!msg.to_lowercase().contains("submit"));
+    }
+
+    #[test]
+    fn test_should_nudge_stops_without_submission_under_cap() {
+        // The case the loop exists for: clean stop, nothing submitted, no error, room left.
+        assert!(should_nudge(Some("stop"), false, false, 0, 3));
+        assert!(should_nudge(Some("stop"), false, false, 2, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_once_submitted() {
+        assert!(!should_nudge(Some("stop"), true, false, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_on_error() {
+        // An error/limit already ended the run; never re-prompt over it.
+        assert!(!should_nudge(Some("stop"), false, true, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_false_on_non_stop_finish() {
+        // Anything other than a voluntary `stop` (length cap, tool-calls, no finish event) ends.
+        assert!(!should_nudge(Some("length"), false, false, 0, 3));
+        assert!(!should_nudge(None, false, false, 0, 3));
+    }
+
+    #[test]
+    fn test_should_nudge_respects_cap() {
+        assert!(!should_nudge(Some("stop"), false, false, 3, 3));
+        assert!(!should_nudge(Some("stop"), false, false, 4, 3));
     }
 
     #[test]

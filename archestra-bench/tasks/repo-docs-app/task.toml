@@ -1,5 +1,17 @@
 [[stages]]
-text = """We've got a DeepWiki connection wired into this workspace. Could you build a small app called `repo-docs-app-{{cell}}` that lets a teammate type a plain-English question about a GitHub repo's documentation and shows the answer back to them? Have it use DeepWiki for the lookups. Once it's working and validates cleanly, call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
+text = """Could you build a small app called `repo-docs-app-{{cell}}`? A teammate should be able to type a plain-English question about a GitHub repo's documentation and get a clear answer back. Let's start there."""
+
+[[stages]]
+text = """Nice. Could you let people line up two repos at once and ask the same question of each, so they can compare the answers side by side in one view?"""
+
+[[stages]]
+text = """One more -- when someone lands on a question worth keeping, let them save it so the rest of the team sees the saved questions too."""
+
+[[stages]]
+text = """Actually, the side-by-side is too busy -- let's drop it and go back to one repo at a time. But instead of a single answer, let people keep asking follow-up questions about that repo and see the running back-and-forth on the page. Keep the saved-questions feature."""
+
+[[stages]]
+text = """Last thing: publish it so the whole org can use it, and put a short one-line summary at the top of each answer. Then call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
 
 [result_schema]
 type = "object"

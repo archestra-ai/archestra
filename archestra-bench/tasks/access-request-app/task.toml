@@ -1,5 +1,14 @@
 [[stages]]
-text = """Can you build an app called `access-request-app-{{cell}}` that lets a teammate file a request for access to one of our systems -- they pick the system, choose an access level, add a short justification, and send it off? Everyone signs in with their own account, so if someone hasn't connected theirs yet, don't drop a raw error on them -- show a friendly prompt that lets them connect and authorize first, then continue. When it validates cleanly, call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
+text = """Can you build an app called `access-request-app-{{cell}}` that lets a teammate file a request for access to one of our systems? They pick the system, choose an access level, add a short justification, and send it off. Everyone uses their own account, so if someone isn't set up yet, it should help them get connected before they can file a request. Let's start there."""
+
+[[stages]]
+text = """Thinking about it more -- admin-level requests shouldn't just sail through. Block an admin request unless that person has a director exception on file, and if they don't, tell them why it can't go through."""
+
+[[stages]]
+text = """After someone connects their account, don't make them re-fill the form and click send again -- bring them back to their filled-in request, ready to go."""
+
+[[stages]]
+text = """Last tweak: only show the systems that belong to the IT team, not every system we've got. Then call submit_result with result = {"app_id": "<the app's id>", "app_name": "<the app's name>"}."""
 
 [result_schema]
 type = "object"

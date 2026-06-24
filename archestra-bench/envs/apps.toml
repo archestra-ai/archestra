@@ -13,7 +13,7 @@ fixture_mcp = true
 # Archestra built-in app authoring tools, beyond the base sandbox set. Listing them here assigns them
 # to the agent (auto-assignment is disabled in the harness) and lets the surface assertion pass. They
 # only exist once ARCHESTRA_APPS_ENABLED is set (see [backend_env]).
-tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app"]
+tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app", "publish_app"]
 
 # MCP Apps ship dark behind ARCHESTRA_APPS_ENABLED. Enable it for this env only (a per-env backend
 # process var) so the app authoring tools appear in the catalog and existing envs' tool surfaces are

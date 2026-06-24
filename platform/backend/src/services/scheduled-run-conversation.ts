@@ -24,10 +24,18 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  *   - the run-view route, AFTER execution, to show the run as a chat.
  *
  * Creation is centralized here and linked with a compare-and-swap so the two
- * paths can never create two conversations for one run. Messages are
- * reconstructed from the run's interactions (the A2A executor persists
- * interactions, not chat messages), so backfilling is done by the view path
- * once interactions exist — never at creation time.
+ * paths can never create two conversations for one run.
+ *
+ * Messages are written by one of two paths, both idempotent (no-op once the
+ * conversation has messages):
+ *   - PRIMARY (`persistRunConversationMessages`): the run handler, at completion,
+ *     stores `[user, responseUiMessage]` from the executor's in-memory result —
+ *     race-free, since it never reads the run's `interactions` rows.
+ *   - FALLBACK (`backfillRunConversationMessages`): the view path reconstructs
+ *     the transcript from the run's interactions. Used for unscoped runs (no
+ *     up-front conversation) and as a safety net; safe by view time because all
+ *     interactions have committed. Must NOT run at creation time (no interactions
+ *     yet) — only once they exist.
  */
 
 /** A short title seeded from the trigger's message template. */

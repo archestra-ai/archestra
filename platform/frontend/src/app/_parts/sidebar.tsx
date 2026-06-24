@@ -12,8 +12,10 @@ import {
   AppWindow,
   BookOpen,
   Bot,
+  Boxes,
   Bug,
   Cable,
+  CircleDollarSign,
   Database,
   FolderKanban,
   Github,
@@ -25,9 +27,11 @@ import {
   Network,
   PencilRuler,
   Route,
+  ShieldCheck,
   Slack,
   Sparkles,
   Star,
+  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -244,30 +248,32 @@ const contentNavGroups: NavGroup[] = [
     label: "MCP & Tools",
     items: [
       {
-        title: "MCPs",
+        title: "Guardrails",
+        url: "/mcp/tool-guardrails",
+        icon: ShieldCheck,
+        testId: E2eTestId.SidebarNavGuardrails,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/tool-guardrails"),
+      },
+      {
+        title: "MCP Registry",
         url: "/mcp/registry",
         icon: Route,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/registry"),
+      },
+      {
+        title: "MCP Gateways",
+        url: "/mcp/gateways",
+        icon: Waypoints,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/gateways"),
         subItems: [
-          {
-            title: "Gateways",
-            url: "/mcp/gateways",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/gateways"),
-          },
           {
             title: "Credentials",
             url: "/mcp/credentials/oauth-clients",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/mcp/credentials"),
-          },
-          {
-            title: "Guardrails",
-            url: "/mcp/tool-guardrails",
-            testId: E2eTestId.SidebarNavGuardrails,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/tool-guardrails"),
           },
         ],
       },
@@ -283,23 +289,25 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname === "/llm/proxies",
         subItems: [
           {
-            title: "Model Providers",
-            url: "/llm/model-providers",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/model-providers") ||
-              pathname.startsWith("/llm/models"),
-          },
-          {
             title: "Credentials",
             url: "/llm/credentials/virtual-keys",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/llm/credentials"),
           },
-          {
-            title: "Costs & Limits",
-            url: "/llm/costs",
-          },
         ],
+      },
+      {
+        title: "Model Providers",
+        url: "/llm/model-providers",
+        icon: Boxes,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-providers") ||
+          pathname.startsWith("/llm/models"),
+      },
+      {
+        title: "Costs & Limits",
+        url: "/llm/costs",
+        icon: CircleDollarSign,
       },
     ],
   },
@@ -634,7 +642,7 @@ export function AppSidebar() {
     // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
       Connect: "/connection_beta",
-      MCPs: "/mcp/registry/beta",
+      "MCP Registry": "/mcp/registry/beta",
     };
     return contentNavGroups
       .filter((group) => group.label !== "Apps" || appsEnabled)

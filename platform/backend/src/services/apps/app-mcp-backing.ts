@@ -70,8 +70,14 @@ export async function createAppBacking(params: {
     // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
     // pre-existing NULL-catalog proxy tool of the same name and its assignments).
     // The catalog is brand-new, so a direct insert can't collide.
+    //
+    // Slugify the name per the discovered-tool convention
+    // (`<server>__show_app`) so that when multiple apps are assigned to the same
+    // gateway profile their launch tools stay distinct — an unprefixed
+    // "show_app" would collide in the gateway's dedupe-by-name and shadow all
+    // but one app.
     const tool = await ToolModel.create({
-      name: APP_SHOW_TOOL_NAME,
+      name: ToolModel.slugifyName(server.name, APP_SHOW_TOOL_NAME),
       description: `Open the "${app.name}" app and render its UI.`,
       parameters: { type: "object", properties: {} },
       catalogId: catalog.id,

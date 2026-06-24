@@ -84,14 +84,45 @@ describe("MCP backing for apps", () => {
     expect(catalog?.serverType).toBe("app");
 
     const tools = await ToolModel.findByCatalogIdWithMeta(server!.catalogId);
-    const showApp = tools.find((t) => t.name === "show_app");
-    expect(showApp).toBeTruthy();
+    // The launch tool is slugified per the discovered-tool convention
+    // (`<server>__show_app`) so apps don't collide in the gateway's
+    // dedupe-by-name; it is the only tool on the app's catalog.
+    expect(tools).toHaveLength(1);
+    const showApp = tools[0];
+    expect(showApp.name.endsWith("__show_app")).toBe(true);
     // The tool points at the app's ui:// resource and stores no CSP (the CSP
     // floor is applied at serve time, never persisted).
     const ui = (showApp?.meta as { _meta?: { ui?: Record<string, unknown> } })
       ?._meta?.ui;
     expect(ui?.resourceUri).toBe(getArchestraAppResourceUri(appId));
     expect(ui?.csp).toBeUndefined();
+  });
+
+  test("two apps get distinct slugified launch-tool names (no gateway collision)", async () => {
+    const appAId = await createApp();
+    const appBId = await app
+      .inject({
+        method: "POST",
+        url: "/api/apps",
+        payload: {
+          name: "Second Dashboard",
+          html: "<html><head></head><body><h1>2</h1></body></html>",
+          scope: "org",
+        },
+      })
+      .then((r) => r.json().id as string);
+
+    const nameFor = async (appId: string) => {
+      const a = await AppModel.findById(appId);
+      const s = await McpServerModel.findById(a!.mcpServerId!);
+      const [t] = await ToolModel.findByCatalogIdWithMeta(s!.catalogId);
+      return t.name;
+    };
+    const nameA = await nameFor(appAId);
+    const nameB = await nameFor(appBId);
+    expect(nameA).not.toBe(nameB);
+    expect(nameA.endsWith("__show_app")).toBe(true);
+    expect(nameB.endsWith("__show_app")).toBe(true);
   });
 
   test("the app backing server is excluded from external UI-capable detection (no double-listing)", async () => {

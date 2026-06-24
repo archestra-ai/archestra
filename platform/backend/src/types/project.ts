@@ -64,6 +64,13 @@ export const ProjectListItemSchema = z.object({
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),
+  /**
+   * Names of the teams a `team`-shared project is shared with, for the owner's
+   * visibility badge. Present (possibly empty) only when the caller owns a
+   * team-shared project; null otherwise (the share's targets are the owner's
+   * business, and other visibilities have no teams).
+   */
+  shareTeamNames: z.array(z.string()).nullable(),
   /** When the requesting user pinned this project; null = not pinned. */
   pinnedAt: z.date().nullable(),
   createdAt: z.date(),

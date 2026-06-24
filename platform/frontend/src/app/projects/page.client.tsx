@@ -277,7 +277,11 @@ function ProjectCard({
           {project.viewerRole === "owner" && project.visibility && (
             <Badge variant="outline" className="gap-1">
               <Users className="h-3 w-3" />
-              {project.visibility === "organization" ? "Org" : "Teams"}
+              {project.visibility === "organization"
+                ? "Org"
+                : project.shareTeamNames && project.shareTeamNames.length > 0
+                  ? project.shareTeamNames.join(", ")
+                  : "Teams"}
             </Badge>
           )}
           <ProjectCardActions

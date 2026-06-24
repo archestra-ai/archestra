@@ -87,7 +87,14 @@ describe("GET /api/projects (scope + search)", () => {
       "private-one",
     ]);
     expect(names((await list("?scope=org")).body)).toEqual(["org-one"]);
-    expect(names((await list("?scope=team")).body)).toEqual(["team-one"]);
+
+    // The owner's team-shared project carries its team name(s) for the badge.
+    const teamItems = JSON.parse((await list("?scope=team")).body) as Array<{
+      name: string;
+      shareTeamNames: string[] | null;
+    }>;
+    expect(teamItems.map((p) => p.name)).toEqual(["team-one"]);
+    expect(teamItems[0]?.shareTeamNames).toEqual(["T"]);
   });
 
   test("scope=team + teamIds narrows to the chosen team", async ({

@@ -122,14 +122,23 @@ class ProjectService {
       candidates = candidates.filter((c) => !exclude.has(c.project.userId));
     }
 
+    // Team memberships for team-shared projects — backs both the `teamIds`
+    // filter and the owner's team-name visibility badge. Fetched once, only when
+    // team data is actually relevant.
+    const needTeams =
+      !!params.teamIds?.length ||
+      candidates.some((c) => c.project.visibility === "team");
+    const shareTeams = needTeams
+      ? await ProjectShareModel.getShareTeamsForProjects(
+          candidates.map((c) => c.project.id),
+        )
+      : new Map<string, { id: string; name: string }[]>();
+
     // teamIds narrows scope=team to projects shared with any chosen team.
     if (params.teamIds?.length) {
       const want = new Set(params.teamIds);
-      const shareTeams = await ProjectShareModel.getShareTeamIdsForProjects(
-        candidates.map((c) => c.project.id),
-      );
       candidates = candidates.filter((c) =>
-        (shareTeams.get(c.project.id) ?? []).some((t) => want.has(t)),
+        (shareTeams.get(c.project.id) ?? []).some((t) => want.has(t.id)),
       );
     }
 
@@ -166,6 +175,12 @@ class ProjectService {
       ownerName: ownerNames.get(project.userId) ?? null,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
+      // Owner's team-shared projects expose their team names for the badge;
+      // others (and non-team projects) get null.
+      shareTeamNames:
+        viewerRole === "owner" && project.visibility === "team"
+          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
     }));
@@ -178,7 +193,7 @@ class ProjectService {
     allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
     const { project, viewerRole } = await this.requireViewable(params);
-    const [share, counts, pins, ownerNames] = await Promise.all([
+    const [share, counts, pins, ownerNames, shareTeams] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
       ProjectPinModel.getPinnedAtForProjects({
@@ -186,6 +201,7 @@ class ProjectService {
         projectIds: [project.id],
       }),
       UserModel.getNamesByIds([project.userId]),
+      ProjectShareModel.getShareTeamsForProjects([project.id]),
     ]);
     // share targets are visible to those who can manage the project (so the
     // edit dialog can populate sharing): the owner or a project admin.
@@ -200,6 +216,10 @@ class ProjectService {
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
+      shareTeamNames:
+        viewerRole === "owner" && share?.visibility === "team"
+          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
     };

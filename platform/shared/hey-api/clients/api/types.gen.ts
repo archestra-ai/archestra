@@ -53690,6 +53690,7 @@ export type GetProjectsResponses = {
         ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     }>;
@@ -53786,6 +53787,7 @@ export type CreateProjectResponses = {
         ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -53965,6 +53967,7 @@ export type GetProjectResponses = {
         ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;

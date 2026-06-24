@@ -193,28 +193,34 @@ class ProjectShareModel {
   }
 
   /**
-   * Team ids each project is shared with, keyed by project id (team-shared
-   * projects only). One query; backs the `scope=team` + `teamIds` filter.
+   * Teams (id + name) each project is shared with, keyed by project id
+   * (team-shared projects only). One query; backs both the `scope=team` +
+   * `teamIds` filter and the owner's team-name visibility badge.
    */
-  static async getShareTeamIdsForProjects(
+  static async getShareTeamsForProjects(
     projectIds: string[],
-  ): Promise<Map<string, string[]>> {
+  ): Promise<Map<string, { id: string; name: string }[]>> {
     if (projectIds.length === 0) return new Map();
     const rows = await db
       .select({
         projectId: schema.projectSharesTable.projectId,
-        teamId: schema.projectShareTeamsTable.teamId,
+        teamId: schema.teamsTable.id,
+        teamName: schema.teamsTable.name,
       })
       .from(schema.projectSharesTable)
       .innerJoin(
         schema.projectShareTeamsTable,
         eq(schema.projectSharesTable.id, schema.projectShareTeamsTable.shareId),
       )
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.projectShareTeamsTable.teamId, schema.teamsTable.id),
+      )
       .where(inArray(schema.projectSharesTable.projectId, projectIds));
-    const byProject = new Map<string, string[]>();
-    for (const { projectId, teamId } of rows) {
+    const byProject = new Map<string, { id: string; name: string }[]>();
+    for (const { projectId, teamId, teamName } of rows) {
       const list = byProject.get(projectId) ?? [];
-      list.push(teamId);
+      list.push({ id: teamId, name: teamName });
       byProject.set(projectId, list);
     }
     return byProject;

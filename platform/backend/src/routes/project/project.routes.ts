@@ -70,6 +70,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ownerName: user.name ?? null,
         conversationCount: 0,
         visibility: null,
+        shareTeamNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
       };

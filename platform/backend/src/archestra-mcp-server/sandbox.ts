@@ -1,5 +1,6 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
+  PROJECT_INSTRUCTIONS_FILENAME,
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
@@ -25,7 +26,11 @@ import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-reg
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import type { MyFileResolutionError } from "@/skills-sandbox/file-store";
-import { fileStore, OBJECT_REF_PREFIX } from "@/skills-sandbox/file-store";
+import {
+  FileNotDeletableError,
+  fileStore,
+  OBJECT_REF_PREFIX,
+} from "@/skills-sandbox/file-store";
 import {
   isInlineSafeImageMime,
   resolveArtifactMime,
@@ -1331,6 +1336,17 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
+      }
+      // The project instructions file is available but never deletable — refuse
+      // up front with the canonical message (the store would otherwise throw,
+      // and this call site is not wrapped to surface it).
+      if (
+        resolved.projectId &&
+        resolved.filename === PROJECT_INSTRUCTIONS_FILENAME
+      ) {
+        return errorResult(
+          new FileNotDeletableError(resolved.filename).message,
+        );
       }
 
       const deleted = await fileStore.delete({

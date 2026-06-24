@@ -2,6 +2,7 @@ import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { McpServerModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -2949,5 +2950,162 @@ describe("mcp server inspect route", () => {
     expect(response.json().error.message).toContain(
       "You can only revoke connections for teams you are a member of",
     );
+  });
+});
+
+describe("mcp server core route coverage", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  const UNKNOWN_ID = "00000000-0000-4000-8000-0000000000aa";
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    await makeMember(user.id, organization.id);
+    hasPermissionMock.mockResolvedValue({ success: true });
+    userHasPermissionMock.mockResolvedValue(true);
+    k8sStopServerMock.mockResolvedValue(undefined);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { user: User; organizationId: string }
+      ).user = user;
+      (
+        request as typeof request & { user: User; organizationId: string }
+      ).organizationId = organizationId;
+    });
+
+    const { default: mcpServerRoutes } = await import("./mcp-server");
+    await app.register(mcpServerRoutes);
+  });
+
+  afterEach(async () => {
+    hasPermissionMock.mockReset();
+    userHasPermissionMock.mockReset();
+    k8sStopServerMock.mockReset();
+    await app.close();
+  });
+
+  describe("GET /api/mcp_server/:id", () => {
+    test("returns an MCP server the caller can access", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().id).toBe(server.id);
+    });
+
+    test("returns 404 for an unknown id", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${UNKNOWN_ID}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("MCP server not found");
+    });
+  });
+
+  describe("DELETE /api/mcp_server/:id", () => {
+    test("returns 404 for an unknown id", async () => {
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${UNKNOWN_ID}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("MCP server not found");
+    });
+
+    test("refuses to delete a built-in MCP server with 400", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "builtin" });
+      const builtin = await McpServerModel.create({
+        name: "builtin-server",
+        catalogId: catalog.id,
+        serverType: "builtin",
+        scope: "org",
+        ownerId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${builtin.id}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "Cannot delete built-in MCP servers",
+      );
+      await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
+    });
+  });
+
+  describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
+    test("rejects a request with no credential fields (400)", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${UNKNOWN_ID}/reauthenticate`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "At least one credential field is required",
+      );
+    });
+
+    test("returns 404 for an unknown id when a credential is supplied", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${UNKNOWN_ID}/reauthenticate`,
+        payload: { accessToken: "fresh-token" },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("MCP server not found");
+    });
+  });
+
+  describe("POST /api/mcp_server/:id/reinstall", () => {
+    test("returns 404 for an unknown id", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${UNKNOWN_ID}/reinstall`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("MCP server not found");
+    });
+  });
+
+  describe("POST /api/mcp_server", () => {
+    test("returns 400 when the referenced catalog item does not exist", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "ghost", catalogId: UNKNOWN_ID, scope: "personal" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe("Catalog item not found");
+    });
   });
 });

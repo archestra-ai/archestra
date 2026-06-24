@@ -39,6 +39,8 @@ export const ProjectListItemSchema = z.object({
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),
+  /** When the requesting user pinned this project; null = not pinned. */
+  pinnedAt: z.date().nullable(),
   createdAt: z.date(),
 });
 export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;

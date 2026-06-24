@@ -36,6 +36,7 @@ import {
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
+  ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
   UnknownCapabilitiesBadge,
@@ -887,6 +888,9 @@ export const ModelSelector = memo(function ModelSelector({
                         <CopyModelIdButton modelId={model.id} />
                       </ModelSelectorName>
                       {model.isFree && <FreeModelBadge />}
+                      {model.requiresUserConnection && !model.isConnected && (
+                        <ConnectAccountBadge />
+                      )}
                       {isOpenRouterLatestAlias(provider, model.id) && (
                         <LatestModelBadge />
                       )}

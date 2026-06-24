@@ -3,18 +3,20 @@
 import {
   type archestraApiTypes,
   PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_INSTRUCTIONS_FILENAME,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import {
   CalendarClock,
   Eye,
-  File as FileIcon,
   FileText,
   Globe,
   Lock,
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
   Users,
 } from "lucide-react";
@@ -32,6 +34,11 @@ import {
 } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
+import {
+  INSTRUCTIONS_SELECTION,
+  InstructionsRow,
+  ProjectInstructionsPanel,
+} from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -56,6 +63,7 @@ import {
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import {
   useDeleteProject,
+  usePinProject,
   useProject,
   useProjectConversations,
   useProjectFiles,
@@ -81,6 +89,7 @@ function ProjectDetail() {
   const { data: project, isPending } = useProject(id);
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
+  const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -119,12 +128,15 @@ function ProjectDetail() {
           title={
             <span className="flex items-center gap-2">
               <AgentIcon icon={project.icon} fallbackType="project" size={22} />
-              {project.name}
+              <span className="min-w-0 truncate">{project.name}</span>
             </span>
           }
           description={project.description ?? ""}
           actionButton={
-            project.isOwner ? (
+            <div className="flex items-center gap-2">
+              {!project.isOwner && (
+                <Badge variant="secondary">Shared with you</Badge>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -136,29 +148,46 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
                   <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setConfirmDelete(true)}
+                    onSelect={() =>
+                      pinProjectMutation.mutate({
+                        id: project.id,
+                        pinned: !project.pinnedAt,
+                      })
+                    }
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
+                    {project.pinnedAt ? (
+                      <PinOff className="h-4 w-4" />
+                    ) : (
+                      <Pin className="h-4 w-4" />
+                    )}
+                    {project.pinnedAt ? "Unpin" : "Pin"}
                   </DropdownMenuItem>
+                  {project.isOwner && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                        <Pencil className="h-4 w-4" />
+                        Edit details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setConfirmDelete(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
-              <Badge variant="secondary">Shared with you</Badge>
-            )
+            </div>
           }
         >
           <DeleteConfirmDialog
             open={confirmDelete}
             onOpenChange={setConfirmDelete}
             title={`Delete ${project.name}?`}
-            description="Chats and files are kept — chats become ordinary conversations, and their files remain available in those conversations."
+            description="Chats are kept as ordinary conversations. Project files are deleted with the project."
             isPending={deleteProject.isPending}
             onConfirm={async () => {
               const ok = await deleteProject.mutateAsync({ id: project.id });
@@ -188,6 +217,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
+          isOwner={project.isOwner}
         />
       </div>
     </div>
@@ -293,15 +323,26 @@ function ChatsList({
 function ProjectFilesSidebar({
   projectId,
   projectName,
+  isOwner,
 }: {
   projectId: string;
   projectName: string;
+  isOwner: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // The instructions file is surfaced only as the pinned entry, so keep it out
+  // of the ordinary list. Its presence + size drives the pinned row's state.
+  const instructionsFile = (files ?? []).find(
+    (f) => f.filename === PROJECT_INSTRUCTIONS_FILENAME,
+  );
+  const hasInstructions = (instructionsFile?.sizeBytes ?? 0) > 0;
+
   const items: FileListItem[] = (files ?? [])
-    .filter((f) => f.downloadable)
+    .filter(
+      (f) => f.downloadable && f.filename !== PROJECT_INSTRUCTIONS_FILENAME,
+    )
     .map((f) => ({
       id: f.downloadRef,
       name: f.filename,
@@ -309,9 +350,12 @@ function ProjectFilesSidebar({
       contentUrl: sandboxArtifactUrl(f.downloadRef),
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
+  const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
+  const previewing = selected !== null || instructionsSelected;
 
   // Open with the newest file previewed, like the chat panel does. Only once —
-  // an explicitly closed preview stays closed.
+  // an explicitly closed preview stays closed. The instructions entry is opened
+  // only on click, never by default.
   const defaultApplied = useRef(false);
   const newestId = items.at(-1)?.id;
   useEffect(() => {
@@ -338,36 +382,44 @@ function ProjectFilesSidebar({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
-          {items.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
-              <FileIcon className="mb-2 h-6 w-6 opacity-50" />
-              <p className="font-medium">No files yet</p>
-              <p className="mt-1">
-                Results the agent saves in this project will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="flex h-full flex-col">
-              <div
-                className={cn(
-                  "overflow-y-auto px-3 py-3",
-                  selected ? "max-h-[45%] shrink-0 border-b" : "flex-1",
-                )}
-              >
+          <div className="flex h-full flex-col">
+            <div
+              className={cn(
+                "overflow-y-auto px-3 py-3",
+                previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
+              )}
+            >
+              <InstructionsRow
+                selected={instructionsSelected}
+                hasContent={hasInstructions}
+                onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+              />
+              {items.length > 0 ? (
                 <FileSection
                   items={items}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
                 />
-              </div>
-              {selected && (
-                <FilePreview
-                  file={selected}
-                  onClose={() => setSelectedId(null)}
-                />
+              ) : (
+                <p className="px-1 pt-3 text-xs text-muted-foreground">
+                  Results the agent saves in this project will appear here.
+                </p>
               )}
             </div>
-          )}
+            {instructionsSelected && (
+              <ProjectInstructionsPanel
+                projectId={projectId}
+                isOwner={isOwner}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
+            {selected && (
+              <FilePreview
+                file={selected}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
+          </div>
         </div>
       </Tabs>
     </ResizableRightPanel>

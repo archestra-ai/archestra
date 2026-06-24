@@ -4,8 +4,10 @@ import {
   type ModelSelection,
   type ModelSource,
   pickBestModel,
+  providerRequiresPerUserCredential,
   type RankedModel,
   resolveModelSelection,
+  type SupportedProvider,
 } from "@archestra/shared";
 
 export type { ModelSource };
@@ -124,12 +126,41 @@ export function resolveInitialModel(
   const findKeyForProvider = (provider: string): string | null =>
     chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
 
-  if (Object.values(modelsByProvider).flat().length === 0) {
+  const allModels = Object.values(modelsByProvider).flat();
+  if (allModels.length === 0) {
     return null;
   }
 
+  const providerForModel = (
+    modelId: string | null | undefined,
+  ): string | null => {
+    if (!modelId) return null;
+    return (
+      Object.keys(modelsByProvider).find((provider) =>
+        modelsByProvider[provider]?.some((m) => m.id === modelId),
+      ) ?? null
+    );
+  };
+
+  // A per-user provider (e.g. GitHub Copilot) is catalogued org-wide, but its
+  // credential is the viewer's own and resolved at send time — the viewer holds
+  // no key for it. So a per-user model is selectable by model alone: pairing it
+  // with `findKeyForProvider` (null) would otherwise drop it from the catalog
+  // and leave an org/agent default pointing at one half-pinned and skipped.
+  const isPerUserModel = (modelId: string | null | undefined): boolean => {
+    const provider = providerForModel(modelId);
+    return (
+      provider != null &&
+      providerRequiresPerUserCredential(provider as SupportedProvider)
+    );
+  };
+
   // Flatten the catalog into RankedModel[], pairing each model with a key for
-  // its provider so the shared resolver can attach an apiKeyId.
+  // its provider so the shared resolver can attach an apiKeyId. Per-user models
+  // have no viewer key and are intentionally excluded here: this list only
+  // backs the "best available, ready-to-use" fallback, which should prefer a
+  // keyed model over one the viewer would still have to connect. A configured
+  // default pointing at a per-user model is handled by `toLevel` below.
   const availableModels: RankedModel[] = [];
   for (const [provider, models] of Object.entries(modelsByProvider)) {
     const apiKeyId = findKeyForProvider(provider);
@@ -141,28 +172,51 @@ export function resolveInitialModel(
     }
   }
 
+  // Build the priority chain. A per-user level is completed with the placeholder
+  // key so it wins by model alone (mirroring the backend, which honors a
+  // resolved per-user model and then nulls the key) instead of being skipped as
+  // half-pinned. The placeholder — and any real configured key, e.g. the admin's
+  // on an org default — is dropped below.
+  const toLevel = (
+    modelId: string | null | undefined,
+    apiKeyId: string | null | undefined,
+  ): ModelSelection => ({
+    modelId,
+    apiKeyId: isPerUserModel(modelId) ? PER_USER_PLACEHOLDER_KEY : apiKeyId,
+  });
+
   const levels: ModelSelection[] = [
-    {
-      modelId: memberDefault?.modelId,
-      apiKeyId: memberDefault?.chatApiKeyId,
-    },
-    { modelId: agent?.modelId, apiKeyId: agent?.llmApiKeyId },
-    {
-      modelId: organization?.defaultModelId,
-      apiKeyId: organization?.defaultLlmApiKeyId,
-    },
+    toLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
+    toLevel(agent?.modelId, agent?.llmApiKeyId),
+    toLevel(organization?.defaultModelId, organization?.defaultLlmApiKeyId),
   ];
 
   const resolved = resolveModelSelection({ levels, availableModels });
   if (!resolved?.modelId) {
     // Catalog has models but none are linked to an accessible key — fall back
     // to the best model regardless of key.
-    const allModels = Object.values(modelsByProvider).flat();
     const best = pickBestModel(allModels);
     return best ? { modelId: best.id, apiKeyId: null } : null;
   }
-  return { modelId: resolved.modelId, apiKeyId: resolved.apiKeyId ?? null };
+  // A per-user provider model (e.g. an org default pointing at GitHub Copilot)
+  // must not carry the configured key — that key belongs to whoever set it (the
+  // admin) and isn't accessible to the viewer. Drop it so the selector resolves
+  // the model on its own and the send falls through to per-user credential
+  // resolution (which surfaces the inline connect prompt).
+  return {
+    modelId: resolved.modelId,
+    apiKeyId: isPerUserModel(resolved.modelId)
+      ? null
+      : (resolved.apiKeyId ?? null),
+  };
 }
+
+/**
+ * Placeholder key paired with per-user-provider models inside
+ * `resolveInitialModel` so they remain selectable even though the viewer holds
+ * no real key for them. It is purely internal — never persisted or surfaced.
+ */
+const PER_USER_PLACEHOLDER_KEY = "__per_user_placeholder__";
 
 /**
  * Resolve the model and API key to use when switching to a given agent.

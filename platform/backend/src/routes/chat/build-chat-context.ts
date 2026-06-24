@@ -27,6 +27,8 @@ export async function buildChatContext(params: {
   organizationId: string;
   /** Context injected by SessionStart hooks, appended to the system prompt. */
   hookSessionContext: string | undefined;
+  /** The project's instructions, when this chat belongs to a project. */
+  projectInstructions: string | undefined;
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   abortSignal: AbortSignal;
@@ -46,6 +48,7 @@ export async function buildChatContext(params: {
     user,
     organizationId,
     hookSessionContext,
+    projectInstructions,
     hookRunCollector,
     elicitation,
     abortSignal,
@@ -91,6 +94,7 @@ export async function buildChatContext(params: {
     agentId,
     user: { name: user.name, email: user.email },
     hookSessionContext,
+    projectInstructions,
   });
 
   return {

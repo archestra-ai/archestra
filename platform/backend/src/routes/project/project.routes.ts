@@ -1,5 +1,6 @@
 import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   RouteId,
 } from "@archestra/shared";
@@ -61,6 +62,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isOwner: true,
         conversationCount: 0,
         visibility: null,
+        pinnedAt: null,
         createdAt: project.createdAt,
       };
     },
@@ -200,6 +202,52 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/projects/:id/instructions",
+    {
+      schema: {
+        operationId: RouteId.GetProjectInstructions,
+        description:
+          "The project's instructions (markdown). Readable by anyone with " +
+          "project access; empty until the owner first saves it. The content " +
+          "is injected into the system prompt of every chat in the project.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ content: z.string() })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.getInstructions({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/instructions",
+    {
+      schema: {
+        operationId: RouteId.SetProjectInstructions,
+        description:
+          "Set the project's instructions (owner only). The first save creates " +
+          "the instructions file; saving empty content keeps it but injects " +
+          "nothing.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          content: z.string().max(PROJECT_INSTRUCTIONS_MAX_LENGTH),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) => {
+      await projectService.setInstructions({
+        id,
+        organizationId,
+        userId: user.id,
+        content: body.content,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.get(
     "/api/projects/:id/conversations",
     {
       schema: {
@@ -220,6 +268,44 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.PinProject,
+        description:
+          "Pin a project to the current user's sidebar. Personal — does not " +
+          "affect other members. Any user who can read the project may pin it.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.pin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinProject,
+        description:
+          "Remove the current user's pin on a project. Idempotent; allowed " +
+          "even if the project was since unshared from the user.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.unpin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
   );
 };
 

@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useCompleteOnboarding } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export function AlternativeOnboardingDialog({
   open,
 }: AlternativeOnboardingDialogProps) {
   const appName = useAppName();
+  // ARCHESTRA_BETA master switch — the new connection page is the default.
+  const betaEnabled = useFeature("betaEnabled") === true;
   const [selectedOption, setSelectedOption] = useState<"proxy" | "chat" | null>(
     null,
   );
@@ -58,7 +61,7 @@ export function AlternativeOnboardingDialog({
     if (selectedOption === "chat") {
       window.location.href = "/chat";
     } else if (selectedOption === "proxy") {
-      window.location.href = "/connection";
+      window.location.href = betaEnabled ? "/connection_beta" : "/connection";
     }
     handleFinishOnboarding();
   };

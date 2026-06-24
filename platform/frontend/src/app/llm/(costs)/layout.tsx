@@ -23,10 +23,7 @@ const PAGE_CONFIG: Record<
       <>
         Monitor usage costs and savings across teams, agents, and models. View
         and edit model token prices in{" "}
-        <Link
-          href="/llm/model-providers/models"
-          className="text-primary hover:underline"
-        >
+        <Link href="/llm/models" className="text-primary hover:underline">
           Model Settings
         </Link>
         .

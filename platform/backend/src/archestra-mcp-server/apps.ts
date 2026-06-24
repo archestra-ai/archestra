@@ -382,7 +382,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${toolsParts.note}${warningsNote}${seededHtmlNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}`,
       );
     },
   }),
@@ -550,7 +550,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
-      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /apps/<id>/run.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -578,7 +578,7 @@ const registry = defineArchestraTools([
       };
       return structuredSuccessResult(
         summary,
-        `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone run page: /apps/${app.id}/run`,
+        `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone page: /a/${app.id}`,
       );
     },
   }),
@@ -728,7 +728,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary} Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${warningsNote}`,
+        `${summary} Rendered inline when viewed in chat; standalone page: /a/${updated.id}${warningsNote}`,
       );
     },
   }),
@@ -878,14 +878,14 @@ const registry = defineArchestraTools([
         return errorResult(`Failed to publish app ${args.appId}.`);
       }
 
-      const runUrl = `/apps/${updated.id}/run`;
+      const runUrl = `/a/${updated.id}`;
       const audience =
         updated.scope === "org"
           ? "the whole organization"
           : "the selected team(s)";
       return structuredSuccessResult(
         { id: updated.id, scope: updated.scope, runUrl },
-        `Published "${updated.name}" to ${audience}. Standalone run page: ${runUrl}`,
+        `Published "${updated.name}" to ${audience}. Standalone page: ${runUrl}`,
       );
     },
   }),

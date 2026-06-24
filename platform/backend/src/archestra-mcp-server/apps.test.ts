@@ -114,7 +114,7 @@ describe("app tool execution", () => {
     // The model hands this link to the user; the chat UI renders inline from
     // structuredContent.id (scaffold is in the rendering set).
     expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
-    expect((created.content[0] as any).text).toContain(`/apps/${appId}/run`);
+    expect((created.content[0] as any).text).toContain(`/a/${appId}`);
 
     const listed = await executeArchestraTool(
       getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
@@ -1381,7 +1381,7 @@ describe("publish_app", () => {
     const result = await publish({ appId: app.id, scope: "org" }, context);
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("org");
-    expect(structured(result).runUrl).toBe(`/apps/${app.id}/run`);
+    expect(structured(result).runUrl).toBe(`/a/${app.id}`);
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
   });
 

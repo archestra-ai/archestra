@@ -2767,6 +2767,7 @@ class ToolModel {
         name: schema.toolsTable.name,
         description: schema.toolsTable.description,
         parameters: schema.toolsTable.parameters,
+        meta: schema.toolsTable.meta,
         catalogId: schema.toolsTable.catalogId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
@@ -2904,6 +2905,12 @@ class ToolModel {
       name: tool.name as string,
       description: tool.description as string | null,
       parameters: (tool.parameters as Record<string, unknown>) ?? {},
+      // Discovery stores MCP metadata as { _meta, annotations } in `meta`.
+      annotations:
+        ((tool.meta as Record<string, unknown> | null)?.annotations as Record<
+          string,
+          unknown
+        > | null) ?? null,
       catalogId: tool.catalogId as string | null,
       createdAt: tool.createdAt as Date,
       updatedAt: tool.updatedAt as Date,

@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: Named collections of chats that share files and scheduled runs
-lastUpdated: 2026-06-18
+lastUpdated: 2026-06-23
 ---
 
 <!--
@@ -15,6 +15,10 @@ A project is a named collection of chats that own a shared set of result files. 
 ## Sharing
 
 A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) stay owner-only. Deleting a project keeps its chats as ordinary conversations but removes its files.
+
+## Instructions
+
+Every project has an instructions file (`instructions.md`) whose contents are prepended to the system prompt of every chat in the project, so standing guidance — domain context, house style, constraints the agent must always follow — applies to every conversation without being repeated in each prompt. Edit it from the pinned entry at the top of the project's Files panel; owner edits take effect on the next message in any of the project's chats, and empty instructions add nothing. Once saved it is an ordinary project file that agents can read and update, but it cannot be deleted — clear its contents to remove the guidance.
 
 ## Files
 

@@ -1,7 +1,7 @@
 [[stages]]
-text = """A teammate opened a PR on our backend. It adds persistence for files uploaded into an agent sandbox so they're re-readable on every replay: the uploaded bytes and metadata are written to Postgres. The change is centered on the `appendUpload` method in `models/skill-sandbox-replay-event.ts`.
+text = """We persist files uploaded into an agent sandbox so they're re-readable on every replay: the uploaded bytes and metadata go to Postgres. The code path is the `appendUpload` method in `models/skill-sandbox-replay-event.ts`.
 
-I've attached a snapshot of the relevant backend source as a `.tar.gz`. Review the change and decide whether it's safe to merge. Call submit_result with:
+I've attached a snapshot of the relevant backend source as a `.tar.gz`. Review this persistence path and decide whether it's safe to ship. Call submit_result with:
 
 - `verdict`: exactly one of
   - `approve` -- no blocking issue

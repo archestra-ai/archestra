@@ -1,7 +1,7 @@
 [[stages]]
-text = """A teammate opened a PR on our backend. It adds persistence for the agent sandbox's `run_command` tool so a session can be replayed later: each command's stdout, stderr, exit code and timing are written to Postgres. The change is centered on the `appendCommand` method in `models/skill-sandbox-replay-event.ts`.
+text = """We persist the agent sandbox's `run_command` output so a session can be replayed later: each command's stdout, stderr, exit code and timing go to Postgres. The code path is the `appendCommand` method in `models/skill-sandbox-replay-event.ts`.
 
-I've attached a snapshot of the relevant backend source as a `.tar.gz`. Review the change and decide whether it's safe to merge. Call submit_result with:
+I've attached a snapshot of the relevant backend source as a `.tar.gz`. Review this persistence path and decide whether it's safe to ship. Call submit_result with:
 
 - `verdict`: exactly one of
   - `approve` -- no blocking issue

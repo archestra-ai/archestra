@@ -1,7 +1,7 @@
 # review-file-upload-persistence (negative / ugly-but-legit)
 
 Mirror of `review-run-command-persistence`. Same byte-identical snapshot (base `6698224a`), so the
-file set is no tell. The diff *looks* like the run_command NUL bug — external bytes persisted to
+file set is no tell. The code *looks* like the run_command NUL bug — external bytes persisted to
 Postgres with no NUL stripping — but is actually safe. Punishes reviewers that decline on surface
 pattern-match; confirming `approve` requires opening the schema.
 

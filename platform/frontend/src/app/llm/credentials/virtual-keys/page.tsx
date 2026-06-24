@@ -22,6 +22,8 @@ import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
+import { LimitUsageSection } from "@/components/limit-usage-section";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
@@ -164,6 +166,13 @@ export default function VirtualKeysPage() {
           <span className="text-sm text-muted-foreground">
             {formatExpiration(row.original.expiresAt)}
           </span>
+        ),
+      },
+      {
+        id: "usage",
+        header: "Usage",
+        cell: ({ row }) => (
+          <LimitUsageCell entityType="virtual_key" entityId={row.original.id} />
         ),
       },
       {
@@ -671,6 +680,11 @@ function EditVirtualKeyDialog({
             providerApiKeyIds={providerApiKeyIds}
             onProviderApiKeyIdsChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys}
+          />
+
+          <LimitUsageSection
+            entityType="virtual_key"
+            entityId={virtualKey.id}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">

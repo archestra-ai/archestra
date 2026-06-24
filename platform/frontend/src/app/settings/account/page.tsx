@@ -7,6 +7,7 @@ import { ChangePasswordDialog } from "@/app/settings/account/_components/change-
 import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { SessionsCard } from "@/app/settings/account/_components/sessions-card";
 import { TwoFactorCard } from "@/app/settings/account/_components/two-factor-card";
+import { UserLimitsCard } from "@/app/settings/account/_components/user-limits-card";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
@@ -53,6 +54,7 @@ function AccountSettingsContent() {
       <SettingsSectionStack>
         <RolePermissionsCard />
         <PersonalTokenCard />
+        <UserLimitsCard />
         {organization?.showTwoFactor && <TwoFactorCard />}
         <LightDarkToggle />
         <SessionsCard />

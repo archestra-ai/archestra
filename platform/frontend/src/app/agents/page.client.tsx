@@ -26,6 +26,7 @@ import {
 } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -379,6 +380,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           } satisfies ColumnDef<AgentData>,
         ]
       : []),
+    {
+      id: "usage",
+      header: "Usage",
+      cell: ({ row }) => (
+        <LimitUsageCell entityType="agent" entityId={row.original.id} />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",

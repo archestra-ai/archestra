@@ -152,6 +152,7 @@ import {
   normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
+import { LimitUsageSection } from "./limit-usage-section";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -2238,6 +2239,13 @@ export function AgentDialog({
                       showLabel={false}
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Section 6: Limit Usage */}
+              {agent?.id && (
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  <LimitUsageSection entityType="agent" entityId={agent.id} />
                 </div>
               )}
             </div>

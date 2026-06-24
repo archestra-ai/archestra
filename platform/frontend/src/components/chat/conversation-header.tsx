@@ -22,6 +22,7 @@ import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { cn } from "@/lib/utils";
+import { ChatLimitProgress } from "./chat-limit-progress";
 import type { RightPanelTab } from "./right-side-panel";
 
 type Conversation = archestraApiTypes.GetChatConversationResponses["200"];
@@ -114,6 +115,9 @@ export function ConversationHeader({
               )}
             </div>
           )}
+
+          <ChatLimitProgress agentId={conversation?.agentId ?? undefined} />
+
           {/* Desktop: chat actions (Share / Export) next to the title */}
           {conversationId && messageCount > 0 && (
             <DropdownMenu>

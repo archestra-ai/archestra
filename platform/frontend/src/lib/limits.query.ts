@@ -105,3 +105,41 @@ export function useDeleteLimit() {
     },
   });
 }
+export type Limit = archestraApiTypes.GetLimitsResponse[number];
+
+export type ApplicableLimitInfo = {
+  limit: Limit;
+  usage: number;
+  remaining: number;
+};
+
+export function useApplicableLimit(params: {
+  agentId?: string;
+  userId?: string;
+  virtualKeyId?: string;
+  environmentId?: string;
+}) {
+  return useQuery({
+    queryKey: ["limits", "applicable", params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (params.agentId) searchParams.set("agentId", params.agentId);
+      if (params.userId) searchParams.set("userId", params.userId);
+      if (params.virtualKeyId)
+        searchParams.set("virtualKeyId", params.virtualKeyId);
+      if (params.environmentId)
+        searchParams.set("environmentId", params.environmentId);
+
+      const response = await fetch(
+        `/api/limits/applicable?${searchParams.toString()}`,
+      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch applicable limit");
+      }
+      return (await response.json()) as ApplicableLimitInfo | null;
+    },
+    // Refetch often since usage changes
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
+  });
+}

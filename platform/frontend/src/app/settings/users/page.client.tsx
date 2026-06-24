@@ -11,6 +11,8 @@ import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
+import { LimitUsageSection } from "@/components/limit-usage-section";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
@@ -330,6 +332,14 @@ function MembersTab({
         ),
     },
     {
+      id: "usage",
+      header: "Usage",
+      cell: ({ row }) =>
+        "provider" in row.original ? null : (
+          <LimitUsageCell entityType="user" entityId={row.original.id} />
+        ),
+    },
+    {
       id: "actions",
       header: "Actions",
       enableHiding: false,
@@ -576,6 +586,7 @@ function ChangeRoleDialog({
           onValueChange={setSelectedRole}
           className="w-full"
         />
+        <LimitUsageSection entityType="user" entityId={member.id} />
       </DialogBody>
       <DialogStickyFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)}>

@@ -130,6 +130,7 @@ const BACKEND_ERROR_TYPE_TO_CODE: Record<string, ChatErrorCode> = {
   api_authorization_error: ChatErrorCode.PermissionDenied,
   api_not_found_error: ChatErrorCode.NotFound,
   api_internal_server_error: ChatErrorCode.ServerError,
+  rate_limit_exceeded: ChatErrorCode.RateLimit,
 };
 
 /**
@@ -153,6 +154,8 @@ export function mapClientError(error: Error): ChatErrorResponse {
   // Try to extract message + type from backend's { error: { message, type } } format
   let displayMessage = msg;
   let backendType: string | undefined;
+  let usageLimitExceeded: boolean | undefined;
+  let usageLimitEntityType: string | undefined;
   try {
     const parsed = JSON.parse(msg);
     if (parsed?.error?.message) {
@@ -160,6 +163,10 @@ export function mapClientError(error: Error): ChatErrorResponse {
     }
     if (typeof parsed?.error?.type === "string") {
       backendType = parsed.error.type;
+    }
+    if (parsed?.error?.usage_limit) {
+      usageLimitExceeded = true;
+      usageLimitEntityType = parsed.error.usage_limit.entity_type;
     }
   } catch {
     // Not JSON, use as-is
@@ -173,5 +180,7 @@ export function mapClientError(error: Error): ChatErrorResponse {
     code,
     message: displayMessage || ChatErrorMessages[code],
     isRetryable: RetryableErrorCodes.has(code),
+    usageLimitExceeded,
+    usageLimitEntityType,
   };
 }

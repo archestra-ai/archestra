@@ -3,6 +3,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
+  ApplicableLimitInfo,
   CreateLimit,
   Limit,
   LimitCleanupInterval,
@@ -904,6 +905,263 @@ export class LimitValidationService {
       // In case of error, allow the request to proceed
       return null;
     }
+  }
+
+  /**
+   * Find the limit with the lowest remaining usage that applies to the current request context
+   */
+  static async getLowestRemainingLimit(params: {
+    agentId?: string;
+    userId?: string;
+    virtualKeyId?: string;
+    organizationId?: string;
+    environmentId?: string;
+  }): Promise<ApplicableLimitInfo | null> {
+    const { agentId, userId, virtualKeyId, organizationId, environmentId } =
+      params;
+    const applicableLimits: ApplicableLimitInfo[] = [];
+
+    try {
+      let resolvedOrgId = organizationId;
+      let resolvedEnvId = environmentId;
+      let agentTeamIds: string[] = [];
+
+      if (agentId) {
+        agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+        if (!resolvedOrgId) {
+          if (agentTeamIds.length > 0) {
+            const agentTeams = await db
+              .select()
+              .from(schema.teamsTable)
+              .where(inArray(schema.teamsTable.id, agentTeamIds));
+            if (agentTeams.length > 0 && agentTeams[0].organizationId) {
+              resolvedOrgId = agentTeams[0].organizationId;
+            }
+          } else {
+            resolvedOrgId =
+              (await AgentModel.findOrganizationId(agentId)) ?? undefined;
+          }
+        }
+        if (!resolvedEnvId) {
+          resolvedEnvId =
+            (await AgentModel.findEnvironmentId(agentId)) ?? undefined;
+        }
+      }
+
+      // Cleanup limits if needed
+      const entities: LimitsCleanupOptionsEntities = {};
+      if (agentId) entities.agent = agentId;
+      if (virtualKeyId) entities.virtual_key = virtualKeyId;
+      if (userId) entities.user = userId;
+      if (agentTeamIds.length > 0) entities.team = agentTeamIds;
+      if (resolvedOrgId) entities.organization = resolvedOrgId;
+      if (resolvedEnvId) entities.environment = resolvedEnvId;
+
+      await LimitModel.cleanupLimitsIfNeeded({ entities });
+
+      if (virtualKeyId) {
+        const limits =
+          await LimitValidationService.getApplicableLimitsForEntity(
+            "virtual_key",
+            virtualKeyId,
+          );
+        applicableLimits.push(...limits);
+      }
+
+      if (userId) {
+        const limits =
+          await LimitValidationService.getApplicableLimitsForEntity(
+            "user",
+            userId,
+          );
+        applicableLimits.push(...limits);
+
+        if (resolvedOrgId) {
+          const defaultUserLimit =
+            await LimitValidationService.getDefaultUserLimitInfo({
+              organizationId: resolvedOrgId,
+              userId,
+              environmentId: resolvedEnvId,
+            });
+          if (defaultUserLimit) applicableLimits.push(defaultUserLimit);
+        }
+      }
+
+      if (agentId) {
+        const limits =
+          await LimitValidationService.getApplicableLimitsForEntity(
+            "agent",
+            agentId,
+          );
+        applicableLimits.push(...limits);
+      }
+
+      if (resolvedEnvId) {
+        const limits =
+          await LimitValidationService.getApplicableLimitsForEntity(
+            "environment",
+            resolvedEnvId,
+          );
+        applicableLimits.push(...limits);
+      }
+
+      if (agentTeamIds.length > 0) {
+        for (const teamId of agentTeamIds) {
+          const limits =
+            await LimitValidationService.getApplicableLimitsForEntity(
+              "team",
+              teamId,
+            );
+          applicableLimits.push(...limits);
+        }
+      }
+
+      if (resolvedOrgId) {
+        const limits =
+          await LimitValidationService.getApplicableLimitsForEntity(
+            "organization",
+            resolvedOrgId,
+          );
+        applicableLimits.push(...limits);
+      }
+
+      if (applicableLimits.length === 0) {
+        return null;
+      }
+
+      // Find the one with the lowest remaining usage
+      return applicableLimits.reduce((prev, curr) =>
+        curr.remaining < prev.remaining ? curr : prev,
+      );
+    } catch (error) {
+      logger.error(
+        `[LimitValidation] Error getting lowest remaining limit: ${error}`,
+      );
+      return null;
+    }
+  }
+
+  private static async getApplicableLimitsForEntity(
+    entityType: LimitEntityType,
+    entityId: string,
+  ): Promise<ApplicableLimitInfo[]> {
+    const applicableLimits: ApplicableLimitInfo[] = [];
+    try {
+      const limits = await LimitModel.findLimitsForValidation(
+        entityType,
+        entityId,
+        "token_cost",
+      );
+      for (const limit of limits) {
+        const modelUsages = await db
+          .select()
+          .from(schema.limitModelUsageTable)
+          .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+
+        let usage = 0;
+        if (modelUsages.length > 0) {
+          const usageCosts = await calculateModelUsageCosts(modelUsages);
+          usage = usageCosts.cost;
+        }
+
+        applicableLimits.push({
+          limit,
+          usage,
+          remaining: Math.max(0, limit.limitValue - usage),
+        });
+      }
+    } catch (error) {
+      logger.error(
+        `Error getting applicable limits for ${entityType} ${entityId}: ${error}`,
+      );
+    }
+    return applicableLimits;
+  }
+
+  private static async getDefaultUserLimitInfo(params: {
+    organizationId: string;
+    userId: string;
+    environmentId?: string | null;
+  }): Promise<ApplicableLimitInfo | null> {
+    try {
+      const customUserLimits = await LimitModel.findLimitsForValidation(
+        "user",
+        params.userId,
+        "token_cost",
+      );
+      if (customUserLimits.length > 0) {
+        return null; // custom limit overrides default
+      }
+
+      let targetLimit: Limit | null = null;
+
+      if (params.environmentId) {
+        const envDefault =
+          await EnvironmentDefaultUserLimitModel.findByEnvironmentId(
+            params.environmentId,
+          );
+        if (envDefault) {
+          targetLimit = {
+            id: envDefault.id,
+            entityType: "environment",
+            entityId: params.environmentId,
+            limitType: "token_cost",
+            limitValue: envDefault.limitValue,
+            model: envDefault.model,
+            cleanupInterval: envDefault.cleanupInterval,
+            lastCleanup: null,
+            createdAt: envDefault.createdAt,
+            updatedAt: envDefault.updatedAt,
+            mcpServerName: null,
+            toolName: null,
+          };
+        }
+      }
+
+      if (!targetLimit) {
+        const globalDefault = await EnvironmentDefaultUserLimitModel.findGlobal(
+          params.organizationId,
+        );
+        if (globalDefault) {
+          targetLimit = {
+            id: globalDefault.id,
+            entityType: "user",
+            entityId: params.userId, // This is a virtual mapping since it's a default user limit
+            limitType: "token_cost",
+            limitValue: globalDefault.limitValue,
+            model: globalDefault.model,
+            cleanupInterval: globalDefault.cleanupInterval,
+            lastCleanup: null,
+            createdAt: globalDefault.createdAt,
+            updatedAt: globalDefault.updatedAt,
+            mcpServerName: null,
+            toolName: null,
+          };
+        }
+      }
+
+      if (targetLimit) {
+        const usage = await getDefaultUserLimitUsage({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          environmentId:
+            targetLimit.entityType === "environment"
+              ? params.environmentId
+              : undefined,
+          models: normalizeLimitModels(targetLimit.model),
+          cleanupInterval: targetLimit.cleanupInterval ?? "calendar_month",
+        });
+
+        return {
+          limit: targetLimit,
+          usage: usage.cost,
+          remaining: Math.max(0, targetLimit.limitValue - usage.cost),
+        };
+      }
+    } catch (error) {
+      logger.error(`Error getting default user limit info: ${error}`);
+    }
+    return null;
   }
 
   /**

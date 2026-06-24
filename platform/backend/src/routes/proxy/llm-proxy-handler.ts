@@ -57,6 +57,7 @@ import {
 import {
   type Agent,
   ApiError,
+  type ApplicableLimitInfo,
   type DualLlmAnalysis,
   type InteractionAuthMethod,
   type InteractionRequest,
@@ -522,6 +523,7 @@ export async function handleLLMProxy<
   }
 
   // Check usage limits
+  let applicableLimit: ApplicableLimitInfo | null = null;
   try {
     logger.debug(
       { resolvedAgentId },
@@ -559,6 +561,20 @@ export async function handleLLMProxy<
       { resolvedAgentId },
       `[${providerName}Proxy] Limit check passed`,
     );
+
+    // Compute lowest remaining limit for frontend tracking
+    applicableLimit = await LimitValidationService.getLowestRemainingLimit({
+      agentId: resolvedAgentId,
+      userId,
+      virtualKeyId,
+      organizationId: resolvedAgent.organizationId,
+      environmentId: resolvedAgent.environmentId ?? undefined,
+    });
+
+    if (applicableLimit) {
+      const limitHeader = JSON.stringify(applicableLimit);
+      reply.header("X-Archestra-Applicable-Limit", limitHeader);
+    }
 
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
@@ -631,6 +647,10 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
       sseHeaders = streamAdapter.getSSEHeaders();
+      if (applicableLimit) {
+        sseHeaders["X-Archestra-Applicable-Limit"] =
+          JSON.stringify(applicableLimit);
+      }
     }
 
     // Helper to commit SSE headers before the first write.

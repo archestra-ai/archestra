@@ -90,6 +90,14 @@ export function InlineChatError({
     : "text-destructive";
   const usageLimitMessage =
     isUsageLimitExceeded && supportMessage ? chatError.message : undefined;
+
+  const usageLimitBadge =
+    isUsageLimitExceeded && chatError.usageLimitEntityType ? (
+      <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+        <span className="opacity-60">Limit type</span>
+        <span>{chatError.usageLimitEntityType}</span>
+      </span>
+    ) : null;
   // Conversation IDs double as chat session IDs for the end-user chat flow.
   const sessionId = chatError.sessionId ?? conversationId;
 
@@ -152,6 +160,7 @@ export function InlineChatError({
                     <span>{entry.value}</span>
                   </span>
                 ))}
+                {usageLimitBadge}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -221,6 +230,7 @@ export function InlineChatError({
                   <span>{entry.value}</span>
                 </span>
               ))}
+              {usageLimitBadge}
               <Button
                 variant="ghost"
                 size="sm"

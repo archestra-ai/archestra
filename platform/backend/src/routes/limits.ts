@@ -1,9 +1,14 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitModel, OptimizationRuleModel } from "@/models";
+import {
+  LimitModel,
+  LimitValidationService,
+  OptimizationRuleModel,
+} from "@/models";
 import {
   ApiError,
+  ApplicableLimitInfoSchema,
   CreateLimitSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -72,6 +77,43 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(limitsWithUsage);
+    },
+  );
+
+  fastify.get(
+    "/api/limits/applicable",
+    {
+      schema: {
+        operationId: "getApplicableLimit",
+        description:
+          "Get the lowest remaining limit applicable to the given context",
+        tags: ["Limits"],
+        querystring: z.object({
+          agentId: z.string().optional(),
+          userId: z.string().optional(),
+          virtualKeyId: z.string().optional(),
+          environmentId: z.string().optional(),
+        }),
+        response: constructResponseSchema(ApplicableLimitInfoSchema.nullable()),
+      },
+    },
+    async (
+      {
+        query: { agentId, userId, virtualKeyId, environmentId },
+        organizationId,
+      },
+      reply,
+    ) => {
+      const applicableLimit =
+        await LimitValidationService.getLowestRemainingLimit({
+          agentId,
+          userId,
+          virtualKeyId,
+          environmentId,
+          organizationId,
+        });
+
+      return reply.send(applicableLimit);
     },
   );
 

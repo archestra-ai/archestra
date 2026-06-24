@@ -22,6 +22,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { LimitUsageSection } from "@/components/limit-usage-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -342,6 +343,12 @@ function TeamSection(props: {
             labels={props.labels}
             onLabelsChange={props.onLabelsChange}
           />
+        )}
+
+        {props.team && (
+          <div className="mt-4">
+            <LimitUsageSection entityType="team" entityId={props.team.id} />
+          </div>
         )}
       </div>
 

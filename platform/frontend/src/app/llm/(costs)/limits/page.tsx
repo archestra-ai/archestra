@@ -531,11 +531,16 @@ export default function LimitsPage() {
           return (
             <div className="space-y-0.5">
               <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatNextLimitReset(
-                  row.original.lastCleanup,
-                  cleanupInterval,
-                )}
+              <div className="mt-1">
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal text-muted-foreground"
+                >
+                  {formatNextLimitReset(
+                    row.original.lastCleanup,
+                    cleanupInterval,
+                  )}
+                </Badge>
               </div>
             </div>
           );

@@ -20,6 +20,7 @@ import {
   serializeLabels,
 } from "@/components/label-select";
 import { LabelTags } from "@/components/label-tags";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -181,6 +182,14 @@ export function TeamsList() {
           </div>
         );
       },
+    },
+    {
+      id: "usage",
+      header: "Usage",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <LimitUsageCell entityType="team" entityId={row.original.id} />
+      ),
     },
     {
       id: "actions",

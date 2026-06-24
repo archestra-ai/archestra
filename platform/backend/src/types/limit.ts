@@ -162,3 +162,11 @@ export const LimitWithUsageSchema = SelectLimitSchema.extend({
 });
 
 export type LimitWithUsage = z.infer<typeof LimitWithUsageSchema>;
+
+export const ApplicableLimitInfoSchema = z.object({
+  limit: SelectLimitSchema,
+  usage: z.number(),
+  remaining: z.number(),
+});
+
+export type ApplicableLimitInfo = z.infer<typeof ApplicableLimitInfoSchema>;

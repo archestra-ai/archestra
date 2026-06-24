@@ -17,6 +17,7 @@ import {
 } from "@/components/agent-scope-filter";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -308,6 +309,13 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           } satisfies ColumnDef<ProxyData>,
         ]
       : []),
+    {
+      id: "usage",
+      header: "Usage",
+      cell: ({ row }) => (
+        <LimitUsageCell entityType="agent" entityId={row.original.id} />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",

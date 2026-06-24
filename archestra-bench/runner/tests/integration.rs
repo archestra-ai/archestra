@@ -161,6 +161,12 @@ fn test_load_real_envs() {
     let envs = load_envs(&dst.join("envs")).expect("should load envs");
     assert!(envs.contains_key("basic"));
     assert!(envs.contains_key("archestra-api"));
+    let apps = envs.get("apps").expect("apps env should load");
+    assert_eq!(
+        apps.backend_env.get("ARCHESTRA_APPS_ENABLED").map(String::as_str),
+        Some("true"),
+        "apps env should enable the apps feature flag via [backend_env]"
+    );
     for env in envs.values() {
         assert!(!env.id.is_empty());
         assert!(!env.tasks.is_empty());

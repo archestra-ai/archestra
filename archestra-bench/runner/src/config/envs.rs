@@ -135,6 +135,9 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
     )?;
     let share_backend = toml_util::opt_bool(&data, "share_backend", &ctx, false)?;
     let fixture_mcp = toml_util::opt_bool(&data, "fixture_mcp", &ctx, false)?;
+    let backend_env = toml_util::str_map(&data, "backend_env", &ctx)?
+        .into_iter()
+        .collect();
 
     let platform = load_platform(&data, &ctx)?;
 
@@ -149,6 +152,7 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
         tools,
         share_backend,
         fixture_mcp,
+        backend_env,
         platform,
     })
 }

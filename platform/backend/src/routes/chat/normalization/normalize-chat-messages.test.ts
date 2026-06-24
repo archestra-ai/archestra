@@ -560,10 +560,13 @@ describe("normalizeChatMessages malformed tool input", () => {
     }
   });
 
-  // Dedupe keeps the first part on a signature that ignores `input`; recovering
-  // the dropped twin's real arguments is out of scope — the kept malformed input
-  // is repaired to an empty object.
-  test("duplicate tool parts: the kept malformed input is coerced to an object", () => {
+  // Pre-existing dedupe behavior (unchanged here): it keeps the FIRST part on a
+  // signature that ignores `input`, so a malformed-first / valid-second pair
+  // already drops the valid twin before coercion runs. We only assert the safety
+  // invariant — the surviving input is a provider-valid object — not that losing
+  // the twin's args is desirable. Recovering them would mean changing dedupe,
+  // which is out of scope.
+  test("duplicate tool parts: the surviving input is coerced to an object", () => {
     const messages = [
       {
         id: "assistant1",
@@ -591,7 +594,10 @@ describe("normalizeChatMessages malformed tool input", () => {
     const toolParts = result[0].parts ?? [];
 
     expect(toolParts).toHaveLength(1);
-    expect(toolParts[0].input).toEqual({});
+    const input = toolParts[0].input;
+    expect(typeof input).toBe("object");
+    expect(input).not.toBeNull();
+    expect(Array.isArray(input)).toBe(false);
   });
 
   test("leaves a clean conversation unchanged", () => {

@@ -141,7 +141,9 @@ function coerceMalformedToolInputsFromMessages(
           partType: part.type,
           originalInputType: describeInputType(originalPart.input),
           recoveredFromJson:
-            typeof originalPart.input === "string" && isRecord(part.input),
+            typeof originalPart.input === "string" &&
+            isRecord(part.input) &&
+            Object.keys(part.input).length > 0,
         },
         "[normalizeChatMessages] Coerced non-object tool-call input to an object",
       );

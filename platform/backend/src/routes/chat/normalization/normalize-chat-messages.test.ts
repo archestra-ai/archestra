@@ -560,6 +560,51 @@ describe("normalizeChatMessages malformed tool input", () => {
     }
   });
 
+  // A static (`tool-<name>`) tool keeps its unparsed args in `rawInput` with
+  // `input` left undefined; convertToModelMessages reads `input ?? rawInput`, so
+  // without coercion the malformed string would still reach the provider. This is
+  // the shape the production brick actually took (no Input block in the export).
+  test("convertToModelMessages emits an object input when malformed args are in rawInput", async () => {
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "text", text: "editing" },
+          {
+            type: "tool-archestra__edit_app",
+            toolCallId: "call_1",
+            state: "output-error",
+            errorText: "JSON parsing failed",
+            rawInput: '{"old_str">x',
+          },
+        ],
+      },
+    ];
+
+    const normalized = normalizeChatMessages(messages);
+    const modelMessages = await convertToModelMessages(
+      normalized as unknown as UIMessage[],
+    );
+
+    const toolCalls = modelMessages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((part) => part.type === "tool-call");
+
+    expect(toolCalls.length).toBeGreaterThan(0);
+    for (const call of toolCalls) {
+      expect(call.input).toBeTypeOf("object");
+      expect(call.input).not.toBeNull();
+      expect(Array.isArray(call.input)).toBe(false);
+    }
+  });
+
   // Pre-existing dedupe behavior (unchanged here): it keeps the FIRST part on a
   // signature that ignores `input`, so a malformed-first / valid-second pair
   // already drops the valid twin before coercion runs. We only assert the safety

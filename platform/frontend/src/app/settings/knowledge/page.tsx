@@ -21,6 +21,7 @@ import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dro
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
+  PROVIDER_CONFIG,
   type LlmProviderApiKeyFormValues,
 } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -141,7 +142,6 @@ function AddApiKeyDialog({
   const formValues = form.watch();
   const isValid =
     formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-    formValues.name &&
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey
@@ -155,7 +155,7 @@ function AddApiKeyDialog({
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
-        name: values.name,
+        name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,

@@ -25,8 +25,8 @@ import {
   McpAppAddressPill,
   McpAppChangelogPill,
   McpAppFullscreenExitButton,
+  McpAppPanelButton,
   McpAppRefreshButton,
-  McpAppSidebarButton,
   McpAppStandaloneButton,
   McpAppSwitcher,
   McpAppTopBar,
@@ -152,22 +152,22 @@ export function McpAppSection({
   const effectiveResourceState =
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
-  const { apps, selectedToolCallId, select, showInSidebar, portalTarget } =
+  const { apps, selectedToolCallId, select, showInPanel, portalTarget } =
     useApps();
 
   const headerName = appName || humanizeToolLabel(toolName);
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
-  const sidebarHostingActive = portalTarget !== null;
-  // Only the *selected* app moves to the sidebar: its iframe is portaled into
+  const panelHostingActive = portalTarget !== null;
+  // Only the *selected* app moves to the panel: its iframe is portaled into
   // the panel and its inline spot becomes a placeholder. Every other inline app
   // keeps rendering live in the chat.
-  const renderInSidebar = sidebarHostingActive && isSelected;
+  const renderInPanel = panelHostingActive && isSelected;
 
   // Track the last inline body height while the app shows inline; once it moves
   // to the panel we stop updating, so the chat placeholder keeps that frozen
   // footprint and messages below it don't reflow.
   const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
-  if (!renderInSidebar) {
+  if (!renderInPanel) {
     lastInlineHeightRef.current = clampInlineHeight(
       size?.height ?? INITIAL_INLINE_HEIGHT,
       inlineCeiling,
@@ -188,9 +188,10 @@ export function McpAppSection({
     };
   }, [rawOutput, appId]);
 
-  const handleShowInSidebar = () => {
+  const handleShowInPanel = () => {
     if (!toolCallId) return;
-    showInSidebar(toolCallId);
+    setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
+    showInPanel(toolCallId);
   };
 
   const handleResourceStateChange = useCallback(
@@ -264,10 +265,10 @@ export function McpAppSection({
         diagnostics={diagnosticsBadge}
         size={size}
         inlineCeiling={inlineCeiling}
-        fillContainer={renderInSidebar}
+        fillContainer={renderInPanel}
         topBar={
           // Pill carries refresh + open-standalone (owned apps). The right zone
-          // holds open-in-sidebar, prefixed by a minimize button while the
+          // holds open-in-panel, prefixed by a minimize button while the
           // app-requested fullscreen is active.
           <McpAppTopBar
             right={
@@ -275,13 +276,13 @@ export function McpAppSection({
                 {displayMode === "fullscreen" && (
                   <McpAppFullscreenExitButton onClick={toggleFullscreen} />
                 )}
-                {toolCallId && !renderInSidebar && (
-                  <McpAppSidebarButton onClick={handleShowInSidebar} />
+                {toolCallId && !renderInPanel && (
+                  <McpAppPanelButton onClick={handleShowInPanel} />
                 )}
               </>
             }
           >
-            {renderInSidebar && apps.length > 1 ? (
+            {renderInPanel && apps.length > 1 ? (
               <McpAppSwitcher
                 value={selectedToolCallId}
                 options={apps.map((app) => ({
@@ -319,9 +320,9 @@ export function McpAppSection({
           // While portaled into the panel (fill mode), don't report size: that
           // would overwrite the last inline size and make the card return at the
           // panel's height when the panel closes.
-          onSizeChange={renderInSidebar ? noopSizeChange : setSize}
+          onSizeChange={renderInPanel ? noopSizeChange : setSize}
           containerDimensions={
-            renderInSidebar ? undefined : { maxHeight: inlineCeiling }
+            renderInPanel ? undefined : { maxHeight: inlineCeiling }
           }
           // Seed the iframe + loading box at the last measured inline height so a
           // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
@@ -340,7 +341,7 @@ export function McpAppSection({
     </McpAppErrorBoundary>
   );
 
-  if (renderInSidebar) {
+  if (renderInPanel) {
     return (
       <>
         <McpAppCard
@@ -355,7 +356,7 @@ export function McpAppSection({
             </McpAppTopBar>
           }
           placeholder={
-            <span className="text-muted-foreground">Showing in sidebar</span>
+            <span className="text-muted-foreground">Showing in panel</span>
           }
         />
         {portalTarget && createPortal(liveSurface, portalTarget)}

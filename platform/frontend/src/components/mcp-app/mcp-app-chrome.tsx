@@ -153,11 +153,11 @@ function McpAppIconButton({
   );
 }
 
-export function McpAppSidebarButton({ onClick }: { onClick: () => void }) {
+export function McpAppPanelButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton
       icon={PanelRight}
-      label="Show in sidebar"
+      label="Show in panel"
       onClick={onClick}
     />
   );

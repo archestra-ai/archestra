@@ -39,7 +39,7 @@ interface AppsContextValue {
   portalTarget: HTMLElement | null;
   setPortalTarget: (el: HTMLElement | null) => void;
   /** Open the panel on the Apps tab and select this app. Wired by the chat page. */
-  showInSidebar: (toolCallId: string) => void;
+  showInPanel: (toolCallId: string) => void;
 }
 
 const AppsContext = createContext<AppsContextValue | null>(null);
@@ -50,18 +50,18 @@ const NOOP_VALUE: AppsContextValue = {
   select: () => {},
   portalTarget: null,
   setPortalTarget: () => {},
-  showInSidebar: () => {},
+  showInPanel: () => {},
 };
 
 export function AppsProvider({
   apps,
-  onShowInSidebar,
+  onShowInPanel,
   children,
 }: {
   /** Apps for this conversation, derived from its messages by the caller. */
   apps: PanelApp[];
   /** Called when an app requests to be shown in the panel — wire this to open the panel and switch to the Apps tab. */
-  onShowInSidebar?: (toolCallId: string) => void;
+  onShowInPanel?: (toolCallId: string) => void;
   children: ReactNode;
 }) {
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
@@ -93,12 +93,12 @@ export function AppsProvider({
     setExplicitSelection(toolCallId);
   }, []);
 
-  const showInSidebar = useCallback(
+  const showInPanel = useCallback(
     (toolCallId: string) => {
       setExplicitSelection(toolCallId);
-      onShowInSidebar?.(toolCallId);
+      onShowInPanel?.(toolCallId);
     },
-    [onShowInSidebar],
+    [onShowInPanel],
   );
 
   const value = useMemo<AppsContextValue>(
@@ -108,9 +108,9 @@ export function AppsProvider({
       select,
       portalTarget,
       setPortalTarget,
-      showInSidebar,
+      showInPanel,
     }),
-    [apps, selectedToolCallId, select, portalTarget, showInSidebar],
+    [apps, selectedToolCallId, select, portalTarget, showInPanel],
   );
 
   return <AppsContext.Provider value={value}>{children}</AppsContext.Provider>;

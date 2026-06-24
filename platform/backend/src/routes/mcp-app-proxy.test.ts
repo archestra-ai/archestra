@@ -1082,7 +1082,6 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // UI (vs plain text/html), and pins the iframe to the platform CSP floor:
     // the platform CSP omits `connectDomains`, so the sandbox gets connect-src 'none'.
     expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
-    // The platform CSP omits `connectDomains`, so the sandbox gets connect-src 'none'.
     expect(content._meta.ui.csp).toEqual(APP_PLATFORM_CSP);
   });
 

@@ -44,10 +44,6 @@ export async function createAppBacking(params: {
   teamIds: string[];
 }): Promise<void> {
   const { app, scope, environmentId, userId, organizationId, teamIds } = params;
-  // Created in sequence (no single transaction — the model read-backs would
-  // deadlock a single-connection pool). Track the catalog/server so a
-  // mid-sequence failure can roll back the partial backing; the caller removes
-  // the app row.
   let catalog: { id: string } | undefined;
   let server: { id: string } | undefined;
   try {
@@ -194,7 +190,7 @@ export async function propagateAppCatalogChange(
       // Mirror the catalog edit onto the app's description and re-assert the
       // team membership so a rescope via the MCP Configuration form is reflected.
       // Team membership is owned by the catalog-team junction (`mcp_catalog_team`,
-      // the source of truth for app visibility) — the old `app_team` table is gone.
+      // the source of truth for app visibility).
       const teamIds =
         changes.scope === "team"
           ? (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalogId)).map(

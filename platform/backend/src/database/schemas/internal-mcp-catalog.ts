@@ -200,8 +200,8 @@ const internalMcpCatalogTable = pgTable(
     environmentIdIdx: index("internal_mcp_catalog_environment_id_idx").on(
       table.environmentId,
     ),
-    // App name-uniqueness re-homed from the apps table onto the backing catalog
-    // (serverType "app"): personal per (org, author, name), shared per (org, name).
+    // App name-uniqueness lives on the backing catalog (serverType "app"):
+    // personal per (org, author, name), shared per (org, name).
     appPersonalNameUnique: uniqueIndex(
       "internal_mcp_catalog_app_personal_name_uidx",
     )

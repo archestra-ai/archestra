@@ -14,8 +14,10 @@ const FACTORIES = {
   cerebras: cerebrasAdapterFactory,
 };
 
-function usageOf(endSse: string): unknown {
-  const firstData = endSse.split("\n\n")[0].replace(/^data: /, "");
+function usageOf(endSse: string | Uint8Array): unknown {
+  const text =
+    typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+  const firstData = text.split("\n\n")[0].replace(/^data: /, "");
   return (JSON.parse(firstData) as { usage?: unknown }).usage;
 }
 

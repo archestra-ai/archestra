@@ -384,6 +384,17 @@ describe("syncBuiltInSkills", () => {
       });
       expect(seeded).not.toBeNull();
       expect(seeded?.content).toContain("window.archestra");
+      // The headline Flow itself (not just the embedded build-loop below it) names
+      // the post-scaffold tool-assignment and diagnostics tools, so it does not
+      // contradict that guidance. Scope the check to the Flow section: a bare
+      // toContain would already pass on the embedded build-loop text.
+      const content = seeded?.content ?? "";
+      const flowSection = content.slice(
+        content.indexOf("## Flow"),
+        content.indexOf("## SDK and authoring conventions"),
+      );
+      expect(flowSection).toContain("set_app_tools");
+      expect(flowSection).toContain("get_app_diagnostics");
     } finally {
       config.apps.enabled = original;
     }

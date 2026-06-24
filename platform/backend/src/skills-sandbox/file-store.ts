@@ -13,14 +13,12 @@ import type {
   SandboxFileListItem,
 } from "@/types";
 import { UnsafePathError } from "./file-path";
+import { deleteRowBytes, getObjectStore, readRowBytes } from "./file-storage";
 import {
-  deleteRowBytes,
   FileBytesMissingError,
   FilePathConflictError,
-  getObjectStore,
   type OwnerScope,
-  readRowBytes,
-} from "./file-storage";
+} from "./object-store";
 import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
 import { SkillSandboxError } from "./types";
 

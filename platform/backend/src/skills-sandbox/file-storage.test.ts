@@ -8,14 +8,16 @@ import type { StoredBlobRow } from "@/types";
 import { UnsafePathError } from "./file-path";
 import {
   deleteRowBytes,
-  FileBytesMissingError,
-  FilePathConflictError,
   FilesystemObjectStore,
   getObjectStore,
-  type OwnerScope,
   readRowBytes,
   storageFilename,
 } from "./file-storage";
+import {
+  FileBytesMissingError,
+  FilePathConflictError,
+  type OwnerScope,
+} from "./object-store";
 
 function userScope(
   label: string,

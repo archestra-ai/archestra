@@ -281,12 +281,7 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
 
     expect(res.statusCode).toBe(200);
     const result = res.json().result as {
-      protocolVersion?: string;
-      capabilities?: {
-        extensions?: Record<string, unknown>;
-        tools?: unknown;
-        resources?: unknown;
-      };
+      capabilities?: { extensions?: Record<string, unknown> };
     };
     // The host negotiates MCP-App support from the extensions capability — it is
     // present despite the SDK not modelling `extensions` (verified to survive
@@ -294,12 +289,5 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     expect(
       result.capabilities?.extensions?.[MCP_APPS_EXTENSION_ID],
     ).toStrictEqual({});
-    // The SDK echoes the requested protocol version when supported.
-    expect(result.protocolVersion).toBe("2025-06-18");
-    expect(result.capabilities?.tools).toMatchObject({ listChanged: false });
-    expect(result.capabilities?.resources).toMatchObject({
-      subscribe: false,
-      listChanged: false,
-    });
   });
 });

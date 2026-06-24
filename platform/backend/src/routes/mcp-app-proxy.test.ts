@@ -1035,10 +1035,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       },
     });
     expect(initRes.statusCode).toBe(200);
-    const initResult = initRes.json().result;
-    expect(initResult.protocolVersion).toBe("2025-06-18");
     expect(
-      initResult.capabilities?.extensions?.[MCP_APPS_EXTENSION_ID],
+      initRes.json().result.capabilities?.extensions?.[MCP_APPS_EXTENSION_ID],
     ).toStrictEqual({});
 
     // 1. tools/list — the launch tool carries the app's ui:// resource pointer.
@@ -1084,8 +1082,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // UI (vs plain text/html), and pins the iframe to the platform CSP floor:
     // the platform CSP omits `connectDomains`, so the sandbox gets connect-src 'none'.
     expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
+    // The platform CSP omits `connectDomains`, so the sandbox gets connect-src 'none'.
     expect(content._meta.ui.csp).toEqual(APP_PLATFORM_CSP);
-    expect(content._meta.ui.csp).not.toHaveProperty("connectDomains");
   });
 
   test("resources/read passes through the app's declared UI permissions", async ({

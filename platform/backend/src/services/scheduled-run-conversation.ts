@@ -126,9 +126,10 @@ export async function persistRunConversationMessages(params: {
   }
 
   // Distinct timestamps so the transcript renders user-before-assistant
-  // (messages are ordered by createdAt).
+  // (messages are ordered by createdAt). Built as a variable, not an inline
+  // literal, so the createdAt passthrough type-checks (matches backfill below).
   const createdAt = Date.now();
-  await MessageModel.bulkCreate([
+  const rows = [
     {
       conversationId: conversation.id,
       role: "user",
@@ -141,7 +142,8 @@ export async function persistRunConversationMessages(params: {
       content: assistantMessage,
       createdAt: new Date(createdAt + 1),
     },
-  ]);
+  ];
+  await MessageModel.bulkCreate(rows);
 }
 
 /**

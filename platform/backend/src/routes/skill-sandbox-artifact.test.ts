@@ -797,7 +797,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId — project admin oversig
     await app.close();
   });
 
-  test("a project admin can download a foreign project's file but not delete it or read a personal one", async ({
+  test("a project admin can download AND delete a foreign project's file, but never a personal one", async ({
     makeUser,
     makeMember,
   }) => {
@@ -846,11 +846,26 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId — project admin oversig
     });
     expect(personalRead.statusCode).toBe(404);
 
-    // ... and file deletion is not a granted oversight capability.
+    // ... project-file deletion IS a granted oversight capability ...
     const del = await app.inject({
       method: "DELETE",
       url: `/api/skill-sandbox/artifacts/${projectFile.id}`,
     });
-    expect(del.statusCode).toBe(404);
+    expect(del.statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/skill-sandbox/artifacts/${projectFile.id}`,
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    // ... but a personal (non-project) file can be neither read nor deleted.
+    const personalDel = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${personalFile.id}`,
+    });
+    expect(personalDel.statusCode).toBe(404);
   });
 });

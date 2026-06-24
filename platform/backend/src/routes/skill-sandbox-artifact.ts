@@ -147,11 +147,23 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
       async ({ params: { artifactId }, organizationId, user }) => {
-        const deleted = await fileStore.delete({
+        let deleted = await fileStore.delete({
           ref: artifactId,
           organizationId,
           userId: user.id,
         });
+        // A project admin may also delete a foreign project's files (oversight),
+        // mirroring the read path — project-scoped files only, never personal.
+        // Checked lazily so the normal path pays no extra permission lookup.
+        if (
+          !deleted &&
+          (await userHasPermission(user.id, organizationId, "project", "admin"))
+        ) {
+          deleted = await fileStore.deleteProjectScopedForAdmin({
+            ref: artifactId,
+            organizationId,
+          });
+        }
         if (!deleted) {
           throw new ApiError(404, "Artifact not found");
         }

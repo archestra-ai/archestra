@@ -181,6 +181,42 @@ class FileStore {
     return this.rowToResolved(file);
   }
 
+  /**
+   * Delete a PROJECT-scoped file/object for a confirmed `project:admin`, without
+   * the owner/share check — oversight delete of a foreign project's files. Never
+   * touches personal (no-project) files. The route MUST verify `project:admin`
+   * before calling this; `delete` stays the share/owner path for everyone else.
+   */
+  async deleteProjectScopedForAdmin(params: {
+    ref: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return false;
+      const store = getObjectStore();
+      if (!store) return false;
+      if (!(await this.projectInOrg(parsed.scope.projectId, params))) {
+        return false;
+      }
+      // Bind key→scope so a crafted ref can't delete a sibling folder's object.
+      if (!(await this.objectRefOwned(parsed, store))) return false;
+      await store.remove(parsed.key).catch(() => {});
+      return true;
+    }
+    if (!UUID_RE.test(params.ref)) return false;
+    const file = await FileModel.findById(params.ref);
+    if (!file || file.organizationId !== params.organizationId) return false;
+    if (!file.projectId) return false; // never delete personal files
+    if (!(await this.projectInOrg(file.projectId, params))) return false;
+    await FileModel.deleteById(file.id);
+    await deleteRowBytes({
+      provider: file.storageProvider,
+      objectKey: file.objectKey,
+    }).catch(() => {});
+    return true;
+  }
+
   /** Delete a file (row first, then its bytes) the caller may access. */
   async delete(params: {
     ref: string;

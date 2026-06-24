@@ -780,7 +780,6 @@ export function McpCatalogForm({
   }, [formValues, initialValues, form]);
 
   // Reset form when initial values change (for edit mode)
-  // Also reset when localConfigSecret loads (if it exists)
   useEffect(() => {
     if (initialValues) {
       const transformedValues = transformCatalogItemToFormValues(
@@ -804,6 +803,38 @@ export function McpCatalogForm({
         transformedValues.oauthClientSecretVaultKey || null,
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValues, form]);
+
+  // When localConfigSecret loads, populate env secret values without resetting
+  // the entire form (avoids wiping user edits on other fields).
+  useEffect(() => {
+    if (!initialValues || !localConfigSecret?.secret) return;
+
+    const environment =
+      initialValues.localConfig.environment?.map((env) => {
+        if (localConfigSecret.secret && env.key in localConfigSecret.secret) {
+          const secretValue = localConfigSecret.secret[env.key];
+          return {
+            ...env,
+            value:
+              secretValue !== null && secretValue !== undefined
+                ? String(secretValue)
+                : undefined,
+          };
+        }
+        return env;
+      }) ?? [];
+
+    environment.forEach((env, index) => {
+      if (env.value !== undefined) {
+        form.setValue(
+          `localConfig.environment.${index}.value` as never,
+          env.value as never,
+          { shouldDirty: false },
+        );
+      }
+    });
   }, [initialValues, localConfigSecret, form]);
 
   // The bar's mode is captured at submit-time so the bar stays consistent

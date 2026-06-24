@@ -78,6 +78,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
 
+      // serverType:"app" backings are managed on the Apps surface, not listed as
+      // MCP servers — keep them out of the user-facing server list (and its
+      // consumers like the agent tool-assignment picker).
+      allServers = allServers.filter((s) => s.serverType !== "app");
+
       // Filter by catalogId if provided
       if (catalogId) {
         allServers = allServers.filter((s) => s.catalogId === catalogId);

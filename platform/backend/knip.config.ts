@@ -23,6 +23,10 @@ const config: KnipConfig = {
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",
     "@archestra/app-runtime-rs",
+    // Used by the S3ObjectStore production implementation (upcoming task); only
+    // the in-memory test double (`src/test/fake-s3-client.ts`) exists so far, so
+    // knip --production can't see a non-test import yet.
+    "@aws-sdk/client-s3",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

@@ -53,6 +53,7 @@
     "@archestra/shared": "workspace:*",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
+    "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/credential-providers": "^3.1003.0",
     "@azure/identity": "^4.13.0",
     "@better-auth/api-key": "^1.6.11",

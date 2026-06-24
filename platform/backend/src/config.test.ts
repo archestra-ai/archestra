@@ -27,6 +27,7 @@ import config, {
   parseDatabasePoolMax,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
+  parseFileStorageS3Config,
   parseMetricsPort,
   parseProcessType,
   parseSampleRate,
@@ -1206,7 +1207,62 @@ describe("parseFileStorageProvider", () => {
   });
 
   test("falls back to db for any unknown value", () => {
-    expect(parseFileStorageProvider("s3")).toBe("db");
+    expect(parseFileStorageProvider("nope")).toBe("db");
+  });
+});
+
+describe("parseFileStorageProvider (s3)", () => {
+  test("recognizes s3 (case-insensitive)", () => {
+    expect(parseFileStorageProvider("s3")).toBe("s3");
+    expect(parseFileStorageProvider("S3")).toBe("s3");
+  });
+  test("keeps filesystem and defaults unknown to db", () => {
+    expect(parseFileStorageProvider("filesystem")).toBe("filesystem");
+    expect(parseFileStorageProvider(undefined)).toBe("db");
+    expect(parseFileStorageProvider("nope")).toBe("db");
+  });
+});
+
+describe("parseFileStorageS3Config", () => {
+  const env = {
+    bucket: "my-bucket",
+    region: "eu-west-1",
+    endpoint: "https://minio.local:9000",
+    forcePathStyle: "true",
+    accessKeyId: "AKIA",
+    secretAccessKey: "secret",
+    keyPrefix: "/inst-a/",
+  };
+  test("parses a full s3 config", () => {
+    const cfg = parseFileStorageS3Config({ provider: "s3", env });
+    expect(cfg).toEqual({
+      bucket: "my-bucket",
+      region: "eu-west-1",
+      endpoint: "https://minio.local:9000",
+      forcePathStyle: true,
+      accessKeyId: "AKIA",
+      secretAccessKey: "secret",
+      keyPrefix: "inst-a",
+    });
+  });
+  test("defaults region, forcePathStyle, and keyPrefix", () => {
+    const cfg = parseFileStorageS3Config({
+      provider: "s3",
+      env: { ...env, region: undefined, forcePathStyle: undefined, keyPrefix: undefined },
+    });
+    expect(cfg.region).toBe("us-east-1");
+    expect(cfg.forcePathStyle).toBe(false);
+    expect(cfg.keyPrefix).toBe("");
+  });
+  test("throws when bucket is missing under the s3 provider", () => {
+    expect(() =>
+      parseFileStorageS3Config({ provider: "s3", env: { ...env, bucket: undefined } }),
+    ).toThrow(/ARCHESTRA_FILE_STORAGE_S3_BUCKET/);
+  });
+  test("does not validate when the provider is not s3", () => {
+    expect(
+      parseFileStorageS3Config({ provider: "db", env: { ...env, bucket: undefined } }).bucket,
+    ).toBe("");
   });
 });
 

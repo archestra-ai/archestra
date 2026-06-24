@@ -102,7 +102,11 @@ export function ProjectSchedulesSection({
       ) : (
         <div className="space-y-2">
           {schedules.map((schedule) => (
-            <ScheduleRow key={schedule.id} schedule={schedule} />
+            <ScheduleRow
+              key={schedule.id}
+              schedule={schedule}
+              projectId={projectId}
+            />
           ))}
         </div>
       )}
@@ -112,7 +116,15 @@ export function ProjectSchedulesSection({
 
 // === internal components ===
 
-function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
+function ScheduleRow({
+  schedule,
+  projectId,
+}: {
+  schedule: ScheduleTrigger;
+  // The owning project id, guaranteed non-null here (the schedule's own
+  // projectId is nullable in the type); used for the runs-route link.
+  projectId: string;
+}) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
   const deleteSchedule = useDeleteScheduleTrigger();
@@ -135,7 +147,7 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
         />
       </span>
       <Link
-        href={`/projects/${schedule.projectId}/schedules/${schedule.id}`}
+        href={`/projects/${projectId}/schedules/${schedule.id}`}
         className={cn(
           "min-w-0 flex-1 hover:opacity-80 transition-opacity",
           !schedule.enabled && "opacity-60",

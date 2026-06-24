@@ -1030,6 +1030,82 @@ describe("auth routes", () => {
       expect(vi.mocked(betterAuth.handler)).toHaveBeenCalled();
     });
   });
+
+  describe("Origin header for native (Origin-less) OAuth clients", () => {
+    // Native MCP clients (e.g. Claude Desktop) call the OAuth endpoints
+    // server-to-server with no Origin header. Better Auth rejects such requests
+    // with MISSING_OR_NULL_ORIGIN before consulting trustedOrigins, so the
+    // forwarding handlers must inject the configured frontend origin. Browsers
+    // always send an Origin on cross-origin POSTs, so a present Origin must be
+    // preserved unchanged.
+    function lastForwardedOrigin(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.headers.get("origin") : null;
+    }
+
+    test("injects frontend origin for DCR when the client sends none", async () => {
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: { client_name: "Claude Desktop" },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(lastForwardedOrigin()).toBe(config.frontendBaseUrl);
+    });
+
+    test("preserves a client-supplied Origin on the token endpoint", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        headers: { origin: "https://app.example.com" },
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "mcp_some_client",
+          code: "auth-code",
+        },
+      });
+
+      expect(lastForwardedOrigin()).toBe("https://app.example.com");
+    });
+
+    test("does not inject an origin for non-public-OAuth routes", async () => {
+      // The carve-out is scoped to the public OAuth endpoints. Credentialed
+      // browser routes (sign-in, consent, etc.) keep Better Auth's origin-based
+      // CSRF protection, so a missing Origin must be forwarded as missing — never
+      // back-filled with the frontend origin.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        payload: { email: "user@example.com", password: "password" },
+      });
+
+      expect(lastForwardedOrigin()).toBeNull();
+    });
+  });
 });
 
 async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {

@@ -1098,6 +1098,21 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
  * - Skips empty header values.
  * - Skips headers rejected by the optional `skipHeader` predicate (used by
  *   `oauth2/authorize` to drop hop-by-hop headers).
+ * - See https://github.com/better-auth/better-auth/issues/6257
+ * - Injects the configured frontend origin when the incoming request carries no
+ *   `Origin` header *and* targets a public OAuth endpoint (see
+ *   `isPublicOAuthCorsPath`). Native MCP clients (e.g. Claude Desktop) call those
+ *   endpoints — dynamic client registration and the token endpoint — directly,
+ *   server-to-server, with no Origin. Better Auth's CSRF check rejects any
+ *   state-changing request that lacks an Origin with `MISSING_OR_NULL_ORIGIN`
+ *   before it ever consults `trustedOrigins`, so without this those flows 403.
+ *   This mirrors what the frontend proxy already does for the browser path
+ *   (`frontend/src/app/api/auth/[...path]/route.ts`, `frontend/src/proxy.ts`).
+ *   Scoped to the same public OAuth paths as the permissive CORS policy so the
+ *   carve-out is visible and symmetric: the credentialed browser routes (sign-in,
+ *   consent, authorize) keep Better Auth's full origin-based CSRF protection.
+ *   Only ever fills in a *missing* Origin, so it can't relax the check for a
+ *   real browser request (those always send Origin on cross-origin POSTs).
  */
 function buildBetterAuthForwardedHeaders(
   request: { headers: Record<string, unknown>; ip?: string | null },
@@ -1112,6 +1127,10 @@ function buildBetterAuthForwardedHeaders(
   }
   if (request.ip) {
     headers.set("x-archestra-client-ip", request.ip);
+  }
+  const origin = headers.get("origin");
+  if ((!origin || origin === "null")) {
+    headers.set("origin", config.frontendBaseUrl);
   }
   return headers;
 }

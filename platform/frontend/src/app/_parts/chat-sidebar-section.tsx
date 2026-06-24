@@ -10,12 +10,22 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
-import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
+import {
+  isScheduledRunConversation,
+  scheduledRunContext,
+} from "@/app/_parts/scheduled-run-sidebar.utils";
+import {
+  runChatHref,
+  runRowKind,
+} from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { isScheduleTriggerRunActive } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +57,7 @@ import { TypingText } from "@/components/ui/typing-text";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  useConversation,
   useConversations,
   useDeleteConversation,
   useGenerateConversationTitle,
@@ -62,6 +73,10 @@ import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
+import {
+  useScheduleTrigger,
+  useScheduleTriggerRuns,
+} from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
@@ -107,6 +122,7 @@ export function ChatSidebarSection({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: canReadConversation } = useHasPermissions({
     chat: ["read"],
@@ -140,6 +156,35 @@ export function ChatSidebarSection({
   const currentConversationId = pathname.startsWith("/chat/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
+
+  // --- Scheduled-run navigator ---
+  // All hooks called unconditionally; rendering gated on ctx below.
+  const ctx = scheduledRunContext(searchParams);
+  const { data: currentConversation } = useConversation(
+    currentConversationId ?? undefined,
+  );
+  const scheduledRunProjectId = currentConversation?.projectId ?? null;
+
+  const { data: scheduleTrigger } = useScheduleTrigger(ctx?.triggerId ?? null, {
+    enabled: !!ctx,
+  });
+
+  // Track whether any run is active for polling decisions.
+  const [hasActiveScheduledRun, setHasActiveScheduledRun] = useState(false);
+  const { data: triggerRunsResponse, isLoading: runsLoading } =
+    useScheduleTriggerRuns(ctx?.triggerId ?? null, {
+      limit: 20,
+      enabled: !!ctx,
+      refetchInterval: hasActiveScheduledRun ? 3_000 : false,
+    });
+
+  const triggerRuns = triggerRunsResponse?.data ?? [];
+  const nextHasActiveScheduledRun = triggerRuns.some((r) =>
+    isScheduleTriggerRunActive(r.status),
+  );
+  if (nextHasActiveScheduledRun !== hasActiveScheduledRun) {
+    setHasActiveScheduledRun(nextHasActiveScheduledRun);
+  }
 
   const recentUnpinnedChats = conversations.filter(
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
@@ -564,6 +609,93 @@ export function ChatSidebarSection({
                             <MoreHorizontal />
                             <span>More</span>
                           </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {ctx !== null && scheduledRunProjectId !== null && (
+            <SidebarGroup className="pt-0">
+              <SidebarGroupLabel>
+                RUNS
+                {scheduleTrigger?.name ? ` · ${scheduleTrigger.name}` : ""}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuSub className={subClass}>
+                      {triggerRuns.map((run) => {
+                        const kind = runRowKind(run);
+                        const isCurrent = run.id === ctx.runId;
+                        const timestamp = new Date(
+                          run.createdAt,
+                        ).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        });
+                        const rowContent = (
+                          <span className="flex items-center gap-2 min-w-0 flex-1 py-0.5">
+                            <StatusBadge label={run.status} />
+                            <span className="truncate text-xs text-muted-foreground flex-1">
+                              {timestamp}
+                            </span>
+                            {isCurrent && (
+                              <span className="text-[10px] text-primary font-medium shrink-0">
+                                current
+                              </span>
+                            )}
+                          </span>
+                        );
+
+                        if (kind === "open-chat") {
+                          const href = runChatHref({
+                            projectId: scheduledRunProjectId,
+                            triggerId: ctx.triggerId,
+                            run,
+                          });
+                          if (href) {
+                            return (
+                              <SidebarMenuSubItem key={run.id}>
+                                <SidebarMenuSubButton
+                                  asChild
+                                  isActive={isCurrent}
+                                  className="h-auto"
+                                >
+                                  <Link href={href}>{rowContent}</Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          }
+                        }
+
+                        // failed or running → link to the schedule's runs view
+                        return (
+                          <SidebarMenuSubItem key={run.id}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={isCurrent}
+                              className="h-auto"
+                            >
+                              <Link
+                                href={`/projects/${scheduledRunProjectId}/schedules/${ctx.triggerId}`}
+                              >
+                                {rowContent}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
+                      {triggerRuns.length === 0 && !runsLoading && (
+                        <SidebarMenuSubItem>
+                          <span className="px-2 text-xs text-muted-foreground">
+                            No runs yet.
+                          </span>
                         </SidebarMenuSubItem>
                       )}
                     </SidebarMenuSub>

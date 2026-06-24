@@ -122,6 +122,7 @@ describe("prepareMessagesForProvider", () => {
     "groq",
     "xai",
     "mistral",
+    "cohere",
   ] as const)("inlines csv and json file parts as text for %s", (provider) => {
     const messages = __prepareTest.prepareMessagesForProvider({
       provider,
@@ -176,10 +177,7 @@ describe("prepareMessagesForProvider", () => {
     expect(messages[0]).toBe(message);
   });
 
-  it.each([
-    "gemini",
-    "cohere",
-  ] as const)("leaves text-document file parts unchanged for %s (native handling)", (provider) => {
+  it("leaves text-document file parts unchanged for gemini (inlineData passthrough)", () => {
     const message = {
       role: "user" as const,
       parts: [
@@ -193,17 +191,14 @@ describe("prepareMessagesForProvider", () => {
     };
 
     const messages = __prepareTest.prepareMessagesForProvider({
-      provider,
+      provider: "gemini",
       messages: [message],
     });
 
     expect(messages[0]).toBe(message);
   });
 
-  it.each([
-    "application/csv",
-    "application/vnd.ms-excel",
-  ] as const)("rewrites %s to text/plain for cohere (it rejects these natively)", (mediaType) => {
+  it("inlines application/csv and excel-as-text for cohere (its SDK relays base64 undecoded otherwise)", () => {
     const messages = __prepareTest.prepareMessagesForProvider({
       provider: "cohere",
       messages: [
@@ -212,20 +207,21 @@ describe("prepareMessagesForProvider", () => {
           parts: [
             {
               type: "file",
-              mediaType,
+              mediaType: "application/csv",
               filename: "report.csv",
-              url: `data:${mediaType};base64,YSxiLGM=`,
+              url: "data:application/csv;base64,YSxiLGM=",
             },
           ],
         },
       ],
     });
 
-    expect(messages[0].parts?.[0]).toMatchObject({
-      type: "file",
-      mediaType: "text/plain",
-      url: "data:text/plain;base64,YSxiLGM=",
-    });
+    expect(messages[0].parts).toEqual([
+      {
+        type: "text",
+        text: '[Attachment "report.csv" (application/csv)]\n\na,b,c',
+      },
+    ]);
   });
 
   it("leaves an invalid-UTF-8 text-document file part unchanged for convert providers", () => {

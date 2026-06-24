@@ -5,18 +5,18 @@ import type { ChatMessage, ChatMessagePart } from "@/types";
  * Rewrite materialized messages into a shape the target provider's SDK accepts
  * before `convertToModelMessages`.
  *
- * Text-document file parts (CSV/JSON/Markdown/…) are handled four ways:
+ * Text-document file parts (CSV/JSON/Markdown/…) are handled three ways:
  * - `anthropic`/`bedrock`: rewrite the document part's mediaType to text/plain
- *   (their SDKs relay text/plain documents natively).
- * - `cohere`: @ai-sdk/cohere accepts only `text/*` and `application/json`
- *   documents, so rewrite the two upload-allowed types it rejects
- *   (`application/csv`, `application/vnd.ms-excel`) to text/plain and pass the
- *   rest through to its native `documents` path.
- * - `gemini`: pass through — @ai-sdk/google inlines any file part as inlineData.
- * - every other provider (OpenAI-compatible, groq, xai, mistral, cerebras, …):
- *   the SDK throws `UnsupportedFunctionalityError` for any non-image/-pdf file
- *   part — including text/plain — so the document is inlined as a `text` part
- *   instead, keeping its content in context.
+ *   (their SDKs base64-decode text/plain documents natively).
+ * - `gemini`: pass through — @ai-sdk/google inlines any file part as inlineData,
+ *   which is base64 the Gemini API decodes server-side.
+ * - every other provider, including `cohere`: the document is inlined as a
+ *   `text` part with its decoded content. OpenAI-compatible/groq/xai/mistral
+ *   SDKs throw `UnsupportedFunctionalityError` for any non-image/-pdf file part
+ *   (including text/plain); @ai-sdk/cohere instead relays a data-URL file part's
+ *   raw base64 body as document text WITHOUT decoding it (its media-type
+ *   handling only runs for `Uint8Array` data, never our data-URL strings), so
+ *   the model would see base64. Inlining the decoded text fixes both.
  */
 export function prepareMessagesForProvider(params: {
   messages: ChatMessage[];
@@ -36,10 +36,6 @@ export function prepareMessagesForProvider(params: {
           ensureBedrockUserMessageHasTextPart(message),
         ),
       );
-  }
-
-  if (provider === "cohere") {
-    return messages.map(normalizeCohereMessageFileParts);
   }
 
   // @ai-sdk/google inlines any file part as inlineData — the document survives.
@@ -231,55 +227,6 @@ function normalizeBedrockFilePart(part: ChatMessagePart): ChatMessagePart {
 // document list — normalize to text/plain so the AI SDK can relay them.
 function isBedrockTextNormalizableMimeType(mediaType: string): boolean {
   return mediaType === "application/json" || mediaType === "application/csv";
-}
-
-// ===== Cohere =====
-
-function normalizeCohereMessageFileParts(message: ChatMessage): ChatMessage {
-  if (!message.parts?.length) {
-    return message;
-  }
-
-  let changed = false;
-  const parts = message.parts.map((part) => {
-    const normalizedPart = normalizeCohereFilePart(part);
-    if (normalizedPart !== part) {
-      changed = true;
-    }
-    return normalizedPart;
-  });
-
-  return changed ? { ...message, parts } : message;
-}
-
-function normalizeCohereFilePart(part: ChatMessagePart): ChatMessagePart {
-  if (
-    part.type !== "file" ||
-    typeof part.mediaType !== "string" ||
-    !isCohereTextNormalizableMimeType(part.mediaType)
-  ) {
-    return part;
-  }
-
-  return {
-    ...part,
-    mediaType: "text/plain",
-    url: normalizeDataUrlMediaType({
-      url: typeof part.url === "string" ? part.url : undefined,
-      fromMediaType: part.mediaType,
-      toMediaType: "text/plain",
-    }),
-  };
-}
-
-// @ai-sdk/cohere accepts only `text/*` and `application/json` document parts.
-// These two upload-allowed text mimes fall outside that set, so rewrite them to
-// text/plain; `text/csv`, `text/markdown`, `text/plain`, `application/json` pass
-// through to Cohere's native `documents` handling.
-function isCohereTextNormalizableMimeType(mediaType: string): boolean {
-  return (
-    mediaType === "application/csv" || mediaType === "application/vnd.ms-excel"
-  );
 }
 
 // Bedrock rejects user messages that contain a file/document block but no text

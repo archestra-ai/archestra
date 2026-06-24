@@ -138,36 +138,38 @@ describe("MCP backing for apps", () => {
     );
   });
 
-  test("app resource is served only to an agent that has the show_app tool (IDOR gate)", async ({
-    makeAgent,
+  test("app resource read is gated by app visibility, not a claimed URI (IDOR gate)", async ({
+    makeUser,
+    makeMember,
   }) => {
-    const appId = await createApp();
+    const appId = await createApp("personal"); // viewable only by `user`
     const uri = getArchestraAppResourceUri(appId);
-    const tokenAuth = {
-      tokenId: "t",
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId,
-      userId: user.id,
-    };
-
-    // The creator's personal gateway was auto-assigned show_app → authorized.
     const personalGateway = await AgentModel.ensurePersonalMcpGateway({
       userId: user.id,
       organizationId,
     });
+    const authFor = (userId: string, tokenId: string) => ({
+      tokenId,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId,
+      userId,
+    });
+
+    // The author can view the app → served.
     const served = await mcpClient.readResource(
       uri,
       personalGateway.id,
-      tokenAuth,
+      authFor(user.id, "t"),
     );
     expect(served.contents[0]?.uri).toBe(uri);
 
-    // An agent that was never assigned show_app must not be able to read the
-    // app's HTML by id alone.
-    const otherAgent = await makeAgent({ organizationId, name: "Other" });
+    // A different member who cannot view this personal app is refused, even
+    // reading by the exact ui:// URI (the gate is the app's own visibility).
+    const other = await makeUser();
+    await makeMember(other.id, organizationId);
     await expect(
-      mcpClient.readResource(uri, otherAgent.id, tokenAuth),
+      mcpClient.readResource(uri, personalGateway.id, authFor(other.id, "t2")),
     ).rejects.toThrow();
   });
 
@@ -250,6 +252,9 @@ describe("MCP backing for apps", () => {
     const renamedServer = await McpServerModel.findById(created!.mcpServerId!);
     expect(renamedServer?.scope).toBe("org");
     expect(renamedServer?.name).toBe("Renamed Dashboard");
+    // The launch tool is re-slugified to track the new name.
+    const [renamedTool] = await ToolModel.findByCatalogIdWithMeta(catalogId);
+    expect(renamedTool.name).toBe("renamed_dashboard__show_app");
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

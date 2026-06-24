@@ -36,6 +36,7 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
   AgentModel,
+  AppModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -3069,31 +3070,37 @@ class McpClient {
   ): Promise<ResourceContents> {
     // An app resource (ui://archestra-app/<appId>) is served in-process from the
     // app store — there is no upstream server to read it from. The URI carries
-    // the app id, so no server lookup is needed. Authorize against the agent's
-    // own tool set (assignment + environment + RBAC already applied by
-    // getMcpToolsByAgent): only serve the resource if a tool the agent can see
-    // exposes exactly this URI. This restores the implicit access gate that
-    // findMcpServerForResource provides for normal upstream resources — without
-    // it, any authenticated caller could read any app's HTML by id. An
-    // unauthorized URI falls through to the normal path, which returns
-    // not-found (no existence leak). Dynamic import avoids a static cycle with
+    // the app id, so authorize against the APP's own visibility (the caller must
+    // be able to view it), not against whether some assigned tool advertises the
+    // URI — a malicious upstream server could otherwise claim a victim app's
+    // ui:// id in its tool _meta and read that app's HTML. An unauthorized or
+    // unknown URI falls through to the normal path, which returns not-found (no
+    // existence leak). Dynamic import avoids a static cycle with
     // mcp-app-gateway.utils (which imports this client).
     const appResourcePrefix = getArchestraAppResourceUri("");
-    if (tokenAuth && uri.startsWith(appResourcePrefix)) {
-      const appId = uri.slice(appResourcePrefix.length);
-      const agentTools = appId
-        ? await ToolModel.getMcpToolsByAgent(agentId)
-        : [];
-      const authorized = agentTools.some(
-        (tool) =>
-          (tool.meta as { _meta?: { ui?: { resourceUri?: string } } } | null)
-            ?._meta?.ui?.resourceUri === uri,
-      );
-      if (appId && authorized) {
-        const { buildAppUiResource } = await import(
-          "@/routes/mcp-app-gateway.utils"
+    if (tokenAuth?.userId && tokenAuth.organizationId) {
+      const appId = uri.startsWith(appResourcePrefix)
+        ? uri.slice(appResourcePrefix.length)
+        : "";
+      if (appId) {
+        const { callerIsAppAdmin } = await import(
+          "@/services/apps/app-authorization"
         );
-        return buildAppUiResource(appId, uri, tokenAuth);
+        const app = await AppModel.findByIdForCaller({
+          id: appId,
+          organizationId: tokenAuth.organizationId,
+          userId: tokenAuth.userId,
+          isAppAdmin: await callerIsAppAdmin(
+            tokenAuth.userId,
+            tokenAuth.organizationId,
+          ),
+        });
+        if (app) {
+          const { buildAppUiResource } = await import(
+            "@/routes/mcp-app-gateway.utils"
+          );
+          return buildAppUiResource(appId, uri, tokenAuth);
+        }
       }
     }
 

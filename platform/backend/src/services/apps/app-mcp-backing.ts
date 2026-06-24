@@ -132,9 +132,17 @@ export async function syncAppBacking(app: App): Promise<void> {
     }
     // Keep the backing server name in lockstep with the app. constructServerName
     // leaves non-local types unchanged, so an app server's name has no scope
-    // suffix and tracks app.name exactly.
+    // suffix and tracks app.name exactly. Re-slugify the launch tool too so its
+    // gateway name (<server>__show_app) doesn't go stale and a later app reusing
+    // the freed name can't reintroduce a dedupe collision.
     if (server.name !== app.name) {
       await McpServerModel.update(server.id, { name: app.name });
+      if (server.catalogId) {
+        await ToolModel.renameToolsByCatalogId(
+          server.catalogId,
+          ToolModel.slugifyName(app.name, APP_SHOW_TOOL_NAME),
+        );
+      }
     }
     await McpServerModel.setTeam(server.id, teamIds[0] ?? null);
     if (server.catalogId) {
@@ -179,12 +187,17 @@ export async function propagateAppCatalogChange(
       await McpServerModel.setScope(server.id, changes.scope);
     }
     const app = await AppModel.findByMcpServerId(server.id);
-    if (
-      app &&
-      (app.scope !== changes.scope ||
-        app.environmentId !== changes.environmentId ||
-        app.description !== changes.description)
-    ) {
+    if (app) {
+      // Mirror the catalog's team membership onto the app so app_team and the
+      // catalog-team junction don't diverge when teams are edited via the MCP
+      // Configuration form (otherwise a team rescope leaves the app visible to
+      // the old team). AppModel.update replaces app_team in the same transaction.
+      const teamIds =
+        changes.scope === "team"
+          ? (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalogId)).map(
+              (t) => t.id,
+            )
+          : [];
       await AppModel.update({
         id: app.id,
         patch: {
@@ -192,6 +205,7 @@ export async function propagateAppCatalogChange(
           environmentId: changes.environmentId,
           description: changes.description,
         },
+        teamIds,
       });
     }
   } catch (error) {

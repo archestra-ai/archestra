@@ -133,14 +133,13 @@ export type McpServerCardProps = {
   isBuiltInPlaywright?: boolean;
 };
 
-export type McpServerCardVariant = "remote" | "local" | "builtin" | "app";
+export type McpServerCardVariant = "remote" | "local" | "builtin";
 
 export function cardVariantForServerType(
   serverType: string,
 ): McpServerCardVariant {
   if (serverType === "builtin") return "builtin";
   if (serverType === "remote") return "remote";
-  if (serverType === "app") return "app";
   return "local";
 }
 
@@ -476,7 +475,6 @@ export function McpServerCard({
       : false;
   const isRemoteVariant = variant === "remote";
   const isBuiltinVariant = variant === "builtin";
-  const isAppVariant = variant === "app";
 
   // Catalog-scope reinstall: surfaces a banner + button on multi-tenant
   // local catalogs whose execution config (image, command, args, transport)
@@ -961,27 +959,6 @@ export function McpServerCard({
     </>
   );
 
-  // An app's backing server is created and run by the Apps flow — it's not
-  // installable or deployable here. Its settings reuse the MCP Configuration
-  // form, reduced to visibility + environment selection (no install/deploy/
-  // credentials), so an app's scope and environment are managed exactly like any
-  // MCP server's.
-  const appCardContent = (
-    <div className="flex flex-wrap gap-2">
-      {chatButton}
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex-1"
-        data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
-        onClick={() => openSettingsPage("configuration")}
-      >
-        <Pencil className="h-4 w-4" />
-        App settings
-      </Button>
-    </div>
-  );
-
   const dialogs = (
     <>
       <McpServerSettingsDialog
@@ -998,10 +975,10 @@ export function McpServerCard({
         initialPage={settingsInitialPage}
         item={item}
         variant={variant}
-        showConnections={!isBuiltinVariant && !isAppVariant}
+        showConnections={!isBuiltinVariant}
         connectionCount={allServersForCatalog.length}
         showDebug={isLogsAvailable}
-        showInspector={!isAppVariant}
+        showInspector={true}
         showYaml={variant === "local"}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}
@@ -1019,11 +996,9 @@ export function McpServerCard({
         needsReinstall={
           !!needsReinstall && !isInstalling && isCurrentUserAuthenticated
         }
-        onDelete={!isPlaywrightVariant && !isAppVariant ? onDelete : undefined}
+        onDelete={!isPlaywrightVariant ? onDelete : undefined}
         onClone={
-          userCanCreateCatalogItem && !isPlaywrightVariant && !isAppVariant
-            ? onClone
-            : undefined
+          userCanCreateCatalogItem && !isPlaywrightVariant ? onClone : undefined
         }
         onRestartPods={
           showRefreshImage && !isInstalling ? triggerRefreshImage : undefined
@@ -1074,11 +1049,6 @@ export function McpServerCard({
                   {item.name}
                 </span>
               </TruncatedTooltip>
-              {isAppVariant && (
-                <Badge variant="secondary" className="shrink-0">
-                  App
-                </Badge>
-              )}
               {environmentLabel && (
                 <Badge
                   variant="outline"
@@ -1193,15 +1163,13 @@ export function McpServerCard({
         )}
         <div className="mt-auto flex flex-col gap-4">
           {compactInfoRow}
-          {isAppVariant
-            ? appCardContent
-            : isBuiltinVariant
-              ? builtinCardContent
-              : isPlaywrightVariant
-                ? playwrightCardContent
-                : isRemoteVariant
-                  ? remoteCardContent
-                  : localCardContent}
+          {isBuiltinVariant
+            ? builtinCardContent
+            : isPlaywrightVariant
+              ? playwrightCardContent
+              : isRemoteVariant
+                ? remoteCardContent
+                : localCardContent}
         </div>
       </CardContent>
       {dialogs}

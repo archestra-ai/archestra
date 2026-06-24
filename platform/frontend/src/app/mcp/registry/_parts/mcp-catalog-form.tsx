@@ -2367,11 +2367,8 @@ export function McpCatalogForm({
               </div>
             )}
 
-            {currentServerType !== "app" && <Separator />}
-            <div
-              className={embedded ? "mb-4" : ""}
-              hidden={currentServerType === "app"}
-            >
+            <Separator />
+            <div className={embedded ? "mb-4" : ""}>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-base">Labels</h3>

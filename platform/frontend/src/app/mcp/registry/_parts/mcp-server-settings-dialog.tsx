@@ -60,7 +60,7 @@ interface McpServerSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   initialPage?: SettingsPage;
   item: CatalogItem;
-  variant: "remote" | "local" | "builtin" | "app";
+  variant: "remote" | "local" | "builtin";
   showConnections: boolean;
   connectionCount?: number;
   showDebug: boolean;
@@ -152,9 +152,6 @@ export function McpServerSettingsDialog({
   const isBuiltin = variant === "builtin";
 
   const navItems: NavItemDef[] = [];
-  // Apps keep the Configuration tab — it's where visibility + environment are
-  // edited, reusing the MCP form — but the parent hides Connections/Inspector/
-  // YAML for them (no pods/connections to manage).
   if (!isBuiltin) {
     navItems.push({ id: "configuration", label: "Configuration" });
   }

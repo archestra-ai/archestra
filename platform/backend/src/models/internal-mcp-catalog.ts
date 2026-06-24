@@ -1,4 +1,14 @@
-import { and, count, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -98,9 +108,12 @@ class InternalMcpCatalogModel {
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
-    const parentOnlyCondition = isNull(
-      schema.internalMcpCatalogTable.parentCatalogItemId,
+    const baseListCondition = and(
+      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+      // App backing catalogs are managed on the Apps page, never surfaced in the
+      // MCP registry (UI list or the agent-callable registry search).
+      ne(schema.internalMcpCatalogTable.serverType, "app"),
     );
 
     if (userId && !isAdmin && !organizationId) {
@@ -115,10 +128,10 @@ class InternalMcpCatalogModel {
           organizationId,
         );
       if (accessibleIds.length === 0) return [];
-      const where = parentOnlyCondition
+      const where = baseListCondition
         ? and(
             inArray(schema.internalMcpCatalogTable.id, accessibleIds),
-            parentOnlyCondition,
+            baseListCondition,
           )
         : inArray(schema.internalMcpCatalogTable.id, accessibleIds);
       dbItems = await db
@@ -128,8 +141,8 @@ class InternalMcpCatalogModel {
         .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     } else {
       const baseQuery = db.select().from(schema.internalMcpCatalogTable);
-      dbItems = await (parentOnlyCondition
-        ? baseQuery.where(parentOnlyCondition)
+      dbItems = await (baseListCondition
+        ? baseQuery.where(baseListCondition)
         : baseQuery
       ).orderBy(desc(schema.internalMcpCatalogTable.createdAt));
     }
@@ -169,10 +182,12 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
-    // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
     const searchCondition = and(
       baseSearchCondition,
+      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+      // App backing catalogs are never surfaced via registry search.
+      ne(schema.internalMcpCatalogTable.serverType, "app"),
     );
 
     if (userId && !isAdmin && !organizationId) {

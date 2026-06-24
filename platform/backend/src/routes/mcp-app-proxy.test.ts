@@ -7,6 +7,7 @@ import {
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
+import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -17,7 +18,12 @@ import {
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AppDataModel, TeamTokenModel, UserTokenModel } from "@/models";
+import {
+  AppDataModel,
+  AppModel,
+  TeamTokenModel,
+  UserTokenModel,
+} from "@/models";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
@@ -1015,6 +1021,23 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       });
     const expectedUri = getArchestraAppResourceUri(created.id);
 
+    // 0. initialize — the host negotiates MCP-App support from the advertised
+    // extensions capability before it will treat this connection as a UI server.
+    const initRes = await call({
+      jsonrpc: "2.0",
+      method: "initialize",
+      id: 0,
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "host", version: "1.0.0" },
+      },
+    });
+    expect(initRes.statusCode).toBe(200);
+    expect(initRes.json().result.capabilities?.extensions).toHaveProperty(
+      "io.modelcontextprotocol/ui",
+    );
+
     // 1. tools/list — the launch tool carries the app's ui:// resource pointer.
     const listRes = await call({ jsonrpc: "2.0", method: "tools/list", id: 1 });
     expect(listRes.statusCode).toBe(200);
@@ -1045,7 +1068,47 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
     expect(readRes.statusCode).toBe(200);
     const content = readRes.json().result.contents[0];
+    expect(content.uri).toBe(expectedUri);
     expect(content.text).toContain("shared app");
+    // The host keys on the MCP-App resource mime type to recognise a renderable
+    // UI (vs plain text/html), and pins the iframe to the platform CSP floor.
+    expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
     expect(content._meta.ui.csp).toEqual(APP_PLATFORM_CSP);
+  });
+
+  test("resources/read passes through the app's declared UI permissions", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp({ html: "<h1>perm</h1>" });
+    // Fork a version that declares iframe permissions the host must grant when
+    // it sandboxes the app (permission values are empty objects per the schema).
+    await AppModel.update({
+      id: created.id,
+      version: {
+        html: "<h1>perm v2</h1>",
+        uiPermissions: { clipboardWrite: {}, camera: {} },
+      },
+    });
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/read",
+        params: { uri: getArchestraAppResourceUri(created.id) },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const meta = response.json().result.contents[0]._meta;
+    expect(meta.ui.permissions).toEqual({ clipboardWrite: {}, camera: {} });
   });
 });

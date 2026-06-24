@@ -109,11 +109,16 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     expect(res.statusCode).toBe(200);
     const tools = res.json().result.tools as Array<{
       name: string;
+      inputSchema?: { type?: string };
       _meta?: { ui?: { resourceUri?: string } };
     }>;
+    // The host calls by the upstream's raw (unslugified) tool name.
     const uiTool = tools.find((t) => t.name === "show_clock");
     expect(uiTool).toBeDefined();
+    // The UI pointer the host reads to discover the renderable resource.
     expect(uiTool?._meta?.ui?.resourceUri).toBe(UI_RESOURCE_URI);
+    // A host needs a usable JSON-Schema inputSchema for every listed tool.
+    expect(uiTool?.inputSchema?.type).toBe("object");
   });
 
   test("resources/read of the ui:// resource is served from the upstream server", async ({
@@ -165,12 +170,21 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     });
 
     expect(res.statusCode).toBe(200);
-    const contents = res.json().result.contents as Array<{
+    const content = res.json().result.contents[0] as {
       uri: string;
+      mimeType?: string;
       text?: string;
-    }>;
-    expect(contents[0]?.uri).toBe(UI_RESOURCE_URI);
-    expect(contents[0]?.text).toContain("clock");
+      _meta?: { ui?: { csp?: unknown } };
+    };
+    expect(content.uri).toBe(UI_RESOURCE_URI);
+    expect(content.text).toContain("clock");
+    // The host keys on the resource mimeType, and applies the author-declared
+    // CSP to sandbox the iframe — both must reach the host unchanged from the
+    // upstream server (this path passes the upstream resource through verbatim).
+    expect(content.mimeType).toBe("text/html");
+    expect(content._meta?.ui?.csp).toEqual({
+      connect_src: ["https://api.example.com"],
+    });
     // The read is delegated to THIS installed server, bound from the route.
     expect(readSpy).toHaveBeenCalledWith({
       mcpServerId: server.id,
@@ -222,5 +236,56 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
       name: "show_clock",
       arguments: {},
     });
+  });
+
+  test("initialize advertises the MCP Apps extension capability to the host", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_clock",
+      meta: { _meta: { ui: { resourceUri: UI_RESOURCE_URI } } },
+    });
+    app = await buildApp(user.id, org.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: rpc("initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "host", version: "1.0.0" },
+      }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = res.json().result as {
+      protocolVersion?: string;
+      capabilities?: { extensions?: Record<string, unknown> };
+    };
+    // The host negotiates MCP-App support from the extensions capability — it is
+    // present despite the SDK not modelling `extensions` (verified to survive
+    // the initialize round-trip).
+    expect(result.capabilities?.extensions).toHaveProperty(
+      "io.modelcontextprotocol/ui",
+    );
+    expect(typeof result.protocolVersion).toBe("string");
+    expect(result.protocolVersion?.length).toBeGreaterThan(0);
   });
 });

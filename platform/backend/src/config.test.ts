@@ -1272,6 +1272,11 @@ describe("parseFileStorageS3Config", () => {
       parseFileStorageS3Config({ provider: "s3", env: { ...env, accessKeyId: undefined } }),
     ).toThrow(/must be set together/);
   });
+  test("treats a whitespace-only credential as unset under s3", () => {
+    expect(() =>
+      parseFileStorageS3Config({ provider: "s3", env: { ...env, secretAccessKey: "   " } }),
+    ).toThrow(/must be set together/);
+  });
   test("allows both credentials omitted under s3 (AWS default chain)", () => {
     const cfg = parseFileStorageS3Config({
       provider: "s3",

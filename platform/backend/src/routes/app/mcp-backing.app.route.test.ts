@@ -125,6 +125,25 @@ describe("MCP backing for apps", () => {
     expect(nameB.endsWith("__show_app")).toBe(true);
   });
 
+  test("same-named apps in different scopes get distinct launch-tool names", async () => {
+    // The per-scope name index lets one author hold a personal AND an org app
+    // with the same name; their launch tools must NOT both slugify to
+    // `<name>__show_app` or one shadows the other in a shared gateway profile.
+    const personalId = await createApp("personal");
+    const orgId = await createApp("org");
+    const nameFor = async (appId: string) => {
+      const a = await AppModel.findById(appId);
+      const s = await McpServerModel.findById(a!.mcpServerId!);
+      const [t] = await ToolModel.findByCatalogIdWithMeta(s!.catalogId);
+      return t.name;
+    };
+    const personalName = await nameFor(personalId);
+    const orgName = await nameFor(orgId);
+    expect(personalName).not.toBe(orgName);
+    expect(personalName.endsWith("__show_app")).toBe(true);
+    expect(orgName.endsWith("__show_app")).toBe(true);
+  });
+
   test("the app backing server is excluded from external UI-capable detection (no double-listing)", async () => {
     const appId = await createApp();
     const created = await AppModel.findById(appId);

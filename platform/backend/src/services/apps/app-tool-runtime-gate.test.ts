@@ -118,6 +118,45 @@ test("refuses a tool not assigned to the app", async ({
   if (!decision.allowed) expect(decision.reason).toContain("not assigned");
 });
 
+test("refuses an assigned tool whose catalog is outside the app's bound environment", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  // Permissive org so the policy engine short-circuits to allow — the env fence
+  // (which runs before policy) is the only thing that can refuse here.
+  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const user = await makeUser();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+  // The app's environment is derived from its backing catalog (FR-30); the
+  // fixture routes environmentId there.
+  const app = await makeApp({ organizationId: org.id, environmentId: prod.id });
+  // The tool's catalog is in the default (null) environment — not prod.
+  const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+  const tool = await makeTool({
+    name: `hf__search_${crypto.randomUUID().slice(0, 8)}`,
+    catalogId: catalog.id,
+  });
+  await makeAppTool(app.id, tool.id);
+
+  const decision = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: user.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(decision.allowed).toBe(false);
+  if (!decision.allowed) expect(decision.reason).toContain("environment");
+});
+
 test("refuses a management Archestra tool, allows the reserved app built-ins", async ({
   makeOrganization,
   makeUser,

@@ -46,6 +46,11 @@ load_dynamic('./dev/Tiltfile.database')
 if os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true':
   load_dynamic('./dev/Tiltfile.coderuntime')
 
+# S3 file storage (MinIO) — only when the file-storage provider is s3, so the
+# default db-provider dev environment never deploys an object store.
+if os.getenv('ARCHESTRA_FILE_STORAGE_PROVIDER') == 's3':
+  load_dynamic('./dev/Tiltfile.minio')
+
 load_dynamic('./dev/Tiltfile.dev')
 load_dynamic('./dev/Tiltfile.test')
 load_dynamic('./dev/Tiltfile.integrations')

@@ -164,6 +164,16 @@ pub async fn run(
     };
     let prices = Arc::new(prices);
 
+    let selected = select_envs(&envs, env_filter, task_filter)?;
+    let plan = build_run_plan(selected, lane_list);
+
+    // Preflight the sandbox once, before any artifact is written: a broken sandbox (managed bench
+    // Postgres can't come up, Dagger runner host won't resolve) aborts the whole run here with a
+    // single error instead of every backend boot failing the same way and fanning out one
+    // agent_error per (task × lane). Warms the same OnceCells `Instance::start` reads, so a healthy
+    // run pays nothing.
+    crate::lifecycle::preflight(&repo_root(), platform_dir).await?;
+
     // An explicit `--run-dir` is reused (create_dir_all); an auto dir must be brand-new — the base name
     // is seconds-granular, so two runs started in the same second would otherwise share a root and
     // overwrite each other's config.json/aggregate.json.
@@ -174,9 +184,6 @@ pub async fn run(
         }
         None => create_fresh_run_dir(bench_dir).await?,
     };
-
-    let selected = select_envs(&envs, env_filter, task_filter)?;
-    let plan = build_run_plan(selected, lane_list);
 
     write_run_config(
         &root_run_dir,

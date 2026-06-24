@@ -609,6 +609,37 @@ async fn compose_up(
     Ok(())
 }
 
+/// Assert the run-wide sandbox preconditions once, before any rollout boots a backend: the managed
+/// bench Postgres must come up and the Dagger runner host must resolve. A broken sandbox aborts the
+/// whole run here with a single error instead of every per-(task × lane) backend boot failing the
+/// same way and fanning out one `agent_error` result each. Reuses the same memoized resolution as
+/// [`Instance::start`] (`BENCH_PG_READY` / `RESOLVED_RUNNER_HOST` / `BENCH_DAGGER_READY`), so a
+/// healthy run pays nothing — the per-instance calls that follow are cache hits. Asserts
+/// preconditions only: it must not create a database, migrate, or spawn a backend. An external
+/// `ARCHESTRA_BENCH_DATABASE_URL` is not probed here (it is first reached at `create_database`).
+pub async fn preflight(
+    repo_root: &Path,
+    platform_dir: Option<&Path>,
+) -> Result<(), LifecycleError> {
+    let platform = platform_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| repo_root.join("platform"));
+    let env_path = platform.join(".env");
+    if !env_path.is_file() {
+        return Err(LifecycleError::Config(format!(
+            "{} not found; create it from platform/.env.example or start the dev stack",
+            env_path.display()
+        )));
+    }
+    let (_bench_db_url, managed) = resolve_bench_db_url(&parse_env_file(&env_path)?);
+    let bench_dev = repo_root.join("archestra-bench").join("dev");
+    if managed {
+        ensure_bench_postgres(&bench_dev.join("docker-compose.bench-pg.yml")).await?;
+    }
+    resolve_runner_host(&bench_dev.join("docker-compose.bench-dagger.yml")).await?;
+    Ok(())
+}
+
 async fn ensure_bench_postgres(compose_file: &Path) -> Result<(), LifecycleError> {
     BENCH_PG_READY
         .get_or_try_init(|| async {
@@ -1085,5 +1116,15 @@ mod tests {
         let env = parse_env_file(&path).unwrap();
         assert_eq!(env.get("FOO"), Some(&"bar".to_string()));
         assert_eq!(env.get("REF"), Some(&"bar/qux".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_preflight_missing_env_is_config_error() {
+        // A missing platform `.env` is rejected before any Docker/Postgres I/O, mirroring
+        // `Instance::start`'s check — so this exercises the preflight's error mapping with no
+        // process boundaries to mock.
+        let tmp = tempfile::tempdir().unwrap();
+        let err = preflight(tmp.path(), Some(tmp.path())).await.unwrap_err();
+        assert!(matches!(err, LifecycleError::Config(_)), "got {err:?}");
     }
 }

@@ -289,8 +289,8 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     vi.clearAllMocks();
   });
 
-  // Drives the app into the sidebar portal so renderInSidebar becomes true.
-  function SidebarDriver({ target }: { target: HTMLElement }) {
+  // Drives the app into the panel portal so renderInPanel becomes true.
+  function PanelDriver({ target }: { target: HTMLElement }) {
     const { setPortalTarget, select } = useApps();
     useEffect(() => {
       setPortalTarget(target);
@@ -304,7 +304,7 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
   // proxy is a true process boundary, so faking its ready message is legitimate.
   async function renderReadyApp(
     viewportHeight: number,
-    { sidebar = false }: { sidebar?: boolean } = {},
+    { panel = false }: { panel?: boolean } = {},
   ) {
     Object.defineProperty(window, "innerHeight", {
       value: viewportHeight,
@@ -345,11 +345,18 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
 
     await act(async () => {
       render(
-        sidebar ? (
+        panel ? (
           <AppsProvider
-            apps={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+            apps={[
+              {
+                toolCallId: "tc1",
+                label: "app",
+                uiResourceUri: defaultProps.uiResourceUri,
+                createdAt: 0,
+              },
+            ]}
           >
-            <SidebarDriver target={document.body} />
+            <PanelDriver target={document.body} />
             <McpAppSection
               {...defaultProps}
               toolCallId="tc1"
@@ -427,13 +434,13 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
   });
 
-  it("hints no cap to the guest when the app fills the sidebar", async () => {
-    const bridge = await renderReadyApp(2000, { sidebar: true });
+  it("hints no cap to the guest when the app fills the panel", async () => {
+    const bridge = await renderReadyApp(2000, { panel: true });
     expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
 });
 
-describe("McpAppSection sidebar hosting", () => {
+describe("McpAppSection panel hosting", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
 
   beforeEach(() => {
@@ -441,9 +448,9 @@ describe("McpAppSection sidebar hosting", () => {
     clearAllAppDiagnostics();
   });
 
-  // Opens the sidebar app host (portalTarget) so the selected owned-app section
+  // Opens the panel app host (portalTarget) so the selected owned-app section
   // portals its iframe into the target.
-  function SidebarHost({ target }: { target: HTMLElement }) {
+  function PanelHost({ target }: { target: HTMLElement }) {
     const { setPortalTarget } = useApps();
     useEffect(() => {
       setPortalTarget(target);
@@ -451,16 +458,23 @@ describe("McpAppSection sidebar hosting", () => {
     return null;
   }
 
-  it("hosts an owned-app render in the sidebar app host", async () => {
+  it("hosts an owned-app render in the panel app host", async () => {
     const target = document.createElement("div");
     document.body.appendChild(target);
 
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -472,9 +486,9 @@ describe("McpAppSection sidebar hosting", () => {
     });
 
     // Opening the app host auto-selects the sole app, portaling the live
-    // owned-app iframe into the sidebar target (not left inline).
+    // owned-app iframe into the panel target (not left inline).
     expect(target.querySelector("iframe")).toBeInTheDocument();
-    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+    expect(screen.getByText(/showing in panel/i)).toBeInTheDocument();
 
     target.remove();
   });
@@ -482,7 +496,7 @@ describe("McpAppSection sidebar hosting", () => {
   it("keeps the diagnostics badge out of the stretched app wrapper when hosted", async () => {
     // The error badge must not share the fill-container wrapper with the iframe:
     // that wrapper applies `[&>div]:!h-full`, so a badge inside it gets stretched
-    // to full height and shoves the iframe below the sidebar fold (blank render).
+    // to full height and shoves the iframe below the panel fold (blank render).
     reportAppDiagnostic(APP_ID, 1, {
       type: "csp-violation",
       message: "script-src blocked eval",
@@ -493,9 +507,16 @@ describe("McpAppSection sidebar hosting", () => {
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -538,11 +559,21 @@ describe("McpAppSection sidebar hosting", () => {
         // selection and the rendered tc2 section stays unselected.
         <AppsProvider
           apps={[
-            { toolCallId: "tc1", label: "First App", createdAt: 1 },
-            { toolCallId: "tc2", label: "Second App", createdAt: 0 },
+            {
+              toolCallId: "tc1",
+              label: "First App",
+              uiResourceUri: "resource://test-server/ui-other",
+              createdAt: 1,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Second App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
           ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -554,21 +585,21 @@ describe("McpAppSection sidebar hosting", () => {
     });
 
     // tc1 is auto-selected and hosted in the panel. The unselected tc2 keeps
-    // rendering live inline (not a placeholder) and is NOT shown in the sidebar,
-    // while still offering its own Show in sidebar control.
-    const showButton = screen.getByRole("button", { name: /show in sidebar/i });
+    // rendering live inline (not a placeholder) and is NOT shown in the panel,
+    // while still offering its own Show in panel control.
+    const showButton = screen.getByRole("button", { name: /show in panel/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
-    expect(screen.queryByText(/showing in sidebar/i)).not.toBeInTheDocument();
-    // tc2's live iframe renders inline (in the document, outside the sidebar target).
+    expect(screen.queryByText(/showing in panel/i)).not.toBeInTheDocument();
+    // tc2's live iframe renders inline (in the document, outside the panel target).
     expect(document.querySelector("iframe")).toBeInTheDocument();
 
-    // Clicking it selects tc2 and portals its iframe into the sidebar target.
+    // Clicking it selects tc2 and portals its iframe into the panel target.
     await act(async () => {
       await user.click(showButton);
     });
 
     expect(target.querySelector("iframe")).toBeInTheDocument();
-    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+    expect(screen.getByText(/showing in panel/i)).toBeInTheDocument();
 
     target.remove();
   });
@@ -591,6 +622,7 @@ describe("McpAppSection superseded renders", () => {
             {
               toolCallId: "tc2",
               label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
               appId: APP_ID,
               createdAt: 1,
             },
@@ -621,6 +653,7 @@ describe("McpAppSection superseded renders", () => {
             {
               toolCallId: "tc1",
               label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
               appId: APP_ID,
               createdAt: 0,
             },

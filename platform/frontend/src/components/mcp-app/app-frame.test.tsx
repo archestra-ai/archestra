@@ -73,7 +73,7 @@ describe("AppFrame", () => {
     // The caller-composed action button is rendered.
     expect(
       screen.getByRole("link", { name: /open standalone/i }),
-    ).toHaveAttribute("href", "/apps/app-1/run");
+    ).toHaveAttribute("href", "/a/app-1");
   });
 
   it("waits for the owned app to resolve before mounting the runtime", () => {

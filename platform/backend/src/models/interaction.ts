@@ -36,6 +36,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
 
 async function findChatErrorsForSessionId(sessionId: string | null) {
@@ -65,24 +66,32 @@ function getMessageText(
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
- * Claude Code specific heuristic:
- * - Main requests have the "Task" tool available (can spawn subagents)
- * - Subagent requests don't have the "Task" tool
- * - Utility requests (single message like "count", "quota") are subagents
- * - Prompt suggestion requests (last message contains "prompt suggestion generator") are subagents
+ * Applies to the Claude agentic sources (Claude Code and Claude Desktop, both
+ * built on the Claude Agent SDK); every other source is "main".
  *
- * For other session sources, all requests are considered "main" by default.
+ * Shared heuristics:
+ * - Single short utility messages ("count", "quota") are subagents
+ * - Prompt suggestion generator requests are subagents
+ * - The Agent SDK spawns single-purpose tool sub-agents (e.g. web search) whose
+ *   system prompt is "You are an assistant for performing a <tool> tool use"
+ *
+ * Source-specific: Claude Code main requests carry the "Task" tool (they can
+ * spawn subagents) and subagents don't — so absence of "Task" means subagent.
+ * Claude Desktop main agents do NOT carry the "Task" tool, so that negative
+ * signal can't be used there; a Claude Desktop request that matched none of the
+ * subagent markers is "main".
  */
 function computeRequestType(
   request: unknown,
   sessionSource: string | null,
 ): "main" | "subagent" {
-  // Only apply detection heuristics for Claude Code sessions
-  if (sessionSource !== "claude_code") {
+  // Only apply detection heuristics for Claude sessions
+  if (sessionSource !== "claude_code" && sessionSource !== "claude_desktop") {
     return "main";
   }
 
   const req = request as {
+    system?: string | Array<{ text?: string; type?: string }>;
     tools?: Array<{ name: string }>;
     messages?: Array<{
       content: string | Array<{ text?: string; type?: string }>;
@@ -110,9 +119,20 @@ function computeRequestType(
     }
   }
 
-  const tools = req?.tools ?? [];
-  const hasTaskTool = tools.some((tool) => tool.name === "Task");
-  return hasTaskTool ? "main" : "subagent";
+  // Claude Agent SDK tool sub-agents (e.g. web search) are marked by their
+  // system prompt. This is the reliable signal for Claude Desktop, whose main
+  // agent — unlike Claude Code's — does not carry the Task tool.
+  if (getMessageText(req?.system).includes("an assistant for performing a")) {
+    return "subagent";
+  }
+
+  if (sessionSource === "claude_code") {
+    const tools = req?.tools ?? [];
+    const hasTaskTool = tools.some((tool) => tool.name === "Task");
+    return hasTaskTool ? "main" : "subagent";
+  }
+
+  return "main";
 }
 
 /**
@@ -281,13 +301,23 @@ class InteractionModel {
       ...data,
       environmentId,
       request: stripNullBytes(data.request),
+      processedRequest: stripNullBytes(data.processedRequest),
       response: stripNullBytes(data.response),
     };
 
+    // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
+    // whole conversation on every row (no-op for all other interactions).
+    const { values, tip } =
+      await InteractionDeltaManager.encodeOnWrite(sanitized);
+
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values(sanitized)
+      .values(values)
       .returning();
+
+    if (tip) {
+      InteractionDeltaManager.commitTip(interaction.id, tip);
+    }
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
@@ -414,22 +444,34 @@ class InteractionModel {
     );
     const agentNamesMap = await getAgentNamesById(allAgentIds);
 
+    // Reconstruct full delta-encoded requests in a single batched query so the
+    // API returns the same data as before delta-encoding was introduced.
+    const reconstructed = await reconstructInteractionRequests(data);
+
     // Add computed requestType and externalAgentIdLabel fields to each interaction
-    const dataWithComputedFields = data.map((interaction) => ({
-      ...interaction,
-      requestType: computeRequestType(
-        interaction.request,
-        interaction.sessionSource,
-      ),
-      // Resolve externalAgentId to human-readable label (supports delegation chains)
-      externalAgentIdLabel: resolveExternalAgentIdLabel(
-        interaction.externalAgentId,
-        agentNamesMap,
-      ),
-    }));
+    const dataWithComputedFields = data.map((interaction) => {
+      const full = reconstructed.get(interaction.id);
+      return {
+        ...interaction,
+        request: full?.request ?? interaction.request,
+        processedRequest:
+          full?.processedRequest ?? interaction.processedRequest,
+        // computeRequestType must run on the reconstructed (full) request — it
+        // inspects messages.length and the first/last message content.
+        requestType: computeRequestType(
+          full?.request ?? interaction.request,
+          interaction.sessionSource,
+        ),
+        // Resolve externalAgentId to human-readable label (supports delegation chains)
+        externalAgentIdLabel: resolveExternalAgentIdLabel(
+          interaction.externalAgentId,
+          agentNamesMap,
+        ),
+      };
+    });
 
     return createPaginatedResult(
-      dataWithComputedFields as (Interaction & {
+      dataWithComputedFields as unknown as (Interaction & {
         requestType: "main" | "subagent";
         externalAgentIdLabel: string | null;
       })[],
@@ -509,8 +551,19 @@ class InteractionModel {
       }
     }
 
+    const reconstructed = await InteractionDeltaManager.reconstructRow(
+      interaction as unknown as {
+        id: string;
+        threadId: string | null;
+        request: unknown;
+        processedRequest: unknown;
+      },
+    );
+
     return {
       ...interaction,
+      request: reconstructed.request,
+      processedRequest: reconstructed.processedRequest,
       chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
     } as Interaction;
   }
@@ -519,7 +572,7 @@ class InteractionModel {
     profileId: string,
     whereClauses?: SQL[],
   ) {
-    return db
+    const rows = await db
       .select()
       .from(schema.interactionsTable)
       .where(
@@ -529,6 +582,8 @@ class InteractionModel {
         ),
       )
       .orderBy(asc(schema.interactionsTable.createdAt));
+
+    return withReconstructedRequests(rows);
   }
 
   /**
@@ -562,7 +617,9 @@ class InteractionModel {
     ]);
 
     return createPaginatedResult(
-      data as Interaction[],
+      // `data` are raw Drizzle rows (they still carry the internal delta columns
+      // that `withReconstructedRequests` needs); the public type omits them.
+      (await withReconstructedRequests(data)) as unknown as Interaction[],
       Number(total),
       pagination,
     );
@@ -922,6 +979,8 @@ class InteractionModel {
 
     // Free-text search filter (case-insensitive)
     // Searches across: request messages content, response content (for titles), and conversation titles
+    //
+    // IMPORTANT: Claude interaction are delta encoded, i.t. each row only stores a part of the context.
     if (filters?.search) {
       const searchPattern = `%${escapeLikePattern(filters.search)}%`;
       const searchCondition = or(
@@ -1157,10 +1216,12 @@ class InteractionModel {
         ? whereConditions[0]
         : sql.join(whereConditions as SQL[], sql` OR `);
 
-    // Use ROW_NUMBER() to limit interactions per session
+    // Use ROW_NUMBER() to limit interactions per session.
+    // thread_id is selected so the chosen tip can be reconstructed from deltas.
     const interactionsResult = await db.execute<{
       id: string;
       session_id: string | null;
+      thread_id: string | null;
       request: unknown;
       response: unknown;
       type: string;
@@ -1168,12 +1229,12 @@ class InteractionModel {
     }>(sql`
       WITH ranked AS (
         SELECT
-          id, session_id, request, response, type, created_at,
+          id, session_id, thread_id, request, response, type, created_at,
           ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
-      SELECT id, session_id, request, response, type, created_at
+      SELECT id, session_id, thread_id, request, response, type, created_at
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
       ORDER BY session_id, created_at DESC
@@ -1182,6 +1243,7 @@ class InteractionModel {
     const interactions = interactionsResult.rows.map((row) => ({
       id: row.id,
       sessionId: row.session_id,
+      threadId: row.thread_id,
       request: row.request,
       response: row.response,
       type: row.type,
@@ -1263,8 +1325,21 @@ class InteractionModel {
       }
 
       if (lastMainInteraction || claudeCodeTitle) {
+        // Reconstruct the chosen tip's full request from deltas (no-op for
+        // legacy/non-delta rows). Only one tip per session is reconstructed.
+        let tipRequest: unknown = lastMainInteraction?.request ?? null;
+        if (lastMainInteraction && lastMainInteraction.threadId !== null) {
+          const full = await InteractionDeltaManager.reconstructRow({
+            id: lastMainInteraction.id,
+            threadId: lastMainInteraction.threadId,
+            request: lastMainInteraction.request,
+            processedRequest: null,
+          });
+          tipRequest = full.request;
+        }
+
         result.set(sessionKey, {
-          request: lastMainInteraction?.request ?? null,
+          request: tipRequest,
           type: lastMainInteraction?.type ?? "",
           claudeCodeTitle: claudeCodeTitle ?? null,
         });
@@ -1276,6 +1351,46 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+/**
+ * Batch-reconstruct full request/processedRequest for delta-encoded rows.
+ * Legacy / non-Claude rows pass through untouched. One bounded query per call.
+ */
+function reconstructInteractionRequests(
+  rows: {
+    id: string;
+    threadId: string | null;
+    request: unknown;
+    processedRequest?: unknown;
+  }[],
+): Promise<Map<string, { request: unknown; processedRequest: unknown }>> {
+  return InteractionDeltaManager.reconstructMany(rows);
+}
+
+/**
+ * Replace each row's delta-encoded request/processedRequest with the full
+ * reconstructed values. Legacy / non-Claude rows are returned unchanged.
+ */
+async function withReconstructedRequests<
+  T extends {
+    id: string;
+    threadId: string | null;
+    request: unknown;
+    processedRequest?: unknown;
+  },
+>(rows: T[]): Promise<T[]> {
+  const reconstructed = await reconstructInteractionRequests(rows);
+  return rows.map((row) => {
+    const full = reconstructed.get(row.id);
+    return full
+      ? {
+          ...row,
+          request: full.request,
+          processedRequest: full.processedRequest,
+        }
+      : row;
+  });
+}
 
 function parseInteractionAuthMethods(
   value: string | null,

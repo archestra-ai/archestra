@@ -7,10 +7,8 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import {
-  Activity,
   ArrowLeft,
   Copy,
-  Layers,
   MoreHorizontal,
   PackageX,
   Pencil,
@@ -18,7 +16,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -72,7 +69,6 @@ import {
   getDeploymentLabel,
 } from "../../_parts/deployment-status";
 import { McpLogsContent, type McpLogsTab } from "../../_parts/mcp-logs-dialog";
-import { TransportBadges } from "../../_parts/transport-badges";
 import { YamlConfigContent } from "../../_parts/yaml-config-dialog";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { CatalogItem } from "../_parts/mcp-server-card";
@@ -335,11 +331,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
               <Badge variant="secondary" className="capitalize">
                 {item.serverType}
               </Badge>
-              {environmentLabel && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  {environmentLabel}
-                </Badge>
-              )}
             </div>
             {item.description && (
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground line-clamp-2">
@@ -451,44 +442,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
       {effectiveTab === "overview" && (
         <div className="space-y-4">
-          {/* Key metrics — at-a-glance, not interactive (navigate via tabs) */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label="Status"
-              icon={<Activity className="h-3.5 w-3.5" />}
-            >
-              <span className="inline-flex items-center gap-2">
-                {deploymentSummary && (
-                  <DeploymentStatusDot state={deploymentSummary.overallState} />
-                )}
-                {statusText}
-              </span>
-            </StatCard>
-
-            <StatCard
-              label="Credentials"
-              icon={<Users className="h-3.5 w-3.5" />}
-            >
-              {connectionsCount}
-            </StatCard>
-
-            <StatCard
-              label="Tools"
-              icon={<ShieldCheck className="h-3.5 w-3.5" />}
-            >
-              {tools.length || (item.toolCount ?? 0)}
-            </StatCard>
-
-            <StatCard
-              label="Environment"
-              icon={<Layers className="h-3.5 w-3.5" />}
-            >
-              <span className="truncate">
-                {environmentLabel ?? defaultEnvironment.name}
-              </span>
-            </StatCard>
-          </div>
-
           {/* Capabilities + details */}
           <div className="grid items-start gap-4 lg:grid-cols-3">
             {/* Tools the server exposes */}
@@ -496,7 +449,14 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1.5">
-                    <CardTitle>Tools</CardTitle>
+                    <CardTitle>
+                      Tools
+                      {!!(tools.length || item.toolCount) && (
+                        <span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">
+                          {tools.length || item.toolCount}
+                        </span>
+                      )}
+                    </CardTitle>
                     <CardDescription>
                       Capabilities this server exposes to agents.
                     </CardDescription>
@@ -563,19 +523,26 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
               </CardContent>
             </Card>
 
-            {/* Server details */}
+            {/* Server details — operational summary */}
             <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
               <CardContent className="space-y-4 text-sm">
-                <OverviewField label="Type">
-                  <span className="capitalize">{item.serverType}</span>
-                  <TransportBadges
-                    isRemote={variant === "remote"}
-                    className="mt-1"
-                  />
+                <OverviewField label="Status">
+                  <span className="inline-flex items-center gap-2">
+                    {deploymentSummary ? (
+                      <DeploymentStatusDot
+                        state={deploymentSummary.overallState}
+                      />
+                    ) : connectionsCount > 0 ? (
+                      <DeploymentStatusDot state="running" />
+                    ) : null}
+                    {statusText}
+                  </span>
                 </OverviewField>
+                {variant !== "builtin" && (
+                  <OverviewField label="Environment">
+                    {environmentLabel ?? defaultEnvironment.name}
+                  </OverviewField>
+                )}
                 {endpoint && (
                   <OverviewField
                     label={variant === "remote" ? "Server URL" : "Command"}
@@ -677,39 +644,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   );
 }
 
-function StatCard({
-  label,
-  hint,
-  icon,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card
-      className={cn(
-        "h-full gap-2 py-4",
-        hint &&
-          "transition-colors group-hover:border-primary/50 group-hover:bg-muted/40",
-      )}
-    >
-      <CardHeader className="px-4">
-        <CardDescription className="flex items-center justify-between">
-          {label}
-          {icon}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-4">
-        <div className="truncate text-xl font-semibold">{children}</div>
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
 function OverviewField({
   label,
   children,
@@ -739,13 +673,10 @@ function ItemPageSkeleton() {
           <Skeleton className="h-4 w-96" />
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <Skeleton className="h-80 rounded-xl lg:col-span-2" />
+        <Skeleton className="h-64 rounded-xl" />
       </div>
-      <Skeleton className="h-64 w-full rounded-xl" />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import {
   AppWindow,
   ChevronDown,
   type LucideIcon,
-  Minimize,
+  Minimize2,
   PanelRight,
   RefreshCw,
   SquareArrowOutUpRight,
@@ -153,11 +153,11 @@ function McpAppIconButton({
   );
 }
 
-export function McpAppSidebarButton({ onClick }: { onClick: () => void }) {
+export function McpAppPanelButton({ onClick }: { onClick: () => void }) {
   return (
     <McpAppIconButton
       icon={PanelRight}
-      label="Show in sidebar"
+      label="Show in panel"
       onClick={onClick}
     />
   );
@@ -176,7 +176,7 @@ export function McpAppFullscreenExitButton({
 }) {
   return (
     <McpAppIconButton
-      icon={Minimize}
+      icon={Minimize2}
       label="Exit fullscreen"
       onClick={onClick}
     />
@@ -191,7 +191,7 @@ export function McpAppStandaloneButton({ appId }: { appId: string }) {
       title="Open standalone"
       {...ICON_BUTTON_PROPS}
     >
-      <Link href={`/apps/${appId}/run`} target="_blank" rel="noreferrer">
+      <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">
         <SquareArrowOutUpRight className="h-3.5 w-3.5" />
       </Link>
     </Button>

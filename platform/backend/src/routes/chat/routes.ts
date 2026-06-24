@@ -6,6 +6,7 @@ import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   isModelSelectionComplete,
+  PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   type SupportedProvider,
   TimeInMs,
@@ -87,6 +88,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
+import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { renderSystemPrompt } from "@/templating";
 import {
@@ -459,6 +461,40 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           abortSignal: chatAbortController.signal,
         });
 
+        // A project chat prepends the project's instructions to the system
+        // prompt. Kicked off as a promise so it runs concurrently with the org
+        // reads below rather than adding a serial read on the hot path.
+        // Best-effort: a read failure (or lost project access) must never break
+        // the chat, and an empty file injects nothing. The injected length is
+        // clamped: the editor caps saves at the same limit, but the file is
+        // also writable by the agent tools (bounded only by the much larger
+        // artifact byte limit), and this content goes into every turn's prompt.
+        const projectInstructionsPromise: Promise<string | undefined> =
+          conversation.projectId
+            ? projectService
+                .getInstructions({
+                  id: conversation.projectId,
+                  organizationId,
+                  userId: user.id,
+                })
+                .then(({ content }) =>
+                  content.trim()
+                    ? content.slice(0, PROJECT_INSTRUCTIONS_MAX_LENGTH)
+                    : undefined,
+                )
+                .catch((error) => {
+                  logger.warn(
+                    {
+                      error,
+                      conversationId,
+                      projectId: conversation.projectId,
+                    },
+                    "Failed to load project instructions, proceeding without them",
+                  );
+                  return undefined;
+                })
+            : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -471,17 +507,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          buildChatContext({
-            conversationId,
-            agentId,
-            agent,
-            user: { id: user.id, email: user.email, name: user.name },
-            organizationId,
-            hookSessionContext,
-            hookRunCollector,
-            elicitation: chatMcpElicitation,
-            abortSignal: chatAbortController.signal,
-          }),
+          projectInstructionsPromise.then((projectInstructions) =>
+            buildChatContext({
+              conversationId,
+              agentId,
+              agent,
+              user: { id: user.id, email: user.email, name: user.name },
+              organizationId,
+              hookSessionContext,
+              projectInstructions,
+              hookRunCollector,
+              elicitation: chatMcpElicitation,
+              abortSignal: chatAbortController.signal,
+            }),
+          ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
         ]);

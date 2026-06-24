@@ -116,7 +116,25 @@ const BaseSelectInteractionSchema = createSelectSchema(
   extendedFields,
 );
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.extend({
+/**
+ * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
+ * the row the model reads) so the delta manager can walk parent chains, but they
+ * are internal plumbing: the `request` / `processedRequest` returned by the model
+ * is always fully reconstructed, so these must never leak into the public API
+ * surface (OpenAPI spec, generated response types). Omit them from every response
+ * schema. The internal row type stays available via Drizzle's `$inferSelect`.
+ */
+const DELTA_ENCODING_COLUMNS = {
+  threadId: true,
+  parentId: true,
+  requestSharedPrefix: true,
+  processedRequestSharedPrefix: true,
+  requestLastMessageIdx: true,
+} as const;
+
+const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
+  DELTA_ENCODING_COLUMNS,
+).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
 });
 

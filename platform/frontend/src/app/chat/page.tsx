@@ -1844,7 +1844,7 @@ export function ChatPageContent({
   return (
     <AppsProvider
       apps={mcpApps}
-      onShowInSidebar={() => openRightPanelTab("apps" as RightPanelTab)}
+      onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
     >
       <div className="flex h-full w-full min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -1882,6 +1882,7 @@ export function ChatPageContent({
                     <ConversationFilesPanel
                       conversationId={conversationId}
                       artifact={conversation?.artifact}
+                      projectId={conversation?.projectId}
                       onClose={closeRightPanel}
                     />
                   </div>
@@ -2221,6 +2222,7 @@ export function ChatPageContent({
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
             artifact={conversation?.artifact}
+            projectId={conversation?.projectId}
             conversationId={conversationId}
             agentId={browserToolsAgentId}
             onCreateConversationWithUrl={handleCreateConversationWithUrl}

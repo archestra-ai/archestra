@@ -14,6 +14,7 @@ import {
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import { useApp } from "@/lib/app.query";
+import { cn } from "@/lib/utils";
 
 /** Stable no-op size reporter: page surfaces fill their own layout. */
 const noopSizeChange = () => {};
@@ -89,8 +90,16 @@ export function AppFrame({
   ) : null;
 
   if (!chrome) {
+    // fillContainer forces the iframe to fill (same override as McpAppCard);
+    // otherwise it sizes to the guest's reported content height.
     return (
-      <div className="h-full w-full">
+      <div
+        className={cn(
+          "h-full w-full",
+          fillContainer &&
+            "overflow-hidden [&>div]:!h-full [&_iframe]:!h-full [&_iframe]:!max-h-none [&_iframe]:!min-h-0 [&_iframe]:!w-full",
+        )}
+      >
         {runtime}
         {resourceState === "empty" && EMPTY_MESSAGE}
       </div>
@@ -109,15 +118,18 @@ export function AppFrame({
           inlineCeiling={inlineCeiling}
           fillContainer={fillContainer}
           topBar={
-            <McpAppTopBar>
+            <McpAppTopBar
+              right={
+                displayMode === "fullscreen" ? (
+                  <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+                ) : undefined
+              }
+            >
               <McpAppAddressPill
                 label={label ?? app.name}
                 actions={
                   <>
                     <McpAppRefreshButton onClick={reload} />
-                    {displayMode === "fullscreen" && (
-                      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-                    )}
                     {actions}
                   </>
                 }

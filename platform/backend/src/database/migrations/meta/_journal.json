@@ -2150,6 +2150,13 @@
       "when": 1782231531164,
       "tag": "0306_greedy_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 307,
+      "version": "7",
+      "when": 1782287892624,
+      "tag": "0307_last_dark_beast",
+      "breakpoints": true
     }
   ]
 }

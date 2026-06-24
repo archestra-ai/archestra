@@ -134,6 +134,7 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
         &format!("{ctx} tools"),
     )?;
     let share_backend = toml_util::opt_bool(&data, "share_backend", &ctx, false)?;
+    let fixture_mcp = toml_util::opt_bool(&data, "fixture_mcp", &ctx, false)?;
 
     let platform = load_platform(&data, &ctx)?;
 
@@ -147,6 +148,7 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
         tasks,
         tools,
         share_backend,
+        fixture_mcp,
         platform,
     })
 }
@@ -343,6 +345,34 @@ share_backend = {}
     fn test_platform_non_table_errors() {
         let err = load_env_with_platform("platform = \"x\"\n").unwrap_err();
         assert!(err.0.contains("[platform] must be a table"), "{}", err.0);
+    }
+
+    #[test]
+    fn test_fixture_mcp_parsed_in_both_modes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let envs_dir = tmp.path().join("envs");
+        std::fs::create_dir(&envs_dir).unwrap();
+        make_task_dir(tmp.path(), "t1");
+        make_task_dir(tmp.path(), "t2");
+
+        // fixture_mcp = true with the default (isolated) backend loads and sets the flag.
+        std::fs::write(
+            envs_dir.join("isolated.toml"),
+            "id = \"isolated\"\nname = \"isolated\"\ntasks = [\"t1\"]\nfixture_mcp = true\n",
+        )
+        .unwrap();
+        // fixture_mcp together with share_backend also loads: the synthetic MCP is stateless, so the
+        // shared backend starts one instance for all lanes.
+        std::fs::write(
+            envs_dir.join("shared.toml"),
+            "id = \"shared\"\nname = \"shared\"\ntasks = [\"t2\"]\nfixture_mcp = true\nshare_backend = true\n",
+        )
+        .unwrap();
+        let envs = load_envs(&envs_dir).unwrap();
+        assert!(envs["isolated"].fixture_mcp);
+        assert!(!envs["isolated"].share_backend);
+        assert!(envs["shared"].fixture_mcp);
+        assert!(envs["shared"].share_backend);
     }
 
     #[test]

@@ -17,10 +17,12 @@ use crate::chat_stream::{ChatRecordKind, ChatRunResult, ChatStreamRecord, apply_
 use crate::client::{AgentCreate, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
+use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
 use crate::interactions::extract_effective_prompts;
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
 use crate::mcp_server::{BenchmarkMcp, Submission};
+use crate::pricing::{self, PriceBook};
 use crate::results::{Outcome, RunResult, render_markdown};
 use crate::seeding::{
     ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures,
@@ -98,6 +100,8 @@ pub struct RunCtx {
     pub update_mcp_lock: bool,
     /// Platform directory override (the prod image lays the app out at `/app`); `None` → `<repo>/platform`.
     pub platform_dir: Option<PathBuf>,
+    /// OpenRouter prices for per-run cost; empty when the fetch failed (every cost then reports `n/a`).
+    pub prices: Arc<PriceBook>,
 }
 
 /// What a completed [`run`] produced: the per-rollout results plus the run directory they were written
@@ -150,6 +154,16 @@ pub async fn run(
     let workers = resolve_workers(max_workers, lane_list.len());
     let api_keys = lane_api_keys(&lane_list)?;
 
+    // Fetch OpenRouter prices once up front. A failure is non-fatal: every run then reports cost n/a.
+    let (prices, price_status) = match pricing::fetch_price_book().await {
+        Ok(book) => (book, "ok".to_string()),
+        Err(e) => {
+            warn!("OpenRouter price fetch failed, run costs will be n/a: {e}");
+            (PriceBook::default(), format!("failed: {e}"))
+        }
+    };
+    let prices = Arc::new(prices);
+
     // An explicit `--run-dir` is reused (create_dir_all); an auto dir must be brand-new — the base name
     // is seconds-granular, so two runs started in the same second would otherwise share a root and
     // overwrite each other's config.json/aggregate.json.
@@ -164,7 +178,15 @@ pub async fn run(
     let selected = select_envs(&envs, env_filter, task_filter)?;
     let plan = build_run_plan(selected, lane_list);
 
-    write_run_config(&root_run_dir, &run_id, &plan, workers).await?;
+    write_run_config(
+        &root_run_dir,
+        &run_id,
+        &plan,
+        workers,
+        &prices,
+        &price_status,
+    )
+    .await?;
 
     let ctx = RunCtx {
         root_run_dir,
@@ -173,6 +195,7 @@ pub async fn run(
         envs_dir,
         update_mcp_lock,
         platform_dir: platform_dir.map(Path::to_path_buf),
+        prices,
     };
 
     let results = execute_plan(plan, ctx.clone(), workers).await;
@@ -372,12 +395,16 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     let mut shared_setups: Vec<Option<HashMap<String, SharedLaneSetup>>> =
         plan.iter().map(|_| None).collect();
     let mut shared_instances: Vec<Instance> = Vec::new();
+    let mut shared_fixtures: Vec<FixtureMcp> = Vec::new();
     let mut infra: Vec<RunResult> = Vec::new();
     for (i, env_plan) in plan.iter().enumerate() {
         if env_plan.share_backend() {
             match setup_shared_env(env_plan, &ctx).await {
-                Ok((instance, setups)) => {
+                Ok((instance, fixture, setups)) => {
                     shared_instances.push(instance);
+                    if let Some(fixture) = fixture {
+                        shared_fixtures.push(fixture);
+                    }
                     shared_setups[i] = Some(setups);
                 }
                 Err(e) => infra.extend(infra_results(env_plan, &ctx, &progress, &e)),
@@ -436,6 +463,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                                 ctx.root_run_dir.clone(),
                                 setup.resolved,
                                 progress.clone(),
+                                ctx.prices.clone(),
                             )
                             .await,
                         );
@@ -463,6 +491,9 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
         .collect()
         .await;
 
+    for fixture in &shared_fixtures {
+        fixture.stop().await;
+    }
     for instance in &shared_instances {
         let _ = instance.shutdown().await;
     }
@@ -502,7 +533,14 @@ async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp, String)]) {
 async fn setup_shared_env(
     env_plan: &EnvPlan,
     ctx: &RunCtx,
-) -> Result<(Instance, HashMap<String, SharedLaneSetup>), String> {
+) -> Result<
+    (
+        Instance,
+        Option<FixtureMcp>,
+        HashMap<String, SharedLaneSetup>,
+    ),
+    String,
+> {
     let env = &env_plan.env;
     let log_path = ctx
         .root_run_dir
@@ -623,6 +661,39 @@ async fn setup_shared_env(
         }
     }
 
+    // One harness-owned synthetic MCP for the whole shared backend: it serves fixed, stateless content
+    // (see fixture_mcp.rs), so a single instance registered to every lane's agent is safe under
+    // concurrency -- mirroring how the public distractor MCPs above are seeded once for all agents.
+    let fixture = if env.fixture_mcp {
+        let agent_ids: Vec<String> = setups.iter().map(|(_, id, _, _, _)| id.clone()).collect();
+        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
+            Ok(fixture) => {
+                if let Err(e) = register_remote_mcp(
+                    &client,
+                    fixture.name(),
+                    fixture.base_url(),
+                    "org",
+                    Some(agent_ids.as_slice()),
+                )
+                .await
+                {
+                    fixture.stop().await;
+                    stop_mcps(&setups).await;
+                    let _ = instance.shutdown().await;
+                    return Err(e.to_string());
+                }
+                Some(fixture)
+            }
+            Err(e) => {
+                stop_mcps(&setups).await;
+                let _ = instance.shutdown().await;
+                return Err(e.to_string());
+            }
+        }
+    } else {
+        None
+    };
+
     if let Err(e) = client.warm_user_token().await {
         warn!("warm_user_token failed; lanes may race gateway-token insert (non-fatal): {e}");
     }
@@ -645,7 +716,7 @@ async fn setup_shared_env(
         })
         .collect();
 
-    Ok((instance, lane_setups))
+    Ok((instance, fixture, lane_setups))
 }
 
 async fn run_isolated_lane(
@@ -765,6 +836,51 @@ async fn run_isolated_lane(
         }
     }
 
+    let fixture_mcp = if env.fixture_mcp {
+        // Isolated-lane fixture: one server per lane, torn down with the lane. Shared-backend envs start
+        // the fixture once in setup_shared_env instead; both are supported.
+        match FixtureMcp::start(FIXTURE_MCP_NAME).await {
+            Ok(fixture) => {
+                if let Err(e) = register_remote_mcp(
+                    &client,
+                    fixture.name(),
+                    fixture.base_url(),
+                    "org",
+                    Some(std::slice::from_ref(&agent_id)),
+                )
+                .await
+                {
+                    fixture.stop().await;
+                    mcp.stop().await;
+                    let _ = instance.shutdown().await;
+                    return infra_results_for_lane(
+                        &env,
+                        &tasks,
+                        &lane,
+                        &ctx,
+                        &progress,
+                        &e.to_string(),
+                    );
+                }
+                Some(fixture)
+            }
+            Err(e) => {
+                mcp.stop().await;
+                let _ = instance.shutdown().await;
+                return infra_results_for_lane(
+                    &env,
+                    &tasks,
+                    &lane,
+                    &ctx,
+                    &progress,
+                    &e.to_string(),
+                );
+            }
+        }
+    } else {
+        None
+    };
+
     let results = run_lane(
         client,
         env,
@@ -777,8 +893,12 @@ async fn run_isolated_lane(
         ctx.root_run_dir.clone(),
         resolved,
         progress,
+        ctx.prices.clone(),
     )
     .await;
+    if let Some(fixture) = &fixture_mcp {
+        fixture.stop().await;
+    }
     let _ = instance.shutdown().await;
     results
 }
@@ -854,6 +974,11 @@ fn infra_results_for_lane(
             tool_call_count: 0,
             turn_count: 0,
             total_tokens: None,
+            prompt_tokens: None,
+            completion_tokens: None,
+            cache_read_tokens: None,
+            price_model: None,
+            cost_usd: None,
             agent_error: Some(format!("infra: {error}")),
             stage_count: task.stages.len(),
             format_attempts: 0,
@@ -1151,6 +1276,7 @@ async fn run_lane(
     root_run_dir: PathBuf,
     resolved: ResolvedModel,
     progress: ProgressBar,
+    prices: Arc<PriceBook>,
 ) -> Vec<RunResult> {
     let mut results = Vec::new();
     for task in tasks {
@@ -1169,6 +1295,7 @@ async fn run_lane(
             project_id.as_deref(),
             &task,
             &resolved,
+            &prices,
         )
         .await;
         progress.inc(1);
@@ -1191,6 +1318,7 @@ async fn run_one(
     project_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
+    prices: &PriceBook,
 ) -> RunResult {
     let rollout_key = format!("{env_id}/{}/{}", task.id, lane.slug());
     let artifacts =
@@ -1208,6 +1336,11 @@ async fn run_one(
                     tool_call_count: 0,
                     turn_count: 0,
                     total_tokens: None,
+                    prompt_tokens: None,
+                    completion_tokens: None,
+                    cache_read_tokens: None,
+                    price_model: None,
+                    cost_usd: None,
                     agent_error: Some(format!("artifact directory error: {e}")),
                     stage_count: task.stages.len(),
                     format_attempts: 0,
@@ -1257,13 +1390,17 @@ async fn run_one(
         &artifacts,
         &mut metadata,
         &rollout_key,
+        prices,
     )
     .await
     {
         Ok(result) => result,
         Err(e) => {
             let error = format!("infra: {e}");
-            agent_error_result(env_id, lane, task, &error, &artifacts, metadata, None).await
+            agent_error_result(
+                env_id, lane, task, &error, &artifacts, metadata, None, prices,
+            )
+            .await
         }
     }
 }
@@ -1379,6 +1516,7 @@ async fn grade_rollout(
     artifacts: &RunArtifacts,
     metadata: &mut serde_json::Value,
     rollout_key: &str,
+    prices: &PriceBook,
 ) -> Result<RunResult, RunError> {
     bench_mcp
         .begin_task(rollout_key, &task.result_schema, task.max_format_attempts)
@@ -1520,6 +1658,12 @@ async fn grade_rollout(
     metadata["turn_count"] = serde_json::Value::Number((run.turn_count as i64).into());
     metadata["total_tokens"] =
         serde_json::to_value(run.total_tokens).unwrap_or(serde_json::Value::Null);
+    metadata["prompt_tokens"] =
+        serde_json::to_value(run.prompt_tokens).unwrap_or(serde_json::Value::Null);
+    metadata["completion_tokens"] =
+        serde_json::to_value(run.completion_tokens).unwrap_or(serde_json::Value::Null);
+    metadata["cache_read_tokens"] =
+        serde_json::to_value(run.cache_read_tokens).unwrap_or(serde_json::Value::Null);
 
     let submission = bench_mcp.take_submission(rollout_key).await;
     match submission {
@@ -1541,6 +1685,7 @@ async fn grade_rollout(
                 metadata,
                 failed.attempts,
                 None,
+                prices,
             )
             .await);
         }
@@ -1554,6 +1699,7 @@ async fn grade_rollout(
                     artifacts,
                     metadata.clone(),
                     Some(&run),
+                    prices,
                 )
                 .await);
             }
@@ -1567,6 +1713,7 @@ async fn grade_rollout(
                 metadata,
                 0,
                 None,
+                prices,
             )
             .await);
         }
@@ -1608,6 +1755,7 @@ async fn grade_rollout(
                             artifacts,
                             metadata.clone(),
                             Some(&run),
+                            prices,
                         )
                         .await);
                     }
@@ -1637,6 +1785,7 @@ async fn grade_rollout(
                             artifacts,
                             metadata.clone(),
                             Some(&run),
+                            prices,
                         )
                         .await);
                     }
@@ -1673,6 +1822,7 @@ async fn grade_rollout(
                 metadata,
                 accepted.attempts,
                 None,
+                prices,
             )
             .await);
         }
@@ -1813,6 +1963,9 @@ async fn drive_stage(
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
     run.stage_tokens = None;
+    run.stage_prompt_tokens = None;
+    run.stage_completion_tokens = None;
+    run.stage_cache_read_tokens = None;
 
     let mut stream = client
         .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
@@ -1847,11 +2000,24 @@ async fn drive_stage(
         }
     }
     coalescer.flush().await;
+    // Sum each stage's final cumulative usage into the run totals, field by field, so the persisted
+    // split stays consistent with `total_tokens`.
     if let Some(stage_tokens) = run.stage_tokens {
         run.total_tokens = Some(run.total_tokens.unwrap_or(0) + stage_tokens);
     }
+    add_stage_into(&mut run.prompt_tokens, run.stage_prompt_tokens);
+    add_stage_into(&mut run.completion_tokens, run.stage_completion_tokens);
+    add_stage_into(&mut run.cache_read_tokens, run.stage_cache_read_tokens);
 
     Ok(combine_errors(run.stream_error.clone(), stream_parse_error))
+}
+
+/// Fold one stage's value into a run-level running total, leaving the total `None` until at least one
+/// stage reports (so "never measured" stays distinct from a measured zero).
+fn add_stage_into(total: &mut Option<i64>, stage: Option<i64>) {
+    if let Some(stage) = stage {
+        *total = Some(total.unwrap_or(0) + stage);
+    }
 }
 
 fn combine_errors(first: Option<String>, second: Option<String>) -> Option<String> {
@@ -2043,12 +2209,33 @@ async fn finish(
     metadata: &mut serde_json::Value,
     format_attempts: usize,
     agent_error: Option<String>,
+    prices: &PriceBook,
 ) -> RunResult {
+    let prompt_tokens = run.and_then(|r| r.prompt_tokens);
+    let completion_tokens = run.and_then(|r| r.completion_tokens);
+    let cache_read_tokens = run.and_then(|r| r.cache_read_tokens);
+    let price_model = lane.price_model();
+    let cost_usd = prices.cost(
+        prompt_tokens,
+        completion_tokens,
+        cache_read_tokens,
+        price_model.as_deref(),
+    );
     if let serde_json::Value::Object(map) = metadata {
         map["finished_at"] = serde_json::Value::String(timestamp());
         map["outcome"] = serde_json::Value::String(outcome.value().to_string());
         map["agent_error"] = serde_json::to_value(&agent_error).unwrap_or(serde_json::Value::Null);
         map["format_attempts"] = serde_json::Value::Number((format_attempts as i64).into());
+        // insert (not index-assign): unlike the keys above, run_one does not pre-seed these, and
+        // indexing a missing key on a serde_json Map panics.
+        map.insert(
+            "price_model".to_string(),
+            serde_json::to_value(&price_model).unwrap_or(serde_json::Value::Null),
+        );
+        map.insert(
+            "cost_usd".to_string(),
+            serde_json::to_value(cost_usd).unwrap_or(serde_json::Value::Null),
+        );
     }
     artifacts.write_run(metadata).await;
     RunResult {
@@ -2062,6 +2249,11 @@ async fn finish(
         tool_call_count: run.map(|r| r.tool_calls.len()).unwrap_or(0),
         turn_count: run.map(|r| r.turn_count).unwrap_or(0),
         total_tokens: run.and_then(|r| r.total_tokens),
+        prompt_tokens,
+        completion_tokens,
+        cache_read_tokens,
+        price_model,
+        cost_usd,
         agent_error,
         stage_count: task.stages.len(),
         format_attempts,
@@ -2077,6 +2269,7 @@ async fn agent_error_result(
     artifacts: &RunArtifacts,
     metadata: serde_json::Value,
     run: Option<&ChatRunResult>,
+    prices: &PriceBook,
 ) -> RunResult {
     artifacts.append_error("agent_error", error).await;
     let mut metadata = metadata;
@@ -2090,6 +2283,7 @@ async fn agent_error_result(
         &mut metadata,
         0,
         Some(error.to_string()),
+        prices,
     )
     .await
 }
@@ -2336,8 +2530,17 @@ impl<'a> StreamCoalescer<'a> {
                 if let Some(data) = event.get("data").and_then(|v| v.as_object())
                     && let Some(total) = data.get("totalTokens").and_then(|v| v.as_i64())
                 {
+                    let field = |key: &str| data.get(key).and_then(|v| v.as_i64());
                     self.artifacts
-                        .append("token_usage", serde_json::json!({"total_tokens": total}))
+                        .append(
+                            "token_usage",
+                            serde_json::json!({
+                                "total_tokens": total,
+                                "prompt_tokens": field("inputTokens"),
+                                "completion_tokens": field("outputTokens"),
+                                "cache_read_tokens": field("cacheReadTokens"),
+                            }),
+                        )
                         .await;
                 }
             }
@@ -2490,6 +2693,8 @@ async fn write_run_config(
     run_id: &str,
     plan: &[EnvPlan],
     max_workers: usize,
+    prices: &PriceBook,
+    price_status: &str,
 ) -> Result<(), RunError> {
     let environments: Vec<serde_json::Value> = plan
         .iter()
@@ -2511,11 +2716,15 @@ async fn write_run_config(
         .flat_map(|p| &p.lanes)
         .filter(|l| seen_lanes.insert(l.name.as_str()))
         .map(|l| {
+            let price_model = l.price_model();
+            let price = price_model.as_deref().and_then(|slug| prices.get(slug));
             serde_json::json!({
                 "name": l.name,
                 "provider": l.provider,
                 "model": l.model,
                 "base_url": l.base_url,
+                "price_model": price_model,
+                "price": price,
             })
         })
         .collect();
@@ -2541,6 +2750,11 @@ async fn write_run_config(
         "max_workers": max_workers,
         "git_commit": git_commit,
         "temperature": crate::client::BENCH_TEMPERATURE,
+        "pricing": {
+            "source": "openrouter",
+            "fetched_at": timestamp(),
+            "status": price_status,
+        },
     });
     fs::write(
         run_dir.join("config.json"),
@@ -2671,6 +2885,7 @@ mod tests {
             tasks,
             tools: vec![],
             share_backend: false,
+            fixture_mcp: false,
             platform: crate::config::types::PlatformConfig::default(),
         }
     }
@@ -2682,6 +2897,7 @@ mod tests {
             model: "gpt-4".to_string(),
             base_url: None,
             api_key_env: None,
+            openrouter_model: None,
         }
     }
 
@@ -2809,6 +3025,89 @@ mod tests {
         ));
     }
 
+    fn priced_book() -> PriceBook {
+        crate::pricing::parse_price_book(&serde_json::json!({
+            "data": [{ "id": "vendor/cheap", "pricing": { "prompt": "0.000001", "completion": "0.000002" } }]
+        }))
+    }
+
+    #[tokio::test]
+    async fn finish_writes_cost_to_run_json_and_result() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
+            .await
+            .unwrap();
+        let mut lane = dummy_lane("l1");
+        lane.provider = archestra_bench_core::Provider::Openrouter;
+        lane.model = "vendor/cheap".to_string();
+        let task = dummy_task("t1");
+        let run = ChatRunResult {
+            prompt_tokens: Some(1000),
+            completion_tokens: Some(500),
+            ..Default::default()
+        };
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::Passed,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            None,
+            &priced_book(),
+        )
+        .await;
+        // 1000 * 1e-6 + 500 * 2e-6 = 0.002
+        assert_eq!(result.cost_usd, Some(0.002));
+        assert_eq!(result.price_model.as_deref(), Some("vendor/cheap"));
+        assert_eq!(result.prompt_tokens, Some(1000));
+        assert_eq!(result.completion_tokens, Some(500));
+        // finish owns price_model/cost_usd in run.json (the token split is written upstream by grade_rollout).
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
+                .unwrap();
+        assert_eq!(written["cost_usd"], 0.002);
+        assert_eq!(written["price_model"], "vendor/cheap");
+    }
+
+    #[tokio::test]
+    async fn finish_leaves_cost_null_without_price_model() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
+            .await
+            .unwrap();
+        let lane = dummy_lane("l1"); // openai provider, no openrouter_model → no price_model
+        let task = dummy_task("t1");
+        let run = ChatRunResult {
+            prompt_tokens: Some(1000),
+            completion_tokens: Some(500),
+            ..Default::default()
+        };
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::Passed,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            None,
+            &priced_book(),
+        )
+        .await;
+        assert_eq!(result.cost_usd, None);
+        assert_eq!(result.price_model, None);
+    }
+
     #[tokio::test]
     async fn test_config_json_lists_each_lane_once_across_envs() {
         let envs = vec![
@@ -2824,7 +3123,9 @@ mod tests {
         let lanes = vec![dummy_lane("l1"), dummy_lane("l2")];
         let plan = build_run_plan(envs, lanes);
         let tmp = tempfile::tempdir().unwrap();
-        write_run_config(tmp.path(), "rid", &plan, 2).await.unwrap();
+        write_run_config(tmp.path(), "rid", &plan, 2, &PriceBook::default(), "ok")
+            .await
+            .unwrap();
         let config: serde_json::Value =
             serde_json::from_slice(&std::fs::read(tmp.path().join("config.json")).unwrap())
                 .unwrap();
@@ -2853,6 +3154,7 @@ mod tests {
             envs_dir: tmp.path().to_path_buf(),
             update_mcp_lock: false,
             platform_dir: None,
+            prices: Arc::new(PriceBook::default()),
         };
         let mut env = dummy_env("e", vec![dummy_task("t1")]);
         env.platform.tool_exposure_mode = crate::config::types::ToolExposureMode::Full;

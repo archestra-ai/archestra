@@ -21,6 +21,9 @@ interface RightSidePanelProps {
   // Artifact props
   artifact?: string | null;
 
+  /** Set when the chat belongs to a project — enables the pinned instructions. */
+  projectId?: string | null;
+
   // Browser props
   conversationId: string | undefined;
   /** Fallback agentId for pre-conversation case */
@@ -42,6 +45,7 @@ export function RightSidePanel({
   onClose,
   canShowBrowser,
   artifact,
+  projectId,
   conversationId,
   agentId,
   onCreateConversationWithUrl,
@@ -118,6 +122,7 @@ export function RightSidePanel({
             <ConversationFilesPanel
               conversationId={conversationId}
               artifact={artifact}
+              projectId={projectId}
               onClose={onClose}
             />
           )}

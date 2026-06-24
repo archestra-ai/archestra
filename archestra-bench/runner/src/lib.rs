@@ -3,10 +3,12 @@
 pub mod chat_stream;
 pub mod client;
 pub mod config;
+pub mod fixture_mcp;
 pub mod interactions;
 pub mod lifecycle;
 pub mod mcp_lock;
 pub mod mcp_server;
+pub mod pricing;
 pub mod results;
 pub mod run;
 pub mod seeding;

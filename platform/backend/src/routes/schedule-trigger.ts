@@ -176,6 +176,8 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: projectId,
           organizationId,
           userId: user.id,
+          // a project admin may see the project's schedules for oversight
+          allowAdminOversight: true,
         });
         actorUserId = undefined;
         actorUserIds = undefined;
@@ -659,6 +661,10 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId, headers }, reply) => {
+      // Access is owner / scheduledTask:admin (findAccessibleRunOrThrow) — the
+      // same gate as every other schedule op. Loading the run conversation can
+      // MINT one when it isn't linked yet (createAndLinkRunConversation below),
+      // so it stays on that existing permission rather than any project scope.
       const run = await findAccessibleRunOrThrow({
         triggerId: id,
         runId,
@@ -696,7 +702,9 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // scheduledTask:admin can access any trigger
+  // scheduledTask:admin can access any trigger (incl. ones inside a project).
+  // Project oversight of schedules rides this existing permission — there is no
+  // separate project:admin path here.
   const { success: isScheduledTaskAdmin } = await hasPermission(
     { scheduledTask: ["admin"] },
     params.headers,

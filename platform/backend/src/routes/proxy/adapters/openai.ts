@@ -384,7 +384,11 @@ export class OpenAIRequestAdapter
 
   async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
+      await convertToolResultsToToon(
+        this.request.messages,
+        model,
+        this.provider,
+      );
     this.request = {
       ...this.request,
       messages: compressedMessages,
@@ -1231,11 +1235,12 @@ export class OpenAIStreamAdapter
 export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
+  provider: SupportedProvider,
 ): Promise<{
   messages: OpenAiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("openai");
+  const tokenizer = getTokenizer(provider);
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -1246,7 +1251,7 @@ export async function convertToolResultsToToon(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
-          provider: "openai",
+          provider,
         },
         "convertToolResultsToToon: tool message found",
       );
@@ -1282,7 +1287,7 @@ export async function convertToolResultsToToon(
                 tokensBefore,
                 tokensAfter,
                 toonPreview: compressed.substring(0, 150),
-                provider: "openai",
+                provider,
               },
               "convertToolResultsToToon: compressed",
             );
@@ -1291,7 +1296,7 @@ export async function convertToolResultsToToon(
                 toolCallId: message.tool_call_id,
                 before: noncompressed,
                 after: compressed,
-                provider: "openai",
+                provider,
                 supposedToBeJson: parsed,
               },
               "convertToolResultsToToon: before/after",
@@ -1310,7 +1315,7 @@ export async function convertToolResultsToToon(
               toolCallId: message.tool_call_id,
               tokensBefore,
               tokensAfter,
-              provider: "openai",
+              provider,
             },
             "Skipping TOON compression - compressed output has more tokens",
           );
@@ -1346,7 +1351,7 @@ export async function convertToolResultsToToon(
     toonCostSavings = await ModelModel.calculateCostSavings(
       model,
       tokensSaved,
-      "openai",
+      provider,
     );
   }
 

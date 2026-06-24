@@ -1252,6 +1252,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
+      // App-backed catalogs are created and removed through the Apps lifecycle;
+      // deleting one here would orphan its app. (Mirrors the install/create guards.)
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be deleted here.",
+        );
+      }
+
       // Enforce ownership: non-admins can only delete own personal items
       if (
         !isAdmin &&
@@ -1295,6 +1304,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (isBuiltInCatalogId(catalogItem.id)) {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
+      }
+
+      // App-backed catalogs are managed through the Apps lifecycle (see above).
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be deleted here.",
+        );
       }
 
       // Enforce ownership: non-admins can only delete own personal items

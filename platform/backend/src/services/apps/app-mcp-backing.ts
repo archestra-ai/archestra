@@ -42,67 +42,84 @@ export async function createAppBacking(params: {
   teamIds: string[];
 }): Promise<void> {
   const { app, scope, environmentId, userId, organizationId, teamIds } = params;
-  const catalog = await InternalMcpCatalogModel.create(
-    {
+  // Created in sequence (no single transaction — the model read-backs would
+  // deadlock a single-connection pool). Track the catalog/server so a
+  // mid-sequence failure can roll back the partial backing; the caller removes
+  // the app row.
+  let catalog: { id: string } | undefined;
+  let server: { id: string } | undefined;
+  try {
+    catalog = await InternalMcpCatalogModel.create(
+      {
+        name: app.name,
+        description: app.description ?? null,
+        serverType: "app",
+        scope,
+        environmentId,
+        requiresAuth: false,
+        ...(scope === "team" && teamIds.length > 0 ? { teams: teamIds } : {}),
+      },
+      { organizationId, authorId: userId },
+    );
+
+    server = await McpServerModel.create({
       name: app.name,
-      description: app.description ?? null,
+      catalogId: catalog.id,
       serverType: "app",
       scope,
-      environmentId,
-      requiresAuth: false,
-      ...(scope === "team" && teamIds.length > 0 ? { teams: teamIds } : {}),
-    },
-    { organizationId, authorId: userId },
-  );
+      ownerId: userId,
+      teamId: scope === "team" ? (teamIds[0] ?? null) : null,
+      userId,
+      localInstallationStatus: "success",
+    });
 
-  const server = await McpServerModel.create({
-    name: app.name,
-    catalogId: catalog.id,
-    serverType: "app",
-    scope,
-    ownerId: userId,
-    teamId: scope === "team" ? (teamIds[0] ?? null) : null,
-    userId,
-    localInstallationStatus: "success",
-  });
+    // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
+    // pre-existing NULL-catalog proxy tool of the same name). The launch-tool
+    // name is suffixed with the app id so two apps that legitimately share a
+    // name across scopes (the per-scope name index allows it) don't produce the
+    // same `<name>__show_app` and shadow each other in the gateway's
+    // dedupe-by-name when both are assigned to one profile.
+    const tool = await ToolModel.create({
+      name: ToolModel.slugifyName(
+        `${app.name}-${app.id.slice(0, 8)}`,
+        APP_SHOW_TOOL_NAME,
+      ),
+      description: `Open the "${app.name}" app and render its UI.`,
+      parameters: { type: "object", properties: {} },
+      catalogId: catalog.id,
+      meta: {
+        _meta: { ui: { resourceUri: getArchestraAppResourceUri(app.id) } },
+      },
+    });
 
-  // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
-  // pre-existing NULL-catalog proxy tool of the same name and its assignments).
-  // The catalog is brand-new, so a direct insert can't collide.
-  //
-  // Slugify the name per the discovered-tool convention (`<server>__show_app`)
-  // so that when multiple apps are assigned to the same gateway profile their
-  // launch tools stay distinct — an unprefixed "show_app" would collide in the
-  // gateway's dedupe-by-name and shadow all but one app.
-  const tool = await ToolModel.create({
-    name: ToolModel.slugifyName(server.name, APP_SHOW_TOOL_NAME),
-    description: `Open the "${app.name}" app and render its UI.`,
-    parameters: { type: "object", properties: {} },
-    catalogId: catalog.id,
-    meta: {
-      _meta: { ui: { resourceUri: getArchestraAppResourceUri(app.id) } },
-    },
-  });
+    // Auto-assign show_app to the creator's personal gateway so they can connect
+    // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
+    // call short-circuits in-process, but dynamic is the only mode that fits an
+    // org-shared, viewer-scoped app.
+    const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+      userId,
+      organizationId,
+    });
+    await AgentToolModel.bulkCreateForAgentsAndTools(
+      [personalGateway.id],
+      [tool.id],
+      { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
+    );
 
-  // Auto-assign show_app to the creator's personal gateway so they can connect
-  // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
-  // call short-circuits in-process, but dynamic is the only mode that fits an
-  // org-shared, viewer-scoped app.
-  const personalGateway = await AgentModel.ensurePersonalMcpGateway({
-    userId,
-    organizationId,
-  });
-  await AgentToolModel.bulkCreateForAgentsAndTools(
-    [personalGateway.id],
-    [tool.id],
-    { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
-  );
-
-  await AppModel.setMcpServerId(app.id, server.id);
-  logger.info(
-    { appId: app.id, mcpServerId: server.id, catalogId: catalog.id },
-    "Created MCP backing for app",
-  );
+    await AppModel.setMcpServerId(app.id, server.id);
+    logger.info(
+      { appId: app.id, mcpServerId: server.id, catalogId: catalog.id },
+      "Created MCP backing for app",
+    );
+  } catch (error) {
+    // Roll back partial backing so a retry isn't blocked by the catalog's
+    // name-uniqueness index (delete the server before its catalog — the catalog
+    // delete then cascades the show_app tool and its assignments).
+    if (server) await McpServerModel.delete(server.id).catch(() => {});
+    if (catalog)
+      await InternalMcpCatalogModel.delete(catalog.id).catch(() => {});
+    throw error;
+  }
 }
 
 /**
@@ -122,19 +139,11 @@ export async function syncAppBacking(app: App): Promise<void> {
     if (server.scope !== app.scope) {
       await McpServerModel.setScope(server.id, app.scope);
     }
-    // Keep the backing server name in lockstep with the app. constructServerName
-    // leaves non-local types unchanged, so an app server's name has no scope
-    // suffix and tracks app.name exactly. Re-slugify the launch tool too so its
-    // gateway name (<server>__show_app) doesn't go stale and a later app reusing
-    // the freed name can't reintroduce a dedupe collision.
+    // Keep the backing server name in lockstep with the app. The launch tool's
+    // name is id-suffixed (stable + globally unique), so it is NOT re-slugified
+    // on rename — renaming can't reintroduce a dedupe collision.
     if (server.name !== app.name) {
       await McpServerModel.update(server.id, { name: app.name });
-      if (server.catalogId) {
-        await ToolModel.renameToolsByCatalogId(
-          server.catalogId,
-          ToolModel.slugifyName(app.name, APP_SHOW_TOOL_NAME),
-        );
-      }
     }
     await McpServerModel.setTeam(server.id, teamIds[0] ?? null);
     if (server.catalogId) {

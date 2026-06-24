@@ -238,6 +238,7 @@ describe("MCP backing for apps", () => {
     const created = await AppModel.findById(appId);
     const catalogId = (await McpServerModel.findById(created!.mcpServerId!))!
       .catalogId;
+    const [toolBefore] = await ToolModel.findByCatalogIdWithMeta(catalogId);
 
     const res = await app.inject({
       method: "PATCH",
@@ -252,9 +253,11 @@ describe("MCP backing for apps", () => {
     const renamedServer = await McpServerModel.findById(created!.mcpServerId!);
     expect(renamedServer?.scope).toBe("org");
     expect(renamedServer?.name).toBe("Renamed Dashboard");
-    // The launch tool is re-slugified to track the new name.
-    const [renamedTool] = await ToolModel.findByCatalogIdWithMeta(catalogId);
-    expect(renamedTool.name).toBe("renamed_dashboard__show_app");
+    // The launch tool name is id-suffixed (stable + globally unique), so a
+    // rename does NOT re-slugify it — that can't reintroduce a dedupe collision.
+    const [toolAfter] = await ToolModel.findByCatalogIdWithMeta(catalogId);
+    expect(toolAfter.name).toBe(toolBefore.name);
+    expect(toolAfter.name.endsWith("__show_app")).toBe(true);
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

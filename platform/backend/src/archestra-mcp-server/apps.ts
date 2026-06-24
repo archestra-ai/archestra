@@ -45,6 +45,7 @@ import {
 } from "@/services/apps/app-diagnostics";
 import {
   createAppBacking,
+  deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
@@ -1159,6 +1160,7 @@ const registry = defineArchestraTools([
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
       }
+      await deleteAppBacking(app);
       logger.info(
         { appId: args.appId, userId: context.userId },
         "App deleted via Archestra tool",

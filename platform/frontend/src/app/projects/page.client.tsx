@@ -41,7 +41,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
   parseProjectScope,
-  scopeUsesPinnedGrouping,
   toApiProjectScope,
 } from "@/lib/projects/project-list-scope";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
@@ -70,9 +69,19 @@ function ProjectsList() {
   const searchParams = useSearchParams();
   const scope = parseProjectScope(searchParams.get("scope"));
   const search = searchParams.get("search") ?? undefined;
+  const csvParam = (key: string): string[] | undefined => {
+    const values = searchParams.get(key)?.split(",").filter(Boolean);
+    return values && values.length > 0 ? values : undefined;
+  };
+  const teamIds = csvParam("teamIds");
+  const authorIds = csvParam("authorIds");
+  const excludeAuthorIds = csvParam("excludeAuthorIds");
   const { data, isPending } = useProjects({
     scope: toApiProjectScope(scope),
     search,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
   });
   const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
@@ -81,15 +90,21 @@ function ProjectsList() {
   );
   const [deletingProject, setDeletingProject] =
     useState<ProjectListItem | null>(null);
+  // Pinned-first grouping applies in every scope: oversight projects simply
+  // aren't pinnable, so they fall into the unpinned section on their own.
   const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
-  const usesPinnedGrouping = scopeUsesPinnedGrouping(scope);
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
-  const hasActiveFilter = scope !== "all" || !!search;
+  const hasActiveFilter =
+    scope !== "all" ||
+    !!search ||
+    !!teamIds ||
+    !!authorIds ||
+    !!excludeAuthorIds;
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
@@ -159,7 +174,7 @@ function ProjectsList() {
                   : "No projects yet"}
             </p>
           </div>
-        ) : usesPinnedGrouping ? (
+        ) : (
           <>
             {pinnedProjects.length > 0 && (
               <ProjectSection
@@ -178,14 +193,6 @@ function ProjectsList() {
               onDelete={setDeletingProject}
             />
           </>
-        ) : (
-          // Admin "Other users" oversight: flat list, no pinned grouping.
-          <ProjectSection
-            projects={projects}
-            onTogglePin={togglePin}
-            onEdit={setEditingProject}
-            onDelete={setDeletingProject}
-          />
         )}
       </div>
     </PageLayout>

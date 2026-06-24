@@ -58,53 +58,79 @@ class ProjectService {
   }
 
   /**
-   * Projects for the list view, scoped + searched. `all` (no scope) and
-   * `personal`/`shared` draw from the caller's accessible set; `others` is the
-   * admin oversight bucket (projects owned by other members, not shared to the
-   * caller) and is empty unless `isProjectAdmin`.
+   * Projects for the list view, scoped + searched, mirroring the Agents filter.
+   * `scope` is the project's share visibility (mutually exclusive): `personal`
+   * (private), `team` (shared with teams — narrow with `teamIds`), or `org`
+   * (org-wide); omitted = everything the caller can see. Admins draw from ALL
+   * org projects and can filter `personal` by owner via `authorIds` /
+   * `excludeAuthorIds` (the "My / Other users" sub-filter); everyone else is
+   * limited to their accessible set. `viewerRole` is the caller's real
+   * relationship to each project (owner / shared / admin-oversight).
    */
   async list(params: {
     organizationId: string;
     userId: string;
     isProjectAdmin?: boolean;
     scope?: ProjectListScope;
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
     search?: string;
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
-    let candidates: {
-      project: Project & { visibility: ProjectShareVisibility | null };
-      viewerRole: ProjectViewerRole;
-    }[];
-    if (scope === "others") {
-      if (!params.isProjectAdmin) return [];
-      const accessible = await ProjectShareModel.listAccessibleProjects({
-        userId,
-        organizationId,
-      });
-      const accessibleIds = new Set(accessible.map((p) => p.id));
-      const others = await ProjectShareModel.listOrgProjectsOwnedByOthers({
-        organizationId,
-        excludeUserId: userId,
-      });
-      candidates = others
-        .filter((project) => !accessibleIds.has(project.id))
-        .map((project) => ({ project, viewerRole: "admin" as const }));
-    } else {
-      const accessible = await ProjectShareModel.listAccessibleProjects({
-        userId,
-        organizationId,
-      });
-      candidates = accessible.map((project) => ({
-        project,
-        viewerRole:
-          project.userId === userId ? ("owner" as const) : ("shared" as const),
-      }));
-      if (scope === "personal") {
-        candidates = candidates.filter((c) => c.viewerRole === "owner");
-      } else if (scope === "shared") {
-        candidates = candidates.filter((c) => c.viewerRole === "shared");
-      }
+    // What the caller can actually reach (owner ∪ org/team-shared-to-them): the
+    // non-admin base, and how admins tell "shared" from "oversight" access.
+    const accessible = await ProjectShareModel.listAccessibleProjects({
+      userId,
+      organizationId,
+    });
+    const accessibleIds = new Set(accessible.map((p) => p.id));
+
+    // A project:admin oversees every project; everyone else sees only theirs.
+    const base = params.isProjectAdmin
+      ? await ProjectShareModel.listAllOrgProjects({ organizationId })
+      : accessible;
+
+    let candidates = base.map((project) => ({
+      project,
+      viewerRole: (project.userId === userId
+        ? "owner"
+        : accessibleIds.has(project.id)
+          ? "shared"
+          : "admin") as ProjectViewerRole,
+    }));
+
+    // scope filters on the project's share visibility.
+    if (scope === "personal") {
+      candidates = candidates.filter((c) => c.project.visibility === null);
+    } else if (scope === "team") {
+      candidates = candidates.filter((c) => c.project.visibility === "team");
+    } else if (scope === "org") {
+      candidates = candidates.filter(
+        (c) => c.project.visibility === "organization",
+      );
+    }
+
+    // admin "My / Other users" owner sub-filter (honored upstream for admins only).
+    if (params.authorIds?.length) {
+      const include = new Set(params.authorIds);
+      candidates = candidates.filter((c) => include.has(c.project.userId));
+    }
+    if (params.excludeAuthorIds?.length) {
+      const exclude = new Set(params.excludeAuthorIds);
+      candidates = candidates.filter((c) => !exclude.has(c.project.userId));
+    }
+
+    // teamIds narrows scope=team to projects shared with any chosen team.
+    if (params.teamIds?.length) {
+      const want = new Set(params.teamIds);
+      const shareTeams = await ProjectShareModel.getShareTeamIdsForProjects(
+        candidates.map((c) => c.project.id),
+      );
+      candidates = candidates.filter((c) =>
+        (shareTeams.get(c.project.id) ?? []).some((t) => want.has(t)),
+      );
     }
 
     const query = params.search?.trim().toLowerCase();
@@ -115,6 +141,14 @@ class ProjectService {
           (project.description?.toLowerCase().includes(query) ?? false),
       );
     }
+
+    // owner-first then newest — a stable order under the frontend's pinned grouping.
+    candidates.sort((a, b) => {
+      const aOwn = a.viewerRole === "owner" ? 0 : 1;
+      const bOwn = b.viewerRole === "owner" ? 0 : 1;
+      if (aOwn !== bOwn) return aOwn - bOwn;
+      return b.project.createdAt.getTime() - a.project.createdAt.getTime();
+    });
 
     const projectIds = candidates.map((c) => c.project.id);
     const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];

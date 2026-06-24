@@ -20,11 +20,15 @@ export const ProjectViewerRoleSchema = z.enum(["owner", "shared", "admin"]);
 export type ProjectViewerRole = z.infer<typeof ProjectViewerRoleSchema>;
 
 /**
- * Projects-list scope filter (mirrors the Agents page personal/shared filter).
- * Omitted = all accessible (owner ∪ shared). `others` is admin-only: projects
- * owned by other members that aren't shared with the caller.
+ * Projects-list scope filter, mirroring the Agents page. A project's "scope" is
+ * its share visibility — mutually exclusive like an agent's:
+ * - `personal` — private (no share),
+ * - `team`     — shared with teams (`visibility=team`; narrow with `teamIds`),
+ * - `org`      — shared org-wide (`visibility=organization`).
+ * Omitted = all the caller can see. Admins additionally filter `personal` by
+ * owner via `authorIds` / `excludeAuthorIds` (the "My / Other users" sub-filter).
  */
-export const ProjectListScopeSchema = z.enum(["personal", "shared", "others"]);
+export const ProjectListScopeSchema = z.enum(["personal", "team", "org"]);
 export type ProjectListScope = z.infer<typeof ProjectListScopeSchema>;
 
 export const SelectProjectSchema = createSelectSchema(schema.projectsTable);

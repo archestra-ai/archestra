@@ -95,24 +95,19 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     actingUser = admin;
 
-    // Not in the default (own ∪ shared) list...
-    const allList = await app.inject({ method: "GET", url: "/api/projects" });
-    expect(allList.json<unknown[]>()).toEqual([]);
-
-    // ...but surfaced under the admin-only "others" scope, tagged + with owner.
-    const others = await app.inject({
+    // The other member's PRIVATE project surfaces for the admin under
+    // scope=personal, tagged as oversight ("admin") with the owner's name.
+    const personal = await app.inject({
       method: "GET",
-      url: "/api/projects?scope=others",
+      url: "/api/projects?scope=personal",
     });
     const items =
-      others.json<
+      personal.json<
         Array<{ name: string; viewerRole: string; ownerName: string | null }>
       >();
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({
-      name: "owned-by-other",
-      viewerRole: "admin",
-    });
+    const overseen = items.find((p) => p.name === "owned-by-other");
+    expect(overseen).toMatchObject({ viewerRole: "admin" });
+    expect(overseen?.ownerName).toBe(otherOwner.name);
 
     // Detail is readable, tagged admin, and exposes shareTeamIds for the edit dialog.
     const detail = await app.inject({
@@ -155,12 +150,21 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     await makeMember(member.id, organizationId, {});
     actingUser = member;
 
-    // scope=others is a no-op (empty) for non-admins.
-    const others = await app.inject({
-      method: "GET",
-      url: "/api/projects?scope=others",
-    });
-    expect(others.json<unknown[]>()).toEqual([]);
+    // A non-admin never sees another member's private project — not in the
+    // default list, nor under scope=personal.
+    expect(
+      (await app.inject({ method: "GET", url: "/api/projects" })).json<
+        unknown[]
+      >(),
+    ).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/projects?scope=personal",
+        })
+      ).json<unknown[]>(),
+    ).toEqual([]);
 
     // ...and they cannot edit or delete it (404, same as "not found").
     const edit = await app.inject({

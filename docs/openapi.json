@@ -205455,15 +205455,15 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see: their own plus ones shared with their teams or the whole organization. `scope` filters personal/shared; `scope=others` (project admins only) lists projects owned by other members for oversight. `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
         "parameters": [
           {
             "schema": {
               "type": "string",
               "enum": [
                 "personal",
-                "shared",
-                "others"
+                "team",
+                "org"
               ]
             },
             "in": "query",
@@ -205477,6 +205477,42 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "teamIds",
+            "required": false,
+            "description": "Team IDs (comma-separated); only used when scope=team."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "authorIds",
+            "required": false,
+            "description": "Owner user IDs (comma-separated). Admin-only; used with scope=personal."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false,
+            "description": "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal."
           }
         ],
         "responses": {
@@ -206139,7 +206175,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's name, description, and/or icon (owner only). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Update a project's name, description, and/or icon (owner or a project admin). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -206443,7 +206479,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Delete a project (owner only). Its chats survive as ordinary conversations; its files are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
         "parameters": [
           {
             "schema": {
@@ -206722,7 +206758,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility \"none\" unshares).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Set who can see the project (owner or a project admin): the whole organization, specific teams, or nobody (visibility \"none\" unshares).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {

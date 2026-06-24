@@ -42,15 +42,26 @@ export function useProjects(
 ) {
   const scope = options?.scope;
   const search = options?.search?.trim() || undefined;
+  const teamIds = options?.teamIds;
+  const authorIds = options?.authorIds;
+  const excludeAuthorIds = options?.excludeAuthorIds;
   return useQuery({
     queryKey: [
       "projects",
       "list",
-      { scope: scope ?? null, search: search ?? null },
+      {
+        scope: scope ?? null,
+        search: search ?? null,
+        teamIds: teamIds ?? null,
+        authorIds: authorIds ?? null,
+        excludeAuthorIds: excludeAuthorIds ?? null,
+      },
     ],
     enabled: options?.enabled ?? true,
     queryFn: async () => {
-      const { data, error } = await getProjects({ query: { scope, search } });
+      const { data, error } = await getProjects({
+        query: { scope, search, teamIds, authorIds, excludeAuthorIds },
+      });
       if (error) {
         handleApiError(error);
         return null;

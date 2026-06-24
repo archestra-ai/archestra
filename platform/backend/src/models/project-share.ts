@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Project, ProjectShare, ProjectShareVisibility } from "@/types";
 
@@ -175,27 +175,49 @@ class ProjectShareModel {
   }
 
   /**
-   * Every project in the org owned by someone other than `excludeUserId`, with
-   * share visibility attached — newest first. Backs the admin "Other users"
-   * oversight view; the caller (service) filters out projects the admin can
-   * already reach via share so the buckets stay non-overlapping.
+   * Every project in the org, with share visibility attached — newest first.
+   * Backs the admin filter base set (a `project:admin` can see/oversee any
+   * project); the service derives each project's viewerRole from the caller's
+   * real access path.
    */
-  static async listOrgProjectsOwnedByOthers(params: {
+  static async listAllOrgProjects(params: {
     organizationId: string;
-    excludeUserId: string;
   }): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
-    const owned = await db
+    const projects = await db
       .select()
       .from(schema.projectsTable)
-      .where(
-        and(
-          eq(schema.projectsTable.organizationId, params.organizationId),
-          ne(schema.projectsTable.userId, params.excludeUserId),
-        ),
-      );
-    return (await ProjectShareModel.attachVisibility(owned)).sort(
+      .where(eq(schema.projectsTable.organizationId, params.organizationId));
+    return (await ProjectShareModel.attachVisibility(projects)).sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
+  }
+
+  /**
+   * Team ids each project is shared with, keyed by project id (team-shared
+   * projects only). One query; backs the `scope=team` + `teamIds` filter.
+   */
+  static async getShareTeamIdsForProjects(
+    projectIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        projectId: schema.projectSharesTable.projectId,
+        teamId: schema.projectShareTeamsTable.teamId,
+      })
+      .from(schema.projectSharesTable)
+      .innerJoin(
+        schema.projectShareTeamsTable,
+        eq(schema.projectSharesTable.id, schema.projectShareTeamsTable.shareId),
+      )
+      .where(inArray(schema.projectSharesTable.projectId, projectIds));
+    const byProject = new Map<string, string[]>();
+    for (const { projectId, teamId } of rows) {
+      const list = byProject.get(projectId) ?? [];
+      list.push(teamId);
+      byProject.set(projectId, list);
+    }
+    return byProject;
   }
 
   /** Attach each project's share visibility (null = unshared) in one query. */

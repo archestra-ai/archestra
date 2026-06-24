@@ -1,14 +1,9 @@
 /**
- * The projects-list scope filter (mirrors the Agents page personal/shared
- * filter). `all` is the default view (own + shared); `others` is the admin-only
- * oversight view of other members' projects.
+ * The projects-list scope filter, mirroring the Agents page. Scope is the
+ * project's share visibility: `personal` (private), `team` (shared with teams),
+ * or `org` (org-wide). `all` is the default — everything the viewer can see.
  */
-export const PROJECT_SCOPE_VALUES = [
-  "all",
-  "personal",
-  "shared",
-  "others",
-] as const;
+export const PROJECT_SCOPE_VALUES = ["all", "personal", "team", "org"] as const;
 
 export type ProjectScopeValue = (typeof PROJECT_SCOPE_VALUES)[number];
 
@@ -25,15 +20,6 @@ export function parseProjectScope(param: string | null): ProjectScopeValue {
  */
 export function toApiProjectScope(
   scope: ProjectScopeValue,
-): "personal" | "shared" | "others" | undefined {
+): "personal" | "team" | "org" | undefined {
   return scope === "all" ? undefined : scope;
-}
-
-/**
- * Pinned grouping applies only where projects are pinnable to the viewer. The
- * admin "Other users" oversight list is shown flat — no pinned grouping, no pin
- * action (those projects can't be pinned and aren't the viewer's own).
- */
-export function scopeUsesPinnedGrouping(scope: ProjectScopeValue): boolean {
-  return scope !== "others";
 }

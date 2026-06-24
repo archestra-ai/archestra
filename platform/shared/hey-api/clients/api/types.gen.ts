@@ -53594,8 +53594,20 @@ export type GetProjectsData = {
     body?: never;
     path?: never;
     query?: {
-        scope?: 'personal' | 'shared' | 'others';
+        scope?: 'personal' | 'team' | 'org';
         search?: string;
+        /**
+         * Team IDs (comma-separated); only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
     };
     url: '/api/projects';
 };

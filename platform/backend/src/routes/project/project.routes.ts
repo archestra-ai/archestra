@@ -18,6 +18,12 @@ import {
   SandboxFileListItemSchema,
 } from "@/types";
 
+/** A comma-separated query param parsed into a string[] (mirrors the agents list). */
+const CommaSeparatedIds = z.preprocess(
+  (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
+  z.array(z.string()),
+);
+
 /**
  * Projects: named collections of chats that own a set of files. Read access
  * follows the project share (org / teams / owner-only); mutations are
@@ -76,15 +82,25 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProjects,
         description:
-          "List projects the caller can see: their own plus ones shared with " +
-          "their teams or the whole organization. `scope` filters " +
-          "personal/shared; `scope=others` (project admins only) lists projects " +
-          "owned by other members for oversight. `search` matches name + " +
+          "List projects the caller can see. `scope` is the project's share " +
+          "visibility: `personal` (private), `team` (shared with teams — narrow " +
+          "with `teamIds`), or `org` (org-wide); omitted = all visible. Admins " +
+          "additionally filter `personal` by owner via `authorIds` / " +
+          "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
           "description.",
         tags: ["Projects"],
         querystring: z.object({
           scope: ProjectListScopeSchema.optional(),
           search: z.string().optional(),
+          teamIds: CommaSeparatedIds.optional().describe(
+            "Team IDs (comma-separated); only used when scope=team.",
+          ),
+          authorIds: CommaSeparatedIds.optional().describe(
+            "Owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          excludeAuthorIds: CommaSeparatedIds.optional().describe(
+            "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
       },
@@ -101,6 +117,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         isProjectAdmin,
         scope: query.scope,
+        teamIds: query.teamIds,
+        // The owner sub-filter is admin-only; ignore it for everyone else.
+        authorIds: isProjectAdmin ? query.authorIds : undefined,
+        excludeAuthorIds: isProjectAdmin ? query.excludeAuthorIds : undefined,
         search: query.search,
       });
     },

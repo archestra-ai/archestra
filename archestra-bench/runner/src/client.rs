@@ -1193,7 +1193,12 @@ enum SandboxReadiness {
 fn sandbox_readiness(body: &JsonValue) -> SandboxReadiness {
     match body.get("sandbox").and_then(|v| v.as_str()) {
         Some("ready") => SandboxReadiness::Ready,
-        None | Some("initializing") => SandboxReadiness::Pending,
+        Some("initializing") => SandboxReadiness::Pending,
+        // No field: a backend that predates it — e.g. a deployed image lagging this runner (the bench
+        // image layers a freshly-built runner over the live platform image). A current backend always
+        // emits the field, so absence can only mean "can't report it"; fall back to DB-only readiness
+        // and proceed rather than poll out the deadline.
+        None => SandboxReadiness::Ready,
         Some(other) => {
             let reason = body
                 .get("sandboxReason")
@@ -1219,10 +1224,10 @@ mod tests {
             sandbox_readiness(&json!({"sandbox": "initializing"})),
             SandboxReadiness::Pending
         );
-        // absent field (older backend) is treated as still-warming, not fatal.
+        // absent field (older/lagging backend) falls back to DB-only readiness: proceed, don't gate.
         assert_eq!(
             sandbox_readiness(&json!({"database": "connected"})),
-            SandboxReadiness::Pending
+            SandboxReadiness::Ready
         );
         assert_eq!(
             sandbox_readiness(&json!({"sandbox": "disabled", "sandboxReason": "disabled"})),

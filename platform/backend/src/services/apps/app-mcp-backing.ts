@@ -1,4 +1,5 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
+import type { Transaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -28,35 +29,37 @@ const APP_SHOW_TOOL_NAME = "show_app";
  * Make an app a first-class catalog entity: create its backing
  * `internal_mcp_catalog` + `mcp_server` rows and a `show_app` tool, then link
  * the app to the server. The backing server is `serverType: "app"` — it opts
- * out of K8s deploy / install / discovery and is served in-process. Best-effort:
- * a failure here is logged and swallowed so app creation still succeeds (the app
- * keeps working on the legacy `/api/mcp/app/:appId` path, just without the
- * unified server surface).
+ * out of K8s deploy / install / discovery and is served in-process. Mandatory:
+ * pass the app-creation transaction so the app and its backing commit (or roll
+ * back) atomically — an app must never exist without backing, since the catalog
+ * is the single source of truth for its visibility + environment.
  */
-export async function createAppBacking(params: {
-  app: App;
-  userId: string;
-  organizationId: string;
-  teamIds: string[];
-}): Promise<void> {
+export async function createAppBacking(
+  params: {
+    app: App;
+    userId: string;
+    organizationId: string;
+    teamIds: string[];
+  },
+  tx?: Transaction,
+): Promise<void> {
   const { app, userId, organizationId, teamIds } = params;
-  try {
-    const catalog = await InternalMcpCatalogModel.create(
-      {
-        name: app.name,
-        description: app.description ?? null,
-        serverType: "app",
-        scope: app.scope,
-        environmentId: app.environmentId,
-        requiresAuth: false,
-        ...(app.scope === "team" && teamIds.length > 0
-          ? { teams: teamIds }
-          : {}),
-      },
-      { organizationId, authorId: userId },
-    );
+  const catalog = await InternalMcpCatalogModel.create(
+    {
+      name: app.name,
+      description: app.description ?? null,
+      serverType: "app",
+      scope: app.scope,
+      environmentId: app.environmentId,
+      requiresAuth: false,
+      ...(app.scope === "team" && teamIds.length > 0 ? { teams: teamIds } : {}),
+    },
+    { organizationId, authorId: userId },
+    tx,
+  );
 
-    const server = await McpServerModel.create({
+  const server = await McpServerModel.create(
+    {
       name: app.name,
       catalogId: catalog.id,
       serverType: "app",
@@ -65,18 +68,20 @@ export async function createAppBacking(params: {
       teamId: app.scope === "team" ? (teamIds[0] ?? null) : null,
       userId,
       localInstallationStatus: "success",
-    });
+    },
+    tx,
+  );
 
-    // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
-    // pre-existing NULL-catalog proxy tool of the same name and its assignments).
-    // The catalog is brand-new, so a direct insert can't collide.
-    //
-    // Slugify the name per the discovered-tool convention
-    // (`<server>__show_app`) so that when multiple apps are assigned to the same
-    // gateway profile their launch tools stay distinct — an unprefixed
-    // "show_app" would collide in the gateway's dedupe-by-name and shadow all
-    // but one app.
-    const tool = await ToolModel.create({
+  // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
+  // pre-existing NULL-catalog proxy tool of the same name and its assignments).
+  // The catalog is brand-new, so a direct insert can't collide.
+  //
+  // Slugify the name per the discovered-tool convention (`<server>__show_app`)
+  // so that when multiple apps are assigned to the same gateway profile their
+  // launch tools stay distinct — an unprefixed "show_app" would collide in the
+  // gateway's dedupe-by-name and shadow all but one app.
+  const tool = await ToolModel.create(
+    {
       name: ToolModel.slugifyName(server.name, APP_SHOW_TOOL_NAME),
       description: `Open the "${app.name}" app and render its UI.`,
       parameters: { type: "object", properties: {} },
@@ -84,33 +89,30 @@ export async function createAppBacking(params: {
       meta: {
         _meta: { ui: { resourceUri: getArchestraAppResourceUri(app.id) } },
       },
-    });
+    },
+    tx,
+  );
 
-    // Auto-assign show_app to the creator's personal gateway so they can connect
-    // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
-    // call short-circuits in-process, but dynamic is the only mode that fits an
-    // org-shared, viewer-scoped app.
-    const personalGateway = await AgentModel.ensurePersonalMcpGateway({
-      userId,
-      organizationId,
-    });
-    await AgentToolModel.bulkCreateForAgentsAndTools(
-      [personalGateway.id],
-      [tool.id],
-      { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
-    );
+  // Auto-assign show_app to the creator's personal gateway so they can connect
+  // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
+  // call short-circuits in-process, but dynamic is the only mode that fits an
+  // org-shared, viewer-scoped app.
+  const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+    userId,
+    organizationId,
+  });
+  await AgentToolModel.bulkCreateForAgentsAndTools(
+    [personalGateway.id],
+    [tool.id],
+    { mcpServerId: server.id, credentialResolutionMode: "dynamic" },
+    tx,
+  );
 
-    await AppModel.update({ id: app.id, patch: { mcpServerId: server.id } });
-    logger.info(
-      { appId: app.id, mcpServerId: server.id, catalogId: catalog.id },
-      "Created MCP backing for app",
-    );
-  } catch (error) {
-    logger.warn(
-      { err: error, appId: app.id },
-      "Failed to create MCP backing for app; app remains usable on the legacy path",
-    );
-  }
+  await AppModel.setMcpServerId(app.id, server.id, tx);
+  logger.info(
+    { appId: app.id, mcpServerId: server.id, catalogId: catalog.id },
+    "Created MCP backing for app",
+  );
 }
 
 /**

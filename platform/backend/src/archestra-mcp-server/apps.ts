@@ -15,6 +15,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AppModel,
@@ -334,16 +335,33 @@ const registry = defineArchestraTools([
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
-      const app = await AppModel.create({
-        app: {
-          organizationId: context.organizationId,
-          authorId: context.userId,
-          scope,
-          name: args.name,
-          description: args.description ?? null,
-          templateId: DEFAULT_APP_TEMPLATE_ID,
-        },
-        payload,
+      // Create the app and its backing catalog/server/show_app tool atomically,
+      // like the REST path, so MCP-authored apps are first-class servers too.
+      // scaffold_app defers team + environment selection to the REST/UI path, so
+      // no teams here. (Hoist narrowed values — closures lose property narrowing.)
+      const { userId, organizationId } = context;
+      const appName = args.name;
+      const app = await withDbTransaction(async (tx) => {
+        const created = await AppModel.create(
+          {
+            app: {
+              organizationId,
+              authorId: userId,
+              scope,
+              name: appName,
+              description: args.description ?? null,
+              templateId: DEFAULT_APP_TEMPLATE_ID,
+            },
+            payload,
+          },
+          tx,
+        );
+        if (!created) return null;
+        await createAppBacking(
+          { app: created, userId, organizationId, teamIds: [] },
+          tx,
+        );
+        return created;
       });
 
       if (!app) {
@@ -351,16 +369,6 @@ const registry = defineArchestraTools([
           `An app named "${args.name}" already exists in this scope.`,
         );
       }
-
-      // Back the app with a catalog/server/show_app tool like the REST path, so
-      // MCP-authored apps are first-class servers too. scaffold_app defers team
-      // and environment selection to the REST/UI path, so no teams here.
-      await createAppBacking({
-        app,
-        userId: context.userId,
-        organizationId: context.organizationId,
-        teamIds: [],
-      });
 
       if (resolvedTools !== undefined && resolvedTools.length > 0) {
         try {

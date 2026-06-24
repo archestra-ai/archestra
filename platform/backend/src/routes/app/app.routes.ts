@@ -13,6 +13,7 @@ import {
 } from "@/app-templates";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AppModel,
@@ -268,18 +269,32 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html,
         uiPermissions: body.uiPermissions,
       });
-      const app = await AppModel.create({
-        app: {
-          organizationId,
-          authorId: user.id,
-          scope,
-          name: body.name,
-          description: body.description ?? null,
-          templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
-          environmentId: body.environmentId ?? null,
-        },
-        payload,
-        teamIds,
+      // Create the app and its backing catalog/server/show_app tool atomically:
+      // an app must never exist without backing (the catalog owns its visibility
+      // + environment).
+      const app = await withDbTransaction(async (tx) => {
+        const created = await AppModel.create(
+          {
+            app: {
+              organizationId,
+              authorId: user.id,
+              scope,
+              name: body.name,
+              description: body.description ?? null,
+              templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
+              environmentId: body.environmentId ?? null,
+            },
+            payload,
+            teamIds,
+          },
+          tx,
+        );
+        if (!created) return null;
+        await createAppBacking(
+          { app: created, userId: user.id, organizationId, teamIds },
+          tx,
+        );
+        return created;
       });
       if (!app) {
         throw new ApiError(
@@ -287,12 +302,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `An app named "${body.name}" already exists in this scope.`,
         );
       }
-      await createAppBacking({
-        app,
-        userId: user.id,
-        organizationId,
-        teamIds,
-      });
       return reply.send(warnings.length > 0 ? { ...app, warnings } : app);
     },
   );

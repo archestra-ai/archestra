@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -75,7 +75,10 @@ class McpServerModel {
     }
   }
 
-  static async create(server: InsertMcpServer): Promise<McpServer> {
+  static async create(
+    server: InsertMcpServer,
+    tx?: Transaction,
+  ): Promise<McpServer> {
     const { userId, ...serverData } = server;
 
     const mcpServerName = McpServerModel.constructServerName({
@@ -87,14 +90,18 @@ class McpServerModel {
     });
 
     // ownerId is part of serverData and will be inserted
-    const [createdServer] = await db
+    const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
       .values({ ...serverData, name: mcpServerName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
     if (userId) {
-      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+      await McpServerUserModel.assignUserToMcpServer(
+        createdServer.id,
+        userId,
+        tx,
+      );
     }
 
     return {

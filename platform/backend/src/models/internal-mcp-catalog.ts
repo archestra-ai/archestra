@@ -9,7 +9,7 @@ import {
   ne,
   or,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -36,6 +36,7 @@ class InternalMcpCatalogModel {
   static async create(
     catalogItem: InsertInternalMcpCatalog,
     context?: { organizationId: string; authorId?: string },
+    tx?: Transaction,
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
 
@@ -48,7 +49,7 @@ class InternalMcpCatalogModel {
     };
 
     let createdItem = (
-      await db
+      await (tx ?? db)
         .insert(schema.internalMcpCatalogTable)
         .values(insertValues)
         .returning()
@@ -62,7 +63,7 @@ class InternalMcpCatalogModel {
     }
 
     if (teams && teams.length > 0) {
-      await McpCatalogTeamModel.syncCatalogTeams(createdItem.id, teams);
+      await McpCatalogTeamModel.syncCatalogTeams(createdItem.id, teams, tx);
     }
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(

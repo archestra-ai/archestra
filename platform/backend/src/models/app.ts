@@ -168,6 +168,21 @@ class AppModel {
   }
 
   /**
+   * Link an app to its backing MCP server. Accepts a transaction so app creation
+   * and its backing rows commit atomically (the app must never exist unbacked).
+   */
+  static async setMcpServerId(
+    id: string,
+    mcpServerId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.appsTable)
+      .set({ mcpServerId })
+      .where(eq(schema.appsTable.id, id));
+  }
+
+  /**
    * Update an app atomically. `patch` updates catalog columns; `teamIds`
    * (when supplied) replaces the team set; `version` (when supplied) forks a new
    * immutable version iff its canonical payload differs from the head, bumping

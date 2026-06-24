@@ -921,6 +921,16 @@ class OllamaStreamAdapter
         },
       ],
     };
+    // Carry accumulated usage into the final SSE chunk so streaming clients see token counts
+    // (mirrors the non-streaming toProviderResponse below; see openai.ts for the shared rationale).
+    if (this.state.usage !== null) {
+      finalChunk.usage = {
+        prompt_tokens: this.state.usage.inputTokens,
+        completion_tokens: this.state.usage.outputTokens,
+        total_tokens:
+          this.state.usage.inputTokens + this.state.usage.outputTokens,
+      };
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 

@@ -191,10 +191,10 @@ export async function propagateAppCatalogChange(
     }
     const app = await AppModel.findByMcpServerId(server.id);
     if (app) {
-      // Mirror the catalog's team membership onto the app so app_team and the
-      // catalog-team junction don't diverge when teams are edited via the MCP
-      // Configuration form (otherwise a team rescope leaves the app visible to
-      // the old team). AppModel.update replaces app_team in the same transaction.
+      // Mirror the catalog edit onto the app's description and re-assert the
+      // team membership so a rescope via the MCP Configuration form is reflected.
+      // Team membership is owned by the catalog-team junction (`mcp_catalog_team`,
+      // the source of truth for app visibility) — the old `app_team` table is gone.
       const teamIds =
         changes.scope === "team"
           ? (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalogId)).map(

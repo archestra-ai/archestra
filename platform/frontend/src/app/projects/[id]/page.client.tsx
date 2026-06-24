@@ -40,7 +40,6 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
@@ -74,6 +73,7 @@ import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
 export default function ProjectDetailPageClient() {
   return (
@@ -183,19 +183,18 @@ function ProjectDetail() {
             </div>
           }
         >
-          <DeleteConfirmDialog
-            open={confirmDelete}
-            onOpenChange={setConfirmDelete}
-            title={`Delete ${project.name}?`}
-            description="Chats are kept as ordinary conversations. Project files are deleted with the project."
-            isPending={deleteProject.isPending}
-            onConfirm={async () => {
-              const ok = await deleteProject.mutateAsync({ id: project.id });
-              if (ok) router.push("/projects");
-            }}
-            confirmLabel="Delete"
-            pendingLabel="Deleting..."
-          />
+          {confirmDelete && (
+            <ProjectDeleteConfirmDialog
+              project={project}
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              isPending={deleteProject.isPending}
+              onConfirm={async () => {
+                const ok = await deleteProject.mutateAsync({ id: project.id });
+                if (ok) router.push("/projects");
+              }}
+            />
+          )}
           {editOpen && (
             <EditProjectDialog
               project={project}

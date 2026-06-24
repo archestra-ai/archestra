@@ -184,6 +184,10 @@ vi.mock("@/lib/projects/projects.query", () => ({
   usePinProject: () => ({ mutate: mockPinMutate }),
 }));
 
+vi.mock("@/lib/schedule-trigger.query", () => ({
+  useScheduleTriggers: () => ({ data: undefined }),
+}));
+
 import ProjectsPageClient from "./page.client";
 
 describe("ProjectsPageClient", () => {

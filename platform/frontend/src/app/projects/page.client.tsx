@@ -145,11 +145,7 @@ function ProjectsList() {
       )}
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            objectNamePlural="projects"
-            searchFields={["name", "description"]}
-            paramName="search"
-          />
+          <SearchInput placeholder="Search projects" paramName="search" />
           <ProjectScopeFilter />
         </div>
         {projects.length === 0 ? (

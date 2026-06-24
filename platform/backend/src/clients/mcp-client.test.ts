@@ -366,6 +366,56 @@ describe("McpClient", () => {
     });
   });
 
+  describe("executeToolCallForOwner (app backing show_app)", () => {
+    test("audits the show_app launch and still returns the ui:// pointer", async () => {
+      const appCatalog = await InternalMcpCatalogModel.create({
+        name: "Clock App",
+        serverType: "app",
+        scope: "org",
+      });
+      const appServer = await McpServerModel.create({
+        name: "Clock App",
+        catalogId: appCatalog.id,
+        serverType: "app",
+      });
+      const uri = "ui://archestra-app/clock-app";
+      const showApp = await ToolModel.create({
+        name: "clock_app__show_app",
+        description: "Open the Clock App.",
+        parameters: { type: "object", properties: {} },
+        catalogId: appCatalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await AgentToolModel.create(agentId, showApp.id, {
+        mcpServerId: appServer.id,
+      });
+
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_show_app", name: showApp.name, arguments: {} },
+        agentOwner(agentId),
+      );
+
+      // The in-process short-circuit still hands the host the ui:// pointer...
+      expect(result.isError).toBe(false);
+      expect(
+        (result._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
+          ?.resourceUri,
+      ).toBe(uri);
+
+      // ...and now records an audit row like any other gateway tool call.
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+      expect(row).toBeDefined();
+      expect(row?.ownerType).toBe("agent");
+      expect(row?.mcpServerName).toBe("Clock App");
+      expect((row?.toolCall as { name?: string } | null)?.name).toBe(
+        showApp.name,
+      );
+    });
+  });
+
   describe("executeToolCallForOwner", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {

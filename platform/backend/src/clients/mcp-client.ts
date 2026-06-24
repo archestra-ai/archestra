@@ -395,13 +395,18 @@ class McpClient {
       const resourceUri = (
         tool.meta as { _meta?: { ui?: { resourceUri?: string } } } | null
       )?._meta?.ui?.resourceUri;
-      return {
-        id: toolCall.id,
-        name: toolCall.name,
+      // Audit the launch like any other gateway tool call. The in-process app
+      // path has no upstream/transport, so success is recorded here rather than
+      // after dispatch; the result still carries the ui:// pointer for the host.
+      return await this.createSuccessResult({
+        toolCall,
+        owner,
+        mcpServerName: catalogItem.name,
         content: [{ type: "text", text: `Opening ${catalogItem.name}.` }],
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
-      };
+        authInfo,
+      });
     }
 
     const targetMcpServerIdResult =

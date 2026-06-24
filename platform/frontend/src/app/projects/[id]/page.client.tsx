@@ -82,7 +82,10 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending } = useProject(id);
-  const { data: conversations } = useProjectConversations(id);
+  // Chats are hidden from admin oversight, so don't even fetch them there.
+  const { data: conversations } = useProjectConversations(id, {
+    enabled: !!project && project.viewerRole !== "admin",
+  });
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);

@@ -77,10 +77,13 @@ export function useProject(id: string | undefined) {
   });
 }
 
-export function useProjectConversations(id: string | undefined) {
+export function useProjectConversations(
+  id: string | undefined,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["projects", id, "conversations"],
-    enabled: !!id,
+    enabled: !!id && (options?.enabled ?? true),
     queryFn: async () => {
       const { data, error } = await getProjectConversations({
         path: { id: id as string },

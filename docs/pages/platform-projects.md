@@ -22,7 +22,7 @@ The projects list has a search box and a scope filter that mirrors the agents fi
 
 Holders of `project:admin` get an extra Other users scope: an oversight view of projects owned by other members that are not shared with them. In that view a project admin can edit or delete the project, change its sharing, and view or download its files — but cannot see or start its chats: the Chats panel is hidden, and the project's conversations remain private to its members. The Other users list is not grouped by pinned.
 
-`project:admin` governs the project and its files only; a foreign project's chats stay private. Managing that project's scheduled runs is not part of `project:admin` — it continues to ride the separate `scheduledTask:admin` permission. The predefined Admin role holds both (plus `scheduledTask:admin`), so an admin can both oversee projects and manage everyone's schedules. To build a custom oversight role, grant `project:admin` for project and file oversight, and add `scheduledTask:admin` if schedule management is also needed, from [Access Control](./platform-access-control).
+`project:admin` is additive oversight, not a standalone role: it lets a holder discover other members' projects and act on the project and its files, but never read their chats, and it does not by itself grant schedule control. It layers on the standard `project` permissions — to edit or delete a foreign project a custom role also needs `project:update` / `project:delete` (and `project:read` to see it); to manage that project's scheduled runs it needs `scheduledTask:admin`. The predefined Admin role already holds all of these. Configure custom roles from [Access Control](./platform-access-control).
 
 ## Files
 

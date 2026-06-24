@@ -483,7 +483,7 @@ Required RBAC permission: `mcpRegistry:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes | The catalog ID of the MCP server to edit. Use get_mcp_servers to look it up by name. |
-| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, or builtin. The `app` type is reserved for user-generated Apps (managed on the Apps surface) and cannot be created or edited through the MCP registry tools. |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.) |
 | `serverUrl` | `string \| null` | No | [Remote] The URL of the remote MCP server. |
 | `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
 | `authDescription` | `string \| null` | No | [Remote] How to set up authentication. |
@@ -543,7 +543,7 @@ Required RBAC permission: `mcpRegistry:create`
 | `labels[].value` | `string` | Yes | Label value. |
 | `teams` | `string[]` | No | Team IDs for team-scoped access control. |
 | `environmentId` | `string \| null` | No | ID of the environment this server belongs to. Omit (or pass null) to leave it in the default environment. |
-| `serverType` | `"local" \| "remote" \| "builtin" \| "app"` | No | Server type: local, remote, or builtin. The `app` type is reserved for user-generated Apps (managed on the Apps surface) and cannot be created or edited through the MCP registry tools. |
+| `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local, remote, or builtin. (The `app` type is reserved for user-generated Apps managed on the Apps surface, not creatable via this tool.) |
 | `serverUrl` | `string \| null` | No | [Remote] The URL of the remote MCP server. |
 | `requiresAuth` | `boolean` | No | [Remote] Whether the server requires authentication. |
 | `authDescription` | `string \| null` | No | [Remote] How to set up authentication. |

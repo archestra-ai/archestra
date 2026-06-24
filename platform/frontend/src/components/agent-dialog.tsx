@@ -1178,9 +1178,41 @@ export function AgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  const hasUnsavedData = useMemo(() => {
+    return Boolean(
+      name.trim() ||
+        description.trim() ||
+        systemPrompt.trim() ||
+        icon ||
+        labels.length > 0,
+    );
+  }, [name, description, systemPrompt, icon, labels]);
+
+  const handleInteractOutside = useCallback(
+    (e: Event) => {
+      if (hasUnsavedData) {
+        e.preventDefault();
+      }
+    },
+    [hasUnsavedData],
+  );
+
+  const handleEscapeKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (hasUnsavedData) {
+        e.preventDefault();
+      }
+    },
+    [hasUnsavedData],
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent
+        className="max-w-5xl h-[90vh] flex flex-col overflow-hidden"
+        onInteractOutside={handleInteractOutside}
+        onEscapeKeyDown={handleEscapeKeyDown}
+      >
         <DialogHeader>
           <div className="flex items-start justify-between gap-4 pr-6">
             <div className="min-w-0 flex-1">

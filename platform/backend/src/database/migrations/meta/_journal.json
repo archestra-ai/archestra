@@ -2164,6 +2164,13 @@
       "when": 1782307085912,
       "tag": "0308_slim_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "7",
+      "when": 1782299613257,
+      "tag": "0309_drop_app_scope_env_team",
+      "breakpoints": true
     }
   ]
 }

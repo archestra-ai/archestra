@@ -83,14 +83,18 @@ export type AppListItem = z.infer<typeof AppListItemSchema>;
 export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
 
 // drizzle-derived schemas (internal: model layer reads/writes through these).
+// Visibility (`scope`) and `environmentId` are NOT app columns — they live on
+// the app's backing catalog (FR-30) and are populated by AppModel on read, so
+// the App type carries them as derived fields the rest of the code keeps using.
 export const SelectAppSchema = createSelectSchema(schema.appsTable, {
-  scope: AppScopeSchema,
   spec: AppSpecSchema.nullable(),
+}).extend({
+  scope: AppScopeSchema,
+  environmentId: z.string().uuid().nullable(),
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {
-  scope: AppScopeSchema.optional(),
   spec: AppSpecSchema.nullable().optional(),
 }).omit({
   id: true,
@@ -132,8 +136,6 @@ export const InsertAppDataSchema = createInsertSchema(schema.appDataTable).omit(
     updatedAt: true,
   },
 );
-
-export const SelectAppTeamSchema = createSelectSchema(schema.appTeamTable);
 
 export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
   schema.appRenderDiagnosticsTable,
@@ -251,7 +253,6 @@ export type AppTool = z.infer<typeof SelectAppToolSchema>;
 export type InsertAppTool = z.infer<typeof InsertAppToolSchema>;
 export type AppData = z.infer<typeof SelectAppDataSchema>;
 export type InsertAppData = z.infer<typeof InsertAppDataSchema>;
-export type AppTeam = z.infer<typeof SelectAppTeamSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;

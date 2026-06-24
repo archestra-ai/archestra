@@ -15,7 +15,6 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
-import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AppModel,
@@ -63,6 +62,7 @@ import {
   RefineAppToolSchema,
   ScaffoldAppSchema,
 } from "@/types/app";
+import { isUniqueConstraintError } from "@/utils/db";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -335,39 +335,47 @@ const registry = defineArchestraTools([
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
-      // Create the app and its backing catalog/server/show_app tool atomically,
-      // like the REST path, so MCP-authored apps are first-class servers too.
-      // scaffold_app defers team + environment selection to the REST/UI path, so
-      // no teams here. (Hoist narrowed values — closures lose property narrowing.)
+      // Like the REST path: create the app, then its backing; on failure delete
+      // the app so it is never left unbacked. scaffold_app defers team +
+      // environment selection to the REST/UI path, so no teams here. (Hoist
+      // narrowed values — closures lose property narrowing.)
       const { userId, organizationId } = context;
       const appName = args.name;
-      const app = await withDbTransaction(async (tx) => {
-        const created = await AppModel.create(
-          {
-            app: {
-              organizationId,
-              authorId: userId,
-              scope,
-              name: appName,
-              description: args.description ?? null,
-              templateId: DEFAULT_APP_TEMPLATE_ID,
-            },
-            payload,
-          },
-          tx,
-        );
-        if (!created) return null;
-        await createAppBacking(
-          { app: created, userId, organizationId, teamIds: [] },
-          tx,
-        );
-        return created;
+      let app: App | null;
+      const created = await AppModel.create({
+        app: {
+          organizationId,
+          authorId: userId,
+          name: appName,
+          description: args.description ?? null,
+          templateId: DEFAULT_APP_TEMPLATE_ID,
+        },
+        payload,
       });
+      try {
+        await createAppBacking({
+          app: created,
+          scope,
+          environmentId: null,
+          userId,
+          organizationId,
+          teamIds: [],
+        });
+        app = await AppModel.findById(created.id);
+      } catch (error) {
+        await AppModel.delete(created.id);
+        // Name-uniqueness lives on the backing catalog now, so a conflict
+        // surfaces as a unique-constraint error from the catalog insert.
+        if (isUniqueConstraintError(error)) {
+          return errorResult(
+            `An app named "${args.name}" already exists in this scope.`,
+          );
+        }
+        throw error;
+      }
 
       if (!app) {
-        return errorResult(
-          `An app named "${args.name}" already exists in this scope.`,
-        );
+        return errorResult("App created but could not be loaded.");
       }
 
       if (resolvedTools !== undefined && resolvedTools.length > 0) {

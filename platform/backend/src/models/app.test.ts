@@ -1,3 +1,4 @@
+import { deleteAppBacking } from "@/services/apps/app-mcp-backing";
 import { describe, expect, test } from "@/test";
 import AppModel from "./app";
 import AppTeamModel from "./app-team";
@@ -12,15 +13,19 @@ describe("AppModel.create", () => {
     expect(head?.html).toBe("<h1>hi</h1>");
   });
 
-  test("returns null on a name conflict in the same shared namespace", async ({
+  test("rejects a name conflict in the same shared namespace", async ({
     makeApp,
   }) => {
     const first = await makeApp({ name: "Dup", scope: "org" });
-    const dup = await AppModel.create({
-      app: { name: "Dup", scope: "org", organizationId: first.organizationId },
-      payload: { html: "<p/>", uiPermissions: null },
-    });
-    expect(dup).toBeNull();
+    // Name-uniqueness lives on the backing catalog now, so the dup is refused
+    // when its backing catalog is created.
+    await expect(
+      makeApp({
+        name: "Dup",
+        scope: "org",
+        organizationId: first.organizationId,
+      }),
+    ).rejects.toThrow();
   });
 
   test("lets distinct authors keep same-named personal apps", async ({
@@ -34,16 +39,13 @@ describe("AppModel.create", () => {
       scope: "personal",
       authorId: a.id,
     });
-    const second = await AppModel.create({
-      app: {
-        name: "Mine",
-        scope: "personal",
-        authorId: b.id,
-        organizationId: first.organizationId,
-      },
-      payload: { html: "<p/>", uiPermissions: null },
+    const second = await makeApp({
+      name: "Mine",
+      scope: "personal",
+      authorId: b.id,
+      organizationId: first.organizationId,
     });
-    expect(second).not.toBeNull();
+    expect(second.id).not.toBe(first.id);
   });
 });
 
@@ -138,18 +140,18 @@ describe("AppModel spec", () => {
 describe("AppModel.delete (soft)", () => {
   test("hides the app and frees its name for re-use", async ({ makeApp }) => {
     const app = await makeApp({ name: "Reusable", scope: "org" });
+    // The delete flow soft-deletes the app and tears down its backing catalog,
+    // which owns the name-uniqueness — freeing the name.
+    await deleteAppBacking(app);
     expect(await AppModel.delete(app.id)).toBe(true);
     expect(await AppModel.findById(app.id)).toBeNull();
 
-    const recreated = await AppModel.create({
-      app: {
-        name: "Reusable",
-        scope: "org",
-        organizationId: app.organizationId,
-      },
-      payload: { html: "<p/>", uiPermissions: null },
+    const recreated = await makeApp({
+      name: "Reusable",
+      scope: "org",
+      organizationId: app.organizationId,
     });
-    expect(recreated).not.toBeNull();
+    expect(recreated.id).not.toBe(app.id);
   });
 });
 

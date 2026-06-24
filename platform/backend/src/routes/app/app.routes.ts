@@ -13,7 +13,6 @@ import {
 } from "@/app-templates";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
-import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AppModel,
@@ -59,6 +58,7 @@ import {
   UpdateAppSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 
 // REST bodies extend the shared create/update schemas with team assignments,
 // which only the REST surface needs for team-scoped apps.
@@ -269,39 +269,41 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html,
         uiPermissions: body.uiPermissions,
       });
-      // Create the app and its backing catalog/server/show_app tool atomically:
-      // an app must never exist without backing (the catalog owns its visibility
-      // + environment).
-      const app = await withDbTransaction(async (tx) => {
-        const created = await AppModel.create(
-          {
-            app: {
-              organizationId,
-              authorId: user.id,
-              scope,
-              name: body.name,
-              description: body.description ?? null,
-              templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
-              environmentId: body.environmentId ?? null,
-            },
-            payload,
-            teamIds,
-          },
-          tx,
-        );
-        if (!created) return null;
-        await createAppBacking(
-          { app: created, userId: user.id, organizationId, teamIds },
-          tx,
-        );
-        return created;
+      // An app must never exist without its backing (the catalog owns its
+      // visibility + environment). Create the app, then its backing; if the
+      // backing fails (e.g. a name conflict on the catalog's unique index),
+      // delete the app so it is never left unbacked.
+      const created = await AppModel.create({
+        app: {
+          organizationId,
+          authorId: user.id,
+          name: body.name,
+          description: body.description ?? null,
+          templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
+        },
+        payload,
       });
-      if (!app) {
-        throw new ApiError(
-          409,
-          `An app named "${body.name}" already exists in this scope.`,
-        );
+      try {
+        await createAppBacking({
+          app: created,
+          scope,
+          environmentId: body.environmentId ?? null,
+          userId: user.id,
+          organizationId,
+          teamIds,
+        });
+      } catch (error) {
+        await AppModel.delete(created.id);
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `An app named "${body.name}" already exists in this scope.`,
+          );
+        }
+        throw error;
       }
+      const app = await AppModel.findById(created.id);
+      if (!app) throw new ApiError(500, "App created but could not be loaded.");
       return reply.send(warnings.length > 0 ? { ...app, warnings } : app);
     },
   );

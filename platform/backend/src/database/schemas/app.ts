@@ -1,29 +1,27 @@
-import { sql } from "drizzle-orm";
 import {
   index,
   integer,
   jsonb,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AppSpec } from "@/types/app-spec";
-import type { ResourceVisibilityScope } from "@/types/visibility";
-import environmentsTable from "./environment";
 import mcpServerTable from "./mcp-server";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 /**
  * User-authored MCP Apps: interactive apps created inside Archestra (from chat
- * or the /apps page). An app belongs to an organization and carries a
- * visibility `scope` (`personal`/`team`/`org`) like agents and skills.
+ * or the /apps page). An app belongs to an organization and is backed by a
+ * `serverType:"app"` MCP catalog/server (see `mcp_server_id`), which is the
+ * single source of truth for the app's visibility (scope + teams) and bound
+ * environment — those are NOT stored on the app row.
  *
  * The app row holds catalog metadata only. Its HTML (plus the CSP/permissions
  * it ships with) lives in immutable `app_versions` snapshots; `latestVersion`
- * points at the head. Team assignments live in `app_team`, tool attachments in
- * `app_tool`, and the per-app data store in `app_data`.
+ * points at the head. Tool attachments live in `app_tool`, and the per-app data
+ * store in `app_data`.
  */
 const appsTable = softDeletablePgTable(
   "apps",
@@ -34,15 +32,6 @@ const appsTable = softDeletablePgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
-    /**
-     * Visibility/management scope: `personal` (author only), `team` (members of
-     * the assigned teams, see `app_team`), or `org` (everyone). Mirrors the
-     * `agents.scope` model. Chat-created apps default to `personal`.
-     */
-    scope: text("scope")
-      .$type<ResourceVisibilityScope>()
-      .notNull()
-      .default("personal"),
     /** Display name surfaced in the apps list and the model's app tools. */
     name: text("name").notNull(),
     /** Optional one-line summary the model uses when listing apps. */
@@ -50,26 +39,9 @@ const appsTable = softDeletablePgTable(
     /** Id of the starter template the app was created from, for provenance. */
     templateId: text("template_id"),
     /**
-     * Optional Environment the app is bound to. The bound environment confines
-     * which MCP tools the app may be assigned and may call at runtime to that
-     * environment (matched on the tool's catalog environment). Null = the org
-     * default environment. ON DELETE SET NULL re-binds the app to the default
-     * rather than orphaning it.
-     *
-     * The FK is referential only; it does NOT encode org ownership, so the write
-     * path that sets `apps.environment_id` validates the environment belongs to
-     * the app's organization (via `assertCanAssignEnvironment`) to prevent
-     * cross-tenant binding.
-     */
-    environmentId: uuid("environment_id").references(
-      () => environmentsTable.id,
-      { onDelete: "set null" },
-    ),
-    /**
-     * Backing MCP server that makes this app a first-class catalog entity: it
-     * surfaces the app in the MCP servers list and exposes a `show_app` tool
-     * through the standard gateway (visibility/environment/guardrails then ride
-     * the normal tool path). Null for apps created before this backing existed.
+     * Backing MCP server that makes this app a first-class catalog entity and
+     * the source of truth for its visibility + environment. Created with the app
+     * in one transaction and required — an app is never unbacked.
      *
      * Routing handle only — serving and isolation still key on `apps.id` (the
      * data store partition, tool gate, and OAuth audience); the backing server
@@ -98,19 +70,9 @@ const appsTable = softDeletablePgTable(
   },
   (table) => [
     index("apps_organization_id_idx").on(table.organizationId),
-    index("apps_scope_idx").on(table.scope),
-    index("apps_environment_id_idx").on(table.environmentId),
-    // Name uniqueness mirrors visibility (like skills): personal apps are unique
-    // per (org, author), shared apps per org. Soft-deleted rows are excluded so
-    // deleting an app frees its name for re-use.
-    uniqueIndex("apps_org_personal_name_idx")
-      .on(table.organizationId, table.authorId, table.name)
-      .where(sql`${table.scope} = 'personal' AND ${table.deletedAt} IS NULL`),
-    uniqueIndex("apps_org_shared_name_idx")
-      .on(table.organizationId, table.name)
-      .where(
-        sql`${table.scope} in ('team', 'org') AND ${table.deletedAt} IS NULL`,
-      ),
+    // Visibility (scope/teams), environment, and name-uniqueness are owned by the
+    // backing internal_mcp_catalog (serverType "app"); there are no scope/env
+    // columns or per-scope name indexes on the app row.
   ],
 );
 

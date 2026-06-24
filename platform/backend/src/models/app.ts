@@ -189,8 +189,10 @@ class AppModel {
   }
 
   /**
-   * Link an app to its backing MCP server. Accepts a transaction so app creation
-   * and its backing rows commit atomically (the app must never exist unbacked).
+   * Link an app to its backing MCP server. The optional `tx` scopes only this
+   * app-row update; the backing catalog/server/tool are created separately (no
+   * shared transaction), and the no-unbacked invariant is upheld by the caller
+   * deleting the app on backing failure.
    */
   static async setMcpServerId(
     id: string,

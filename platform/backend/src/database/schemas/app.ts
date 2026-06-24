@@ -40,8 +40,10 @@ const appsTable = softDeletablePgTable(
     templateId: text("template_id"),
     /**
      * Backing MCP server that makes this app a first-class catalog entity and
-     * the source of truth for its visibility + environment. Created with the app
-     * in one transaction and required — an app is never unbacked.
+     * the source of truth for its visibility + environment. Created right after
+     * the app (sequentially, not in one transaction — the model read-backs would
+     * deadlock a single-connection pool); on backing failure the app row is
+     * removed, so an app is never left unbacked.
      *
      * Routing handle only — serving and isolation still key on `apps.id` (the
      * data store partition, tool gate, and OAuth audience); the backing server

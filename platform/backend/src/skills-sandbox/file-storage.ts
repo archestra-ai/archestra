@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type Dirent, constants as fsConstants } from "node:fs";
 import * as fs from "node:fs/promises";
 import path from "node:path";
+import type { S3Client } from "@aws-sdk/client-s3";
 import config from "@/config";
 import type { StoredBlobRow } from "@/types";
 import { resolveWithinRoot, safeSegment, UnsafePathError } from "./file-path";
@@ -13,6 +14,7 @@ import {
   scopeFolder,
   type StoredObject,
 } from "./object-store";
+import { buildS3Client, S3ObjectStore } from "./s3-storage";
 
 export { FileBytesMissingError } from "./object-store";
 
@@ -236,9 +238,30 @@ const filesystemStore = new FilesystemObjectStore(
   () => config.fileStorage.filesystemRoot,
 );
 
+// The real S3 client is built once from config (memoized); a test may inject a
+// fake via __setS3ClientForTests. Both are read lazily through thunks so the
+// singleton tracks config mutations in tests.
+let cachedS3Client: S3Client | null = null;
+let s3ClientOverride: S3Client | null = null;
+
+/** @public — test seam: inject a fake S3 client (or null to reset) for the store. */
+export function __setS3ClientForTests(client: S3Client | null): void {
+  s3ClientOverride = client;
+  cachedS3Client = null;
+}
+
+const s3Store = new S3ObjectStore({
+  getClient: () =>
+    s3ClientOverride ?? (cachedS3Client ??= buildS3Client(config.fileStorage.s3)),
+  getBucket: () => config.fileStorage.s3.bucket,
+  getKeyPrefix: () => config.fileStorage.s3.keyPrefix,
+});
+
 /** The store a given provider's rows live in; null = inline Postgres (`db`). */
 function objectStoreFor(
   provider: string | null | undefined,
 ): EnumerableObjectStore | null {
-  return provider === "filesystem" ? filesystemStore : null;
+  if (provider === "filesystem") return filesystemStore;
+  if (provider === "s3") return s3Store;
+  return null;
 }

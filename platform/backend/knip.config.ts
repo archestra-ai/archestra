@@ -10,9 +10,6 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
-    // S3 storage provider — wired into file-storage.ts factory in an upcoming task;
-    // listed here so knip --production sees it as a production entry point now.
-    "src/skills-sandbox/s3-storage.ts!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
   ],

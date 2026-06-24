@@ -139,17 +139,24 @@ export async function validateAppHtmlStatic(
   return findings;
 }
 
+const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
 const BROWSER_STORAGE_API_PATTERN =
   /\b(localStorage|sessionStorage|indexedDB)\b/g;
 
-// Browser storage APIs referenced anywhere in the html. They are unusable in the
-// app sandbox: the opaque-origin iframe throws on access, and where it doesn't
-// the data is ephemeral and browser-local rather than the platform-attached
-// archestra.storage. Returned in first-seen order, deduplicated.
+// Browser storage APIs referenced inside <script> blocks. Scoped to script
+// content (not the whole html) so prose, comments, and attribute text that
+// merely name an API do not warn — the same structural anchoring the resource
+// check uses. It stays a lexical scan: dynamic access (window["local"+"Storage"])
+// is not detected, which is acceptable for a soft authoring hint. They are
+// unusable in the app sandbox: the opaque-origin iframe throws on access, and
+// where it doesn't the data is ephemeral and browser-local rather than the
+// platform-attached archestra.storage. Returned in first-seen order, deduplicated.
 function browserStorageApisUsed(html: string): string[] {
   const apis = new Set<string>();
-  for (const match of html.matchAll(BROWSER_STORAGE_API_PATTERN)) {
-    apis.add(match[1]);
+  for (const block of html.matchAll(SCRIPT_BLOCK_PATTERN)) {
+    for (const match of block[1].matchAll(BROWSER_STORAGE_API_PATTERN)) {
+      apis.add(match[1]);
+    }
   }
   return [...apis];
 }

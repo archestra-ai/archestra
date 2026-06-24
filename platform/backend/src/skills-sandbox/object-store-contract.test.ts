@@ -114,3 +114,45 @@ describe.each([
     expect(await h.store.enumerate(SCOPE)).toEqual([]);
   });
 });
+
+// keyPrefix is S3-only (no filesystem analogue), so it lives outside the shared
+// contract: the prefix is applied to the underlying bucket key but stripped from
+// the store-level key/name the caller sees.
+describe("S3ObjectStore keyPrefix", () => {
+  test("write prefixes the underlying object but returns a prefix-free key", async () => {
+    const fake = new FakeS3Client();
+    const store = new S3ObjectStore({
+      getClient: () => fake as unknown as S3Client,
+      getBucket: () => "test-bucket",
+      getKeyPrefix: () => "tenant1",
+    });
+
+    const { key } = await store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("hello") });
+    expect(key).toBe("acme/a.txt"); // keyPrefix-free
+    expect((await store.read("acme/a.txt")).toString()).toBe("hello");
+
+    // The bytes really live under the prefixed bucket key: a prefix-free store
+    // over the SAME fake cannot reach them (keyPrefix isolation).
+    const noPrefix = new S3ObjectStore({
+      getClient: () => fake as unknown as S3Client,
+      getBucket: () => "test-bucket",
+      getKeyPrefix: () => "",
+    });
+    await expect(noPrefix.read("acme/a.txt")).rejects.toBeInstanceOf(FileBytesMissingError);
+  });
+
+  test("enumerate strips the keyPrefix from key and name", async () => {
+    const fake = new FakeS3Client();
+    const store = new S3ObjectStore({
+      getClient: () => fake as unknown as S3Client,
+      getBucket: () => "test-bucket",
+      getKeyPrefix: () => "tenant1",
+    });
+
+    fake.putRaw("tenant1/acme/dropped.csv", "a,b,c");
+    const objs = await store.enumerate(SCOPE);
+    expect(objs.map((o) => o.name)).toEqual(["dropped.csv"]);
+    expect(objs[0].key).toBe("acme/dropped.csv"); // keyPrefix-free
+    expect(objs[0].size).toBe(5);
+  });
+});

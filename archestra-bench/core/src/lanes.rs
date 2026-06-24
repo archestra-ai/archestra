@@ -66,12 +66,27 @@ pub struct Lane {
     pub model: String,
     pub base_url: Option<String>,
     pub api_key_env: Option<String>,
+    /// OpenRouter slug to price this lane against. For an `openrouter` lane the `model` already is the
+    /// slug, so this is only needed to map a lane served by another provider onto an OR offering.
+    pub openrouter_model: Option<String>,
 }
 
 impl Lane {
     /// Filesystem-safe handle for this lane's agent / log / artifact dir.
     pub fn slug(&self) -> String {
         slug(&self.name)
+    }
+
+    /// The OpenRouter slug whose pricing applies to this lane, if any: an explicit `openrouter_model`
+    /// wins; otherwise an `openrouter` lane prices off its own `model`; other providers have no slug
+    /// unless one is given (so their cost is reported as unknown rather than guessed).
+    pub fn price_model(&self) -> Option<String> {
+        self.openrouter_model
+            .clone()
+            .or_else(|| match self.provider {
+                Provider::Openrouter => Some(self.model.clone()),
+                _ => None,
+            })
     }
 
     /// Env var holding this lane's key, defaulting to `<PROVIDER>_API_KEY`.
@@ -107,6 +122,8 @@ struct RawLane {
     base_url: Option<String>,
     #[serde(default)]
     api_key_env: Option<String>,
+    #[serde(default)]
+    openrouter_model: Option<String>,
 }
 
 /// Load `[[lane]]` entries from a `lanes.toml`. With `select = Some("a,b")`, return exactly those
@@ -141,6 +158,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
             model: raw.model,
             base_url: raw.base_url,
             api_key_env: raw.api_key_env,
+            openrouter_model: raw.openrouter_model,
         });
     }
 
@@ -386,6 +404,34 @@ model = "qwen/qwen3.7-plus"
         // `.` is path-safe, so it survives normalization rather than erroring
         assert_eq!(lanes[0].name, "qwen3.7-plus");
         assert_eq!(load(body, Some("qwen3.7-plus")).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn price_model_prefers_override_then_openrouter_model() {
+        let lanes = load(
+            r#"
+[[lane]]
+name = "or"
+provider = "openrouter"
+model = "vendor/m"
+
+[[lane]]
+name = "gw"
+provider = "anthropic"
+model = "glm-5.2"
+openrouter_model = "z-ai/glm-5.2"
+
+[[lane]]
+name = "bare"
+provider = "anthropic"
+model = "glm-5.2"
+"#,
+            None,
+        )
+        .unwrap();
+        assert_eq!(lanes[0].price_model().as_deref(), Some("vendor/m"));
+        assert_eq!(lanes[1].price_model().as_deref(), Some("z-ai/glm-5.2"));
+        assert_eq!(lanes[2].price_model(), None);
     }
 
     #[test]

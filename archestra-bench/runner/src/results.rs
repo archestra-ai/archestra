@@ -15,6 +15,13 @@ pub struct RunResult {
     pub tool_call_count: usize,
     pub turn_count: usize,
     pub total_tokens: Option<i64>,
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    /// OpenRouter slug the run was priced against, and the resulting USD cost (both `None` when the
+    /// lane has no slug or the slug is absent from the price book).
+    pub price_model: Option<String>,
+    pub cost_usd: Option<f64>,
     pub agent_error: Option<String>,
     pub stage_count: usize,
     pub format_attempts: usize,
@@ -60,6 +67,10 @@ pub struct GroupAggregate {
     /// Rollouts that reported a token count — the denominator for `avg_tokens` (infra/error rollouts
     /// have none, and folding them in as 0 would understate the average).
     pub tokens_n: usize,
+    pub total_cost_usd: f64,
+    /// Rollouts that were priced — the denominator for `avg_cost_usd` (unpriced rollouts are excluded
+    /// rather than counted as $0).
+    pub cost_n: usize,
 }
 
 impl GroupAggregate {
@@ -86,6 +97,14 @@ impl GroupAggregate {
             Some(self.total_tokens as f64 / self.tokens_n as f64)
         }
     }
+
+    pub fn avg_cost_usd(&self) -> Option<f64> {
+        if self.cost_n == 0 {
+            None
+        } else {
+            Some(self.total_cost_usd / self.cost_n as f64)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -105,8 +124,10 @@ impl Aggregate {
             "pass_rate": o.pass_rate(),
             "avg_turns": o.avg_turns(),
             "avg_tokens": o.avg_tokens(),
+            "avg_cost_usd": o.avg_cost_usd(),
             "total_turns": o.total_turns,
             "total_tokens": o.total_tokens,
+            "total_cost_usd": o.total_cost_usd,
             "outcomes": o.outcomes,
             "per_env": self.per_env.iter().map(|g| group_json("env_id", g)).collect::<Vec<_>>(),
             "per_task": self.per_task.iter().map(|g| group_json("task_id", g)).collect::<Vec<_>>(),
@@ -123,8 +144,10 @@ fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
         "pass_rate": g.pass_rate(),
         "avg_turns": g.avg_turns(),
         "avg_tokens": g.avg_tokens(),
+        "avg_cost_usd": g.avg_cost_usd(),
         "total_turns": g.total_turns,
         "total_tokens": g.total_tokens,
+        "total_cost_usd": g.total_cost_usd,
         "outcomes": g.outcomes,
     })
 }
@@ -152,6 +175,8 @@ fn group_aggregate(key: String, rows: &[&RunResult]) -> GroupAggregate {
         total_turns: rows.iter().map(|r| r.turn_count).sum(),
         total_tokens: rows.iter().filter_map(|r| r.total_tokens).sum(),
         tokens_n: rows.iter().filter(|r| r.total_tokens.is_some()).count(),
+        total_cost_usd: rows.iter().filter_map(|r| r.cost_usd).sum(),
+        cost_n: rows.iter().filter(|r| r.cost_usd.is_some()).count(),
     }
 }
 
@@ -210,6 +235,10 @@ fn stats(g: &GroupAggregate) -> String {
         .avg_tokens()
         .map(|t| format!("{t:.0}"))
         .unwrap_or_else(|| "n/a".to_string());
+    let cost = g
+        .avg_cost_usd()
+        .map(|c| format!("${c:.4}"))
+        .unwrap_or_else(|| "n/a".to_string());
     let failures = failure_summary(&g.outcomes);
     let tail = if failures.is_empty() {
         String::new()
@@ -217,12 +246,13 @@ fn stats(g: &GroupAggregate) -> String {
         format!(" — {failures}")
     };
     format!(
-        "{}/{} passed ({:.0}%) · avg turns {:.1} · avg tokens {}{}",
+        "{}/{} passed ({:.0}%) · avg turns {:.1} · avg tokens {} · avg cost {}{}",
         g.passed,
         g.total,
         g.pass_rate() * 100.0,
         g.avg_turns(),
         tokens,
+        cost,
         tail
     )
 }
@@ -256,6 +286,11 @@ mod tests {
             tool_call_count: 0,
             turn_count: 1,
             total_tokens: None,
+            prompt_tokens: None,
+            completion_tokens: None,
+            cache_read_tokens: None,
+            price_model: None,
+            cost_usd: None,
             agent_error: None,
             stage_count: 1,
             format_attempts: 0,
@@ -292,9 +327,29 @@ mod tests {
     }
 
     #[test]
+    fn test_aggregate_sums_cost_over_priced_rollouts_only() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.cost_usd = Some(0.01);
+        let mut b = result("basic", "t2", "l1", Outcome::Failed);
+        b.cost_usd = Some(0.03);
+        let c = result("basic", "t3", "l1", Outcome::AgentError); // unpriced rollout
+        let agg = aggregate(&[a, b, c]);
+        assert!((agg.overall.total_cost_usd - 0.04).abs() < 1e-12);
+        assert_eq!(agg.overall.cost_n, 2);
+        assert_eq!(agg.overall.avg_cost_usd(), Some(0.02)); // averaged over the 2 priced, not 3
+    }
+
+    #[test]
+    fn test_aggregate_cost_is_none_when_unpriced() {
+        let agg = aggregate(&[result("basic", "t1", "l1", Outcome::Passed)]);
+        assert_eq!(agg.overall.avg_cost_usd(), None);
+    }
+
+    #[test]
     fn test_render_markdown_is_aggregate_only() {
         let mut a = result("basic", "t1", "l1", Outcome::Passed);
         a.total_tokens = Some(1500);
+        a.cost_usd = Some(0.0123);
         let md = render_markdown(&[a, result("basic", "t2", "l1", Outcome::Failed)]);
         assert!(
             !md.contains("Pass matrix"),
@@ -303,6 +358,7 @@ mod tests {
         assert!(md.contains("**overall**: 1/2 passed (50%)"));
         assert!(md.contains("avg turns"));
         assert!(md.contains("avg tokens"));
+        assert!(md.contains("avg cost $0.0123"));
         assert!(md.contains("failed=1"), "failure reasons are reported");
         assert!(md.contains("## By task"));
     }

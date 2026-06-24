@@ -87,9 +87,17 @@ def _summarize(aggregate_path: Path) -> _Summary:
             text=f"⚠️ {passed}/{total} passed — harness likely broken · {outcomes}",
         )
     rate = int(pass_rate * 100)
+    cost = _cost_fragment(agg.get("avg_cost_usd"))
     return _Summary(
-        healthy=True, text=f"✅ {passed}/{total} passed ({rate}%) · {outcomes}"
+        healthy=True, text=f"✅ {passed}/{total} passed ({rate}%){cost} · {outcomes}"
     )
+
+
+def _cost_fragment(avg_cost_usd: float | None) -> str:
+    # Omitted entirely when nothing was priced (older runs, or every lane unmapped).
+    if avg_cost_usd is None:
+        return ""
+    return f" · ~${avg_cost_usd:.4f}/run"
 
 
 def _upload(run_id: str, *, tb: Path, run_dir: Path, tarball: Path) -> list[str]:

@@ -181,6 +181,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useHasAnyApiKey: () => ({ hasAnyApiKey: true, isLoading: false }),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: false }),
+}));
+
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects, isPending: false }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),

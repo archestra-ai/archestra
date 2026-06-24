@@ -38,11 +38,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
   parseProjectScope,
   toApiProjectScope,
 } from "@/lib/projects/project-list-scope";
+import { canManageProject } from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
@@ -251,6 +253,7 @@ function ProjectCard({
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 }) {
+  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   return (
     <div className="rounded-lg border p-4 transition-colors hover:bg-muted/50">
       <div className="flex items-center justify-between gap-2">
@@ -287,9 +290,7 @@ function ProjectCard({
           <ProjectCardActions
             pinned={!!project.pinnedAt}
             canPin={project.viewerRole !== "admin"}
-            canManage={
-              project.viewerRole === "owner" || project.viewerRole === "admin"
-            }
+            canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
             onTogglePin={() => onTogglePin(project)}
             onEdit={() => onEdit(project)}
             onDelete={() => onDelete(project)}

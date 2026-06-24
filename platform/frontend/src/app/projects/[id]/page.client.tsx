@@ -60,7 +60,9 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
+import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
   usePinProject,
@@ -95,6 +97,7 @@ function ProjectDetail() {
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -122,12 +125,14 @@ function ProjectDetail() {
     );
   }
 
-  // A project admin overseeing someone else's project can manage it (edit /
-  // delete / sharing) and read its files, but NOT its chats: no composer, no
-  // chats list, no pin, no new schedules. Existing schedules follow their
-  // scheduledTask permissions.
+  // A project admin can manage ANY project they can see — their own, one shared
+  // with them, or another member's they oversee (edit / delete / sharing /
+  // instructions), matching the backend's requireManageable.
+  const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
+  // The oversight-only view (a foreign project surfaced purely via project:admin)
+  // additionally hides chats: no composer, no chats list, no pin, no new
+  // schedules. A project merely shared with the admin keeps its chats.
   const isAdminView = project.viewerRole === "admin";
-  const canManage = project.viewerRole === "owner" || isAdminView;
   const canChat = !isAdminView;
 
   return (

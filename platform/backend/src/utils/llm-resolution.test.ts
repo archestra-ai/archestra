@@ -392,6 +392,64 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     expect(result.selectedModel).toBe("gpt-4o");
   });
 
+  test("honors an explicit per-user provider model by model alone, ignoring a carried-over foreign key", async () => {
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-copilot") {
+        return mockModel({
+          id: "m-copilot",
+          modelId: "gpt-4",
+          provider: "github-copilot",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "key-anthropic", modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+      // The picker carried over a non-Copilot key (the member hasn't connected
+      // Copilot, so that pair isn't linked). A per-user model is still honored
+      // by model alone — its credential is resolved per-user at request time.
+      explicitModelId: "m-copilot",
+      explicitApiKeyId: "key-azure",
+    });
+
+    expect(result.modelId).toBe("m-copilot");
+    expect(result.chatApiKeyId).toBeNull();
+    expect(result.selectedModel).toBe("gpt-4");
+    expect(result.selectedProvider).toBe("github-copilot");
+  });
+
+  test("does not pin a key when the org default points at a per-user model", async () => {
+    // The org default pins a Copilot model + the admin's key; another member
+    // inherits the model but must not inherit the admin's (inaccessible) key.
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      defaultModelId: "m-copilot",
+      defaultLlmApiKeyId: "key-admin-copilot",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-copilot") {
+        return mockModel({
+          id: "m-copilot",
+          modelId: "gpt-4o",
+          provider: "github-copilot",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "member-2",
+    });
+
+    expect(result.modelId).toBe("m-copilot");
+    expect(result.chatApiKeyId).toBeNull();
+    expect(result.selectedProvider).toBe("github-copilot");
+  });
+
   test("an explicit model with no key falls through to the agent", async () => {
     vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
       if (id === "m-agent") {

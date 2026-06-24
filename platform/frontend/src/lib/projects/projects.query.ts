@@ -19,14 +19,19 @@ const {
   getProject,
   getProjectConversations,
   getProjectFiles,
+  getProjectInstructions,
   getProjects,
+  pinProject,
+  setProjectInstructions,
   setProjectShare,
+  unpinProject,
   updateProject,
 } = archestraApiSdk;
 
-export function useProjects() {
+export function useProjects(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["projects"],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { data, error } = await getProjects();
       if (error) {
@@ -91,6 +96,50 @@ export function useProjectFiles(id: string | undefined) {
   });
 }
 
+/** The project's instructions ("" when never saved). */
+export function useProjectInstructions(id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", id, "instructions"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getProjectInstructions({
+        path: { id: id as string },
+      });
+      if (error) {
+        if (!isProjectNotFound(error)) handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useSetProjectInstructions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; content: string }) => {
+      const { error } = await setProjectInstructions({
+        path: { id: params.id },
+        body: { content: params.content },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      toast.success("Instructions saved");
+      queryClient.invalidateQueries({
+        queryKey: ["projects", id, "instructions"],
+      });
+      // The first save materializes the instructions.md file.
+      queryClient.invalidateQueries({ queryKey: ["projects", id, "files"] });
+    },
+  });
+}
+
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -122,6 +171,28 @@ export function useUpdateProject() {
     ) => {
       const { id, ...body } = params;
       const { error } = await updateProject({ path: { id }, body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", id] });
+    },
+  });
+}
+
+/** Pin/unpin a project for the current user (personal — toggle by `pinned`). */
+export function usePinProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { error } = pinned
+        ? await pinProject({ path: { id } })
+        : await unpinProject({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;

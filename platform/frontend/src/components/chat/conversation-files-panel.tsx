@@ -1,31 +1,50 @@
 "use client";
 
+import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import { Check, Copy, Download, File as FileIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { FileSection } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
+import {
+  INSTRUCTIONS_SELECTION,
+  InstructionsRow,
+  ProjectInstructionsPanel,
+} from "@/components/chat/project-instructions";
 import { useConversationFiles } from "@/lib/chat/chat.query";
 import { assembleFileSections } from "@/lib/chat/conversation-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
+import { useProject } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
 interface ConversationFilesPanelProps {
   conversationId: string | undefined;
   artifact: string | null | undefined;
+  /** Set when the chat belongs to a project — enables the pinned instructions. */
+  projectId?: string | null;
   onClose: () => void;
 }
 
 export function ConversationFilesPanel({
   conversationId,
   artifact,
+  projectId,
   onClose,
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
-  const { generated, attachments, projectFiles } = assembleFileSections({
-    files,
-    artifact,
-  });
+  const { data: project } = useProject(projectId ?? undefined);
+  const isProjectOwner = project?.isOwner ?? false;
+  const sections = assembleFileSections({ files, artifact });
+  const { generated, attachments } = sections;
+
+  // In a project chat, instructions.md is surfaced only as the pinned entry —
+  // keep it out of the ordinary project file list. Its presence drives the row.
+  const hasInstructions = sections.projectFiles.some(
+    (f) => f.name === PROJECT_INSTRUCTIONS_FILENAME,
+  );
+  const projectFiles = sections.projectFiles.filter(
+    (f) => f.name !== PROJECT_INSTRUCTIONS_FILENAME,
+  );
   const hasArtifact = !!artifact && artifact.trim().length > 0;
   // Default to previewing the artifact when one exists as the panel opens.
   const [selectedId, setSelectedId] = useState<string | null>(() =>
@@ -37,6 +56,15 @@ export function ConversationFilesPanel({
   const results = [...generated, ...projectFiles];
   const all = [...results, ...attachments];
   const selected = all.find((f) => f.id === selectedId) ?? null;
+
+  // The pinned instructions entry only exists in a project chat. Its sentinel
+  // selection is not a file, so it must be excluded from the "selected file"
+  // bookkeeping below.
+  const showInstructions = projectId != null;
+  const instructionsSelected =
+    showInstructions && selectedId === INSTRUCTIONS_SELECTION;
+  const instructionsSelectedRef = useRef(false);
+  instructionsSelectedRef.current = instructionsSelected;
 
   // The Results header only earns its place when attachments sit beside it; a
   // lone group needs no label to tell it apart.
@@ -52,7 +80,9 @@ export function ConversationFilesPanel({
 
   // Clear the preview if the selected file disappears (e.g. artifact cleared).
   // Depend on a stable boolean, not the freshly-built `all` array each render.
-  const selectedMissing = selectedId !== null && selected === null;
+  // The instructions sentinel is never a file, so it must not count as missing.
+  const selectedMissing =
+    selectedId !== null && !instructionsSelected && selected === null;
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
@@ -86,6 +116,9 @@ export function ConversationFilesPanel({
     seenGeneratedRef.current = new Set(ids);
     prevArtifactRef.current = artifact;
     if (prevGenerated === null) return; // baseline only — default handles open
+    // Don't yank the view away from the instructions editor (and its unsaved
+    // draft) when a new output lands while the owner is editing.
+    if (instructionsSelectedRef.current) return;
 
     if (hasArtifact && artifact !== prevArtifact) {
       setSelectedId("artifact");
@@ -105,8 +138,11 @@ export function ConversationFilesPanel({
   const handleDownloadArtifactPdf = () =>
     printMarkdownElementAsPdf(artifactRef.current, "Artifact");
   const artifactSelected = selected?.source === "artifact";
+  const previewing = selected !== null || instructionsSelected;
 
-  if (results.length === 0 && attachments.length === 0) {
+  // A project chat always shows the pinned instructions row, so the empty state
+  // only applies to non-project chats with nothing to show.
+  if (!showInstructions && results.length === 0 && attachments.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
         <FileIcon className="mb-2 h-6 w-6 opacity-50" />
@@ -127,9 +163,16 @@ export function ConversationFilesPanel({
       <div
         className={cn(
           "overflow-y-auto px-3 py-3",
-          selected ? "max-h-[45%] shrink-0 border-b" : "flex-1",
+          previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
         )}
       >
+        {showInstructions && (
+          <InstructionsRow
+            selected={instructionsSelected}
+            hasContent={hasInstructions}
+            onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+          />
+        )}
         <FileSection
           title={showHeaders ? "Results" : undefined}
           items={results}
@@ -171,6 +214,14 @@ export function ConversationFilesPanel({
 
       {selected && !artifactSelected && (
         <FilePreview file={selected} onClose={onClose} />
+      )}
+
+      {instructionsSelected && projectId && (
+        <ProjectInstructionsPanel
+          projectId={projectId}
+          isOwner={isProjectOwner}
+          onClose={() => setSelectedId(null)}
+        />
       )}
     </div>
   );

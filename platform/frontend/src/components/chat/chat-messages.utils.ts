@@ -1,13 +1,19 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  getArchestraAppResourceUri,
+  getArchestraToolShortName,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
+import { startCase } from "lodash-es";
 import {
   getToolErrorText,
   isCompactEligible,
@@ -132,6 +138,48 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
+ * Whether a render has been superseded by a newer render of the same app in the
+ * conversation. The app registry (see {@link deriveAppsFromMessages}) dedupes
+ * apps by `uiResourceUri` to their latest render, so a render is superseded when
+ * the registry holds an entry for its `uiResourceUri` whose `toolCallId` differs.
+ * Applies to both owned apps and external MCP-UI tool calls.
+ *
+ * Returns `false` when the registry has no entry for the app yet (e.g. mid-stream
+ * before the result is derived) so a freshly arriving render is never wrongly
+ * collapsed. Superseded renders show a static changelog pill instead of a live
+ * iframe; only the latest render of each app stays live.
+ */
+export function isSupersededRender(params: {
+  apps: PanelApp[];
+  uiResourceUri: string;
+  toolCallId: string | undefined;
+}): boolean {
+  const latest = params.apps.find(
+    (a) => a.uiResourceUri === params.uiResourceUri,
+  )?.toolCallId;
+  return latest !== undefined && latest !== params.toolCallId;
+}
+
+/**
+ * Past-tense verb describing what an owned-app render did, derived from the tool
+ * that produced it — used as the trailing label on a superseded render's
+ * changelog pill (e.g. "Dashboard · v2 · Updated"). Returns `null` for unknown
+ * tools so the pill simply omits the verb.
+ */
+export function getAppRenderVerb(toolName: string): string | null {
+  switch (getArchestraToolShortName(toolName, { includeDefaultPrefix: true })) {
+    case TOOL_SCAFFOLD_APP_SHORT_NAME:
+      return "Created";
+    case TOOL_EDIT_APP_SHORT_NAME:
+      return "Updated";
+    case TOOL_RENDER_APP_SHORT_NAME:
+      return "Rendered";
+    default:
+      return null;
+  }
+}
+
+/**
  * Derive the list of MCP Apps for a conversation directly from its messages
  * (plus any early UI-start data from the active stream).
  *
@@ -144,11 +192,25 @@ export function extractOwnedAppRender(params: {
  * refresh reconstructs and never empties because a single section briefly
  * unmounts.
  *
- * Owned (Archestra-authored) apps are deduped by `appId`: repeated renders of
- * the same app collapse to a single entry that tracks the latest render (its
- * toolCallId and version), so the panel defaults to the newest version. External
- * MCP-UI tool calls stay one entry per call — each is a distinct invocation.
+ * Apps are deduped by `uiResourceUri`: repeated renders of the same app collapse
+ * to a single entry that tracks the latest render (its toolCallId and version),
+ * so the panel defaults to the newest version. Owned (Archestra-authored) apps
+ * use the synthetic `ui://archestra-app/<appId>` URI (version-independent, so
+ * every version collapses together); external MCP-UI tool calls use the URI from
+ * their result.
  */
+
+/**
+ * Friendly label for an external MCP tool, derived from its full name.
+ * "system__get-system-stats" -> "System / Get System Stats"; "render_app" -> "Render App".
+ */
+export function humanizeToolLabel(fullToolName: string): string {
+  const { serverName, toolName } = parseFullToolName(fullToolName);
+  return serverName
+    ? `${startCase(serverName)} / ${startCase(toolName)}`
+    : startCase(toolName);
+}
+
 export function deriveAppsFromMessages(
   messages: UIMessage[],
   earlyToolUiStarts: Record<
@@ -159,9 +221,9 @@ export function deriveAppsFromMessages(
 ): PanelApp[] {
   const apps: PanelApp[] = [];
   const seen = new Set<string>();
-  // Maps an owned-app `appId` to its index in `apps`, so a later render of the
-  // same app replaces the earlier entry instead of appending a duplicate.
-  const ownedAppIndex = new Map<string, number>();
+  // Maps an app's `uiResourceUri` to its index in `apps`, so a later render of
+  // the same app replaces the earlier entry instead of appending a duplicate.
+  const appIndex = new Map<string, number>();
 
   for (const message of messages) {
     const createdAt = getMessageCreatedAt(message);
@@ -171,10 +233,12 @@ export function deriveAppsFromMessages(
       if (!toolCallId || seen.has(toolCallId)) continue;
 
       const early = earlyToolUiStarts[toolCallId];
-      const hasUiResource =
+      const outputUri =
         // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
-        Boolean((part.output as any)?._meta?.ui?.resourceUri) ||
-        Boolean(early?.uiResourceUri);
+        ((part.output as any)?._meta?.ui?.resourceUri as string | undefined) ??
+        early?.uiResourceUri ??
+        null;
+      const hasUiResource = Boolean(outputUri);
       const fullToolName = getToolName(part) ?? early?.toolName ?? "";
       const ownedApp = hasUiResource
         ? null
@@ -185,26 +249,29 @@ export function deriveAppsFromMessages(
             output: part.output,
             getToolShortName,
           });
-      if (!hasUiResource && !ownedApp) continue;
+      // Owned apps drive the app-bound endpoint via a synthetic, version-stable
+      // URI; external MCP-UI calls carry their own URI in the result.
+      const uiResourceUri = ownedApp
+        ? getArchestraAppResourceUri(ownedApp.appId)
+        : outputUri;
+      if (!uiResourceUri) continue;
 
       seen.add(toolCallId);
-      const parsed = parseFullToolName(fullToolName);
       const entry: PanelApp = {
         toolCallId,
-        label: ownedApp?.appName ?? (parsed.toolName || fullToolName),
+        label: ownedApp?.appName ?? humanizeToolLabel(fullToolName),
+        uiResourceUri,
         appId: ownedApp?.appId ?? null,
         version: ownedApp?.latestVersion ?? null,
         createdAt: createdAt ?? 0,
       };
 
-      if (ownedApp) {
-        const existing = ownedAppIndex.get(ownedApp.appId);
-        if (existing !== undefined) {
-          apps[existing] = entry;
-          continue;
-        }
-        ownedAppIndex.set(ownedApp.appId, apps.length);
+      const existing = appIndex.get(uiResourceUri);
+      if (existing !== undefined) {
+        apps[existing] = entry;
+        continue;
       }
+      appIndex.set(uiResourceUri, apps.length);
       apps.push(entry);
     }
   }

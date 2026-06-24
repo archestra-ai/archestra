@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: ""
+      amd64_only:
+        description: "Build only linux/amd64 and skip the arm64 matrix leg. Use for amd64-only deploy targets (e.g. the staging cluster). Release/Docker Hub builds leave this false to stay multi-arch."
+        required: false
+        type: boolean
+        default: false
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -77,15 +82,13 @@ concurrency:
 jobs:
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
-    runs-on: ${{ matrix.platform }}
+    # Pick the runner matching the arch.
+    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'blacksmith-16vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
     strategy:
       fail-fast: false
+      # Build both arches, or amd64 only when amd64_only is set.
       matrix:
-        include:
-          - platform: blacksmith-16vcpu-ubuntu-2404
-            os_and_arch: linux/amd64
-          - platform: blacksmith-16vcpu-ubuntu-2404-arm
-            os_and_arch: linux/arm64
+        os_and_arch: ${{ inputs.amd64_only && fromJSON('["linux/amd64"]') || fromJSON('["linux/amd64", "linux/arm64"]') }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-19
+lastUpdated: 2026-06-23
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -243,7 +243,7 @@ The following table lists all available permissions that can be assigned to cust
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
 | `project:read` | View projects and the chats inside them |
 | `project:create` | Create projects |
-| `project:update` | Edit project descriptions and sharing |
+| `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |

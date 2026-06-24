@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
@@ -41,6 +42,9 @@ import type { AuditEventName } from "@/types/audit-log";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 import { hashOauthClientSecret } from "./oauth-client-secret";
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: EE-only SSO config
     await import("./idp.ee")
@@ -49,6 +53,7 @@ const { ssoConfig, syncSsoRole, syncSsoTeams } = config.enterpriseFeatures.core
       syncSsoRole: () => {},
       syncSsoTeams: () => {},
     };
+// SPDX-SnippetEnd
 
 const APP_NAME = DEFAULT_APP_NAME;
 const {
@@ -1464,6 +1469,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // SSO Role & Team Sync: Synchronize role and team memberships based on SSO claims
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
@@ -1478,10 +1486,14 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
       }
+      // SPDX-SnippetEnd
     }
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function getSsoCallbackProviderId(params: {
   path: string;
   requestUrl?: string;
@@ -1599,6 +1611,7 @@ async function cleanupRejectedSsoLogin(params: {
     }
   });
 }
+// SPDX-SnippetEnd
 
 /**
  * Writes a single auth-event row to audit_logs.

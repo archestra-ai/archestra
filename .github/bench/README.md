@@ -41,6 +41,11 @@ PLATFORM_GSA=$(kubectl get sa archestra-platform -n archestra \
   -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}')
 gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
   --member="serviceAccount:${PLATFORM_GSA}" --role="roles/storage.objectAdmin"
+
+# So the Slack `report` / `details` links (storage.cloud.google.com authenticated URLs) open for any
+# signed-in org member — read-only, org domain only, not allUsers/public.
+gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
+  --member="domain:archestra.ai" --role="roles/storage.objectViewer"
 ```
 
 ### 2. GitHub secrets

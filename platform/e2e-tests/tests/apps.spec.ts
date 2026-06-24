@@ -1,7 +1,7 @@
 import { goToPage } from "../fixtures";
 import { expect, test } from "./api-fixtures";
 
-// Seed an app from the default template, open /apps/:id/run, and assert through
+// Seed an app from the default template, open /a/:id, and assert through
 // the nested sandbox frames (host page → sandbox proxy iframe → inner app
 // iframe) that the app reaches "Ready." — which the template only shows after
 // the injected runtime bridge connected the guest SDK and completed a
@@ -39,8 +39,10 @@ test("create an app from a template and run it standalone", async ({
   const app = (await createRes.json()) as { id: string };
 
   try {
-    await goToPage(page, `/apps/${app.id}/run`);
-    await expect(page.getByText(name)).toBeVisible();
+    await goToPage(page, `/a/${app.id}`);
+    // The standalone runtime is chromeless: the app name is the browser tab
+    // title, not on-page text.
+    await expect(page).toHaveTitle(name);
 
     const proxyFrame = page.frameLocator("iframe");
     const appFrame = proxyFrame.frameLocator("iframe");

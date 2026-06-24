@@ -13,6 +13,7 @@ import {
   PackageX,
   Pencil,
   PlugZap,
+  Plus,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -21,6 +22,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+} from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +53,12 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import {
@@ -315,6 +328,52 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           null
         : null;
 
+  // Avatars for the people/teams connected to this server (deduped by
+  // owner/team), with an overflow count and a "+" to manage credentials —
+  // mirrors the registry card.
+  const MAX_AVATARS = 4;
+  const connectionAvatars: Array<{
+    type: "team" | "user";
+    label: string;
+    key: string;
+    serverIds: string[];
+  }> = [];
+  const seenAvatarKeys = new Set<string>();
+  for (const server of allServersForCatalog) {
+    const serverScope = server.scope ?? (server.teamId ? "team" : "personal");
+    if (serverScope === "org") continue;
+    if (server.teamDetails?.name) {
+      const key = `team-${server.teamDetails.teamId}`;
+      if (seenAvatarKeys.has(key)) {
+        connectionAvatars.find((a) => a.key === key)?.serverIds.push(server.id);
+      } else {
+        seenAvatarKeys.add(key);
+        connectionAvatars.push({
+          type: "team",
+          label: server.teamDetails.name,
+          key,
+          serverIds: [server.id],
+        });
+      }
+    } else if (server.ownerEmail) {
+      const key = `user-${server.ownerEmail}`;
+      if (seenAvatarKeys.has(key)) {
+        connectionAvatars.find((a) => a.key === key)?.serverIds.push(server.id);
+      } else {
+        seenAvatarKeys.add(key);
+        connectionAvatars.push({
+          type: "user",
+          label: server.ownerEmail,
+          key,
+          serverIds: [server.id],
+        });
+      }
+    }
+  }
+  const extraAvatarCount = connectionAvatars.length - MAX_AVATARS;
+  const showAuthorAvatar =
+    item.scope === "personal" && Boolean(item.authorName);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -543,6 +602,73 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                     {environmentLabel ?? defaultEnvironment.name}
                   </OverviewField>
                 )}
+                {variant !== "builtin" && (
+                  <OverviewField label="Credentials">
+                    <AvatarGroup>
+                      {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
+                        const connDeployment = computeDeploymentStatusSummary(
+                          entry.serverIds,
+                          deploymentStatuses,
+                        );
+                        const borderClass = connDeployment
+                          ? {
+                              running: "border-green-600 dark:border-green-800",
+                              pending:
+                                "border-yellow-500 dark:border-yellow-600",
+                              failed: "border-red-500 dark:border-red-700",
+                              degraded:
+                                "border-orange-500 dark:border-orange-600",
+                            }[connDeployment.overallState]
+                          : "border-background";
+                        return (
+                          <TooltipProvider key={entry.key}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Avatar
+                                  className={cn("size-7 border-2", borderClass)}
+                                >
+                                  <AvatarFallback
+                                    className={cn(
+                                      "text-[10px]",
+                                      entry.type === "team" && "bg-accent",
+                                    )}
+                                  >
+                                    {entry.label.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {entry.type === "team"
+                                  ? `Team: ${entry.label}`
+                                  : entry.label}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })}
+                      {extraAvatarCount > 0 && (
+                        <AvatarGroupCount className="size-7 text-[10px]">
+                          +{extraAvatarCount}
+                        </AvatarGroupCount>
+                      )}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Avatar
+                              className="size-7 cursor-pointer border-2 border-background transition-opacity hover:opacity-80"
+                              onClick={() => setActiveTab("credentials")}
+                            >
+                              <AvatarFallback className="bg-muted text-muted-foreground">
+                                <Plus className="h-3 w-3" />
+                              </AvatarFallback>
+                            </Avatar>
+                          </TooltipTrigger>
+                          <TooltipContent>Manage credentials</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </AvatarGroup>
+                  </OverviewField>
+                )}
                 {endpoint && (
                   <OverviewField
                     label={variant === "remote" ? "Server URL" : "Command"}
@@ -555,6 +681,18 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                 <OverviewField label="Created">
                   {formatDate({ date: item.createdAt, dateFormat: "PP" })}
                 </OverviewField>
+                {showAuthorAvatar && (
+                  <OverviewField label="Author">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="size-7">
+                        <AvatarFallback className="text-[10px]">
+                          {item.authorName?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{item.authorName}</span>
+                    </div>
+                  </OverviewField>
+                )}
                 {item.labels.length > 0 && (
                   <OverviewField label="Labels">
                     <div className="flex flex-wrap gap-1.5">

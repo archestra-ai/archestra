@@ -131,6 +131,7 @@ export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
 export const TOOL_RENDER_APP_SHORT_NAME = "render_app";
 export const TOOL_READ_APP_SHORT_NAME = "read_app";
 export const TOOL_EDIT_APP_SHORT_NAME = "edit_app";
+export const TOOL_SET_APP_TOOLS_SHORT_NAME = "set_app_tools";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
@@ -224,6 +225,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
@@ -433,6 +435,7 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
@@ -508,9 +511,10 @@ export function isProjectsFileArchestraToolShortName(
  * writing code in the reply — the model won't search for a capability it
  * doesn't know exists, so the scaffold/read/edit/render authoring surface stays
  * top-level. delete_app stays behind search (destructive, never
- * intent-time-critical); preview_app_tool and get_app_diagnostics likewise —
- * they are follow-up steps the scaffold/edit tool descriptions name explicitly,
- * so the model reaches them via run_tool once it is already building.
+ * intent-time-critical); preview_app_tool, get_app_diagnostics, and
+ * set_app_tools likewise — they are follow-up steps the scaffold/edit tool
+ * descriptions and the authoring guidance name explicitly, so the model reaches
+ * them via run_tool once it is already building.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,

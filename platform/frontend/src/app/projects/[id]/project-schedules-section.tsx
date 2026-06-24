@@ -9,6 +9,7 @@ import {
   Power,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   DEFAULT_FORM_STATE,
@@ -133,7 +134,13 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
           aria-hidden
         />
       </span>
-      <span className={cn("min-w-0 flex-1", !schedule.enabled && "opacity-60")}>
+      <Link
+        href={`/projects/${schedule.projectId}/schedules/${schedule.id}`}
+        className={cn(
+          "min-w-0 flex-1 hover:opacity-80 transition-opacity",
+          !schedule.enabled && "opacity-60",
+        )}
+      >
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{schedule.name}</span>
           {!schedule.enabled && (
@@ -145,7 +152,7 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
         <span className="block truncate text-xs text-muted-foreground">
           {schedule.agent?.name ?? "Default agent"}
         </span>
-      </span>
+      </Link>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Schedule actions">

@@ -155,6 +155,29 @@ describe("GET /api/projects (scope + search)", () => {
     ).toEqual(["other-private"]); // a specific other user
   });
 
+  test("admin default 'All' hides other members' private projects", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "list-admin-all@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const other = await makeUser({ email: "list-other-all@test.com" });
+    await makeMember(other.id, organizationId, {});
+    await create(admin, "admin-private");
+    await create(other, "other-private");
+    const otherOrg = await create(other, "other-org");
+    await share(other, otherOrg.id, "organization");
+    actingUser = admin;
+
+    // "All" mirrors the Agents filter: org/team-shared projects (even others')
+    // show, but other members' PRIVATE projects do not — those are reachable
+    // only via Personal → Other users.
+    expect(names((await list()).body).sort()).toEqual([
+      "admin-private",
+      "other-org",
+    ]);
+  });
+
   test("the owner sub-filter is ignored for non-admins", async ({
     makeUser,
     makeMember,

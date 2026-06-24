@@ -239,7 +239,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
-          isOwner={project.isOwner}
+          isOwner={canManage}
         />
       </div>
     </div>

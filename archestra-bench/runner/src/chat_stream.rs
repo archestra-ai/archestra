@@ -19,7 +19,8 @@ pub struct ChatRunResult {
     pub total_tokens: Option<i64>,
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
-    /// Prompt tokens served from the provider's cache — a subset of `prompt_tokens`, billed cheaper.
+    /// Prompt tokens served from the provider's cache, billed cheaper. Disjoint from `prompt_tokens`
+    /// (the backend reports `prompt_tokens`/`inputTokens` already net of cache).
     pub cache_read_tokens: Option<i64>,
     pub stage_tokens: Option<i64>,
     pub stage_prompt_tokens: Option<i64>,

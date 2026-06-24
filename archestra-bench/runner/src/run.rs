@@ -3063,7 +3063,6 @@ mod tests {
         )
         .await;
         // 1000 * 1e-6 + 500 * 2e-6 = 0.002
-        // 1000 * 1e-6 + 500 * 2e-6 = 0.002
         assert_eq!(result.cost_usd, Some(0.002));
         assert_eq!(result.price_model.as_deref(), Some("vendor/cheap"));
         assert_eq!(result.prompt_tokens, Some(1000));

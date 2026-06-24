@@ -30,8 +30,13 @@ impl PriceBook {
     }
 
     /// USD cost of one run. `None` — reported as `n/a`, never `0` — when the lane has no slug, the slug
-    /// is absent from the book, or token counts are missing. Cache reads (a subset of `prompt`) are
-    /// clamped to `[0, prompt]` and billed at the cache rate when known, else at the input rate.
+    /// is absent from the book, or token counts are missing.
+    ///
+    /// `prompt` is the backend's `inputTokens`, which is already **net of** cache reads (the platform
+    /// emits a fully-cached request as `inputTokens == 0`, with the cache shown separately — see
+    /// `calculateCost` in the platform's cost-optimization). So input and cache tokens are disjoint and
+    /// summed, not subtracted. Cache reads are billed at the cache rate when OpenRouter publishes one,
+    /// else at the input rate (the conservative estimate when the discount is unknown).
     pub fn cost(
         &self,
         prompt: Option<i64>,
@@ -40,19 +45,20 @@ impl PriceBook {
         slug: Option<&str>,
     ) -> Option<f64> {
         let price = self.models.get(slug?)?;
-        let prompt = prompt?;
-        let completion = completion? as f64;
-        let cache_read = cache_read.unwrap_or(0).clamp(0, prompt) as f64;
-        let billable_input = prompt as f64 - cache_read;
+        let prompt = prompt?.max(0) as f64;
+        let completion = completion?.max(0) as f64;
+        let cache_read = cache_read.unwrap_or(0).max(0) as f64;
         let cache_price = price.cache_read.unwrap_or(price.input);
-        Some(billable_input * price.input + cache_read * cache_price + completion * price.output)
+        Some(prompt * price.input + cache_read * cache_price + completion * price.output)
     }
 }
 
 /// Fetch and parse OpenRouter's model list. Any failure is returned as an error string so the caller
 /// can record the fetch status once and fall back to an empty book (all costs `n/a`).
 pub async fn fetch_price_book() -> Result<PriceBook, String> {
+    // Bounded so a hung models endpoint can't stall the whole benchmark before any rollout starts.
     let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
     let resp = http
@@ -140,32 +146,35 @@ mod tests {
     }
 
     #[test]
-    fn cost_is_cache_aware_when_rate_known() {
+    fn cost_adds_cache_reads_at_cache_rate() {
         let book = book();
-        // 200 cache reads of 1000 input: 800*1e-6 + 200*1e-7 + 500*2e-6
+        // input (1000) is already net of cache; cache reads (200) are disjoint and priced separately:
+        // 1000*1e-6 + 200*1e-7 + 500*2e-6
         let cost = book
             .cost(Some(1000), Some(500), Some(200), Some("vendor/cached"))
             .unwrap();
-        assert!((cost - (0.0008 + 0.00002 + 0.001)).abs() < 1e-12);
+        assert!((cost - (0.001 + 0.00002 + 0.001)).abs() < 1e-12);
     }
 
     #[test]
-    fn cache_reads_without_rate_fall_back_to_input() {
+    fn cache_reads_without_rate_priced_at_input() {
         let book = book();
-        // vendor/cheap has no cache rate, so cached tokens cost the same as input — equals the no-cache cost.
-        let with_cache = book.cost(Some(1000), Some(500), Some(300), Some("vendor/cheap"));
-        let without = book.cost(Some(1000), Some(500), None, Some("vendor/cheap"));
-        assert_eq!(with_cache, without);
-    }
-
-    #[test]
-    fn cache_reads_clamp_to_prompt() {
-        let book = book();
-        // cache_read > prompt must not produce negative billable input.
-        let cost = book
-            .cost(Some(100), Some(0), Some(10_000), Some("vendor/cached"))
+        // vendor/cheap has no cache rate → cache reads billed at the input rate, added on top of input.
+        let with_cache = book
+            .cost(Some(1000), Some(500), Some(300), Some("vendor/cheap"))
             .unwrap();
-        assert!((cost - 100.0 * 0.0000001).abs() < 1e-12);
+        // 1000*1e-6 + 300*1e-6 + 500*2e-6
+        assert!((with_cache - (0.001 + 0.0003 + 0.001)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn negative_token_counts_clamp_to_zero() {
+        let book = book();
+        // A malformed negative count must not produce a negative cost.
+        let cost = book
+            .cost(Some(-5), Some(-5), Some(-5), Some("vendor/cached"))
+            .unwrap();
+        assert_eq!(cost, 0.0);
     }
 
     #[test]

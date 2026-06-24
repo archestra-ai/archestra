@@ -10,6 +10,9 @@ const config: KnipConfig = {
     "src/routes/**/*.ts!",
     // Standalone scripts run via `tsx` from package.json scripts (not picked up by tsdown plugin)
     "src/standalone-scripts/**/*.ts!",
+    // S3 storage provider — wired into file-storage.ts factory in an upcoming task;
+    // listed here so knip --production sees it as a production entry point now.
+    "src/skills-sandbox/s3-storage.ts!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
   ],
@@ -23,10 +26,6 @@ const config: KnipConfig = {
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",
     "@archestra/app-runtime-rs",
-    // Used by the S3ObjectStore production implementation (upcoming task); only
-    // the in-memory test double (`src/test/fake-s3-client.ts`) exists so far, so
-    // knip --production can't see a non-test import yet.
-    "@aws-sdk/client-s3",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

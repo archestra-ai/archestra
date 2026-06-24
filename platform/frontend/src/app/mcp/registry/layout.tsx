@@ -79,8 +79,8 @@ export default function McpCatalogLayout({
         title={title}
         description={
           <>
-            Self-hosted MCP registry allows you to manage your own list of MCP
-            servers and make them available to your agents.
+            Self-hosted registry to create and promote MCP servers for your
+            agents and MCP gateways.
           </>
         }
         actionButton={registryActionButton ?? pageActionButton}

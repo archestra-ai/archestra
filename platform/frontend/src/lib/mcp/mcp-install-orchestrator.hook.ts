@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
@@ -49,6 +49,20 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
+
+  // Catalogs the user has a connected server for. An "Authentication Required"
+  // install card flips to a connected state once its catalog appears here (the
+  // install/reauth mutations and the OAuth callback both invalidate
+  // `useMcpServers`, so this refreshes when a connection completes).
+  const connectedCatalogIds = useMemo(
+    () =>
+      new Set(
+        (installedServers ?? [])
+          .map((server) => server.catalogId)
+          .filter((catalogId): catalogId is string => !!catalogId),
+      ),
+    [installedServers],
+  );
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<DialogKey>();
 
@@ -372,6 +386,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     // Public API
     triggerInstallByCatalogId,
     triggerReauthByCatalogIdAndServerId,
+    connectedCatalogIds,
 
     // Dialog state (for rendering)
     isDialogOpened,

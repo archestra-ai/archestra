@@ -878,7 +878,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `false` (virtual-hosted style, correct for AWS S3 and most S3-compatible stores)
 
 - **`ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID`** and **`ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY`** - Static AWS credentials for the S3 provider.
-  - Optional: When omitted, the AWS default credential chain is used (environment variables, `~/.aws/credentials`, IAM instance profile, IRSA, etc.)
+  - Optional: When both are omitted, the AWS default credential chain is used (environment variables, `~/.aws/credentials`, IAM instance profile, IRSA, etc.)
   - Use static credentials for self-hosted stores (MinIO) or when running outside AWS without IRSA
 
 - **`ARCHESTRA_FILE_STORAGE_S3_KEY_PREFIX`** - Optional object key prefix (folder) within the bucket.

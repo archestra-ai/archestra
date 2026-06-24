@@ -44,6 +44,10 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: () => ({ data: { user: { id: "test-user" } } }),
+}));
+
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({
     mutateAsync: mutateAsyncMock,

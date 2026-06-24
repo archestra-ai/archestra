@@ -982,4 +982,70 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
     expect(response.statusCode).toBe(401);
   });
+
+  test("full host flow: an OAuth-connector client lists, opens, and reads the shared app UI", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    // The user shares their app; an external host (e.g. Claude Desktop) completes
+    // OAuth consent and presents an audience-bound, mcp-scoped token. This walks
+    // the exact host journey over the connector end to end: tools/list -> call
+    // the launch tool -> resources/read the ui:// resource it points at.
+    const created = await makeApp({ html: "<h1>shared app</h1>" });
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "admin" });
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `connector-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: connectorRef(created.id),
+      scopes: ["mcp"],
+    });
+    app = await buildBearerApp();
+
+    const call = (payload: object) =>
+      app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}`,
+        headers: bearerLocal(rawToken),
+        payload,
+      });
+    const expectedUri = getArchestraAppResourceUri(created.id);
+
+    // 1. tools/list — the launch tool carries the app's ui:// resource pointer.
+    const listRes = await call({ jsonrpc: "2.0", method: "tools/list", id: 1 });
+    expect(listRes.statusCode).toBe(200);
+    const open = (
+      listRes.json().result.tools as Array<{
+        name: string;
+        _meta?: { ui?: { resourceUri?: string } };
+      }>
+    ).find((t) => t.name === "open");
+    expect(open?._meta?.ui?.resourceUri).toBe(expectedUri);
+
+    // 2. tools/call the launch tool — returns the ui:// pointer for the host to render.
+    const callRes = await call({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      id: 2,
+      params: { name: "open", arguments: {} },
+    });
+    expect(callRes.statusCode).toBe(200);
+    expect(callRes.json().result._meta?.ui?.resourceUri).toBe(expectedUri);
+
+    // 3. resources/read — the app HTML under the platform-pinned CSP.
+    const readRes = await call({
+      jsonrpc: "2.0",
+      method: "resources/read",
+      id: 3,
+      params: { uri: expectedUri },
+    });
+    expect(readRes.statusCode).toBe(200);
+    const content = readRes.json().result.contents[0];
+    expect(content.text).toContain("shared app");
+    expect(content._meta.ui.csp).toEqual(APP_PLATFORM_CSP);
+  });
 });

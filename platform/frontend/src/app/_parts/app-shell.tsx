@@ -2,6 +2,7 @@
 
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import {
@@ -37,6 +38,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const mainRef = useRef<HTMLElement | null>(null);
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
   // Chat and project detail pages are viewport-locked, two-pane layouts
@@ -102,7 +104,11 @@ export function AppShell({ children }: AppShellProps) {
         <AppSidebar />
         <NavAwareSidebarCircleToggle />
         <MaintenanceModeOverlay />
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
+        <main
+          ref={mainRef}
+          className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto"
+        >
+          <MainScrollRestoration containerRef={mainRef} />
           {notification && (
             <SiteNotificationBar
               content={notification.content}
@@ -140,4 +146,69 @@ export function AppShell({ children }: AppShellProps) {
 function NavAwareSidebarCircleToggle() {
   const { isNavigating } = useNavigationStatus();
   return <SidebarCircleToggle loading={isNavigating} />;
+}
+
+// Next.js restores window scroll on navigation, but in this shell the page
+// content scrolls inside <main overflow-y-auto>, so its scrollTop is lost on
+// back/forward. Persist it per route and restore it ourselves.
+const mainScrollPositions = new Map<string, number>();
+
+const useBrowserLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+function MainScrollRestoration({
+  containerRef,
+}: {
+  containerRef: React.RefObject<HTMLElement | null>;
+}) {
+  const pathname = usePathname();
+
+  // Remember where the user is on the current route as they scroll.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      mainScrollPositions.set(pathname, el.scrollTop);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [pathname, containerRef]);
+
+  // On navigation, restore the saved position (or reset to top for a route we
+  // haven't scrolled). Content can render/grow asynchronously after a data
+  // fetch, so re-apply for a few frames until the target is reached — unless
+  // the user starts scrolling first.
+  useBrowserLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const target = mainScrollPositions.get(pathname) ?? 0;
+    if (target === 0) {
+      el.scrollTop = 0;
+      return;
+    }
+    let raf = 0;
+    let frames = 0;
+    let interrupted = false;
+    const interrupt = () => {
+      interrupted = true;
+    };
+    el.addEventListener("wheel", interrupt, { passive: true });
+    el.addEventListener("touchmove", interrupt, { passive: true });
+    const tick = () => {
+      if (interrupted) return;
+      el.scrollTop = target;
+      frames += 1;
+      if (frames < 30 && Math.abs(el.scrollTop - target) > 1) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("wheel", interrupt);
+      el.removeEventListener("touchmove", interrupt);
+    };
+  }, [pathname, containerRef]);
+
+  return null;
 }

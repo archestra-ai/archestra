@@ -139,7 +139,7 @@ export async function validateAppHtmlStatic(
   return findings;
 }
 
-const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
 const BROWSER_STORAGE_API_PATTERN =
   /\b(localStorage|sessionStorage|indexedDB)\b/g;
 

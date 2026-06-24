@@ -187,6 +187,16 @@ describe("validateAppHtmlStatic", () => {
     expect(findings.at(-1)?.message).toContain("archestra.storage");
   });
 
+  test("a whitespace-padded script closing tag is still scanned", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><script>localStorage.x;</script ></head><body/></html>",
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("Uses browser storage (localStorage)"),
+    });
+  });
+
   test("an api named only in prose or a comment does not warn", async () => {
     const findings = await validateAppHtmlStatic(
       "<html><head><!-- avoid localStorage --></head><body><p>This app does not use localStorage.</p></body></html>",

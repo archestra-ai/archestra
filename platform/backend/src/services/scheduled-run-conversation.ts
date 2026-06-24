@@ -1,4 +1,5 @@
 import { DynamicInteraction, type PartialUIMessage } from "@archestra/shared";
+import type { UIMessage } from "ai";
 import {
   AgentModel,
   ConversationModel,
@@ -101,6 +102,46 @@ export async function createAndLinkRunConversation(params: {
     throw new Error("Failed to resolve the run conversation");
   }
   return existing;
+}
+
+/**
+ * Persist a scheduled run's chat transcript from the executor's own result —
+ * the user prompt plus the complete assistant turn (`responseUiMessage`, which
+ * already holds every tool-call, tool-result, and the final answer text). This
+ * is race-free: it does not read the `interactions` rows, which the LLM proxy
+ * commits in a `finally` after the stream is flushed and so are not reliably
+ * visible at run completion. Idempotent — a no-op once the conversation has any
+ * messages, so the lazy view-path stays a safe fallback.
+ */
+export async function persistRunConversationMessages(params: {
+  conversation: Conversation;
+  userText: string;
+  assistantMessage: UIMessage;
+}): Promise<void> {
+  const { conversation, userText, assistantMessage } = params;
+
+  const existing = await MessageModel.findByConversation(conversation.id);
+  if (existing.length > 0) {
+    return;
+  }
+
+  // Distinct timestamps so the transcript renders user-before-assistant
+  // (messages are ordered by createdAt).
+  const createdAt = Date.now();
+  await MessageModel.bulkCreate([
+    {
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: userText }] },
+      createdAt: new Date(createdAt),
+    },
+    {
+      conversationId: conversation.id,
+      role: assistantMessage.role,
+      content: assistantMessage,
+      createdAt: new Date(createdAt + 1),
+    },
+  ]);
 }
 
 /**

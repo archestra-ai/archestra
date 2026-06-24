@@ -29052,6 +29052,8 @@ export type GetReadyResponses = {
         status: 'ok' | 'maintenance';
         version: string;
         database: 'connected' | 'not_checked';
+        sandbox: 'ready' | 'initializing' | 'disabled' | 'unreachable';
+        sandboxReason?: string;
     };
 };
 

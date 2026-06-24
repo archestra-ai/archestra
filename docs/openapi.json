@@ -102707,13 +102707,26 @@
                         "connected",
                         "not_checked"
                       ]
+                    },
+                    "sandbox": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "initializing",
+                        "disabled",
+                        "unreachable"
+                      ]
+                    },
+                    "sandboxReason": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "name",
                     "status",
                     "version",
-                    "database"
+                    "database",
+                    "sandbox"
                   ],
                   "additionalProperties": false
                 }

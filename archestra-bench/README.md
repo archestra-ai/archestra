@@ -237,15 +237,32 @@ three tasks —
 
 ## Lifecycle: fresh backend over shared infra
 
-The harness does not run its own Tilt stack. It reuses the developer's already-running stack's
-Dagger code-runtime engine, provisions a dedicated bench Postgres of its own (so DB traffic skips
+The harness does not run its own Tilt stack. It resolves a Dagger code-runtime engine (see the ladder
+below), provisions a dedicated bench Postgres of its own (so DB traffic skips
 Tilt's port-forward), and stands up only what must be isolated per env: a fresh database (migrated
 from scratch) plus a second backend **process** on a new port. The backend reads `process.env`
-directly, so benchmark overrides (fresh DB URL, new API/metrics ports, shared Dagger host) take
+directly, so benchmark overrides (fresh DB URL, new API/metrics ports, resolved Dagger host) take
 effect without a git worktree, a second Tilt, or any edit to `platform/.env`. The
 second backend runs the already-built `dist/server.mjs` the main stack keeps fresh, so it never
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
+
+**Dagger host resolution.** Before booting the backend, the runner resolves a Dagger host and shares
+the first successful result across lanes (so they can't split across engines; a failed attempt isn't
+cached and the next lane re-resolves):
+
+1. `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, when set, is used verbatim and the ladder is skipped
+   (the prod-image / CI path supplies a `kube-pod://` host this way).
+2. Otherwise, if Docker is running **and** the engine image is already pulled, the runner brings up a
+   managed engine (`dev/docker-compose.bench-dagger.yml`) on `tcp://127.0.0.1:1245` and uses it.
+3. Otherwise, if the dev stack's port-forward is listening on `tcp://127.0.0.1:1234`, that is used.
+4. Otherwise the run **aborts immediately** with a message naming each tier it tried and the remedy.
+
+The managed engine is privileged and left running between runs so its buildkit cache stays warm
+(the compose file documents how to stop it and prune the cache volume). The runner never pulls the
+image — pre-pull it once with `docker pull registry.dagger.io/engine:<tag>` (the tag is pinned in the
+compose file). A broken sandbox no longer wastes the readiness deadline: the backend's `GET /ready`
+reports a `sandbox` field, and the runner fails fast on `disabled`/`unreachable` instead of polling.
 
 ## Reproducibility
 
@@ -320,8 +337,11 @@ not the raw per-token SSE chunks), `run.json`,
 
 ## Prerequisites
 
-- A running Archestra dev stack (`tilt up` with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`) providing the
-  Dagger engine (`tcp://127.0.0.1:1234`), with the backend built (`dist/server.mjs`).
+- A built backend (`dist/server.mjs`, kept fresh by `tilt up`) and a reachable Dagger engine. The
+  engine can be the runner-managed one (Docker + the engine image pre-pulled) or the dev stack's
+  port-forward on `tcp://127.0.0.1:1234` (`tilt up` with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`); see
+  the resolution ladder under "Lifecycle". Set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` to bypass
+  resolution and point at an engine you manage.
 - Docker, so the runner can provision the dedicated bench Postgres (`dev/docker-compose.bench-pg.yml`,
   host-reachable on `localhost:5544`). This bypasses the dev stack's slow kubectl port-forward, but on
   macOS the host→Colima-VM path still crosses Colima's network proxy, which can drop a burst of idle

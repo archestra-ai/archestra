@@ -40,6 +40,7 @@ import {
   parseAttachmentIdFromUrl,
 } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
+import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
 
 export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 // max number of recent real user messages serialized into the reference block
@@ -690,8 +691,15 @@ async function tryCreateInContextCompaction(params: {
       previousSummary: params.previousSummary,
       messages: materializedCompactable,
     });
+    // Rewrite document file parts into a shape the compaction model's provider
+    // accepts (e.g. inline CSV/JSON as text for OpenAI-compatible providers),
+    // mirroring the main chat path — otherwise the compaction call hard-errors.
+    const providerPreparedCompaction = prepareMessagesForProvider({
+      messages: compactionMessages,
+      provider: params.provider,
+    });
     const modelMessages = await convertToModelMessages(
-      compactionMessages as unknown as Omit<UIMessage, "id">[],
+      providerPreparedCompaction as unknown as Omit<UIMessage, "id">[],
     );
     const result = await generateText({
       model,
@@ -737,7 +745,7 @@ async function tryCreateInContextCompaction(params: {
       );
 
       const correctedMessages = await convertToModelMessages([
-        ...(compactionMessages as unknown as Omit<UIMessage, "id">[]),
+        ...(providerPreparedCompaction as unknown as Omit<UIMessage, "id">[]),
         {
           role: "assistant",
           parts: [{ type: "text", text: result.text }],

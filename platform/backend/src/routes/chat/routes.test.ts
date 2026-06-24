@@ -116,7 +116,70 @@ describe("prepareMessagesForProvider", () => {
     });
   });
 
-  it("leaves non-anthropic file parts unchanged", () => {
+  it.each([
+    "openai",
+    "openrouter",
+    "groq",
+    "xai",
+    "mistral",
+  ] as const)("inlines csv and json file parts as text for %s", (provider) => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider,
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "text/csv",
+              filename: "report.csv",
+              url: "data:text/csv;base64,YSxiLGM=",
+            },
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts).toEqual([
+      { type: "text", text: '[Attachment "report.csv" (text/csv)]\n\na,b,c' },
+      {
+        type: "text",
+        text: '[Attachment "data.json" (application/json)]\n\n{"a":1}',
+      },
+    ]);
+  });
+
+  it("leaves image file parts unchanged for convert providers", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        {
+          type: "file",
+          mediaType: "image/png",
+          filename: "shot.png",
+          url: "data:image/png;base64,iVBORw0KGgo=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "openai",
+      messages: [message],
+    });
+
+    expect(messages[0]).toBe(message);
+  });
+
+  it.each([
+    "gemini",
+    "cohere",
+  ] as const)("leaves text-document file parts unchanged for %s (native handling)", (provider) => {
     const message = {
       role: "user" as const,
       parts: [
@@ -130,7 +193,7 @@ describe("prepareMessagesForProvider", () => {
     };
 
     const messages = __prepareTest.prepareMessagesForProvider({
-      provider: "openai",
+      provider,
       messages: [message],
     });
 

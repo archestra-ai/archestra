@@ -7,6 +7,7 @@ import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
+import { isInlineableTextDocumentMimeType } from "./prepare-for-provider";
 
 type Attachment = Awaited<
   ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
@@ -57,7 +58,7 @@ export async function materializeAttachments(
     }
     return {
       ...message,
-      parts: message.parts.map((part) =>
+      parts: message.parts.flatMap((part) =>
         materializePart(part, byId, ingestibleMimeTypes),
       ),
     };
@@ -82,7 +83,7 @@ function materializePart(
   part: ChatMessagePart,
   byId: Map<string, Attachment>,
   ingestibleMimeTypes?: Set<string>,
-): ChatMessagePart {
+): ChatMessagePart | ChatMessagePart[] {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
   }
@@ -126,7 +127,7 @@ function materializePart(
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
   const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
-  return {
+  const filePart: ChatMessagePart = {
     ...part,
     url: dataUrl,
     mediaType: attachment.mimeType,
@@ -144,6 +145,46 @@ function materializePart(
         cacheControl: { type: "ephemeral" },
       },
     },
+  };
+
+  // Dual availability: a text-document that is shown inline is ALSO auto-staged
+  // into the sandbox (same byte limit), so the model can both read it in context
+  // and process it with run_command. Point it there alongside the inline copy.
+  const pointer = dualAvailabilityPointer(attachment);
+  return pointer ? [filePart, pointer] : filePart;
+}
+
+/**
+ * When the skill sandbox is enabled and a text-document attachment is within the
+ * auto-staging size limit, it has been staged under
+ * {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Return a text part telling the model the
+ * inlined file is ALSO available there (distinct from
+ * {@link referenceSandboxFilePart}, which replaces an attachment the model can't
+ * see inline). Returns null when the sandbox is off, the file is over the limit
+ * (not staged), or the mime type is not an inlineable text-document.
+ *
+ * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
+ * filename from breaking out of this platform-generated notice.
+ */
+function dualAvailabilityPointer(
+  attachment: Attachment,
+): ChatMessagePart | null {
+  if (
+    !config.skillsSandbox.enabled ||
+    !isInlineableTextDocumentMimeType(attachment.mimeType)
+  ) {
+    return null;
+  }
+  if (
+    attachment.fileData.byteLength > config.skillsSandbox.artifactBytesLimit
+  ) {
+    return null;
+  }
+
+  const name = JSON.stringify(attachment.originalName ?? "attachment");
+  return {
+    type: "text",
+    text: `[The attached file ${name} is also available in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then process it with run_command.]`,
   };
 }
 

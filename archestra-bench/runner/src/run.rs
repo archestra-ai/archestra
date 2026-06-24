@@ -195,6 +195,14 @@ pub async fn run(
     )
     .await?;
 
+    // Stream the managed Dagger engine's container logs into the run dir so a future engine crash is
+    // root-causeable (managed tier only; non-fatal). The host was resolved by `preflight` above.
+    let dagger_compose = repo_root()
+        .join("archestra-bench")
+        .join("dev")
+        .join("docker-compose.bench-dagger.yml");
+    crate::lifecycle::capture_managed_dagger_logs(&dagger_compose, &root_run_dir).await;
+
     let ctx = RunCtx {
         root_run_dir,
         run_id,

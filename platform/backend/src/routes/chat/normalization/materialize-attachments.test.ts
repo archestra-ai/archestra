@@ -414,6 +414,112 @@ test("an over-limit non-ingestible attachment is reported as unavailable, not st
   expect(part.text).not.toContain("data:");
 });
 
+test("inlined text-document also gets a sandbox pointer when the sandbox is enabled", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("a,b,c\n1,2,3", "utf8");
+  const originalName = 'q1 "orders".csv';
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName,
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: originalName,
+        },
+      ],
+    },
+  ];
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = true;
+  let output: ChatMessage[];
+  try {
+    output = await materializeAttachments(input, conversation.id);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  // The bytes are still inlined for in-context reading...
+  const filePart = expectPresent(output[0].parts?.[0]);
+  expect(filePart.type).toBe("file");
+  expect(filePart.url).toBe(`data:text/csv;base64,${bytes.toString("base64")}`);
+  // ...AND a pointer tells the model the same file is in its sandbox.
+  const pointer = expectPresent(output[0].parts?.[1]);
+  expect(pointer.type).toBe("text");
+  expect(pointer.text).toContain("/home/sandbox/attachments");
+  expect(pointer.text).toContain(JSON.stringify(originalName));
+  expect(pointer.text).toContain("run_command");
+  // Distinct from the "can't be shown inline" replacement wording.
+  expect(pointer.text).not.toContain("can't be shown");
+  expect(output[0].parts).toHaveLength(2);
+});
+
+test("inlined text-document gets NO sandbox pointer when the sandbox is disabled", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("a,b,c", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "report.csv",
+    mimeType: "text/csv",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/csv",
+          filename: "report.csv",
+        },
+      ],
+    },
+  ];
+
+  const prevEnabled = config.skillsSandbox.enabled;
+  config.skillsSandbox.enabled = false;
+  let output: ChatMessage[];
+  try {
+    output = await materializeAttachments(input, conversation.id);
+  } finally {
+    config.skillsSandbox.enabled = prevEnabled;
+  }
+
+  expect(output[0].parts).toHaveLength(1);
+  expect(expectPresent(output[0].parts?.[0]).type).toBe("file");
+});
+
 test("no refs in messages returns a clone without DB hits", async () => {
   const messages: ChatMessage[] = [
     { role: "user", parts: [{ type: "text", text: "hello" }] },

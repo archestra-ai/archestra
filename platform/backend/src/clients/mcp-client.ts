@@ -3087,7 +3087,15 @@ class McpClient {
       const appId = uri.startsWith(appResourcePrefix)
         ? uri.slice(appResourcePrefix.length)
         : "";
-      if (appId) {
+      // A malformed (non-UUID) id would make the UUID-typed lookup below throw
+      // ("invalid input syntax for type uuid") and surface as a 500; treat it as
+      // a normal not-found instead.
+      if (
+        appId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          appId,
+        )
+      ) {
         const { callerIsAppAdmin } = await import(
           "@/services/apps/app-authorization"
         );

@@ -28,10 +28,12 @@ const APP_SHOW_TOOL_NAME = "show_app";
  * Make an app a first-class catalog entity: create its backing
  * `internal_mcp_catalog` + `mcp_server` rows and a `show_app` tool, then link
  * the app to the server. The backing server is `serverType: "app"` — it opts
- * out of K8s deploy / install / discovery and is served in-process. Mandatory:
- * pass the app-creation transaction so the app and its backing commit (or roll
- * back) atomically — an app must never exist without backing, since the catalog
- * is the single source of truth for its visibility + environment.
+ * out of K8s deploy / install / discovery and is served in-process. The rows
+ * are created in sequence rather than in one transaction (the model read-backs
+ * would deadlock a single-connection pool); on any failure this rolls back the
+ * partial backing it created and the caller deletes the app row, so an app never
+ * ends up without backing — the single source of truth for its visibility +
+ * environment.
  */
 export async function createAppBacking(params: {
   app: { id: string; name: string; description: string | null };

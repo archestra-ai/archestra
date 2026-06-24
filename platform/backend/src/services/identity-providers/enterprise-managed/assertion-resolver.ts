@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";

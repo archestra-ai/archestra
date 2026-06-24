@@ -1,0 +1,56 @@
+[[stages]]
+text = """Hey, I'm prepping for our quarterly renewals review and could use a churn-risk shortlist out of the four attached files: crm_accounts.csv (one row per account, with ARR, segment and renewal date), usage_logs.jsonl (the prior and current active-user counts per account), support_tickets.csv (per-account tickets with severity and status), and invoices.csv (paid or overdue per account).
+
+Use July 1 2026 as the reference date for anything time-based. For each account I score four drivers, each landing between 0 and 1. Usage decline is the drop from previous to current active users over the previous count, with negative drops treated as 0 and anything over 1 capped at 1 (if previous is 0, just call it 0). Support load is the account's count of high-severity open tickets, capped at 3 and divided by 3. Billing is the count of overdue invoices, capped at 2 and divided by 2. Renewal timing goes off the days from July 1 to the renewal date: 1.0 if it's already due or past, 0.0 if it's 90 or more days out, and scaling linearly in between so the closer the renewal the higher it scores.
+
+The overall score is out of 100, weighting usage 40%, support 25%, billing 20% and renewal timing 15%. I also like to flag the top driver per account -- whichever one contributes the most once weighted (its weight times its 0-to-1 value). The codes are usage_decline, support_load, billing and renewal_timing, and if two come out tied I just take them in that order.
+
+What I need is the top 5 accounts by score, highest first. For ties, the higher score wins, then the higher arr_usd, then the lower account_id. Plus the total ARR across those five, and the top driver behind each.
+
+Send it back with submit_result: ranking as the list of the five account_id strings in order, arr_at_risk_usd as the summed ARR over those five, and top_drivers as an object mapping each of those five account_id values to its driver code."""
+
+  [[stages.files]]
+  src = "crm_accounts.csv"
+  dest = "/home/sandbox/attachments/crm_accounts.csv"
+  mime_type = "text/csv"
+
+  [[stages.files]]
+  src = "usage_logs.jsonl"
+  dest = "/home/sandbox/attachments/usage_logs.jsonl"
+  mime_type = "application/octet-stream"
+
+  [[stages.files]]
+  src = "support_tickets.csv"
+  dest = "/home/sandbox/attachments/support_tickets.csv"
+  mime_type = "text/csv"
+
+  [[stages.files]]
+  src = "invoices.csv"
+  dest = "/home/sandbox/attachments/invoices.csv"
+  mime_type = "text/csv"
+
+[result_schema]
+type = "object"
+required = ["ranking", "arr_at_risk_usd", "top_drivers"]
+additionalProperties = false
+
+  [result_schema.properties.ranking]
+  type = "array"
+  minItems = 5
+  maxItems = 5
+
+    [result_schema.properties.ranking.items]
+    type = "string"
+
+  [result_schema.properties.arr_at_risk_usd]
+  type = "number"
+  minimum = 0
+
+  [result_schema.properties.top_drivers]
+  type = "object"
+
+    [result_schema.properties.top_drivers.additionalProperties]
+    enum = ["usage_decline", "support_load", "billing", "renewal_timing"]
+
+[verifier]
+deps = []

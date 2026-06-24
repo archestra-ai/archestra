@@ -39,6 +39,11 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  // Full-page app runtimes: the owned standalone /a/[id] and the external
+  // /apps/server/[id]/run. (/apps/[id] is the management page — keeps the shell.)
+  const isAppRuntime =
+    /^\/a\/[^/]+$/.test(pathname) ||
+    /^\/apps\/server\/[^/]+\/run$/.test(pathname);
   // Chat and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their
@@ -54,11 +59,14 @@ export function AppShell({ children }: AppShellProps) {
   );
   const { data: notification } = useActiveSiteNotification({
     enabled:
-      canReadSiteNotification === true && !isAuthPage && !isBrowserPreview,
+      canReadSiteNotification === true &&
+      !isAuthPage &&
+      !isBrowserPreview &&
+      !isAppRuntime,
   });
 
-  // Browser preview mode: render children directly without sidebar/header/version
-  if (isBrowserPreview) {
+  // Chromeless surfaces (browser preview, app runtime): no sidebar/header/version.
+  if (isBrowserPreview || isAppRuntime) {
     return (
       <>
         <MaintenanceModeOverlay />

@@ -26,7 +26,7 @@ const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
 const OAUTH_USER_CONFIG_VALUES = "oauth_user_config_values";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
 const OAUTH_RETURN_URL = "oauth_return_url";
-const OAUTH_REAUTH_CHAT_RESUME = "oauth_reauth_chat_resume";
+const OAUTH_CHAT_RESUME = "oauth_chat_resume";
 
 // Dynamic key prefix (combined with code + state to deduplicate callbacks)
 const OAUTH_PROCESSING_PREFIX = "oauth_processing_";
@@ -234,29 +234,33 @@ export function clearOAuthReturnUrl() {
   sessionStorage.removeItem(OAUTH_RETURN_URL);
 }
 
+/** Queue a chat resume after re-authenticating an existing connection. */
 export function setOAuthReauthChatResume(params: {
   returnUrl: string;
   serverName: string;
-}) {
-  const conversationId = extractConversationIdFromChatUrl(params.returnUrl);
-  if (!conversationId) {
-    return;
-  }
-
-  sessionStorage.setItem(
-    OAUTH_REAUTH_CHAT_RESUME,
-    JSON.stringify({
-      conversationId,
-      message: `I re-authenticated the "${params.serverName}" connection. Please retry the last failed tool call and continue from where we left off.`,
-    }),
+}): string | null {
+  return writeChatResume(
+    params.returnUrl,
+    `I re-authenticated the "${params.serverName}" connection. Please retry the last failed tool call and continue from where we left off.`,
   );
 }
 
-export function getOAuthReauthChatResume(): {
+/** Queue a chat resume after connecting a new integration mid-conversation. */
+export function setOAuthInstallChatResume(params: {
+  returnUrl: string;
+  serverName: string;
+}): string | null {
+  return writeChatResume(
+    params.returnUrl,
+    `I connected the "${params.serverName}" integration. Please retry what I asked and continue from where we left off.`,
+  );
+}
+
+export function getOAuthPendingChatResume(): {
   conversationId: string;
   message: string;
 } | null {
-  const json = sessionStorage.getItem(OAUTH_REAUTH_CHAT_RESUME);
+  const json = sessionStorage.getItem(OAUTH_CHAT_RESUME);
   if (!json) {
     return null;
   }
@@ -282,8 +286,8 @@ export function getOAuthReauthChatResume(): {
   }
 }
 
-export function clearOAuthReauthChatResume() {
-  sessionStorage.removeItem(OAUTH_REAUTH_CHAT_RESUME);
+export function clearOAuthPendingChatResume() {
+  sessionStorage.removeItem(OAUTH_CHAT_RESUME);
 }
 
 // ─── Cleanup ─────────────────────────────────────────────────────────
@@ -314,6 +318,25 @@ export function clearInstallationCompleteCatalogId() {
 /** Remove the "pending after env vars" flag. */
 export function clearPendingAfterEnvVars() {
   sessionStorage.removeItem(OAUTH_PENDING_AFTER_ENV_VARS);
+}
+
+/**
+ * Persist a message to auto-send once the user lands back on a chat
+ * conversation after an OAuth redirect. Only applies when `returnUrl` points at
+ * a chat conversation (`/chat/:id`); returns the conversation id when a resume
+ * was stored, or null otherwise (e.g. flows started from the MCP registry).
+ */
+function writeChatResume(returnUrl: string, message: string): string | null {
+  const conversationId = extractConversationIdFromChatUrl(returnUrl);
+  if (!conversationId) {
+    return null;
+  }
+
+  sessionStorage.setItem(
+    OAUTH_CHAT_RESUME,
+    JSON.stringify({ conversationId, message }),
+  );
+  return conversationId;
 }
 
 function extractConversationIdFromChatUrl(url: string): string | null {

@@ -53,8 +53,9 @@ fn deregister(id: u64) {
 }
 
 /// Tear down every still-live backend instance (process group + database). Invoked on SIGINT/SIGTERM,
-/// where the run future was dropped mid-flight so `Instance::shutdown` never ran. Awaits each teardown
-/// so process groups are killed and databases dropped before the process exits — no leaks on cancel.
+/// where the run future was dropped mid-flight so `Instance::shutdown` never ran. Runs the teardowns
+/// concurrently — process groups killed and databases dropped before the process exits, no leaks on
+/// cancel — so total wait is bounded by the slowest single backend, not their sum.
 pub async fn shutdown_all() {
     let live: Vec<Teardown> = {
         let mut reg = registry().lock().expect("teardown registry");
@@ -67,9 +68,7 @@ pub async fn shutdown_all() {
         "interrupted: tearing down {} live backend instance(s)",
         live.len()
     );
-    for teardown in live {
-        teardown.run().await;
-    }
+    futures::future::join_all(live.iter().map(|t| t.run())).await;
 }
 
 async fn kill_backend(proc: &Arc<Mutex<Option<Child>>>) {
@@ -94,8 +93,17 @@ async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_ur
         return;
     }
     info!("dropping benchmark database {db_name}");
-    match tokio_postgres::connect(&libpq_url(maint_db_url), tokio_postgres::NoTls).await {
-        Ok((client, connection)) => {
+    // Bound the connect so an unreachable/hung Postgres can't stall teardown indefinitely (it would
+    // keep the interrupted run frozen the same way the serial loop used to). The DB is per-run and
+    // recreated next run, so giving up on a drop only leaks one disposable database.
+    let connected = tokio::time::timeout(
+        Duration::from_secs(10),
+        tokio_postgres::connect(&libpq_url(maint_db_url), tokio_postgres::NoTls),
+    )
+    .await;
+    match connected {
+        Err(_) => error!("timed out connecting to drop benchmark database {db_name}"),
+        Ok(Ok((client, connection))) => {
             let client: tokio_postgres::Client = client;
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
@@ -114,7 +122,7 @@ async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_ur
                 .await;
             *db_created.lock().await = false;
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!("failed to drop benchmark database {db_name}: {e}");
         }
     }
@@ -907,6 +915,13 @@ async fn free_port() -> Result<u16, LifecycleError> {
 mod tests {
     use super::*;
 
+    /// Serializes tests that touch the global teardown registry, since `shutdown_all` drains it
+    /// wholesale — without this, parallel registry tests would reap each other's children.
+    fn registry_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
     #[test]
     fn test_benchmark_db_name() {
         assert_eq!(
@@ -941,6 +956,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown_all_kills_registered_process_group() {
+        let _guard = registry_lock().lock().await;
         // Spawn a real child in its own process group, register a teardown for it (no DB — db_created
         // stays false so drop_database is a no-op), then verify shutdown_all reaps the process group.
         let mut cmd = Command::new("sleep");
@@ -968,6 +984,50 @@ mod tests {
             signal::kill(Pid::from_raw(pid), None).is_err(),
             "process group should be dead after shutdown_all"
         );
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_all_tears_down_concurrently() {
+        let _guard = registry_lock().lock().await;
+        // Two real children that trap SIGTERM and take ~2s to exit. Serial teardown would wait ~4s;
+        // concurrent teardown is bounded by the slower single child (~2s). The wall-clock proves the
+        // teardowns overlap (wide margin so it doesn't flake on a loaded CI box), and both process
+        // groups must be reaped.
+        fn spawn_slow_term_child() -> (Arc<Mutex<Option<Child>>>, i32) {
+            let mut cmd = Command::new("sh");
+            cmd.arg("-c")
+                .arg("trap 'sleep 2; exit 0' TERM; sleep 30")
+                .process_group(0);
+            let child = cmd.spawn().expect("spawn sh");
+            let pid = child.id().expect("child pid") as i32;
+            (Arc::new(Mutex::new(Some(child))), pid)
+        }
+
+        let (proc_a, pid_a) = spawn_slow_term_child();
+        let (proc_b, pid_b) = spawn_slow_term_child();
+        for proc in [&proc_a, &proc_b] {
+            register(Teardown {
+                proc: proc.clone(),
+                db_created: Arc::new(Mutex::new(false)),
+                db_name: String::new(),
+                maint_db_url: String::new(),
+            });
+        }
+
+        let start = tokio::time::Instant::now();
+        shutdown_all().await;
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < Duration::from_millis(3000),
+            "teardowns should overlap (~2s), took {elapsed:?}"
+        );
+        for pid in [pid_a, pid_b] {
+            assert!(
+                signal::kill(Pid::from_raw(pid), None).is_err(),
+                "process group {pid} should be dead after shutdown_all"
+            );
+        }
     }
 
     #[test]

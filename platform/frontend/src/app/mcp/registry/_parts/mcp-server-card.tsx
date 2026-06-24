@@ -1049,6 +1049,14 @@ export function McpServerCard({
                   <span className="max-w-32 truncate">{environmentLabel}</span>
                 </Badge>
               )}
+              {!isBuiltinVariant && hasPersonalConnection && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-green-500/50 text-green-600 dark:text-green-400"
+                >
+                  Connected
+                </Badge>
+              )}
             </div>
             {item.description && (
               <p className="text-xs text-muted-foreground line-clamp-2">

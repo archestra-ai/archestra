@@ -206513,7 +206513,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files and scheduled tasks are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
         "parameters": [
           {
             "schema": {

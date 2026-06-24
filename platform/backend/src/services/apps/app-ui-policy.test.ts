@@ -171,6 +171,36 @@ describe("validateAppHtmlStatic", () => {
     );
     expect(findings).toEqual([]);
   });
+
+  test.each([
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+  ])("browser storage (%s) is a warning pointing at archestra.storage", async (api) => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>window.${api}.getItem("k");</script></head><body/></html>`,
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("archestra.storage"),
+    });
+  });
+
+  test("multiple browser storage APIs are reported once, deduplicated", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><script>localStorage.x; localStorage.y; sessionStorage.z;</script></head><body/></html>",
+    );
+    const storageWarnings = findings.filter((f) =>
+      f.message.includes("Uses browser storage"),
+    );
+    expect(storageWarnings).toHaveLength(1);
+    expect(storageWarnings[0].message).toContain(
+      "localStorage, sessionStorage",
+    );
+    expect(storageWarnings[0].message).not.toMatch(
+      /localStorage,.*localStorage/,
+    );
+  });
 });
 
 describe("starter templates pass the save gate", () => {

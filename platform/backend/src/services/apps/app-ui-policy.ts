@@ -127,7 +127,31 @@ export async function validateAppHtmlStatic(
       )}); the sandbox CSP blocks it at render time. Load client-side assets from an allowlisted CDN, and fetch data through an assigned MCP tool instead.`,
     });
   }
+  const browserStorageApis = browserStorageApisUsed(html);
+  if (browserStorageApis.length > 0) {
+    findings.push({
+      severity: "warning",
+      message: `Uses browser storage (${browserStorageApis.join(
+        ", ",
+      )}), which is unavailable in the app sandbox (an opaque origin where it throws) and ephemeral browser-local state even where it works. Persist state through the platform-attached store instead: archestra.storage.user.* (private per viewer) or archestra.storage.shared.* (shared across viewers).`,
+    });
+  }
   return findings;
+}
+
+const BROWSER_STORAGE_API_PATTERN =
+  /\b(localStorage|sessionStorage|indexedDB)\b/g;
+
+// Browser storage APIs referenced anywhere in the html. They are unusable in the
+// app sandbox: the opaque-origin iframe throws on access, and where it doesn't
+// the data is ephemeral and browser-local rather than the platform-attached
+// archestra.storage. Returned in first-seen order, deduplicated.
+function browserStorageApisUsed(html: string): string[] {
+  const apis = new Set<string>();
+  for (const match of html.matchAll(BROWSER_STORAGE_API_PATTERN)) {
+    apis.add(match[1]);
+  }
+  return [...apis];
 }
 
 const RESOURCE_REF_PATTERN =

@@ -1,4 +1,5 @@
 import {
+  coerceMalformedToolInputs,
   hasPersistableAssistantContent,
   hasRenderableAssistantContent,
   stripDanglingToolCalls,
@@ -8,11 +9,17 @@ import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
 
 export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
-  return dropEmptyAssistantMessages(
-    stripOrphanedToolUiStartsFromMessages(
-      stripImagesFromMessages(
-        stripDanglingToolCallsFromMessages(
-          dedupeToolPartsFromMessages(messages),
+  // Coerce malformed tool inputs last, over the already-cleaned parts: dedupe
+  // keys on type/toolCallId/state and dangling-strip keys on state — neither
+  // reads `input` — so repairing input here can never drop a deduped twin or
+  // change which parts survive.
+  return coerceMalformedToolInputsFromMessages(
+    dropEmptyAssistantMessages(
+      stripOrphanedToolUiStartsFromMessages(
+        stripImagesFromMessages(
+          stripDanglingToolCallsFromMessages(
+            dedupeToolPartsFromMessages(messages),
+          ),
         ),
       ),
     ),
@@ -103,6 +110,47 @@ function stripDanglingToolCallsFromMessages(messages: ChatMessage[]) {
 
     return message;
   });
+}
+
+// repairs tool-call parts whose `input` is not a JSON object (a malformed-JSON
+// remnant the AI SDK couldn't parse) so replaying the history doesn't fail
+// provider validation. The pure transform lives in shared; this wrapper logs
+// each repair so a rising rate of malformed model output stays visible.
+function coerceMalformedToolInputsFromMessages(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  const repaired = coerceMalformedToolInputs(messages);
+
+  repaired.forEach((message, index) => {
+    const original = messages[index];
+    if (message === original) {
+      return;
+    }
+
+    message.parts?.forEach((part, partIndex) => {
+      const originalPart = original.parts?.[partIndex];
+      if (!originalPart || part === originalPart) {
+        return;
+      }
+
+      logger.warn(
+        {
+          messageId: message.id,
+          role: message.role,
+          toolCallId: part.toolCallId,
+          partType: part.type,
+          originalInputType: describeInputType(originalPart.input),
+          recoveredFromJson:
+            typeof originalPart.input === "string" &&
+            isRecord(part.input) &&
+            Object.keys(part.input).length > 0,
+        },
+        "[normalizeChatMessages] Coerced non-object tool-call input to an object",
+      );
+    });
+  });
+
+  return repaired;
 }
 
 // drops `data-tool-ui-start` markers whose tool call no longer survives — e.g. an
@@ -234,4 +282,18 @@ function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {
 }
 function getToolPartState(part: ChatMessagePart) {
   return typeof part.state === "string" ? part.state : "unknown";
+}
+
+function describeInputType(input: unknown): string {
+  if (input === null) {
+    return "null";
+  }
+  if (Array.isArray(input)) {
+    return "array";
+  }
+  return typeof input;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -14,7 +14,15 @@ A project is a named collection of chats that own a shared set of result files. 
 
 ## Sharing
 
-A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) stay owner-only. Deleting a project keeps its chats as ordinary conversations but removes its files.
+A project is private to its owner until shared. Sharing makes it visible to the whole organization or to selected teams; everyone with access can read its chats, start their own chats in it, and work with its files. Mutations to the project itself (rename, icon, description, sharing, deletion) are owner-only, except for holders of `project:admin` (see Finding projects). Deleting a project keeps its chats as ordinary conversations but removes its files and its scheduled tasks.
+
+## Finding projects
+
+The projects list has a search box and a scope filter that mirrors the agents filter. Scope is a project's share visibility: **Personal** (private, owner-only), **Team** (shared with teams — narrow further by team), or **Organization** (shared org-wide); the default shows everything you can see. Search matches a project's name and description.
+
+Holders of `project:admin` get the agents-style owner sub-filter under **Personal**: **My projects** vs **Other users** (with a by-user picker) — an oversight view of other members' private projects. In that view a project admin can edit or delete the project, change its sharing, and view, download, or delete its files — but cannot see or start its chats: the Chats panel is hidden, and the project's conversations remain private to its members.
+
+`project:admin` is additive oversight, not a standalone role: it lets a holder discover other members' projects and act on the project and its files, but never read their chats, and it does not by itself grant schedule control. It layers on the standard `project` permissions — to edit or delete a foreign project a custom role also needs `project:update` / `project:delete` (and `project:read` to see it); to manage that project's scheduled runs it needs `scheduledTask:admin`. The predefined Admin role already holds all of these. Configure custom roles from [Access Control](./platform-access-control).
 
 ## Instructions
 

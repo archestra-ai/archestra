@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { FileNotDeletableError, fileStore } from "@/skills-sandbox/file-store";
@@ -70,6 +71,18 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userId: user.id,
         });
+        // A project admin overseeing a foreign project may read its files
+        // read-only, even without share access. Project-scoped files only —
+        // personal files are never exposed by this fallback.
+        if (
+          !resolved &&
+          (await userHasPermission(user.id, organizationId, "project", "admin"))
+        ) {
+          resolved = await fileStore.getProjectScopedForAdmin({
+            ref: artifactId,
+            organizationId,
+          });
+        }
       } catch (error) {
         if (error instanceof FileBytesMissingError) {
           // the row exists but its bytes are gone
@@ -141,6 +154,24 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             userId: user.id,
           });
+          // A project admin may also delete a foreign project's files (oversight),
+          // mirroring the read path — project-scoped files only, never personal.
+          // Checked lazily so the normal path pays no extra permission lookup.
+          // Inside the try so the instructions-file guard below still applies.
+          if (
+            !deleted &&
+            (await userHasPermission(
+              user.id,
+              organizationId,
+              "project",
+              "admin",
+            ))
+          ) {
+            deleted = await fileStore.deleteProjectScopedForAdmin({
+              ref: artifactId,
+              organizationId,
+            });
+          }
         } catch (error) {
           // The project instructions file is never deletable; surface it as a
           // conflict rather than a generic 500.

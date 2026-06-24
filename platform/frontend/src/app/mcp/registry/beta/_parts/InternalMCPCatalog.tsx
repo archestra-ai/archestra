@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   LabelFilterBadges,
@@ -33,6 +33,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { useEnvironments } from "@/lib/environment.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import {
   useInternalMcpCatalog,
@@ -48,6 +49,8 @@ import {
   useReinstallMcpServer,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
+import { useDefaultEnvironment } from "@/lib/organization.query";
+import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
 import { CustomServerRequestDialog } from "../../_parts/custom-server-request-dialog";
 import {
   LocalServerInstallDialog,
@@ -65,6 +68,17 @@ import {
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
+import {
+  emptyRegistryFilters,
+  type FilterGroup,
+  type FilterOption,
+  RegistryFilterChips,
+  RegistryFilterDropdown,
+  type RegistryFilters,
+  RegistrySortMenu,
+  type SortKey,
+  STATUS_OPTIONS,
+} from "./registry-list-controls";
 import { useCatalogInstall } from "./use-catalog-install";
 
 export function InternalMCPCatalog({
@@ -111,6 +125,30 @@ export function InternalMCPCatalog({
   const deploymentStatuses = useMcpDeploymentStatuses();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  const { data: environmentList } = useEnvironments();
+  const defaultEnvironment = useDefaultEnvironment();
+
+  const [sort, setSort] = useState<SortKey>("name-asc");
+  const [filters, setFilters] = useState<RegistryFilters>(emptyRegistryFilters);
+  const toggleFilter = useCallback((group: FilterGroup, value: string) => {
+    setFilters((prev) => {
+      const next = new Set(prev[group]);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return { ...prev, [group]: next };
+    });
+  }, []);
+  const removeFilter = useCallback((group: FilterGroup, value: string) => {
+    setFilters((prev) => {
+      const next = new Set(prev[group]);
+      next.delete(value);
+      return { ...prev, [group]: next };
+    });
+  }, []);
+  const clearAdvancedFilters = useCallback(
+    () => setFilters(emptyRegistryFilters()),
+    [],
+  );
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     | "custom-request"
@@ -639,40 +677,6 @@ export function InternalMCPCatalog({
     }
   };
 
-  // Capture connected catalog IDs on first load to keep sort order stable.
-  // Only update when the set of catalog IDs changes (new item added/removed),
-  // not when connection status changes (which would cause items to jump around).
-  const connectedCatalogIdsRef = useRef<Set<string> | null>(null);
-  if (connectedCatalogIdsRef.current === null && installedServers) {
-    connectedCatalogIdsRef.current = new Set(
-      installedServers.map((s) => s.catalogId).filter(Boolean) as string[],
-    );
-  }
-
-  const sortInstalledFirst = (items: CatalogItem[]) => {
-    const connectedIds = connectedCatalogIdsRef.current;
-    return [...items].sort((a, b) => {
-      // Primary sort: connected (has installations) first — using stable snapshot
-      const aConnected = connectedIds?.has(a.id) ? 0 : 1;
-      const bConnected = connectedIds?.has(b.id) ? 0 : 1;
-      if (aConnected !== bConnected) return aConnected - bConnected;
-
-      // Secondary sort priority: builtin > remote > local
-      const getPriority = (item: CatalogItem) => {
-        if (item.serverType === "builtin" || isPlaywrightCatalogItem(item.id))
-          return 0;
-        if (item.serverType === "remote") return 1;
-        return 2; // local
-      };
-
-      const priorityDiff = getPriority(a) - getPriority(b);
-      if (priorityDiff !== 0) return priorityDiff;
-
-      // Tertiary sort by createdAt (newest first)
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  };
-
   const filterCatalogItems = (items: CatalogItem[], query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return items;
@@ -700,12 +704,100 @@ export function InternalMCPCatalog({
     );
   };
 
-  const allFilteredItems = sortInstalledFirst(
+  // Live connection status (vs the stable snapshot used for the default sort).
+  const connectedCatalogIds = useMemo(
+    () =>
+      new Set(
+        (installedServers ?? [])
+          .map((s) => s.catalogId)
+          .filter(Boolean) as string[],
+      ),
+    [installedServers],
+  );
+  const envLabelByCatalog = useMemo(() => {
+    const envs = environmentList?.environments ?? [];
+    const map = new Map<string, string | null>();
+    for (const it of catalogItems ?? []) {
+      map.set(
+        it.id,
+        it.serverType === "builtin"
+          ? null
+          : (resolveCatalogEnvironmentLabel({
+              environmentId: it.environmentId,
+              environments: envs,
+              defaultEnvironmentName: defaultEnvironment.name,
+            }) ?? defaultEnvironment.name),
+      );
+    }
+    return map;
+  }, [catalogItems, environmentList, defaultEnvironment.name]);
+
+  const environmentOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    envLabelByCatalog.forEach((label) => {
+      if (label) set.add(label);
+    });
+    return [...set].sort().map((value) => ({ value, label: value }));
+  }, [envLabelByCatalog]);
+  const authorOptions: FilterOption[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of catalogItems ?? []) {
+      if (it.authorName) set.add(it.authorName);
+    }
+    return [...set].sort().map((value) => ({ value, label: value }));
+  }, [catalogItems]);
+  const matchesAdvancedFilters = (item: CatalogItem) => {
+    if (filters.status.size > 0) {
+      const installed = connectedCatalogIds.has(item.id);
+      const ok =
+        (installed && filters.status.has("installed")) ||
+        (!installed && filters.status.has("not-installed"));
+      if (!ok) return false;
+    }
+    if (filters.environment.size > 0) {
+      const env = envLabelByCatalog.get(item.id);
+      if (!env || !filters.environment.has(env)) return false;
+    }
+    if (
+      filters.author.size > 0 &&
+      (!item.authorName || !filters.author.has(item.authorName))
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const sortItems = (list: CatalogItem[]) => {
+    switch (sort) {
+      case "name-desc":
+        return [...list].sort((a, b) => b.name.localeCompare(a.name));
+      case "newest":
+        return [...list].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      case "oldest":
+        return [...list].sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      case "most-tools":
+        return [...list].sort(
+          (a, b) => (b.toolCount ?? 0) - (a.toolCount ?? 0),
+        );
+      default:
+        return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    }
+  };
+
+  const allFilteredItems = sortItems(
     filterByLabels(
       filterCatalogItems(catalogItems || [], searchQueryFromUrl),
       parsedLabels,
-    ),
-  ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
+    )
+      .filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID)
+      .filter(matchesAdvancedFilters),
+  );
 
   const personalItems = allFilteredItems.filter(
     (item) => item.scope === "personal",
@@ -784,10 +876,38 @@ export function InternalMCPCatalog({
           inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
         />
         <McpCatalogLabelFilter />
+        <RegistryFilterDropdown
+          label="Status"
+          options={STATUS_OPTIONS}
+          selected={filters.status}
+          onToggle={(value) => toggleFilter("status", value)}
+        />
+        {environmentOptions.length > 0 && (
+          <RegistryFilterDropdown
+            label="Environment"
+            options={environmentOptions}
+            selected={filters.environment}
+            onToggle={(value) => toggleFilter("environment", value)}
+          />
+        )}
+        {authorOptions.length > 0 && (
+          <RegistryFilterDropdown
+            label="Author"
+            options={authorOptions}
+            selected={filters.author}
+            onToggle={(value) => toggleFilter("author", value)}
+          />
+        )}
+        <RegistrySortMenu value={sort} onChange={setSort} />
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
       )}
+      <RegistryFilterChips
+        selected={filters}
+        onRemove={removeFilter}
+        onClearAll={clearAdvancedFilters}
+      />
       <div className="space-y-6">
         {personalItems.length > 0 && (
           <div className="space-y-3">

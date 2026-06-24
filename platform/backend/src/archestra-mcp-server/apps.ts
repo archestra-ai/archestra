@@ -736,7 +736,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root or <script>/<link> hosts outside the CDN allowlist as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet (open it in the sidebar, then re-run). Fix any errors with edit_app before publishing.",
+      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet (open it in the sidebar, then re-run). Fix any errors with edit_app before publishing.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {

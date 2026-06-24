@@ -33,7 +33,10 @@ export function ConversationFilesPanel({
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
   const { data: project } = useProject(projectId ?? undefined);
-  const isProjectOwner = project?.isOwner ?? false;
+  // Editing instructions requires manage rights; in a chat the participant is
+  // the owner (a shared member sees them read-only). viewerRole replaces the old
+  // isOwner flag.
+  const isProjectOwner = project?.viewerRole === "owner";
   const sections = assembleFileSections({ files, artifact });
   const { generated, attachments } = sections;
 

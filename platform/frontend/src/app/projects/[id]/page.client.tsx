@@ -40,7 +40,6 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
@@ -60,7 +59,9 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
+import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
   usePinProject,
@@ -74,6 +75,7 @@ import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
 export default function ProjectDetailPageClient() {
   return (
@@ -87,11 +89,15 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending } = useProject(id);
-  const { data: conversations } = useProjectConversations(id);
+  // Chats are hidden from admin oversight, so don't even fetch them there.
+  const { data: conversations } = useProjectConversations(id, {
+    enabled: !!project && project.viewerRole !== "admin",
+  });
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -119,6 +125,16 @@ function ProjectDetail() {
     );
   }
 
+  // A project admin can manage ANY project they can see — their own, one shared
+  // with them, or another member's they oversee (edit / delete / sharing /
+  // instructions), matching the backend's requireManageable.
+  const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
+  // The oversight-only view (a foreign project surfaced purely via project:admin)
+  // additionally hides chats: no composer, no chats list, no pin, no new
+  // schedules. A project merely shared with the admin keeps its chats.
+  const isAdminView = project.viewerRole === "admin";
+  const canChat = !isAdminView;
+
   return (
     // The same two-column shell as /chat: the page content scrolls in the left
     // column while the Files panel takes the full height of the right side.
@@ -134,8 +150,14 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {!project.isOwner && (
+              {project.viewerRole === "shared" && (
                 <Badge variant="secondary">Shared with you</Badge>
+              )}
+              {isAdminView && (
+                <Badge variant="secondary">
+                  Viewing as administrator
+                  {project.ownerName ? ` · ${project.ownerName}` : ""}
+                </Badge>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -148,22 +170,24 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      pinProjectMutation.mutate({
-                        id: project.id,
-                        pinned: !project.pinnedAt,
-                      })
-                    }
-                  >
-                    {project.pinnedAt ? (
-                      <PinOff className="h-4 w-4" />
-                    ) : (
-                      <Pin className="h-4 w-4" />
-                    )}
-                    {project.pinnedAt ? "Unpin" : "Pin"}
-                  </DropdownMenuItem>
-                  {project.isOwner && (
+                  {!isAdminView && (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        pinProjectMutation.mutate({
+                          id: project.id,
+                          pinned: !project.pinnedAt,
+                        })
+                      }
+                    >
+                      {project.pinnedAt ? (
+                        <PinOff className="h-4 w-4" />
+                      ) : (
+                        <Pin className="h-4 w-4" />
+                      )}
+                      {project.pinnedAt ? "Unpin" : "Pin"}
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && (
                     <>
                       <DropdownMenuItem onSelect={() => setEditOpen(true)}>
                         <Pencil className="h-4 w-4" />
@@ -183,19 +207,18 @@ function ProjectDetail() {
             </div>
           }
         >
-          <DeleteConfirmDialog
-            open={confirmDelete}
-            onOpenChange={setConfirmDelete}
-            title={`Delete ${project.name}?`}
-            description="Chats are kept as ordinary conversations. Project files are deleted with the project."
-            isPending={deleteProject.isPending}
-            onConfirm={async () => {
-              const ok = await deleteProject.mutateAsync({ id: project.id });
-              if (ok) router.push("/projects");
-            }}
-            confirmLabel="Delete"
-            pendingLabel="Deleting..."
-          />
+          {confirmDelete && (
+            <ProjectDeleteConfirmDialog
+              project={project}
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              isPending={deleteProject.isPending}
+              onConfirm={async () => {
+                const ok = await deleteProject.mutateAsync({ id: project.id });
+                if (ok) router.push("/projects");
+              }}
+            />
+          )}
           {editOpen && (
             <EditProjectDialog
               project={project}
@@ -205,9 +228,12 @@ function ProjectDetail() {
           )}
 
           <div className="space-y-6">
-            <ProjectChatInput projectId={project.id} />
-            <ProjectSchedulesSection projectId={project.id} />
-            <ChatsList conversations={conversations ?? []} />
+            {canChat && <ProjectChatInput projectId={project.id} />}
+            <ProjectSchedulesSection
+              projectId={project.id}
+              canCreate={canChat}
+            />
+            {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
         </PageLayout>
       </div>
@@ -217,7 +243,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
-          isOwner={project.isOwner}
+          isOwner={canManage}
         />
       </div>
     </div>

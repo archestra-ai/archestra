@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MCP_APPS_EXTENSION_ID } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -151,10 +151,12 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
         contents: [
           {
             uri: UI_RESOURCE_URI,
-            mimeType: "text/html",
+            mimeType: "text/html;profile=mcp-app",
             text: "<h1>clock</h1>",
+            // ext-apps CSP shape: connectDomains widens connect-src for the
+            // sandbox; the author declares it and the host must receive it as-is.
             _meta: {
-              ui: { csp: { connect_src: ["https://api.example.com"] } },
+              ui: { csp: { connectDomains: ["https://api.example.com"] } },
             },
           },
         ],
@@ -170,20 +172,23 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     });
 
     expect(res.statusCode).toBe(200);
-    const content = res.json().result.contents[0] as {
+    const contents = res.json().result.contents as Array<{
       uri: string;
       mimeType?: string;
       text?: string;
       _meta?: { ui?: { csp?: unknown } };
-    };
+    }>;
+    expect(contents).toHaveLength(1);
+    const content = contents[0];
     expect(content.uri).toBe(UI_RESOURCE_URI);
+    expect(typeof content.text).toBe("string");
     expect(content.text).toContain("clock");
     // The host keys on the resource mimeType, and applies the author-declared
     // CSP to sandbox the iframe — both must reach the host unchanged from the
     // upstream server (this path passes the upstream resource through verbatim).
-    expect(content.mimeType).toBe("text/html");
+    expect(content.mimeType).toBe("text/html;profile=mcp-app");
     expect(content._meta?.ui?.csp).toEqual({
-      connect_src: ["https://api.example.com"],
+      connectDomains: ["https://api.example.com"],
     });
     // The read is delegated to THIS installed server, bound from the route.
     expect(readSpy).toHaveBeenCalledWith({
@@ -277,15 +282,24 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     expect(res.statusCode).toBe(200);
     const result = res.json().result as {
       protocolVersion?: string;
-      capabilities?: { extensions?: Record<string, unknown> };
+      capabilities?: {
+        extensions?: Record<string, unknown>;
+        tools?: unknown;
+        resources?: unknown;
+      };
     };
     // The host negotiates MCP-App support from the extensions capability — it is
     // present despite the SDK not modelling `extensions` (verified to survive
-    // the initialize round-trip).
-    expect(result.capabilities?.extensions).toHaveProperty(
-      "io.modelcontextprotocol/ui",
-    );
-    expect(typeof result.protocolVersion).toBe("string");
-    expect(result.protocolVersion?.length).toBeGreaterThan(0);
+    // the initialize round-trip), and is exactly `{}` per the spec.
+    expect(
+      result.capabilities?.extensions?.[MCP_APPS_EXTENSION_ID],
+    ).toStrictEqual({});
+    // The SDK echoes the requested protocol version when supported.
+    expect(result.protocolVersion).toBe("2025-06-18");
+    expect(result.capabilities?.tools).toMatchObject({ listChanged: false });
+    expect(result.capabilities?.resources).toMatchObject({
+      subscribe: false,
+      listChanged: false,
+    });
   });
 });

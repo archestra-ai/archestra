@@ -3,6 +3,7 @@ import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
   getArchestraAppResourceUri,
   getArchestraToolFullName,
+  MCP_APPS_EXTENSION_ID,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
@@ -1034,9 +1035,11 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       },
     });
     expect(initRes.statusCode).toBe(200);
-    expect(initRes.json().result.capabilities?.extensions).toHaveProperty(
-      "io.modelcontextprotocol/ui",
-    );
+    const initResult = initRes.json().result;
+    expect(initResult.protocolVersion).toBe("2025-06-18");
+    expect(
+      initResult.capabilities?.extensions?.[MCP_APPS_EXTENSION_ID],
+    ).toStrictEqual({});
 
     // 1. tools/list — the launch tool carries the app's ui:// resource pointer.
     const listRes = await call({ jsonrpc: "2.0", method: "tools/list", id: 1 });
@@ -1044,10 +1047,14 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     const open = (
       listRes.json().result.tools as Array<{
         name: string;
+        inputSchema?: unknown;
         _meta?: { ui?: { resourceUri?: string } };
       }>
     ).find((t) => t.name === "open");
+    expect(open).toBeDefined();
     expect(open?._meta?.ui?.resourceUri).toBe(expectedUri);
+    // The launch tool must carry a valid (empty) object input schema.
+    expect(open?.inputSchema).toStrictEqual({ type: "object", properties: {} });
 
     // 2. tools/call the launch tool — returns the ui:// pointer for the host to render.
     const callRes = await call({
@@ -1067,13 +1074,18 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       params: { uri: expectedUri },
     });
     expect(readRes.statusCode).toBe(200);
-    const content = readRes.json().result.contents[0];
+    const contents = readRes.json().result.contents;
+    expect(contents).toHaveLength(1);
+    const content = contents[0];
     expect(content.uri).toBe(expectedUri);
+    expect(typeof content.text).toBe("string");
     expect(content.text).toContain("shared app");
     // The host keys on the MCP-App resource mime type to recognise a renderable
-    // UI (vs plain text/html), and pins the iframe to the platform CSP floor.
+    // UI (vs plain text/html), and pins the iframe to the platform CSP floor:
+    // the platform CSP omits `connectDomains`, so the sandbox gets connect-src 'none'.
     expect(content.mimeType).toBe(RESOURCE_MIME_TYPE);
     expect(content._meta.ui.csp).toEqual(APP_PLATFORM_CSP);
+    expect(content._meta.ui.csp).not.toHaveProperty("connectDomains");
   });
 
   test("resources/read passes through the app's declared UI permissions", async ({

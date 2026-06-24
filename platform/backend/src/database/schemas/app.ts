@@ -72,6 +72,9 @@ const appsTable = softDeletablePgTable(
   },
   (table) => [
     index("apps_organization_id_idx").on(table.organizationId),
+    // Backing-server lookups (findByMcpServerId, the catalog-derived access JOINs)
+    // filter on this FK, so index it.
+    index("apps_mcp_server_id_idx").on(table.mcpServerId),
     // Visibility (scope/teams), environment, and name-uniqueness are owned by the
     // backing internal_mcp_catalog (serverType "app"); there are no scope/env
     // columns or per-scope name indexes on the app row.

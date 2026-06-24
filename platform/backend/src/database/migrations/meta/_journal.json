@@ -2178,6 +2178,13 @@
       "when": 1782316005295,
       "tag": "0310_delete_all_apps",
       "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "7",
+      "when": 1782318456176,
+      "tag": "0311_apps_mcp_server_id_index",
+      "breakpoints": true
     }
   ]
 }

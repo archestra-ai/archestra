@@ -25,6 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -282,18 +283,21 @@ function ChatsList({
     readOnly: boolean;
   }>;
 }) {
+  const userConversations = conversations.filter(
+    (c) => !isScheduledRunConversation(c),
+  );
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
         Chats
       </h2>
-      {conversations.length === 0 ? (
+      {userConversations.length === 0 ? (
         <p className="rounded-xl border px-3 py-8 text-center text-sm text-muted-foreground">
           No chats yet — type above to start one.
         </p>
       ) : (
         <div className="space-y-2">
-          {conversations.map((conv) => (
+          {userConversations.map((conv) => (
             <Link
               key={conv.id}
               href={`/chat/${conv.id}`}

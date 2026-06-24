@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
@@ -140,7 +141,9 @@ export function ChatSidebarSection({
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const recentUnpinnedChats = conversations.filter((c) => !c.pinnedAt);
+  const recentUnpinnedChats = conversations.filter(
+    (c) => !c.pinnedAt && !isScheduledRunConversation(c),
+  );
 
   const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: projectsData } = useProjects({ enabled: projectsEnabled });
@@ -149,7 +152,7 @@ export function ChatSidebarSection({
     ? (projectsData ?? []).filter((p) => p.pinnedAt)
     : [];
   const pinnedItems = buildPinnedSidebarItems({
-    chats: conversations,
+    chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
   });
 

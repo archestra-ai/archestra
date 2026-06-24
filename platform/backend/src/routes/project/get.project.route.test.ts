@@ -133,6 +133,51 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     expect(del.statusCode).toBe(200);
   });
 
+  test("a project admin can manage a project shared with them (not only owned/overseen)", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const otherOwner = await makeUser({ email: "proj-share-owner@test.com" });
+    await makeMember(otherOwner.id, organizationId, {});
+    const project = await projectService.create({
+      organizationId,
+      userId: otherOwner.id,
+      name: "shared-org-wide",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: otherOwner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    const admin = await makeUser({ email: "proj-admin-share@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    actingUser = admin;
+
+    // The admin reaches it via the org share, so viewerRole is "shared" (not
+    // oversight) — but a project:admin may still manage it, so the detail exposes
+    // shareTeamIds (for the edit dialog) instead of null...
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(
+      detail.json<{ viewerRole: string; shareTeamIds: string[] | null }>(),
+    ).toMatchObject({ viewerRole: "shared", shareTeamIds: [] });
+
+    // ...and the edit goes through (requireManageable allows project:admin).
+    const edit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "edited by admin via share" },
+    });
+    expect(edit.statusCode).toBe(200);
+  });
+
   test("a non-admin member cannot see or manage other members' projects", async ({
     makeUser,
     makeMember,

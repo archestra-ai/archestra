@@ -17,7 +17,15 @@ pub struct ChatRunResult {
     pub turn_count: usize,
     pub finish_reason: Option<String>,
     pub total_tokens: Option<i64>,
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    /// Prompt tokens served from the provider's cache, billed cheaper. Disjoint from `prompt_tokens`
+    /// (the backend reports `prompt_tokens`/`inputTokens` already net of cache).
+    pub cache_read_tokens: Option<i64>,
     pub stage_tokens: Option<i64>,
+    pub stage_prompt_tokens: Option<i64>,
+    pub stage_completion_tokens: Option<i64>,
+    pub stage_cache_read_tokens: Option<i64>,
     pub stream_error: Option<String>,
 }
 
@@ -68,10 +76,18 @@ pub fn apply_chat_event(result: &mut ChatRunResult, event: &HashMap<String, Json
             }
         }
         Some("data-token-usage") => {
-            if let Some(data) = event.get("data").and_then(|v| v.as_object())
-                && let Some(total) = data.get("totalTokens").and_then(|v| v.as_i64())
-            {
-                result.stage_tokens = Some(total);
+            // Co-read the whole split from the one event that also carries totalTokens. The backend
+            // emits this per agentic step plus once at stage end with the cumulative `result.usage`;
+            // overwrite-last keeps the final cumulative figures, and reading all fields together keeps
+            // the split consistent with the total the rest of the harness already trusts.
+            if let Some(data) = event.get("data").and_then(|v| v.as_object()) {
+                let field = |key: &str| data.get(key).and_then(|v| v.as_i64());
+                if let Some(total) = field("totalTokens") {
+                    result.stage_tokens = Some(total);
+                    result.stage_prompt_tokens = field("inputTokens");
+                    result.stage_completion_tokens = field("outputTokens");
+                    result.stage_cache_read_tokens = field("cacheReadTokens");
+                }
             }
         }
         Some("error") => {
@@ -243,6 +259,51 @@ mod tests {
         assert_eq!(sse_data_payload("data: hello"), Some("hello"));
         assert_eq!(sse_data_payload("data:  [DONE]"), Some("[DONE]"));
         assert_eq!(sse_data_payload("event: message"), None);
+    }
+
+    fn token_usage_event(
+        input: i64,
+        output: i64,
+        total: i64,
+        cache_read: i64,
+    ) -> HashMap<String, JsonValue> {
+        let event = serde_json::json!({
+            "type": "data-token-usage",
+            "data": {
+                "inputTokens": input,
+                "outputTokens": output,
+                "totalTokens": total,
+                "cacheReadTokens": cache_read,
+            }
+        });
+        serde_json::from_value(event).unwrap()
+    }
+
+    #[test]
+    fn token_usage_co_reads_split_and_overwrites_with_last() {
+        let mut run = ChatRunResult::default();
+        // Per-step event, then the larger stage-final cumulative event: overwrite-last wins, and the
+        // split is co-read from the same event so it stays consistent with the total.
+        apply_chat_event(&mut run, &token_usage_event(100, 10, 110, 0));
+        apply_chat_event(&mut run, &token_usage_event(300, 40, 340, 90));
+        assert_eq!(run.stage_tokens, Some(340));
+        assert_eq!(run.stage_prompt_tokens, Some(300));
+        assert_eq!(run.stage_completion_tokens, Some(40));
+        assert_eq!(run.stage_cache_read_tokens, Some(90));
+    }
+
+    #[test]
+    fn token_usage_without_split_keeps_total_only() {
+        let mut run = ChatRunResult::default();
+        let event: HashMap<String, JsonValue> = serde_json::from_value(serde_json::json!({
+            "type": "data-token-usage",
+            "data": { "totalTokens": 50 }
+        }))
+        .unwrap();
+        apply_chat_event(&mut run, &event);
+        assert_eq!(run.stage_tokens, Some(50));
+        assert_eq!(run.stage_prompt_tokens, None);
+        assert_eq!(run.stage_completion_tokens, None);
     }
 
     fn stream_from_chunks(chunks: Vec<Vec<u8>>) -> ChatRecordStream {

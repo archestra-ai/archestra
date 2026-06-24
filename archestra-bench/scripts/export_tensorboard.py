@@ -65,6 +65,7 @@ def _write_overall(out: Path, aggregate: dict, step: int) -> int:
     n += _scalar(writer, "overall/total", aggregate.get("total"), step)
     n += _scalar(writer, "overall/avg_turns", aggregate.get("avg_turns"), step)
     n += _scalar(writer, "overall/avg_tokens", aggregate.get("avg_tokens"), step)
+    n += _scalar(writer, "overall/cost_usd", aggregate.get("cost_usd"), step)
     for outcome, count in (aggregate.get("outcomes") or {}).items():
         n += _scalar(writer, f"outcomes/{outcome}", count, step)
     writer.close()
@@ -77,12 +78,14 @@ def _write_lane(out: Path, lane_aggregate: dict, rollouts: list[dict], step: int
     n += _scalar(writer, "pass_rate", lane_aggregate.get("pass_rate"), step)
     n += _scalar(writer, "passed", lane_aggregate.get("passed"), step)
     n += _scalar(writer, "total", lane_aggregate.get("total"), step)
+    n += _scalar(writer, "cost_usd", lane_aggregate.get("cost_usd"), step)
     for rollout in rollouts:
         slot = f"{rollout['env_id']}/{rollout['task_id']}"
         outcome = rollout.get("outcome")
         n += _scalar(writer, f"pass/{slot}", 1.0 if outcome == "passed" else 0.0, step)
         n += _scalar(writer, f"turns/{slot}", rollout.get("turn_count"), step)
         n += _scalar(writer, f"tokens/{slot}", rollout.get("total_tokens"), step)
+        n += _scalar(writer, f"cost/{slot}", rollout.get("cost_usd"), step)
         n += _scalar(writer, f"tool_calls/{slot}", rollout.get("tool_call_count"), step)
         if outcome is not None:
             n += _scalar(writer, f"outcome/{outcome}/{slot}", 1.0, step)

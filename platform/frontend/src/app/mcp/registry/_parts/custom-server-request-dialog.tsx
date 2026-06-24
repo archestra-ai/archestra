@@ -95,7 +95,44 @@ export function CustomServerRequestDialog({
 
   const createRequest = useCreateMcpServerInstallationRequest();
 
-  const onSubmit = async (values: CustomServerRequestFormValues) => {
+  const handleArgumentsChange = (value: string) => {
+    const parsed = parseMcpConfig(value);
+    if (parsed) {
+      if (parsed.serverType) {
+        form.setValue("serverType", parsed.serverType, { shouldDirty: true });
+      }
+      if (parsed.name) {
+        form.setValue("name", parsed.name, { shouldDirty: true });
+        if (!form.getValues("label")) {
+          const formattedLabel = parsed.name
+            .split(/[-_]+/)
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+          form.setValue("label", formattedLabel, { shouldDirty: true });
+        }
+      }
+      if (parsed.docsUrl) {
+        form.setValue("docsUrl", parsed.docsUrl, { shouldDirty: true });
+      }
+      if (parsed.serverType === "remote") {
+        if (parsed.serverUrl) {
+          form.setValue("serverUrl", parsed.serverUrl, { shouldDirty: true });
+        }
+      } else {
+        if (parsed.command) {
+          form.setValue("command", parsed.command, { shouldDirty: true });
+        }
+        if (parsed.arguments !== undefined) {
+          form.setValue("arguments", parsed.arguments, { shouldDirty: true });
+        }
+        if (parsed.environment && parsed.environment.length > 0) {
+          form.setValue("environment", parsed.environment, { shouldDirty: true });
+        }
+      }
+    }
+  };
+
+  const onSubmit = async (values: CustomServerRequestFormValues) =>. {
     const customServerConfig: NonNullable<
       archestraApiTypes.CreateMcpServerInstallationRequestData["body"]["customServerConfig"]
     > =
@@ -282,6 +319,10 @@ export function CustomServerRequestDialog({
                             placeholder={`/path/to/server.js\n--verbose`}
                             rows={3}
                             {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              handleArgumentsChange(e.target.value);
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
@@ -336,4 +377,213 @@ export function CustomServerRequestDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function parseMcpConfig(jsonStr: string) {
+  let json: any;
+  try {
+    const trimmed = jsonStr.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return null;
+    }
+    json = JSON.parse(trimmed);
+  } catch (e) {
+    return null;
+  }
+
+  let config: any = null;
+  let name = "";
+  let description = "";
+  let docsUrl = "";
+
+  const isServerConfig = (obj: any) => {
+    return (
+      obj &&
+      typeof obj === "object" &&
+      ("command" in obj ||
+        "url" in obj ||
+        "serverUrl" in obj ||
+        "args" in obj ||
+        "arguments" in obj ||
+        "env" in obj ||
+        "environment" in obj)
+    );
+  };
+
+  if (json.mcpServers && typeof json.mcpServers === "object") {
+    const keys = Object.keys(json.mcpServers);
+    if (keys.length > 0) {
+      name = keys[0];
+      config = json.mcpServers[name];
+    }
+  } else if (json.servers && typeof json.servers === "object") {
+    const keys = Object.keys(json.servers);
+    if (keys.length > 0) {
+      name = keys[0];
+      config = json.servers[name];
+    }
+  } else if (json.server && typeof json.server === "object") {
+    config = json.server;
+    if (json.name) name = json.name;
+    if (json.description) description = json.description;
+    if (json.docsUrl) docsUrl = json.docsUrl;
+    if (json.docs_url) docsUrl = json.docs_url;
+  } else if (
+    Object.keys(json).length === 1 &&
+    isServerConfig(json[Object.keys(json)[0]])
+  ) {
+    name = Object.keys(json)[0];
+    config = json[name];
+  } else if (isServerConfig(json)) {
+    config = json;
+    if (json.name) name = json.name;
+    if (json.description) description = json.description;
+  }
+
+  if (!config) {
+    return null;
+  }
+
+  if (!docsUrl) {
+    docsUrl = config.docsUrl || config.docs_url || "";
+  }
+
+  let serverType: "remote" | "local" = "local";
+  if (
+    config.type === "remote" ||
+    config.type === "http" ||
+    config.type === "sse" ||
+    config.url ||
+    config.serverUrl
+  ) {
+    serverType = "remote";
+  } else if (
+    config.type === "local" ||
+    config.type === "stdio" ||
+    config.command
+  ) {
+    serverType = "local";
+  }
+
+  const command = config.command || "";
+
+  let argsArray: string[] = [];
+  if (Array.isArray(config.args)) {
+    argsArray = config.args;
+  } else if (Array.isArray(config.arguments)) {
+    argsArray = config.arguments;
+  }
+  const argsStr = argsArray.map((arg) => String(arg)).join("\n");
+
+  const serverUrl = config.url || config.serverUrl || "";
+
+  const envObj = config.env || config.environment || {};
+  const environment: any[] = [];
+  if (typeof envObj === "object" && envObj !== null) {
+    for (const [key, val] of Object.entries(envObj)) {
+      const valStr = String(val);
+      const isPlaceholder = (v: string) => {
+        const lower = v.toLowerCase().trim();
+        return (
+          lower === "" ||
+          lower.includes("your_token_here") ||
+          lower.includes("your_key_here") ||
+          lower.includes("enter_token") ||
+          lower.includes("enter_key") ||
+          lower.includes("<token>") ||
+          lower.includes("<key>") ||
+          lower.includes("<org>") ||
+          lower.includes("<username>") ||
+          lower.includes("<password>") ||
+          lower.includes("redacted") ||
+          lower.includes("todo") ||
+          lower.startsWith("${input:") ||
+          (v.startsWith("<") && v.endsWith(">")) ||
+          (v.startsWith("[") && v.endsWith("]"))
+        );
+      };
+
+      const isSecret = (k: string) => {
+        const lower = k.toLowerCase();
+        return (
+          lower.includes("token") ||
+          lower.includes("key") ||
+          lower.includes("secret") ||
+          lower.includes("pass") ||
+          lower.includes("auth") ||
+          lower.includes("jwt") ||
+          lower.includes("cert") ||
+          lower.includes("private") ||
+          lower.includes("cred")
+        );
+      };
+
+      const placeholder = isPlaceholder(valStr);
+      environment.push({
+        key,
+        type: isSecret(key) ? "secret" : "plain_text",
+        value: placeholder ? "" : valStr,
+        promptOnInstallation: placeholder,
+        required: placeholder,
+      });
+    }
+  }
+
+  const headersObj = config.headers || {};
+  const headers: any[] = [];
+  if (typeof headersObj === "object" && headersObj !== null) {
+    for (const [key, val] of Object.entries(headersObj)) {
+      const valStr = String(val);
+      const isPlaceholder = (v: string) => {
+        const lower = v.toLowerCase().trim();
+        return (
+          lower === "" ||
+          lower.includes("your_token_here") ||
+          lower.includes("your_key_here") ||
+          lower.includes("<token>") ||
+          lower.includes("<key>") ||
+          lower.includes("redacted") ||
+          lower.startsWith("${input:") ||
+          (v.startsWith("<") && v.endsWith(">"))
+        );
+      };
+
+      const isSecret = (k: string) => {
+        const lower = k.toLowerCase();
+        return (
+          lower.includes("token") ||
+          lower.includes("key") ||
+          lower.includes("secret") ||
+          lower.includes("pass") ||
+          lower.includes("auth") ||
+          lower.includes("jwt") ||
+          lower.includes("authorization")
+        );
+      };
+
+      const placeholder = isPlaceholder(valStr);
+      headers.push({
+        fieldName: undefined,
+        headerName: key,
+        promptOnInstallation: placeholder,
+        required: placeholder,
+        value: placeholder ? "" : valStr,
+        description: "",
+        includeBearerPrefix: valStr.toLowerCase().includes("bearer"),
+        sensitive: isSecret(key),
+      });
+    }
+  }
+
+  return {
+    name,
+    description,
+    serverType,
+    command,
+    arguments: argsStr,
+    serverUrl,
+    docsUrl,
+    environment,
+    headers,
+  };
 }

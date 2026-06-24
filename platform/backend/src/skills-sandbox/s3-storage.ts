@@ -19,7 +19,7 @@ import {
 /**
  * Build the real S3 client; undefined credentials → AWS default chain (IAM/IRSA).
  *
- * @public — consumed by the file-storage provider factory (Task 5).
+ * @public — consumed by the file-storage provider factory.
  */
 export function buildS3Client(s3: FileStorageS3Config): S3Client {
   return new S3Client({

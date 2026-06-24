@@ -19,12 +19,13 @@ import { buildS3Client, S3ObjectStore } from "./s3-storage";
 export { FileBytesMissingError } from "./object-store";
 
 /**
- * Provider-agnostic byte storage. The seam is `ObjectStore` — a backend that
- * holds bytes addressed by an opaque `key` (filesystem today; S3/Drive/… later).
- * Postgres `bytea` is NOT an `ObjectStore`: it stores bytes inline in the row, so
- * it has no external key namespace and nothing can be dropped in out of band. The
- * row helpers below (`readRowBytes`/`deleteRowBytes`) dispatch per row between the
- * inline (`db`) case and the row's external store.
+ * Filesystem byte backend + provider dispatch. The provider-agnostic seam
+ * (`ObjectStore`/`EnumerableObjectStore`) lives in `./object-store`; this module
+ * implements it for a mounted filesystem (`FilesystemObjectStore`), selects the
+ * active backend (`objectStoreFor`/`getObjectStore`), and dispatches a row's bytes
+ * per `storageProvider` via `readRowBytes`/`deleteRowBytes`. Postgres `bytea` is
+ * NOT an `ObjectStore`: bytes live inline in the row, so it has no external key
+ * namespace and nothing can be dropped in out of band.
  */
 
 /**

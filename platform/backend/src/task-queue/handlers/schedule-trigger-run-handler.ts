@@ -1,4 +1,7 @@
-import { executeA2AMessage } from "@/agents/a2a-executor";
+import {
+  type A2AExecuteResult,
+  executeA2AMessage,
+} from "@/agents/a2a-executor";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
@@ -9,7 +12,11 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
-import { createAndLinkRunConversation } from "@/services/scheduled-run-conversation";
+import {
+  createAndLinkRunConversation,
+  persistRunConversationMessages,
+} from "@/services/scheduled-run-conversation";
+import type { Conversation } from "@/types";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -53,13 +60,17 @@ export async function handleScheduleTriggerRunExecution(
 
   let status: "success" | "failed" = "success";
   let errorMessage: string | null = null;
+  // Captured for post-completion transcript persistence: a project-scoped run's
+  // chat conversation is created up front and the executor result is persisted
+  // after execution completes.
+  let runConversation: Conversation | null = null;
+  let executeResult: A2AExecuteResult | null = null;
 
   try {
     const actor = await UserModel.getById(trigger.actorUserId);
     if (!actor) {
       throw new Error("Scheduled trigger actor no longer exists");
     }
-
     const userIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
       userId: actor.id,
       organizationId: trigger.organizationId,
@@ -96,9 +107,10 @@ export async function handleScheduleTriggerRunExecution(
         organizationId: trigger.organizationId,
       });
       conversationId = conversation.id;
+      runConversation = conversation;
     }
 
-    await executeA2AMessage({
+    executeResult = await executeA2AMessage({
       agentId: trigger.agentId,
       message: trigger.messageTemplate,
       organizationId: trigger.organizationId,
@@ -124,6 +136,32 @@ export async function handleScheduleTriggerRunExecution(
     status,
     error: errorMessage,
   });
+
+  // For a project-scoped run that executed successfully, persist the chat
+  // transcript from the executor's own result (the user prompt + the complete
+  // assistant turn). This is race-free — unlike reading the `interactions` rows,
+  // which the proxy commits after the stream is flushed and so may not yet be
+  // visible at completion. So the conversation isn't blank (or missing its final
+  // answer) when opened from any surface (project chat list, sidebar, direct
+  // link). Best-effort: a persist failure must not fail the already-completed run.
+  if (status === "success" && runConversation && executeResult) {
+    try {
+      await persistRunConversationMessages({
+        conversation: runConversation,
+        userText: trigger.messageTemplate,
+        assistantMessage: executeResult.responseUiMessage,
+      });
+    } catch (error) {
+      logger.warn(
+        {
+          runId: run.id,
+          triggerId: run.triggerId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Failed to persist scheduled run conversation messages",
+      );
+    }
+  }
 
   metrics.scheduleTrigger.reportScheduleTriggerRun(agentName, status);
 

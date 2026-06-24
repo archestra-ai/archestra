@@ -16,14 +16,16 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
+import { ProjectScopeFilter } from "@/components/project-scope-filter";
+import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
+import {
+  parseProjectScope,
+  toApiProjectScope,
+} from "@/lib/projects/project-list-scope";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
@@ -49,7 +55,9 @@ import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
 export default function ProjectsPageClient() {
   return (
     <ErrorBoundary>
-      <ProjectsList />
+      <Suspense>
+        <ProjectsList />
+      </Suspense>
     </ErrorBoundary>
   );
 }
@@ -58,7 +66,23 @@ const PROJECTS_DESCRIPTION =
   "Collections of chats with shared files. Share a project to let teammates follow along and start their own chats.";
 
 function ProjectsList() {
-  const { data, isPending } = useProjects();
+  const searchParams = useSearchParams();
+  const scope = parseProjectScope(searchParams.get("scope"));
+  const search = searchParams.get("search") ?? undefined;
+  const csvParam = (key: string): string[] | undefined => {
+    const values = searchParams.get(key)?.split(",").filter(Boolean);
+    return values && values.length > 0 ? values : undefined;
+  };
+  const teamIds = csvParam("teamIds");
+  const authorIds = csvParam("authorIds");
+  const excludeAuthorIds = csvParam("excludeAuthorIds");
+  const { data, isPending } = useProjects({
+    scope: toApiProjectScope(scope),
+    search,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
+  });
   const { hasAnyApiKey, isLoading: isApiKeyLoading } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectListItem | null>(
@@ -66,11 +90,21 @@ function ProjectsList() {
   );
   const [deletingProject, setDeletingProject] =
     useState<ProjectListItem | null>(null);
+  // Pinned-first grouping applies in every scope: oversight projects simply
+  // aren't pinnable, so they fall into the unpinned section on their own.
   const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
+  const togglePin = (project: ProjectListItem) =>
+    pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
+  const hasActiveFilter =
+    scope !== "all" ||
+    !!search ||
+    !!teamIds ||
+    !!authorIds ||
+    !!excludeAuthorIds;
 
   // Mirror the new-chat screen: with no usable LLM key there's nothing to run a
   // project on, so prompt to add one instead of offering project creation.
@@ -121,41 +155,43 @@ function ProjectsList() {
           }}
         />
       )}
-      {projects.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
-          <FolderKanban className="h-8 w-8 opacity-50" />
-          <p>{isPending ? "Loading…" : "No projects yet"}</p>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput placeholder="Search projects" paramName="search" />
+          <ProjectScopeFilter />
         </div>
-      ) : (
-        <div className="space-y-6">
-          {pinnedProjects.length > 0 && (
+        {projects.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
+            <FolderKanban className="h-8 w-8 opacity-50" />
+            <p>
+              {isPending
+                ? "Loading…"
+                : hasActiveFilter
+                  ? "No projects match your filters"
+                  : "No projects yet"}
+            </p>
+          </div>
+        ) : (
+          <>
+            {pinnedProjects.length > 0 && (
+              <ProjectSection
+                title="Pinned"
+                projects={pinnedProjects}
+                onTogglePin={togglePin}
+                onEdit={setEditingProject}
+                onDelete={setDeletingProject}
+              />
+            )}
             <ProjectSection
-              title="Pinned"
-              projects={pinnedProjects}
-              onTogglePin={(project) =>
-                pinProjectMutation.mutate({
-                  id: project.id,
-                  pinned: !project.pinnedAt,
-                })
-              }
+              title={pinnedProjects.length > 0 ? "All projects" : undefined}
+              projects={unpinnedProjects}
+              onTogglePin={togglePin}
               onEdit={setEditingProject}
               onDelete={setDeletingProject}
             />
-          )}
-          <ProjectSection
-            title={pinnedProjects.length > 0 ? "All projects" : undefined}
-            projects={unpinnedProjects}
-            onTogglePin={(project) =>
-              pinProjectMutation.mutate({
-                id: project.id,
-                pinned: !project.pinnedAt,
-              })
-            }
-            onEdit={setEditingProject}
-            onDelete={setDeletingProject}
-          />
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </PageLayout>
   );
 }
@@ -225,18 +261,32 @@ function ProjectCard({
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
         <span className="flex shrink-0 items-center gap-1">
-          {!project.isOwner && (
+          {project.viewerRole === "admin" && (
+            <Badge variant="secondary">
+              {project.ownerName
+                ? `Owned by ${project.ownerName}`
+                : "Other user"}
+            </Badge>
+          )}
+          {project.viewerRole === "shared" && (
             <Badge variant="secondary">Shared with you</Badge>
           )}
-          {project.isOwner && project.visibility && (
+          {project.viewerRole === "owner" && project.visibility && (
             <Badge variant="outline" className="gap-1">
               <Users className="h-3 w-3" />
-              {project.visibility === "organization" ? "Org" : "Teams"}
+              {project.visibility === "organization"
+                ? "Org"
+                : project.shareTeamNames && project.shareTeamNames.length > 0
+                  ? project.shareTeamNames.join(", ")
+                  : "Teams"}
             </Badge>
           )}
           <ProjectCardActions
             pinned={!!project.pinnedAt}
-            canManage={project.isOwner}
+            canPin={project.viewerRole !== "admin"}
+            canManage={
+              project.viewerRole === "owner" || project.viewerRole === "admin"
+            }
             onTogglePin={() => onTogglePin(project)}
             onEdit={() => onEdit(project)}
             onDelete={() => onDelete(project)}
@@ -257,12 +307,14 @@ function ProjectCard({
 
 function ProjectCardActions({
   pinned,
+  canPin,
   canManage,
   onTogglePin,
   onEdit,
   onDelete,
 }: {
   pinned: boolean;
+  canPin: boolean;
   canManage: boolean;
   onTogglePin: () => void;
   onEdit: () => void;
@@ -276,14 +328,16 @@ function ProjectCardActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onTogglePin}>
-          {pinned ? (
-            <PinOff className="h-4 w-4" />
-          ) : (
-            <Pin className="h-4 w-4" />
-          )}
-          {pinned ? "Unpin" : "Pin"}
-        </DropdownMenuItem>
+        {canPin && (
+          <DropdownMenuItem onSelect={onTogglePin}>
+            {pinned ? (
+              <PinOff className="h-4 w-4" />
+            ) : (
+              <Pin className="h-4 w-4" />
+            )}
+            {pinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
+        )}
         {canManage && (
           <>
             <DropdownMenuItem onSelect={onEdit}>

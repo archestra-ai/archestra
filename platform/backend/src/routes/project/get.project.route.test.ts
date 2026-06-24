@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -56,9 +57,9 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
 
     const list = await app.inject({ method: "GET", url: "/api/projects" });
     expect(list.statusCode).toBe(200);
-    const items = list.json<Array<{ name: string; isOwner: boolean }>>();
+    const items = list.json<Array<{ name: string; viewerRole: string }>>();
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ name: "alpha", isOwner: false });
+    expect(items[0]).toMatchObject({ name: "alpha", viewerRole: "shared" });
 
     const detail = await app.inject({
       method: "GET",
@@ -75,6 +76,108 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     expect(ownDetail.json<{ shareTeamIds: string[] }>().shareTeamIds).toEqual(
       [],
     );
+  });
+
+  test("a project admin sees, reads, edits, and deletes other members' projects (oversight)", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const otherOwner = await makeUser({ email: "proj-other-owner@test.com" });
+    await makeMember(otherOwner.id, organizationId, {});
+    const project = await projectService.create({
+      organizationId,
+      userId: otherOwner.id,
+      name: "owned-by-other",
+      description: null,
+    });
+
+    const admin = await makeUser({ email: "proj-admin@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    actingUser = admin;
+
+    // The other member's PRIVATE project surfaces for the admin under
+    // scope=personal, tagged as oversight ("admin") with the owner's name.
+    const personal = await app.inject({
+      method: "GET",
+      url: "/api/projects?scope=personal",
+    });
+    const items =
+      personal.json<
+        Array<{ name: string; viewerRole: string; ownerName: string | null }>
+      >();
+    const overseen = items.find((p) => p.name === "owned-by-other");
+    expect(overseen).toMatchObject({ viewerRole: "admin" });
+    expect(overseen?.ownerName).toBe(otherOwner.name);
+
+    // Detail is readable, tagged admin, and exposes shareTeamIds for the edit dialog.
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(
+      detail.json<{ viewerRole: string; shareTeamIds: string[] | null }>(),
+    ).toMatchObject({ viewerRole: "admin", shareTeamIds: [] });
+
+    // Admin can edit and delete the project.
+    const edit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "annotated by admin" },
+    });
+    expect(edit.statusCode).toBe(200);
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/projects/${project.id}`,
+    });
+    expect(del.statusCode).toBe(200);
+  });
+
+  test("a non-admin member cannot see or manage other members' projects", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const otherOwner = await makeUser({ email: "proj-other-owner2@test.com" });
+    await makeMember(otherOwner.id, organizationId, {});
+    const project = await projectService.create({
+      organizationId,
+      userId: otherOwner.id,
+      name: "private-other",
+      description: null,
+    });
+
+    const member = await makeUser({ email: "proj-plain-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    actingUser = member;
+
+    // A non-admin never sees another member's private project — not in the
+    // default list, nor under scope=personal.
+    expect(
+      (await app.inject({ method: "GET", url: "/api/projects" })).json<
+        unknown[]
+      >(),
+    ).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/projects?scope=personal",
+        })
+      ).json<unknown[]>(),
+    ).toEqual([]);
+
+    // ...and they cannot edit or delete it (404, same as "not found").
+    const edit = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "nope" },
+    });
+    expect(edit.statusCode).toBe(404);
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/projects/${project.id}`,
+    });
+    expect(del.statusCode).toBe(404);
   });
 
   test("an unshared project 404s for everyone but the owner", async ({

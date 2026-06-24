@@ -87,7 +87,10 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending } = useProject(id);
-  const { data: conversations } = useProjectConversations(id);
+  // Chats are hidden from admin oversight, so don't even fetch them there.
+  const { data: conversations } = useProjectConversations(id, {
+    enabled: !!project && project.viewerRole !== "admin",
+  });
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -119,6 +122,14 @@ function ProjectDetail() {
     );
   }
 
+  // A project admin overseeing someone else's project can manage it (edit /
+  // delete / sharing) and read its files, but NOT its chats: no composer, no
+  // chats list, no pin, no new schedules. Existing schedules follow their
+  // scheduledTask permissions.
+  const isAdminView = project.viewerRole === "admin";
+  const canManage = project.viewerRole === "owner" || isAdminView;
+  const canChat = !isAdminView;
+
   return (
     // The same two-column shell as /chat: the page content scrolls in the left
     // column while the Files panel takes the full height of the right side.
@@ -134,8 +145,14 @@ function ProjectDetail() {
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
-              {!project.isOwner && (
+              {project.viewerRole === "shared" && (
                 <Badge variant="secondary">Shared with you</Badge>
+              )}
+              {isAdminView && (
+                <Badge variant="secondary">
+                  Viewing as administrator
+                  {project.ownerName ? ` · ${project.ownerName}` : ""}
+                </Badge>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -148,22 +165,24 @@ function ProjectDetail() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      pinProjectMutation.mutate({
-                        id: project.id,
-                        pinned: !project.pinnedAt,
-                      })
-                    }
-                  >
-                    {project.pinnedAt ? (
-                      <PinOff className="h-4 w-4" />
-                    ) : (
-                      <Pin className="h-4 w-4" />
-                    )}
-                    {project.pinnedAt ? "Unpin" : "Pin"}
-                  </DropdownMenuItem>
-                  {project.isOwner && (
+                  {!isAdminView && (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        pinProjectMutation.mutate({
+                          id: project.id,
+                          pinned: !project.pinnedAt,
+                        })
+                      }
+                    >
+                      {project.pinnedAt ? (
+                        <PinOff className="h-4 w-4" />
+                      ) : (
+                        <Pin className="h-4 w-4" />
+                      )}
+                      {project.pinnedAt ? "Unpin" : "Pin"}
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && (
                     <>
                       <DropdownMenuItem onSelect={() => setEditOpen(true)}>
                         <Pencil className="h-4 w-4" />
@@ -204,9 +223,12 @@ function ProjectDetail() {
           )}
 
           <div className="space-y-6">
-            <ProjectChatInput projectId={project.id} />
-            <ProjectSchedulesSection projectId={project.id} />
-            <ChatsList conversations={conversations ?? []} />
+            {canChat && <ProjectChatInput projectId={project.id} />}
+            <ProjectSchedulesSection
+              projectId={project.id}
+              canCreate={canChat}
+            />
+            {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
         </PageLayout>
       </div>
@@ -216,7 +238,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
-          isOwner={project.isOwner}
+          isOwner={canManage}
         />
       </div>
     </div>

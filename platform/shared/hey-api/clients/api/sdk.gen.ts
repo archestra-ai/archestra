@@ -4997,7 +4997,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 });
 
 /**
- * List projects the caller can see: their own plus ones shared with their teams or the whole organization.
+ * List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.
  *
  * Authentication:
  *
@@ -5030,7 +5030,7 @@ export const createProject = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Delete a project (owner only). Its chats survive as ordinary conversations; its files are deleted with it.
+ * Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files are deleted with it.
  *
  * Authentication:
  *
@@ -5056,7 +5056,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
 /**
- * Update a project's name, description, and/or icon (owner only). Only the provided fields change.
+ * Update a project's name, description, and/or icon (owner or a project admin). Only the provided fields change.
  *
  * Authentication:
  *
@@ -5076,7 +5076,7 @@ export const updateProject = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility "none" unshares).
+ * Set who can see the project (owner or a project admin): the whole organization, specific teams, or nobody (visibility "none" unshares).
  *
  * Authentication:
  *

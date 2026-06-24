@@ -53596,7 +53596,22 @@ export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletio
 export type GetProjectsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        scope?: 'personal' | 'team' | 'org';
+        search?: string;
+        /**
+         * Team IDs (comma-separated); only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+    };
     url: '/api/projects';
 };
 
@@ -53674,9 +53689,11 @@ export type GetProjectsResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     }>;
@@ -53769,9 +53786,11 @@ export type CreateProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -53947,9 +53966,11 @@ export type GetProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;

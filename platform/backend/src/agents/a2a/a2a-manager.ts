@@ -1,3 +1,4 @@
+import { coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -197,8 +198,9 @@ export class A2AManager {
       const contextUiMessages = contextDbMessages.map(
         (m) => m.content as UIMessage,
       );
-      const requestMessages: ModelMessage[] =
-        await convertToModelMessages(contextUiMessages);
+      const requestMessages: ModelMessage[] = await convertToModelMessages(
+        coerceMalformedToolInputs(contextUiMessages),
+      );
 
       if (messageParts.length > 0) {
         // We need to separately push user message to both contextUiMessages and requestMessages.

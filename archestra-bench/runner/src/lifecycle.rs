@@ -120,7 +120,6 @@ async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_ur
     }
 }
 
-const DAGGER_RUNNER_HOST: &str = "tcp://127.0.0.1:1234";
 const DEV_AUTH_SECRET: &str = "better-auth-secret-12345678901234567890";
 const DEFAULT_ADMIN_EMAIL: &str = "admin@example.com";
 const DEFAULT_ADMIN_PASSWORD: &str = "password";
@@ -129,9 +128,30 @@ const DEFAULT_ADMIN_PASSWORD: &str = "password";
 const DEFAULT_BENCH_DATABASE_URL: &str = "postgres://postgres:postgres@localhost:5544/postgres";
 const BENCH_PG_COMPOSE_PROJECT: &str = "archestra-bench";
 
+/// Process-env override that, when set, names the Dagger runner host explicitly and skips the
+/// local resolution ladder (the prod-image / CI path supplies a `kube-pod://` host here).
+const RUNNER_HOST_ENV: &str = "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST";
+/// Dagger host published by the dev stack's Tilt kubectl port-forward (the resolution fallback).
+const K8S_DAGGER_HOST: &str = "tcp://127.0.0.1:1234";
+const K8S_DAGGER_PROBE_ADDR: &str = "127.0.0.1:1234";
+/// Dagger host published by the runner-managed engine (`docker-compose.bench-dagger.yml`).
+const MANAGED_DAGGER_HOST: &str = "tcp://127.0.0.1:1245";
+const MANAGED_DAGGER_PROBE_ADDR: &str = "127.0.0.1:1245";
+const BENCH_DAGGER_COMPOSE_PROJECT: &str = "archestra-bench-dagger";
+/// The image whose presence gates the managed tier; the tag is read from the compose file so the
+/// engine version lives in exactly one place (kept in sync by scripts/check-dagger-version-sync.sh).
+const DAGGER_ENGINE_IMAGE: &str = "registry.dagger.io/engine";
+/// How long the managed engine has to start listening after `docker compose up` before we give up.
+const MANAGED_DAGGER_WAIT: Duration = Duration::from_secs(30);
+
 /// Provision the dedicated bench Postgres at most once per process. Isolated lanes call
 /// [`Instance::start`] concurrently, so this serializes the `docker compose up` across them.
 static BENCH_PG_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+/// Provision the runner-managed Dagger engine at most once per process (same rationale as above).
+static BENCH_DAGGER_READY: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+/// The Dagger runner host, resolved once and shared across all lanes so they cannot split across
+/// tiers (e.g. one lane on the managed engine, another on the k8s port-forward) within a run.
+static RESOLVED_RUNNER_HOST: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
 
 #[derive(Debug, thiserror::Error)]
 pub enum LifecycleError {
@@ -147,6 +167,8 @@ pub enum LifecycleError {
     EarlyExit { code: i32, message: String },
     #[error("config error: {0}")]
     Config(String),
+    #[error("dagger unavailable: {0}")]
+    DaggerUnavailable(String),
 }
 
 pub struct Instance {
@@ -166,6 +188,8 @@ pub struct Instance {
     api_port: u16,
     metrics_port: u16,
     bench_compose: PathBuf,
+    dagger_compose: PathBuf,
+    dagger_runner_host: String,
     teardown_id: Option<u64>,
 }
 
@@ -182,10 +206,9 @@ impl Instance {
     ) -> Self {
         let run_id = run_id.into();
         let platform = platform_dir.unwrap_or_else(|| repo_root.join("platform"));
-        let bench_compose = repo_root
-            .join("archestra-bench")
-            .join("dev")
-            .join("docker-compose.bench-pg.yml");
+        let bench_dev = repo_root.join("archestra-bench").join("dev");
+        let bench_compose = bench_dev.join("docker-compose.bench-pg.yml");
+        let dagger_compose = bench_dev.join("docker-compose.bench-dagger.yml");
         Self {
             run_id,
             log_path,
@@ -203,6 +226,8 @@ impl Instance {
             api_port: 0,
             metrics_port: 0,
             bench_compose,
+            dagger_compose,
+            dagger_runner_host: String::new(),
             teardown_id: None,
         }
     }
@@ -235,6 +260,11 @@ impl Instance {
         self.db_url = with_dbname(&self.maint_db_url, &self.db_name);
         self.api_port = free_port().await?;
         self.metrics_port = free_port().await?;
+
+        // Resolve the Dagger runner host before anything reads `backend_env()` (migrate, spawn). A
+        // broken sandbox fails fast here instead of booting a backend that can never run a command.
+        // No per-run side effect has happened yet, so a failure just propagates with nothing to undo.
+        self.dagger_runner_host = resolve_runner_host(&self.dagger_compose).await?;
 
         // Register teardown BEFORE the first side effect (database creation): an interruption during a
         // partial boot must still kill the process group and drop the database.
@@ -438,6 +468,7 @@ impl Instance {
             &self.db_url,
             &self.base_url,
             self.metrics_port,
+            &self.dagger_runner_host,
             &self
                 .platform
                 .join("dev")
@@ -576,6 +607,183 @@ pub fn bench_postgres_unavailable_message(
     }
 }
 
+/// Which Dagger host to use, decided purely from booleans so the ladder is unit-testable.
+#[derive(Debug, PartialEq, Eq)]
+enum RunnerChoice {
+    Explicit(String),
+    Managed,
+    K8s,
+    None,
+}
+
+/// The local resolution ladder (no I/O): an explicit override wins; else the runner-managed engine
+/// when Docker can run it and the image is already pulled; else the dev-stack port-forward when it is
+/// listening; else nothing.
+fn decide_runner(explicit: Option<String>, managed_runnable: bool, k8s_open: bool) -> RunnerChoice {
+    match (explicit, managed_runnable, k8s_open) {
+        (Some(host), _, _) => RunnerChoice::Explicit(host),
+        (None, true, _) => RunnerChoice::Managed,
+        (None, false, true) => RunnerChoice::K8s,
+        (None, false, false) => RunnerChoice::None,
+    }
+}
+
+/// Resolve the Dagger runner host once per process and share the result across all lanes, so a run
+/// cannot end up split across tiers. Memoized in [`RESOLVED_RUNNER_HOST`].
+async fn resolve_runner_host(dagger_compose: &Path) -> Result<String, LifecycleError> {
+    RESOLVED_RUNNER_HOST
+        .get_or_try_init(|| async {
+            let explicit = env_override(RUNNER_HOST_ENV);
+            // Read the engine tag up front: a misconfigured compose fails clearly here, and the
+            // `image_present` probe and the unavailable message then share one source of truth.
+            let tag = engine_tag(dagger_compose)?;
+            // Short-circuit the probes the ladder won't reach (don't run `docker info` when an
+            // explicit host is set, don't probe k8s once the managed engine is chosen).
+            let managed_runnable =
+                explicit.is_none() && docker_running().await && image_present(&tag).await;
+            let k8s_open = explicit.is_none()
+                && !managed_runnable
+                && tcp_open(K8S_DAGGER_PROBE_ADDR, Duration::from_secs(1)).await;
+            match decide_runner(explicit, managed_runnable, k8s_open) {
+                RunnerChoice::Explicit(host) => {
+                    info!("sandbox: explicit Dagger runner host {host} (ladder skipped)");
+                    Ok(host)
+                }
+                RunnerChoice::Managed => {
+                    ensure_bench_dagger(dagger_compose).await?;
+                    info!("sandbox: runner-managed Dagger engine on {MANAGED_DAGGER_HOST}");
+                    Ok(MANAGED_DAGGER_HOST.to_string())
+                }
+                RunnerChoice::K8s => {
+                    info!("sandbox: dev-stack Dagger port-forward on {K8S_DAGGER_HOST}");
+                    Ok(K8S_DAGGER_HOST.to_string())
+                }
+                RunnerChoice::None => Err(dagger_unavailable_resolution(&tag)),
+            }
+        })
+        .await
+        .cloned()
+}
+
+/// Provision the runner-managed Dagger engine at most once per process; left running between runs so
+/// the buildkit cache stays warm (`docker-compose.bench-dagger.yml` documents how to stop + prune).
+async fn ensure_bench_dagger(compose_file: &Path) -> Result<(), LifecycleError> {
+    BENCH_DAGGER_READY
+        .get_or_try_init(|| async {
+            info!(
+                "ensuring runner-managed Dagger engine ({})",
+                compose_file.display()
+            );
+            let compose = compose_file.to_string_lossy();
+            let output = Command::new("docker")
+                .args(["compose", "-p", BENCH_DAGGER_COMPOSE_PROJECT, "-f"])
+                .arg(compose.as_ref())
+                .args(["up", "-d"])
+                .output()
+                .await
+                .map_err(|e| {
+                    LifecycleError::DaggerUnavailable(format!(
+                        "failed to run `docker compose` for the managed Dagger engine (is Docker running?): {e}"
+                    ))
+                })?;
+            if !output.status.success() {
+                return Err(LifecycleError::DaggerUnavailable(format!(
+                    "could not start the runner-managed Dagger engine: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            // `docker compose up` returns once the container is running, not once the engine has
+            // bound its TCP port; poll the published port directly (the engine image ships no usable
+            // in-container health tool to hang a compose `--wait` healthcheck on).
+            wait_tcp(MANAGED_DAGGER_PROBE_ADDR, MANAGED_DAGGER_WAIT).await
+        })
+        .await
+        .copied()
+}
+
+/// Names what the resolution ladder tried and how to fix it, in the style of
+/// [`bench_postgres_unavailable_message`].
+fn dagger_unavailable_resolution(tag: &str) -> LifecycleError {
+    LifecycleError::DaggerUnavailable(format!(
+        "no Dagger runner host available: the managed engine needs Docker running and \
+         `{DAGGER_ENGINE_IMAGE}:{tag}` pulled (`docker pull {DAGGER_ENGINE_IMAGE}:{tag}`), and the \
+         dev-stack port-forward was not listening on {K8S_DAGGER_PROBE_ADDR} (is `tilt up` running?). \
+         Set {RUNNER_HOST_ENV} to a Dagger engine you manage to bypass resolution"
+    ))
+}
+
+/// Read the engine image tag from the compose file so the version lives in exactly one place.
+fn engine_tag(compose_file: &Path) -> Result<String, LifecycleError> {
+    let contents = std::fs::read_to_string(compose_file).map_err(|e| {
+        LifecycleError::DaggerUnavailable(format!(
+            "cannot read the managed-engine compose file {}: {e}",
+            compose_file.display()
+        ))
+    })?;
+    let marker = format!("{DAGGER_ENGINE_IMAGE}:");
+    contents
+        .lines()
+        .find_map(|line| line.split_once(marker.as_str()))
+        .map(|(_, rest)| rest.trim().trim_matches('"').to_string())
+        .filter(|tag| !tag.is_empty())
+        .ok_or_else(|| {
+            LifecycleError::DaggerUnavailable(format!(
+                "could not find `{DAGGER_ENGINE_IMAGE}:<tag>` in {}",
+                compose_file.display()
+            ))
+        })
+}
+
+/// `docker info` succeeds only when the daemon is reachable.
+async fn docker_running() -> bool {
+    Command::new("docker")
+        .arg("info")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// `docker image inspect` succeeds only when the image is already pulled locally (we never pull).
+async fn image_present(tag: &str) -> bool {
+    let reference = format!("{DAGGER_ENGINE_IMAGE}:{tag}");
+    Command::new("docker")
+        .args(["image", "inspect", &reference])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// True if a TCP connection to `addr` completes within `timeout`.
+async fn tcp_open(addr: &str, timeout: Duration) -> bool {
+    matches!(
+        tokio::time::timeout(timeout, tokio::net::TcpStream::connect(addr)).await,
+        Ok(Ok(_))
+    )
+}
+
+/// Poll `addr` until it accepts a connection or `total` elapses.
+async fn wait_tcp(addr: &str, total: Duration) -> Result<(), LifecycleError> {
+    let deadline = tokio::time::Instant::now() + total;
+    loop {
+        if tcp_open(addr, Duration::from_secs(1)).await {
+            return Ok(());
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(LifecycleError::DaggerUnavailable(format!(
+                "managed Dagger engine did not start listening on {addr} within {}s",
+                total.as_secs()
+            )));
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+}
+
 pub fn redacted_db_location(db_url: &str) -> String {
     let parsed = url::Url::parse(db_url).ok();
     let host = parsed
@@ -599,6 +807,7 @@ pub fn build_backend_env(
     db_url: &str,
     api_base_url: &str,
     metrics_port: u16,
+    dagger_runner_host: &str,
     dagger_cli_bin: &str,
 ) -> HashMap<String, String> {
     let mut env: HashMap<String, String> = std::env::vars().collect();
@@ -621,11 +830,11 @@ pub fn build_backend_env(
     // These two keys are always force-set (the dev default points the backend at the local Dagger
     // engine), so `/app/.env` cannot steer them — the prod image delivers them through the process
     // env instead, which this honors over the dev default.
-    env.insert(
-        "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST".to_string(),
-        env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")
-            .unwrap_or_else(|| DAGGER_RUNNER_HOST.to_string()),
-    );
+    //
+    // The runner host arrives already resolved (`resolve_runner_host`): explicit process-env
+    // override, else the managed engine, else the k8s port-forward. The CLI-bin override still lives
+    // here because it has nothing to resolve — it is a plain process-env-or-default.
+    env.insert(RUNNER_HOST_ENV.to_string(), dagger_runner_host.to_string());
     env.insert(
         "ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN".to_string(),
         env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN")
@@ -748,19 +957,76 @@ mod tests {
     }
 
     #[test]
-    fn test_build_backend_env_dagger_defaults_when_unset() {
-        // No process-env override → the dev defaults stand (the `.env` base map cannot steer these two,
-        // so they are force-set; the override path swaps the default for a process-env value).
+    fn test_build_backend_env_force_sets_the_resolved_dagger_host() {
+        // The runner host arrives already resolved and is force-set verbatim (the `.env` base map
+        // cannot steer it); the CLI bin still falls back to the passed default when unset.
         let base = HashMap::new();
-        let env = build_backend_env(&base, "postgres://h/db", "http://localhost:1", 2, "/dev/dagger");
+        let env = build_backend_env(
+            &base,
+            "postgres://h/db",
+            "http://localhost:1",
+            2,
+            MANAGED_DAGGER_HOST,
+            "/dev/dagger",
+        );
         assert_eq!(
-            env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST"),
-            Some(&DAGGER_RUNNER_HOST.to_string())
+            env.get(RUNNER_HOST_ENV),
+            Some(&MANAGED_DAGGER_HOST.to_string())
         );
         assert_eq!(
             env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN"),
             Some(&"/dev/dagger".to_string())
         );
+    }
+
+    #[test]
+    fn test_decide_runner_prefers_explicit_then_managed_then_k8s() {
+        assert_eq!(
+            decide_runner(Some("kube-pod://x".to_string()), true, true),
+            RunnerChoice::Explicit("kube-pod://x".to_string())
+        );
+        assert_eq!(decide_runner(None, true, true), RunnerChoice::Managed);
+        assert_eq!(decide_runner(None, false, true), RunnerChoice::K8s);
+        assert_eq!(decide_runner(None, false, false), RunnerChoice::None);
+    }
+
+    #[test]
+    fn test_engine_tag_reads_the_compose_image() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("compose.yml");
+        std::fs::write(
+            &path,
+            "services:\n  bench-dagger:\n    image: registry.dagger.io/engine:v9.9.9\n",
+        )
+        .unwrap();
+        assert_eq!(engine_tag(&path).unwrap(), "v9.9.9");
+    }
+
+    #[test]
+    fn test_engine_tag_errors_when_image_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("compose.yml");
+        std::fs::write(
+            &path,
+            "services:\n  bench-dagger:\n    image: postgres:18\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            engine_tag(&path),
+            Err(LifecycleError::DaggerUnavailable(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_docker_image_probe_reports_absent_image() {
+        // Runtime-skip when Docker is not running so the suite never blocks on a daemon. When it is
+        // running, exercise the real `docker image inspect` path with a tag that cannot exist — no
+        // pull, no container, no leftover state. Booting the privileged engine end-to-end is left to
+        // manual validation (it would leave a running container + cache volume behind).
+        if !docker_running().await {
+            return;
+        }
+        assert!(!image_present("v0.0.0-does-not-exist").await);
     }
 
     #[test]

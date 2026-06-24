@@ -16,7 +16,7 @@ function loadNative(): Promise<NativeBindings> {
   return nativeBindings;
 }
 
-type SandboxRuntimeStatus =
+export type SandboxRuntimeStatus =
   | "disabled"
   | "initializing"
   | "ready"
@@ -123,6 +123,13 @@ class SandboxRuntimeService {
 
   get isReady(): boolean {
     return this.status === "ready";
+  }
+
+  // Cached boot status for the /ready healthcheck. Never triggers init() or
+  // checkSession() — the poller reads a frozen snapshot, so an `error` here is
+  // terminal (nothing re-runs the 10s retry during a readiness poll).
+  get bootStatus(): SandboxRuntimeStatus {
+    return this.status;
   }
 
   async init(): Promise<void> {

@@ -1,0 +1,41 @@
+# Runner-managed Dagger engine for archestra-bench runs.
+#
+# The dev stack's Dagger engine is only reachable through Tilt's kubectl
+# port-forward on :1234, which (like the dev Postgres) throttles under
+# concurrent lanes and can be flat-out down — surfacing late, after the bench
+# has already waited out its readiness deadline. A directly-managed engine with
+# a published TCP port establishes immediately and lets the runner fail fast.
+#
+# Brought up idempotently by the runner (`docker compose up -d`) and left
+# running between runs so the buildkit cache stays warm. To stop it and reclaim
+# the cache:
+#
+#   docker compose -p archestra-bench-dagger -f dev/docker-compose.bench-dagger.yml down
+#   docker volume rm archestra-bench-dagger-data
+#
+# The engine version (`registry.dagger.io/engine:<tag>`) is the single source of
+# truth for the bench engine and is kept in lockstep with the Dockerfile, the
+# dagger-sdk crate, and the Helm charts by scripts/check-dagger-version-sync.sh.
+#
+# Spec mirrors the in-cluster engine (platform .../dagger-environment-runtime/
+# manager.ts): privileged, a persistent volume for the buildkit cache at
+# /var/lib/dagger, and a memory-backed socket dir at /run/dagger. The published
+# port binds to 127.0.0.1 only — the engine is privileged and must never be
+# reachable off-host.
+services:
+  bench-dagger:
+    image: registry.dagger.io/engine:v0.21.5
+    privileged: true
+    command:
+      - --addr
+      - tcp://0.0.0.0:1245
+      - --addr
+      - unix:///run/dagger/engine.sock
+    ports:
+      - "127.0.0.1:1245:1245"
+    volumes:
+      - bench-dagger-data:/var/lib/dagger
+    tmpfs:
+      - /run/dagger
+volumes:
+  bench-dagger-data:

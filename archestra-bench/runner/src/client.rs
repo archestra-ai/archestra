@@ -292,12 +292,26 @@ impl EvalClient {
         loop {
             match self.request(Method::GET, "ready", None, None).await {
                 Ok(body) => {
-                    if let Some(obj) = body.as_object()
-                        && obj.get("database").and_then(|v| v.as_str()) == Some("connected")
-                    {
-                        return Ok(body);
+                    let db_connected =
+                        body.get("database").and_then(|v| v.as_str()) == Some("connected");
+                    if db_connected {
+                        match sandbox_readiness(&body) {
+                            SandboxReadiness::Ready => return Ok(body),
+                            // The sandbox is terminally broken (disabled/unreachable). Nothing runs a
+                            // sandbox command during this poll, so the boot status is frozen and will
+                            // not recover — fail now instead of waiting out the deadline.
+                            SandboxReadiness::Fatal(reason) => {
+                                return Err(ClientError::Config(format!(
+                                    "{reason} — see backend log"
+                                )));
+                            }
+                            SandboxReadiness::Pending => {
+                                last = Some(format!("db connected, sandbox not ready yet: {body}"));
+                            }
+                        }
+                    } else {
+                        last = Some(format!("reachable but not connected: {body}"));
                     }
-                    last = Some(format!("reachable but not connected: {body}"));
                 }
                 Err(e) if (400..500).contains(&e.status) => {
                     return Err(ClientError::Api(e));
@@ -1158,9 +1172,67 @@ fn build_chat_body(
     })
 }
 
+/// What one `/ready` poll says about the code-execution sandbox.
+#[derive(Debug, PartialEq, Eq)]
+enum SandboxReadiness {
+    /// Still warming (or an older backend that predates the field) — keep polling.
+    Pending,
+    /// Usable now.
+    Ready,
+    /// Terminally unusable; the reason is carried for the error message.
+    Fatal(String),
+}
+
+/// Decide sandbox readiness from a `/ready` body. `ready` → Ready; `initializing` or an absent field
+/// → Pending; `disabled`/`unreachable` (or any unknown value) → Fatal, preferring `sandboxReason`.
+fn sandbox_readiness(body: &JsonValue) -> SandboxReadiness {
+    match body.get("sandbox").and_then(|v| v.as_str()) {
+        Some("ready") => SandboxReadiness::Ready,
+        None | Some("initializing") => SandboxReadiness::Pending,
+        Some(other) => {
+            let reason = body
+                .get("sandboxReason")
+                .and_then(|v| v.as_str())
+                .unwrap_or(other);
+            SandboxReadiness::Fatal(format!("sandbox {reason}"))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sandbox_readiness_classifies_each_state() {
+        use serde_json::json;
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "ready"})),
+            SandboxReadiness::Ready
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "initializing"})),
+            SandboxReadiness::Pending
+        );
+        // absent field (older backend) is treated as still-warming, not fatal.
+        assert_eq!(
+            sandbox_readiness(&json!({"database": "connected"})),
+            SandboxReadiness::Pending
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "disabled", "sandboxReason": "disabled"})),
+            SandboxReadiness::Fatal("sandbox disabled".to_string())
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "unreachable", "sandboxReason": "error"})),
+            SandboxReadiness::Fatal("sandbox error".to_string())
+        );
+        // unreachable without a reason falls back to the status value itself.
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "unreachable"})),
+            SandboxReadiness::Fatal("sandbox unreachable".to_string())
+        );
+    }
 
     #[test]
     fn test_chat_body_pins_temperature() {

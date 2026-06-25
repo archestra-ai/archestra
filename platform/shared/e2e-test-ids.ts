@@ -5,7 +5,6 @@ export const E2eTestId = {
   CloneAgentButton: "clone-agent-button",
   DeleteAgentButton: "delete-agent-button",
   OnboardingNextButton: "onboarding-next-button",
-  OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
   SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",

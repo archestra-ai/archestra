@@ -150,6 +150,32 @@ describe("parseMcpServerConfigPaste", () => {
     });
   });
 
+  it("skips Docker value flags before inferring the image", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        mounted: {
+          command: "docker",
+          args: [
+            "run",
+            "--mount",
+            "type=bind,src=/data,dst=/data",
+            "--add-host",
+            "host.docker.internal:host-gateway",
+            "mcp/server",
+          ],
+        },
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "mounted",
+      serverType: "local",
+      localConfig: expect.objectContaining({
+        dockerImage: "mcp/server",
+      }),
+    });
+  });
+
   it("hydrates Archestra catalog manifests", () => {
     const values = parseMcpServerConfigPaste(
       JSON.stringify({
@@ -184,6 +210,52 @@ describe("parseMcpServerConfigPaste", () => {
       description: "GitHub Copilot MCP Server",
       serverType: "remote",
       serverUrl: "https://api.githubcopilot.com/mcp/",
+    });
+  });
+
+  it("preserves multitenant state for local catalog manifests with auth", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        description: "Local MCP with auth",
+        author: { name: "example" },
+        name: "local-auth",
+        display_name: "Local Auth MCP",
+        readme: null,
+        category: "Development",
+        quality_score: 80,
+        archestra_config: {
+          client_config_permutations: null,
+          oauth: { provider: null, required: false },
+          works_in_archestra: true,
+        },
+        user_config: {
+          access_token: {
+            sensitive: true,
+            type: "string",
+            title: "Access Token",
+            required: true,
+          },
+        },
+        server: {
+          type: "local",
+          command: "node",
+          args: ["server.js"],
+          env: {
+            ACCESS_TOKEN: ["$", "{user_config.access_token}"].join(""),
+          },
+        },
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "Local Auth MCP",
+      serverType: "local",
+      authMethod: "bearer",
+      multitenant: true,
+      localConfig: expect.objectContaining({
+        command: "node",
+        arguments: "server.js",
+      }),
     });
   });
 });

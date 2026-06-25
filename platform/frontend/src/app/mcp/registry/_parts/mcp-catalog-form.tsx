@@ -425,6 +425,9 @@ export function McpCatalogForm({
     if (parsedValues.serverType) {
       form.setValue("serverType", parsedValues.serverType, setOptions);
     }
+    if (parsedValues.multitenant !== undefined) {
+      form.setValue("multitenant", parsedValues.multitenant, setOptions);
+    }
     if (parsedValues.serverUrl !== undefined) {
       form.setValue("serverUrl", parsedValues.serverUrl, setOptions);
     }

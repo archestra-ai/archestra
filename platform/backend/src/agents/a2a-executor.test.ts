@@ -1,4 +1,7 @@
-import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
+import {
+  DEFAULT_AGENT_SYSTEM_PROMPT,
+  TOOL_LOAD_SKILL_FULL_NAME,
+} from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -725,6 +728,30 @@ describe("executeA2AMessage skill catalog", () => {
     const system = mockStreamText.mock.calls[0]?.[0].system;
     expect(system).toContain("Handle the task.");
     expect(system).toContain("<available_skills>");
+  });
+
+  test("falls back to the default persona when the agent has no system prompt", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: null,
+    });
+    primeMocks({});
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "do it",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const system = mockStreamText.mock.calls[0]?.[0].system;
+    expect(system).toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
   });
 
   test("omits the skill catalog but keeps the shared tool instructions when no skill tools are available", async ({

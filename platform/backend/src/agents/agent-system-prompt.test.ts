@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, TOOL_LOAD_SKILL_SHORT_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  DEFAULT_AGENT_SYSTEM_PROMPT,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { SkillModel } from "@/models";
@@ -309,7 +313,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain(PROJECT_INSTRUCTIONS_PREFIX);
   });
 
-  test("returns the denial instruction alone for an agent with no base prompt or tools", async ({
+  test("falls back to the default persona for an agent with no base prompt or tools", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -329,6 +333,55 @@ describe("buildAgentSystemPrompt", () => {
       agentId: agent.id,
     });
 
-    expect(prompt).toBe(TOOL_DENIAL_INSTRUCTION);
+    expect(prompt).toBe(
+      `${DEFAULT_AGENT_SYSTEM_PROMPT}\n\n${TOOL_DENIAL_INSTRUCTION}`,
+    );
+  });
+
+  test("falls back to the default persona for a whitespace-only base prompt", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "   \n  ",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
+  });
+
+  test("does not add the default persona when the agent has its own prompt", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are a careful analyst.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).toContain("You are a careful analyst.");
+    expect(prompt).not.toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
   });
 });

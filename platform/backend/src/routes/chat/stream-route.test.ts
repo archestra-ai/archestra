@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  DEFAULT_AGENT_SYSTEM_PROMPT,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -913,6 +914,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     await executionPromise;
 
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
     expect(systemPrompt).toContain(
       "Some available tools are not listed upfront",
     );

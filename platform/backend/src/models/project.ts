@@ -124,6 +124,8 @@ class ProjectModel {
       // and open the latest run with its sidebar runs navigator.
       scheduleTriggerId: string | null;
       scheduleRunId: string | null;
+      // The schedule's display name, shown on a collapsed scheduled chat row.
+      scheduleName: string | null;
     }[]
   > {
     return (
@@ -138,6 +140,7 @@ class ProjectModel {
           createdAt: schema.conversationsTable.createdAt,
           scheduleTriggerId: schema.scheduleTriggerRunsTable.triggerId,
           scheduleRunId: schema.scheduleTriggerRunsTable.id,
+          scheduleName: schema.scheduleTriggersTable.name,
         })
         .from(schema.conversationsTable)
         .leftJoin(
@@ -151,6 +154,13 @@ class ProjectModel {
           eq(
             schema.scheduleTriggerRunsTable.chatConversationId,
             schema.conversationsTable.id,
+          ),
+        )
+        .leftJoin(
+          schema.scheduleTriggersTable,
+          eq(
+            schema.scheduleTriggersTable.id,
+            schema.scheduleTriggerRunsTable.triggerId,
           ),
         )
         .where(eq(schema.conversationsTable.projectId, projectId))

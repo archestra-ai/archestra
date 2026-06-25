@@ -204,6 +204,7 @@ describe("ProjectModel", () => {
     const scheduledRow = withScheduled.find((c) => c.id === scheduledConv.id);
     expect(scheduledRow?.scheduleTriggerId).toBe(trigger.id);
     expect(scheduledRow?.scheduleRunId).toBe(run.id);
+    expect(scheduledRow?.scheduleName).toBe(trigger.name);
   });
 });
 

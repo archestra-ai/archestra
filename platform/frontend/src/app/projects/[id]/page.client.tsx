@@ -283,6 +283,7 @@ function ChatsList({
     readOnly: boolean;
     scheduleTriggerId: string | null;
     scheduleRunId: string | null;
+    scheduleName: string | null;
   }>;
 }) {
   // A schedule's runs collapse to one row (its latest run); user chats are shown
@@ -291,7 +292,7 @@ function ChatsList({
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        Chats
+        Recents
       </h2>
       {chats.length === 0 ? (
         <p className="rounded-xl border px-3 py-8 text-center text-sm text-muted-foreground">
@@ -344,9 +345,11 @@ function ChatsList({
                     )}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {conv.readOnly
-                      ? `by ${conv.authorName ?? "someone else"}`
-                      : "by you"}
+                    {isScheduled
+                      ? (conv.scheduleName ?? "Scheduled task")
+                      : conv.readOnly
+                        ? `by ${conv.authorName ?? "someone else"}`
+                        : "by you"}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">

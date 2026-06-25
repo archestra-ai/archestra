@@ -102,6 +102,8 @@ export const ProjectConversationItemSchema = z.object({
    * user chats. Used to collapse a schedule's runs into one chat-list row. */
   scheduleTriggerId: z.string().nullable(),
   scheduleRunId: z.string().nullable(),
+  /** The schedule's name, shown as the row's subtitle for scheduled chats. */
+  scheduleName: z.string().nullable(),
 });
 export type ProjectConversationItem = z.infer<
   typeof ProjectConversationItemSchema

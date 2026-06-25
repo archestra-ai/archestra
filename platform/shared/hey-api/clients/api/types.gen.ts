@@ -54510,6 +54510,7 @@ export type GetProjectConversationsResponses = {
         readOnly: boolean;
         scheduleTriggerId: string | null;
         scheduleRunId: string | null;
+        scheduleName: string | null;
     }>;
 };
 

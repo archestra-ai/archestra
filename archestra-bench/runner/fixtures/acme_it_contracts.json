@@ -1,12 +1,12 @@
 {
   "contracts": [
-    {"contract_id": "C-JB",    "product": "JetBrains All Products", "billing_model": "per_active_seat",    "rate_cents": 24900},
+    {"contract_id": "C-JB",    "product": "JetBrains All Products", "billing_model": "per_seat",    "rate_cents": 24900},
     {"contract_id": "C-ADOBE", "product": "Adobe Creative Cloud",   "billing_model": "flat_monthly_commit", "commit_cents": 15000},
-    {"contract_id": "C-SF",    "product": "Salesforce",             "billing_model": "per_active_seat",    "rate_cents": 16500},
+    {"contract_id": "C-SF",    "product": "Salesforce",             "billing_model": "per_seat",    "rate_cents": 16500},
     {"contract_id": "C-HUB",   "product": "HubSpot",                "billing_model": "annual_prepaid",     "annual_cents": 110400},
-    {"contract_id": "C-TAB",   "product": "Tableau",                "billing_model": "per_active_seat",    "rate_cents": 7000},
+    {"contract_id": "C-TAB",   "product": "Tableau",                "billing_model": "per_seat",    "rate_cents": 7000},
     {"contract_id": "C-DD",    "product": "Datadog",                "billing_model": "flat_monthly_commit", "commit_cents": 6000},
-    {"contract_id": "C-ZD",    "product": "Zendesk",                "billing_model": "per_active_seat",    "rate_cents": 5500},
-    {"contract_id": "C-GH",    "product": "GitHub Enterprise",      "billing_model": "per_active_seat",    "rate_cents": 2100}
+    {"contract_id": "C-ZD",    "product": "Zendesk",                "billing_model": "per_seat",    "rate_cents": 5500},
+    {"contract_id": "C-GH",    "product": "GitHub Enterprise",      "billing_model": "per_seat",    "rate_cents": 2100}
   ]
 }

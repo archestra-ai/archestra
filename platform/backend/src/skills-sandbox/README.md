@@ -125,6 +125,13 @@ can tune them via env vars:
 Fixed API limits live in `types.ts` (`SKILL_SANDBOX_LIMITS`), including command
 input length and the per-sandbox pending queue length.
 
+There is also a ceiling on **replay length**: every replayed step adds overlay
+filesystem layers, and a long enough chain overflows the kernel's overlay
+mount-options limit. The native core (`archestra-rs/sandbox-core`) guards against
+this and fails such a `run_command` with a terminal, per-sandbox
+`ARCHESTRA_SANDBOX_HISTORY_LIMIT` error telling the model to start a fresh
+sandbox — rather than the opaque mount failure it would otherwise surface.
+
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is
 enabled because npm/uv/npx require it; this is documented in the activation

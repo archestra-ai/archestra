@@ -1,4 +1,13 @@
-import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  inArray,
+  or,
+} from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
@@ -7,6 +16,33 @@ import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
 import AppTeamModel from "./app-team";
 import AppVersionModel, { type VersionPayload } from "./app-version";
+import McpCatalogTeamModel from "./mcp-catalog-team";
+
+/** Raw `apps` row (no `scope`/`environmentId` — those live on the backing catalog). */
+type AppRow = typeof schema.appsTable.$inferSelect;
+
+// An app's visibility (`scope`) and `environmentId` are owned by its backing
+// catalog (FR-30). Reads JOIN apps→mcp_server→internal_mcp_catalog and surface
+// them as derived fields so the `App` type stays whole for the rest of the code.
+const appWithCatalogColumns = {
+  ...getTableColumns(schema.appsTable),
+  scope: schema.internalMcpCatalogTable.scope,
+  environmentId: schema.internalMcpCatalogTable.environmentId,
+};
+
+function appWithCatalogQuery() {
+  return db
+    .select(appWithCatalogColumns)
+    .from(schema.appsTable)
+    .innerJoin(
+      schema.mcpServersTable,
+      eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+    )
+    .innerJoin(
+      schema.internalMcpCatalogTable,
+      eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+    );
+}
 
 function buildOrgFilters(params: {
   organizationId: string;
@@ -47,9 +83,7 @@ class AppModel {
     search?: string;
     accessibleAppIds?: string[];
   }): Promise<App[]> {
-    let query = db
-      .select()
-      .from(schema.appsTable)
+    let query = appWithCatalogQuery()
       .where(and(...buildOrgFilters(params)))
       .orderBy(desc(schema.appsTable.createdAt))
       .$dynamic();
@@ -73,10 +107,20 @@ class AppModel {
 
   /** A single active app by id (no access check). */
   static async findById(id: string): Promise<App | null> {
-    const [result] = await db
-      .select()
-      .from(schema.appsTable)
-      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)));
+    const [result] = await appWithCatalogQuery().where(
+      and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)),
+    );
+    return result ?? null;
+  }
+
+  /** A single active app by its backing mcp_server id (the catalog→app link). */
+  static async findByMcpServerId(mcpServerId: string): Promise<App | null> {
+    const [result] = await appWithCatalogQuery().where(
+      and(
+        eq(schema.appsTable.mcpServerId, mcpServerId),
+        notDeleted(schema.appsTable),
+      ),
+    );
     return result ?? null;
   }
 
@@ -85,16 +129,13 @@ class AppModel {
     id: string,
     organizationId: string,
   ): Promise<App | null> {
-    const [result] = await db
-      .select()
-      .from(schema.appsTable)
-      .where(
-        and(
-          eq(schema.appsTable.id, id),
-          eq(schema.appsTable.organizationId, organizationId),
-          notDeleted(schema.appsTable),
-        ),
-      );
+    const [result] = await appWithCatalogQuery().where(
+      and(
+        eq(schema.appsTable.id, id),
+        eq(schema.appsTable.organizationId, organizationId),
+        notDeleted(schema.appsTable),
+      ),
+    );
     return result ?? null;
   }
 
@@ -117,28 +158,21 @@ class AppModel {
   }
 
   /**
-   * Create an app, its team assignments, and its immutable version 1 in one
-   * transaction. Returns `null` on a name conflict within the app's visibility
-   * namespace (`ON CONFLICT DO NOTHING` against the partial unique indexes, so
-   * it is race-free).
+   * Create the app row and its immutable version 1. Returns the raw row (no
+   * scope/environmentId — those are set on the backing catalog by
+   * `createAppBacking`, which the caller runs immediately after). Names are
+   * unique per author (apps_org_author_name_uidx), so a duplicate throws a
+   * unique-constraint error from this insert, which the caller maps to 409.
    */
   static async create(
-    params: { app: InsertApp; payload: VersionPayload; teamIds?: string[] },
+    params: { app: InsertApp; payload: VersionPayload },
     tx?: Transaction,
-  ): Promise<App | null> {
+  ): Promise<AppRow> {
     const run = async (tx: Transaction) => {
       const [app] = await tx
         .insert(schema.appsTable)
         .values({ ...params.app, latestVersion: 1 })
-        .onConflictDoNothing()
         .returning();
-      if (!app) return null;
-
-      if (params.teamIds && params.teamIds.length > 0) {
-        await tx
-          .insert(schema.appTeamTable)
-          .values(params.teamIds.map((teamId) => ({ appId: app.id, teamId })));
-      }
 
       await AppVersionModel.insertVersion(tx, {
         appId: app.id,
@@ -151,6 +185,23 @@ class AppModel {
     };
 
     return tx ? await run(tx) : await withDbTransaction(run);
+  }
+
+  /**
+   * Link an app to its backing MCP server. The optional `tx` scopes only this
+   * app-row update; the backing catalog/server/tool are created separately (no
+   * shared transaction), and the no-unbacked invariant is upheld by the caller
+   * deleting the app on backing failure.
+   */
+  static async setMcpServerId(
+    id: string,
+    mcpServerId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.appsTable)
+      .set({ mcpServerId })
+      .where(eq(schema.appsTable.id, id));
   }
 
   /**
@@ -177,41 +228,46 @@ class AppModel {
         | "templateId"
         | "spec"
         | "environmentId"
+        | "mcpServerId"
       >
     >;
     version?: VersionPayload;
     teamIds?: string[];
     expectedLatestVersion?: number;
   }): Promise<App | null> {
-    return await withDbTransaction(async (tx) => {
-      let app: App | undefined;
-      if (params.patch && Object.keys(params.patch).length > 0) {
-        try {
-          [app] = await tx
-            .update(schema.appsTable)
-            .set(params.patch)
-            .where(
-              and(
-                eq(schema.appsTable.id, params.id),
-                notDeleted(schema.appsTable),
-              ),
-            )
-            .returning();
-        } catch (error) {
-          // A rename into an existing name trips the partial unique index;
-          // surface it as a clean 409 instead of an opaque DB fault.
-          if (isUniqueConstraintError(error)) {
-            throw new ApiError(
-              409,
-              "An app with this name already exists in this scope.",
-            );
-          }
-          throw error;
-        }
+    const patch = params.patch ?? {};
+    // App-row columns only; scope/environmentId are owned by the backing catalog.
+    const appRowPatch: Partial<
+      Pick<
+        AppRow,
+        "name" | "description" | "templateId" | "spec" | "mcpServerId"
+      >
+    > = {};
+    if (patch.name !== undefined) appRowPatch.name = patch.name;
+    if (patch.description !== undefined)
+      appRowPatch.description = patch.description;
+    if (patch.templateId !== undefined)
+      appRowPatch.templateId = patch.templateId;
+    if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
+    if (patch.mcpServerId !== undefined)
+      appRowPatch.mcpServerId = patch.mcpServerId;
+
+    const ok = await withDbTransaction(async (tx) => {
+      let app: AppRow | undefined;
+      if (Object.keys(appRowPatch).length > 0) {
+        [app] = await tx
+          .update(schema.appsTable)
+          .set(appRowPatch)
+          .where(
+            and(
+              eq(schema.appsTable.id, params.id),
+              notDeleted(schema.appsTable),
+            ),
+          )
+          .returning();
       } else {
         // Lock the row so a concurrent version-only update can't read the same
-        // head and fork a duplicate (appId, version). The patch branch above
-        // already row-locks via UPDATE.
+        // head and fork a duplicate (appId, version).
         [app] = await tx
           .select()
           .from(schema.appsTable)
@@ -223,7 +279,7 @@ class AppModel {
           )
           .for("update");
       }
-      if (!app) return null;
+      if (!app) return false;
 
       if (
         params.expectedLatestVersion !== undefined &&
@@ -235,16 +291,54 @@ class AppModel {
         );
       }
 
-      if (params.teamIds !== undefined) {
-        await tx
-          .delete(schema.appTeamTable)
-          .where(eq(schema.appTeamTable.appId, params.id));
-        if (params.teamIds.length > 0) {
-          await tx
-            .insert(schema.appTeamTable)
-            .values(
-              params.teamIds.map((teamId) => ({ appId: params.id, teamId })),
+      // Route visibility/environment/teams to the backing catalog (single source
+      // of truth, FR-30). Resolved by schema join to avoid importing McpServerModel.
+      const routesToCatalog =
+        patch.scope !== undefined ||
+        patch.environmentId !== undefined ||
+        patch.name !== undefined ||
+        params.teamIds !== undefined;
+      if (app.mcpServerId && routesToCatalog) {
+        const [server] = await tx
+          .select({ catalogId: schema.mcpServersTable.catalogId })
+          .from(schema.mcpServersTable)
+          .where(eq(schema.mcpServersTable.id, app.mcpServerId));
+        if (server) {
+          if (patch.scope !== undefined) {
+            await tx
+              .update(schema.mcpServersTable)
+              .set({ scope: patch.scope })
+              .where(eq(schema.mcpServersTable.id, app.mcpServerId));
+          }
+          const catalogSet: Record<string, unknown> = {};
+          if (patch.scope !== undefined) catalogSet.scope = patch.scope;
+          if (patch.environmentId !== undefined)
+            catalogSet.environmentId = patch.environmentId;
+          // Mirror the name so the catalog's per-scope name-uniqueness index tracks it.
+          if (patch.name !== undefined) catalogSet.name = patch.name;
+          if (Object.keys(catalogSet).length > 0) {
+            try {
+              await tx
+                .update(schema.internalMcpCatalogTable)
+                .set(catalogSet)
+                .where(eq(schema.internalMcpCatalogTable.id, server.catalogId));
+            } catch (error) {
+              if (isUniqueConstraintError(error)) {
+                throw new ApiError(
+                  409,
+                  "An app with this name already exists in this scope.",
+                );
+              }
+              throw error;
+            }
+          }
+          if (params.teamIds !== undefined) {
+            await McpCatalogTeamModel.syncCatalogTeams(
+              server.catalogId,
+              params.teamIds,
+              tx,
             );
+          }
         }
       }
 
@@ -262,21 +356,19 @@ class AppModel {
             version: nextVersion,
             payload: params.version,
             contentHash,
-            // Snapshot the head spec (already reflects any spec set in this
-            // same update's patch) so the pinned html records what built it.
             spec: app.spec,
           });
-          const [bumped] = await tx
+          await tx
             .update(schema.appsTable)
             .set({ latestVersion: nextVersion })
-            .where(eq(schema.appsTable.id, params.id))
-            .returning();
-          return bumped ?? app;
+            .where(eq(schema.appsTable.id, params.id));
         }
       }
 
-      return app;
+      return true;
     });
+
+    return ok ? await AppModel.findById(params.id) : null;
   }
 
   /** Soft-delete an app (frees its name for re-use via the partial unique indexes). */
@@ -287,6 +379,21 @@ class AppModel {
       eq(schema.appsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Hard-remove a just-created app and its version rows. Used only to roll back
+   * a create whose backing failed: a soft-delete would leave a ghost app row and
+   * — because `app_versions.app_id` is ON DELETE SET NULL — orphaned version
+   * bytes. The app never became visible, so there is nothing to preserve.
+   */
+  static async purge(id: string): Promise<void> {
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.appVersionsTable)
+        .where(eq(schema.appVersionsTable.appId, id));
+      await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
+    });
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

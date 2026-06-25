@@ -18,6 +18,10 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
   "remote",
   "builtin",
+  // Platform-authored MCP App: in-process, HTML-backed, viewer-scoped. Backs a
+  // real mcp_server exposing an `open` launch tool, but opts out of K8s deploy /
+  // install / cascade / discovery. Served in-process via the owned-app builder.
+  "app",
 ]);
 
 // Define Zod schemas for complex JSONB fields

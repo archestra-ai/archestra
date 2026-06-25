@@ -10,6 +10,15 @@ import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
 export type AppScope = z.infer<typeof AppScopeSchema>;
 
+// The launch tool that hands a host the app's `ui://` resource so it renders the
+// app. ext-apps hosts discover a renderable UI from a tool's
+// `_meta.ui.resourceUri`, so an external client needs a tool to call. Shared by
+// BOTH the serve-time synthesized tool (the app server's own tools/list) and the
+// persisted catalog `tool` row (prefixed `<app>__open` when assigned to a
+// gateway), so the two never diverge. Always offered to a viewer who already
+// passed the app's visibility check, so it sits outside the per-tool RBAC filter.
+export const APP_LAUNCH_TOOL_NAME = "open";
+
 // Limits. The html cap is enforced by byte length (not char count) so the
 // stored size is bounded regardless of multi-byte content.
 export const APP_NAME_MAX_LENGTH = 100;
@@ -57,8 +66,6 @@ export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
 const AppListItemBaseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
-  scope: AppScopeSchema,
-  authorId: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
 });
@@ -66,13 +73,23 @@ const AppListItemBaseSchema = z.object({
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("owned"),
   id: z.string(),
+  scope: AppScopeSchema,
+  authorId: z.string().nullable(),
   latestVersion: z.number().int(),
 });
 
+// An external item is keyed by its catalog item and listed once, regardless of
+// how many installs back it (mcp-apps.md FR-26). `runnable` is false when the
+// caller can see the catalog but has no accessible install (FR-31);
+// `availabilityScopes` are the scopes of the caller's accessible installs, for
+// the card's chips. The concrete installs (the run-page selector) are resolved
+// lazily via `GET /api/apps/external/:catalogId`.
 export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("external"),
-  mcpServerId: z.string(),
+  catalogId: z.string(),
   resourceUri: z.string(),
+  runnable: z.boolean(),
+  availabilityScopes: z.array(AppScopeSchema),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [
@@ -82,15 +99,45 @@ export const AppListItemSchema = z.discriminatedUnion("source", [
 export type AppListItem = z.infer<typeof AppListItemSchema>;
 export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
 
-// drizzle-derived schemas (internal: model layer reads/writes through these).
-export const SelectAppSchema = createSelectSchema(schema.appsTable, {
+/** One of the caller's accessible installs of an external app's catalog. */
+export const ExternalAppInstallSchema = z.object({
+  mcpServerId: z.string(),
   scope: AppScopeSchema,
+  ownerId: z.string().nullable(),
+  teamId: z.string().nullable(),
+  name: z.string(),
+  localInstallationStatus: z.string().nullable(),
+});
+export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
+
+/**
+ * Run-page resolution for an external app: its UI resource plus the caller's
+ * accessible installs and the default install (personal → team → org,
+ * mcp-apps.md FR-31). `defaultMcpServerId` is null when none is accessible.
+ */
+export const ExternalAppResolutionSchema = z.object({
+  catalogId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  resourceUri: z.string(),
+  defaultMcpServerId: z.string().nullable(),
+  installs: z.array(ExternalAppInstallSchema),
+});
+export type ExternalAppResolution = z.infer<typeof ExternalAppResolutionSchema>;
+
+// drizzle-derived schemas (internal: model layer reads/writes through these).
+// Visibility (`scope`) and `environmentId` are NOT app columns — they live on
+// the app's backing catalog (FR-30) and are populated by AppModel on read, so
+// the App type carries them as derived fields the rest of the code keeps using.
+export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   spec: AppSpecSchema.nullable(),
+}).extend({
+  scope: AppScopeSchema,
+  environmentId: z.string().uuid().nullable(),
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
 export const InsertAppSchema = createInsertSchema(schema.appsTable, {
-  scope: AppScopeSchema.optional(),
   spec: AppSpecSchema.nullable().optional(),
 }).omit({
   id: true,
@@ -132,8 +179,6 @@ export const InsertAppDataSchema = createInsertSchema(schema.appDataTable).omit(
     updatedAt: true,
   },
 );
-
-export const SelectAppTeamSchema = createSelectSchema(schema.appTeamTable);
 
 export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
   schema.appRenderDiagnosticsTable,
@@ -251,7 +296,6 @@ export type AppTool = z.infer<typeof SelectAppToolSchema>;
 export type InsertAppTool = z.infer<typeof InsertAppToolSchema>;
 export type AppData = z.infer<typeof SelectAppDataSchema>;
 export type InsertAppData = z.infer<typeof InsertAppDataSchema>;
-export type AppTeam = z.infer<typeof SelectAppTeamSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;

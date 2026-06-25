@@ -2164,6 +2164,20 @@
       "when": 1782307085912,
       "tag": "0308_slim_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "7",
+      "when": 1782372062745,
+      "tag": "0309_awesome_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "7",
+      "when": 1782372184062,
+      "tag": "0310_lame_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

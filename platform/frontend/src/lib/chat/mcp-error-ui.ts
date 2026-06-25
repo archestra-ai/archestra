@@ -261,6 +261,27 @@ export function resolveAssistantTextAuthState(
   return null;
 }
 
+/**
+ * An "Authentication Required" install prompt is resolved once a server for its
+ * catalog has been connected — at that point the card should read as connected
+ * rather than as an outstanding error. Scoped deliberately to the install case
+ * (`install_mcp_credentials`): identity-provider connect, expired/re-auth, and
+ * assigned-credential-unavailable cards are NOT covered, since "a server exists"
+ * is not a valid resolution signal for those.
+ */
+export function isInstallAuthResolved(params: {
+  authState: ToolAuthState | null;
+  connectedCatalogIds: ReadonlySet<string>;
+}): boolean {
+  const { authState, connectedCatalogIds } = params;
+  return (
+    authState?.kind === "auth-required" &&
+    authState.action === "install_mcp_credentials" &&
+    authState.catalogId !== null &&
+    connectedCatalogIds.has(authState.catalogId)
+  );
+}
+
 export function hasToolPartsWithAuthErrors(
   parts: Array<{ output?: unknown; errorText?: string }> | undefined,
 ): boolean {

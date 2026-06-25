@@ -155,6 +155,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   render_app: ToolGroup.Apps,
   read_app: ToolGroup.Apps,
   edit_app: ToolGroup.Apps,
+  set_app_tools: ToolGroup.Apps,
   validate_app: ToolGroup.Apps,
   publish_app: ToolGroup.Apps,
   delete_app: ToolGroup.Apps,

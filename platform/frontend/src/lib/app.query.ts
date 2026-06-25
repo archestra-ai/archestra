@@ -6,6 +6,7 @@ import { handleApiError } from "@/lib/utils";
 const {
   getApps,
   getApp,
+  getExternalApp,
   getAppVersions,
   getAppTools,
   createApp,
@@ -27,6 +28,25 @@ export function useApps(params: AppsParams, options?: { enabled?: boolean }) {
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getApps({ query: params });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+// Resolves an external UI-providing app by catalog id: its UI resource plus the
+// caller's accessible installs and default install for the run-page selector.
+export function useExternalApp(catalogId: string | null) {
+  return useQuery({
+    queryKey: ["apps", "external", catalogId],
+    enabled: !!catalogId,
+    queryFn: async () => {
+      const { data, error } = await getExternalApp({
+        path: { catalogId: catalogId as string },
+      });
       if (error) {
         handleApiError(error);
         return null;

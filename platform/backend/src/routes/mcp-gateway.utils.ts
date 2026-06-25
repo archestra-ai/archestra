@@ -221,17 +221,42 @@ export async function createAgentServer(
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
 
+    // Resolve the backing catalogs of the assigned tools once: their names feed
+    // both the search_tools description and the app launch-tool titles below.
+    const catalogsById = await InternalMcpCatalogModel.getByIds([
+      ...new Set(
+        mcpTools
+          .map((tool) => tool.catalogId)
+          .filter(
+            (id): id is string =>
+              Boolean(id) && id !== ARCHESTRA_MCP_CATALOG_ID,
+          ),
+      ),
+    ]);
+
+    // An app's launch tool keeps its unique slug `name` for invocation, but a
+    // gateway client should show a human label. Derive "Open <app>" from the
+    // backing catalog name (kept in lockstep with the app) so it never goes
+    // stale; non-app tools keep their existing title.
+    const appLaunchTitle = (
+      catalogId: string | null | undefined,
+    ): string | undefined => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
+    };
+
     // Dynamically enrich the knowledge sources tool description with
     // the agent's actual knowledge base names and connector types
     const [kbToolDescription, searchToolsDescription] = await Promise.all([
       buildKnowledgeSourcesDescription(agentId),
-      buildSearchToolsDescription(mcpTools),
+      buildSearchToolsDescription(mcpTools, catalogsById),
     ]);
 
     const toolsList: McpListTool[] = permittedTools.map(
-      ({ name, description, parameters, meta }) => ({
+      ({ name, description, parameters, meta, catalogId }) => ({
         name,
-        title: archestraToolTitles.get(name) || name,
+        title:
+          archestraToolTitles.get(name) || appLaunchTitle(catalogId) || name,
         description:
           name ===
             archestraMcpBranding.getToolName(
@@ -1650,6 +1675,9 @@ function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
 
 async function buildSearchToolsDescription(
   mcpTools: McpToolForSearchDescription[],
+  prefetchedCatalogs?: Awaited<
+    ReturnType<typeof InternalMcpCatalogModel.getByIds>
+  >,
 ) {
   const searchTool = getArchestraMcpTools().find(
     (tool) =>
@@ -1676,7 +1704,8 @@ async function buildSearchToolsDescription(
     return baseDescription;
   }
 
-  const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
+  const catalogs =
+    prefetchedCatalogs ?? (await InternalMcpCatalogModel.getByIds(catalogIds));
   const catalogSummaries = catalogIds
     .map((catalogId) => catalogs.get(catalogId))
     .filter((catalog) => catalog !== undefined)

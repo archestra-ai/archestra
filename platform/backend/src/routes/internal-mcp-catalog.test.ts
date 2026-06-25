@@ -93,6 +93,34 @@ describe("internal MCP catalog routes", () => {
     expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
   });
 
+  test("DELETE /api/internal_mcp_catalog refuses an app-backing catalog (managed via the Apps lifecycle)", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const appCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "app",
+      name: "my-app-backing",
+      scope: "personal",
+    });
+
+    const byId = await app.inject({
+      method: "DELETE",
+      url: `/api/internal_mcp_catalog/${appCatalog.id}`,
+    });
+    expect(byId.statusCode).toBe(400);
+
+    const byName = await app.inject({
+      method: "DELETE",
+      url: "/api/internal_mcp_catalog/by-name/my-app-backing",
+    });
+    expect(byName.statusCode).toBe(400);
+
+    // The catalog still exists — neither delete path removed it.
+    expect(
+      await InternalMcpCatalogModel.findById(appCatalog.id),
+    ).not.toBeNull();
+  });
+
   test("DELETE /api/internal_mcp_catalog/by-name/:name is scoped to the active organization", async ({
     makeInternalMcpCatalog,
     makeOrganization,

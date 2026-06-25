@@ -52,7 +52,7 @@ const EMPTY_TOOLS: CatalogTool[] = [];
  * environment are offered; a server an existing assignment has left is still
  * shown so the stale assignment can be removed.
  */
-export function AppToolsTab({ appId }: { appId: string }) {
+export function AppToolsEditor({ appId }: { appId: string }) {
   const { data: app } = useApp(appId);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();

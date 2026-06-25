@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
+import McpServerUserModel from "@/models/mcp-server-user";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -87,6 +88,44 @@ describe("GET /api/apps/external/:catalogId", () => {
         (i: { mcpServerId: string }) => i.mcpServerId === server.id,
       ),
     ).toBe(true);
+  });
+
+  test("orders installs by scope precedence (personal first) and defaults to the personal install", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Multi-install",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    // Org install created first; a naive DB-order result would list it first.
+    const org = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const personal = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: user.id,
+    });
+    await McpServerUserModel.assignUserToMcpServer(personal.id, user.id);
+    await makeTool({
+      catalogId: catalog.id,
+      name: "draw",
+      meta: { _meta: { ui: { resourceUri: "ui://mi/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${catalog.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(
+      body.installs.map((i: { mcpServerId: string }) => i.mcpServerId),
+    ).toEqual([personal.id, org.id]);
+    expect(body.defaultMcpServerId).toBe(personal.id);
   });
 
   test("resolves a visible catalog with no accessible install to a null default and no installs", async ({

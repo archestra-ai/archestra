@@ -519,6 +519,43 @@ describe("McpServerModel", () => {
       expect(entry?.availabilityScopes).toEqual(["org"]);
     });
 
+    test("orders availabilityScopes by precedence (personal → team → org), not DB order", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({
+        name: "Multi-scope",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      // Insert the org install first so a naive (DB-order) result would put
+      // "org" before "personal".
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      const personal = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: user.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(personal.id, user.id);
+      await makeTool({
+        catalogId: catalog.id,
+        name: "draw",
+        meta: uiMeta("ui://ms/app.html"),
+      });
+
+      const res = await McpServerModel.findUiCapableForCaller({
+        userId: user.id,
+        organizationId: catalog.organizationId!,
+      });
+      expect(
+        res.find((r) => r.catalogId === catalog.id)?.availabilityScopes,
+      ).toEqual(["personal", "org"]);
+    });
+
     test("lists a UI catalog once no matter how many installs back it", async ({
       makeUser,
       makeInternalMcpCatalog,

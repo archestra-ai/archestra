@@ -33,6 +33,14 @@ import ToolModel from "./tool";
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 
+// Run-time install precedence for an external app (mcp-apps.md FR-31): the
+// caller's own personal install wins, then a team install, then an org install.
+// Used to order availability scopes, the run-page install list, and the default
+// install deterministically rather than by unordered DB result.
+const SCOPE_PRECEDENCE: ResourceVisibilityScope[] = ["personal", "team", "org"];
+const scopeRank = (scope: ResourceVisibilityScope): number =>
+  SCOPE_PRECEDENCE.indexOf(scope);
+
 /**
  * Data-access layer for `mcp_server` — an installation of an
  * `internal_mcp_catalog` row (root template or child **preset**) by a
@@ -375,7 +383,9 @@ class McpServerModel {
       description: c.description,
       resourceUri: c.resourceUri,
       runnable: (scopesByCatalog.get(c.catalogId)?.size ?? 0) > 0,
-      availabilityScopes: Array.from(scopesByCatalog.get(c.catalogId) ?? []),
+      availabilityScopes: Array.from(
+        scopesByCatalog.get(c.catalogId) ?? [],
+      ).sort((a, b) => scopeRank(a) - scopeRank(b)),
     }));
   }
 
@@ -455,7 +465,7 @@ class McpServerModel {
       params.userId,
     );
     if (accessibleServerIds.length === 0) return [];
-    return db
+    const rows = await db
       .select({
         mcpServerId: schema.mcpServersTable.id,
         scope: schema.mcpServersTable.scope,
@@ -471,6 +481,11 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, params.catalogId),
         ),
       );
+    // Stable selector order: scope precedence, then name.
+    return rows.sort(
+      (a, b) =>
+        scopeRank(a.scope) - scopeRank(b.scope) || a.name.localeCompare(b.name),
+    );
   }
 
   /** UI-providing catalogs among `catalogIds`, deduped to the lowest-named ui tool. */
@@ -607,8 +622,7 @@ class McpServerModel {
   private static pickDefaultInstall(
     installs: Array<{ mcpServerId: string; scope: ResourceVisibilityScope }>,
   ): string | null {
-    const precedence: ResourceVisibilityScope[] = ["personal", "team", "org"];
-    for (const scope of precedence) {
+    for (const scope of SCOPE_PRECEDENCE) {
       const match = installs.find((i) => i.scope === scope);
       if (match) return match.mcpServerId;
     }

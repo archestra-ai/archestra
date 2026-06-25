@@ -211,9 +211,19 @@ class ProjectService {
       UserModel.getNamesByIds([project.userId]),
       ProjectShareModel.getShareTeamsForProjects([project.id]),
     ]);
-    // share targets are visible to those who can manage the project (so the
-    // edit dialog can populate sharing): the owner or a project admin.
-    const canManage = viewerRole === "owner" || viewerRole === "admin";
+    // Share targets are visible to whoever can manage the project (so the edit
+    // dialog can populate sharing): the owner, or a project admin — including on
+    // a project merely shared with them (viewerRole "shared"), so they still get
+    // the team list. requireManageable enforces the same gate on write.
+    const canManage =
+      viewerRole === "owner" ||
+      viewerRole === "admin" ||
+      (await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "project",
+        "admin",
+      ));
     return {
       id: project.id,
       name: project.name,

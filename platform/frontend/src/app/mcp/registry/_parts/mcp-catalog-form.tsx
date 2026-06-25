@@ -1169,17 +1169,17 @@ export function McpCatalogForm({
               )}
             </div>
 
-            {currentServerType !== "remote" && <Separator />}
+            {currentServerType === "local" && <Separator />}
 
             <div className="space-y-4">
-              {currentServerType === "remote" ? null : (
+              {currentServerType === "local" ? (
                 <div className="space-y-1">
                   <h3 className="font-semibold text-base">Deployment</h3>
                   <p className="text-sm text-muted-foreground">
                     How {appName} runs this server in Kubernetes.
                   </p>
                 </div>
-              )}
+              ) : null}
 
               {currentServerType === "remote" && (
                 <FormField

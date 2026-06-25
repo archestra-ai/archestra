@@ -5030,7 +5030,7 @@ export const createProject = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files are deleted with it.
+ * Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files and scheduled tasks are deleted with it.
  *
  * Authentication:
  *

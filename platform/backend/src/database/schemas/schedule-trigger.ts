@@ -21,11 +21,13 @@ const scheduleTriggersTable = pgTable(
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     /**
      * Owning project (projects feature). Required at the API layer when the
-     * projects flag is on; null for legacy/flag-off triggers. SET NULL on
-     * project delete so the trigger survives as an unscoped one.
+     * projects flag is on; null for legacy/flag-off triggers. CASCADE on
+     * project delete: the project's scheduled tasks (and their runs) go with
+     * it, rather than surviving as unscoped triggers that keep firing but no
+     * longer surface in any project once the projects flag is on.
      */
     projectId: uuid("project_id").references(() => projectsTable.id, {
-      onDelete: "set null",
+      onDelete: "cascade",
     }),
     messageTemplate: text("message_template").notNull(),
     cronExpression: text("cron_expression").notNull(),

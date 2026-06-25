@@ -1,3 +1,4 @@
+import { convertToModelMessages, type UIMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
   normalizeChatMessages,
@@ -480,5 +481,192 @@ describe("normalizeChatMessagesForPersistence", () => {
     expect(
       normalizeChatMessagesForPersistence(messages).map((m) => m.id),
     ).toEqual(["user1", "assistant1"]);
+  });
+});
+
+describe("normalizeChatMessages malformed tool input", () => {
+  test("repairs a poisoned output-error tool part, preserving the rest of the turn", () => {
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "text", text: "editing" },
+          {
+            type: "tool-archestra__edit_app",
+            toolCallId: "call_1",
+            state: "output-error",
+            errorText: "JSON parsing failed",
+            input: undefined,
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+    const toolPart = result[1].parts?.find((p) => p.toolCallId === "call_1");
+
+    expect(toolPart?.input).toEqual({});
+    expect(toolPart?.state).toBe("output-error");
+    expect(toolPart?.errorText).toBe("JSON parsing failed");
+    expect(result[1].parts?.[0]).toEqual({ type: "text", text: "editing" });
+  });
+
+  // The real failing path: assert the actual AI SDK converter never emits a
+  // non-object tool_use input for a previously-poisoned conversation.
+  test("convertToModelMessages emits an object input for every tool_use", async () => {
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "text", text: "editing" },
+          {
+            type: "tool-archestra__edit_app",
+            toolCallId: "call_1",
+            state: "output-error",
+            errorText: "JSON parsing failed",
+            input: '{"old_str">x',
+          },
+        ],
+      },
+    ];
+
+    const normalized = normalizeChatMessages(messages);
+    const modelMessages = await convertToModelMessages(
+      normalized as unknown as UIMessage[],
+    );
+
+    const toolCalls = modelMessages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((part) => part.type === "tool-call");
+
+    expect(toolCalls.length).toBeGreaterThan(0);
+    for (const call of toolCalls) {
+      expect(call.input).toBeTypeOf("object");
+      expect(call.input).not.toBeNull();
+      expect(Array.isArray(call.input)).toBe(false);
+    }
+  });
+
+  // A static (`tool-<name>`) tool keeps its unparsed args in `rawInput` with
+  // `input` left undefined; convertToModelMessages reads `input ?? rawInput`, so
+  // without coercion the malformed string would still reach the provider. This is
+  // the shape the production brick actually took (no Input block in the export).
+  test("convertToModelMessages emits an object input when malformed args are in rawInput", async () => {
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "text", text: "editing" },
+          {
+            type: "tool-archestra__edit_app",
+            toolCallId: "call_1",
+            state: "output-error",
+            errorText: "JSON parsing failed",
+            rawInput: '{"old_str">x',
+          },
+        ],
+      },
+    ];
+
+    const normalized = normalizeChatMessages(messages);
+    const modelMessages = await convertToModelMessages(
+      normalized as unknown as UIMessage[],
+    );
+
+    const toolCalls = modelMessages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((part) => part.type === "tool-call");
+
+    expect(toolCalls.length).toBeGreaterThan(0);
+    for (const call of toolCalls) {
+      expect(call.input).toBeTypeOf("object");
+      expect(call.input).not.toBeNull();
+      expect(Array.isArray(call.input)).toBe(false);
+    }
+  });
+
+  // Pre-existing dedupe behavior (unchanged here): it keeps the FIRST part on a
+  // signature that ignores `input`, so a malformed-first / valid-second pair
+  // already drops the valid twin before coercion runs. We only assert the safety
+  // invariant — the surviving input is a provider-valid object — not that losing
+  // the twin's args is desirable. Recovering them would mean changing dedupe,
+  // which is out of scope.
+  test("duplicate tool parts: the surviving input is coerced to an object", () => {
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-x",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "ok",
+            input: "garbage",
+          },
+          {
+            type: "tool-x",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "ok",
+            input: { valid: true },
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+    const toolParts = result[0].parts ?? [];
+
+    expect(toolParts).toHaveLength(1);
+    const input = toolParts[0].input;
+    expect(typeof input).toBe("object");
+    expect(input).not.toBeNull();
+    expect(Array.isArray(input)).toBe(false);
+  });
+
+  test("leaves a clean conversation unchanged", () => {
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-x",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: "ok",
+            input: { appId: "x" },
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual(messages);
   });
 });

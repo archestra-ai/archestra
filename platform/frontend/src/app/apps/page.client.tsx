@@ -118,11 +118,11 @@ export default function AppsPage() {
                         {app.description}
                       </CardDescription>
                     ) : null}
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {app.executionModel === "viewer-scoped"
-                        ? "Runs as you · no direct network"
-                        : "Runs as the server · declares its own network"}
-                    </p>
+                    {app.executionModel === "server-scoped" ? (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Runs as the server · declares its own network
+                      </p>
+                    ) : null}
                   </CardHeader>
                   {app.source === "owned" ? (
                     <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">

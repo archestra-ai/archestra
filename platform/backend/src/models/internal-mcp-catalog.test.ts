@@ -775,4 +775,29 @@ describe("InternalMcpCatalogModel", () => {
       expect(clonedTools[0].clonedPendingDiscovery).toBe(true);
     });
   });
+
+  describe("excludes app backing catalogs from registry surfaces", () => {
+    test("findAll and searchByQuery omit serverType:'app' catalogs", async () => {
+      const remote = await InternalMcpCatalogModel.create({
+        name: "Visible Remote XYZ",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const app = await InternalMcpCatalogModel.create({
+        name: "Hidden App XYZ",
+        serverType: "app",
+        scope: "org",
+      });
+
+      const allIds = (await InternalMcpCatalogModel.findAll()).map((c) => c.id);
+      expect(allIds).toContain(remote.id);
+      expect(allIds).not.toContain(app.id);
+
+      const searchedIds = (
+        await InternalMcpCatalogModel.searchByQuery("XYZ")
+      ).map((c) => c.id);
+      expect(searchedIds).toContain(remote.id);
+      expect(searchedIds).not.toContain(app.id);
+    });
+  });
 });

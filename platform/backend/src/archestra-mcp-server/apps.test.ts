@@ -10,6 +10,7 @@ import {
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_EDIT_MCP_CONFIG_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
@@ -34,6 +35,8 @@ import {
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import {
@@ -151,6 +154,59 @@ describe("app tool execution", () => {
     );
     expect(deleted.isError).toBe(false);
     expect(await AppModel.findById(appId)).toBeNull();
+  });
+
+  test("delete_app tears down the app's backing catalog and server", async () => {
+    const created = await scaffold({ name: "BackingTeardown" });
+    const appId = structured(created).id as string;
+    const serverId = (await AppModel.findById(appId))?.mcpServerId;
+    expect(serverId).toBeTruthy();
+    const catalogId = (await McpServerModel.findById(serverId as string))
+      ?.catalogId;
+    expect(catalogId).toBeTruthy();
+
+    const deleted = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_DELETE_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(deleted.isError).toBe(false);
+
+    // The MCP delete_app path must tear down backing too (not just the app row),
+    // or the catalog's name-uniqueness index stays occupied and the launch tool
+    // lingers in gateways.
+    expect(await AppModel.findById(appId)).toBeNull();
+    expect(await McpServerModel.findById(serverId as string)).toBeNull();
+    expect(
+      await InternalMcpCatalogModel.findById(catalogId as string),
+    ).toBeNull();
+  });
+
+  test("edit_mcp_config refuses to reconfigure an app's backing catalog", async () => {
+    // An app author has modify rights on their own backing catalog; without the
+    // serverType:"app" guard they could flip it to a deployable local server and
+    // attach a command, escaping the Apps lifecycle and registry controls.
+    const created = await scaffold({ name: "Hijackable" });
+    const appId = structured(created).id as string;
+    const serverId = (await AppModel.findById(appId))?.mcpServerId;
+    const catalogId = (await McpServerModel.findById(serverId as string))
+      ?.catalogId;
+    expect(catalogId).toBeTruthy();
+
+    const attempt = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_MCP_CONFIG_SHORT_NAME),
+      { id: catalogId, serverType: "local", command: "evil-binary" },
+      context,
+    );
+    expect(attempt.isError).toBe(true);
+    expect((attempt.content[0] as any).text).toContain(
+      "managed through the Apps API",
+    );
+
+    // The catalog is untouched: still an app, no deploy config attached.
+    const after = await InternalMcpCatalogModel.findById(catalogId as string);
+    expect(after?.serverType).toBe("app");
+    expect(after?.localConfig).toBeFalsy();
   });
 
   test("a plain member cannot create or mutate org-scoped apps", async ({
@@ -289,7 +345,9 @@ describe("app tool execution", () => {
     await scaffold({ name: "Dup", scope: "org" });
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
-    expect((second.content[0] as any).text).toContain("already exists");
+    expect((second.content[0] as any).text).toContain(
+      "already have an app named",
+    );
   });
 
   test("scaffold rejects team scope", async () => {

@@ -181,6 +181,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useHasAnyApiKey: () => ({ hasAnyApiKey: true, isLoading: false }),
 }));
 
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: false }),
+}));
+
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects, isPending: false }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -193,6 +197,10 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   usePinProject: () => ({ mutate: mockPinMutate }),
+}));
+
+vi.mock("@/lib/schedule-trigger.query", () => ({
+  useScheduleTriggers: () => ({ data: undefined }),
 }));
 
 import ProjectsPageClient from "./page.client";

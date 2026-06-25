@@ -83,6 +83,7 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { buildCloneFormValues } from "./mcp-catalog-form.utils";
 import {
   type CatalogItem,
+  cardVariantForServerType,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
@@ -1510,13 +1511,7 @@ export function InternalMCPCatalog({
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
+                    variant={cardVariantForServerType(item.serverType)}
                     key={item.id}
                     item={item}
                     installedServer={serverInfo.installedServer}
@@ -1573,13 +1568,7 @@ export function InternalMCPCatalog({
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
+                    variant={cardVariantForServerType(item.serverType)}
                     key={item.id}
                     item={item}
                     installedServer={serverInfo.installedServer}

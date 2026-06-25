@@ -9,8 +9,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type TeamInfo = { id: string; name: string };
+
+// Scope colors mirror AgentBadge so apps/MCP/proxies/skills share one language.
+const scopeStyles = {
+  personal:
+    "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400 dark:border-blue-400/30",
+  team: "bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400 dark:border-green-400/30",
+  org: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400 dark:border-amber-400/30",
+} as const;
 
 export function ResourceVisibilityBadge({
   scope,
@@ -30,27 +39,33 @@ export function ResourceVisibilityBadge({
 
   if (scope === "org") {
     return (
-      <Badge variant="secondary" className="text-xs">
+      <Badge variant="outline" className={cn(scopeStyles.org, "gap-1 text-xs")}>
         <Globe className="h-3 w-3" />
+        Organization
       </Badge>
     );
   }
 
   if (scope === "personal") {
-    const displayName =
-      currentUserId && authorId === currentUserId ? "Me" : authorName;
-    if (!displayName) {
+    // "Me" is redundant — personal resources are only visible to their author.
+    if (currentUserId && authorId === currentUserId) {
+      return null;
+    }
+    if (!authorName) {
       return <span className="text-muted-foreground">-</span>;
     }
 
     return (
       <Badge
-        variant="secondary"
-        className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+        variant="outline"
+        className={cn(
+          scopeStyles.personal,
+          "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+        )}
       >
         <User className="h-3 w-3 shrink-0" />
         <span className="min-w-0 flex-1 truncate">
-          {truncateBadgeText(displayName, MAX_BADGE_TEXT_LENGTH)}
+          {truncateBadgeText(authorName, MAX_BADGE_TEXT_LENGTH)}
         </span>
       </Badge>
     );
@@ -58,7 +73,10 @@ export function ResourceVisibilityBadge({
 
   if (!teams || teams.length === 0) {
     return (
-      <Badge variant="secondary" className="text-xs gap-1">
+      <Badge
+        variant="outline"
+        className={cn(scopeStyles.team, "gap-1 text-xs")}
+      >
         <Users className="h-3 w-3" />
         Team
       </Badge>
@@ -73,8 +91,11 @@ export function ResourceVisibilityBadge({
       {visibleTeams.map((team) => (
         <Badge
           key={team.id}
-          variant="secondary"
-          className="inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs"
+          variant="outline"
+          className={cn(
+            scopeStyles.team,
+            "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+          )}
         >
           <Users className="h-3 w-3 shrink-0" />
           <span className="min-w-0 flex-1 truncate">

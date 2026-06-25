@@ -49,6 +49,23 @@ interface OpenAiCompatibleAdapterOptions {
     apiKey: string | undefined,
     options: CreateClientOptions,
   ) => OpenAIProvider;
+  /**
+   * Override context-overflow detection. The default matches OpenAI's structured
+   * `error.code === "context_length_exceeded"`; providers that only return a plain
+   * message (vLLM, Ollama) supply their own substring check.
+   */
+  extractInternalCode?: (
+    error: unknown,
+  ) => ArchestraInternalErrorCode | undefined;
+}
+
+function defaultExtractInternalCode(
+  error: unknown,
+): ArchestraInternalErrorCode | undefined {
+  if (get(error, "error.code") === "context_length_exceeded") {
+    return ArchestraInternalErrorCode.ContextLengthExceeded;
+  }
+  return undefined;
 }
 
 export function createOpenAiCompatibleAdapterFactory(
@@ -115,14 +132,8 @@ export function createOpenAiCompatibleAdapterFactory(
       };
     },
 
-    extractInternalCode(
-      error: unknown,
-    ): ArchestraInternalErrorCode | undefined {
-      if (get(error, "error.code") === "context_length_exceeded") {
-        return ArchestraInternalErrorCode.ContextLengthExceeded;
-      }
-      return undefined;
-    },
+    extractInternalCode:
+      options.extractInternalCode ?? defaultExtractInternalCode,
 
     extractErrorMessage(error: unknown): string {
       const openaiMessage = get(error, "error.message");

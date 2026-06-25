@@ -13,6 +13,7 @@ import {
 import * as metrics from "@/observability/metrics";
 import {
   SandboxRuntimeError,
+  type SandboxRuntimeStatus,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
 import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
@@ -82,6 +83,13 @@ class SkillSandboxRuntimeService {
 
   get isReady(): boolean {
     return sandboxRuntimeService.isReady;
+  }
+
+  // Underlying Dagger runtime boot status for the /ready healthcheck. The skill
+  // feature flag and the runtime flag are coupled (config.ts), so the runtime's
+  // own status is the authoritative signal of whether the sandbox can run.
+  get bootStatus(): SandboxRuntimeStatus {
+    return sandboxRuntimeService.bootStatus;
   }
 
   async init(): Promise<void> {

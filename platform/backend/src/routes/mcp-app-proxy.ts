@@ -15,8 +15,8 @@ import {
 } from "@/services/apps/app-connector-resource";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type App, UuidIdSchema } from "@/types";
+import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import {
-  APP_LAUNCH_TOOL_NAME,
   createAppServer,
   validateAppConnectorOAuthToken,
   validateAppGatewayToken,

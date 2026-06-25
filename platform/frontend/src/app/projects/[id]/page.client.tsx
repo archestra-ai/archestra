@@ -40,7 +40,6 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
@@ -60,7 +59,9 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
+import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
   usePinProject,
@@ -74,6 +75,7 @@ import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
 export default function ProjectDetailPageClient() {
   return (
@@ -95,6 +97,7 @@ function ProjectDetail() {
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -122,12 +125,14 @@ function ProjectDetail() {
     );
   }
 
-  // A project admin overseeing someone else's project can manage it (edit /
-  // delete / sharing) and read its files, but NOT its chats: no composer, no
-  // chats list, no pin, no new schedules. Existing schedules follow their
-  // scheduledTask permissions.
+  // A project admin can manage ANY project they can see — their own, one shared
+  // with them, or another member's they oversee (edit / delete / sharing /
+  // instructions), matching the backend's requireManageable.
+  const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
+  // The oversight-only view (a foreign project surfaced purely via project:admin)
+  // additionally hides chats: no composer, no chats list, no pin, no new
+  // schedules. A project merely shared with the admin keeps its chats.
   const isAdminView = project.viewerRole === "admin";
-  const canManage = project.viewerRole === "owner" || isAdminView;
   const canChat = !isAdminView;
 
   return (
@@ -202,19 +207,18 @@ function ProjectDetail() {
             </div>
           }
         >
-          <DeleteConfirmDialog
-            open={confirmDelete}
-            onOpenChange={setConfirmDelete}
-            title={`Delete ${project.name}?`}
-            description="Chats are kept as ordinary conversations. Project files are deleted with the project."
-            isPending={deleteProject.isPending}
-            onConfirm={async () => {
-              const ok = await deleteProject.mutateAsync({ id: project.id });
-              if (ok) router.push("/projects");
-            }}
-            confirmLabel="Delete"
-            pendingLabel="Deleting..."
-          />
+          {confirmDelete && (
+            <ProjectDeleteConfirmDialog
+              project={project}
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              isPending={deleteProject.isPending}
+              onConfirm={async () => {
+                const ok = await deleteProject.mutateAsync({ id: project.id });
+                if (ok) router.push("/projects");
+              }}
+            />
+          )}
           {editOpen && (
             <EditProjectDialog
               project={project}

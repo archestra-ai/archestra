@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -75,7 +75,10 @@ class McpServerModel {
     }
   }
 
-  static async create(server: InsertMcpServer): Promise<McpServer> {
+  static async create(
+    server: InsertMcpServer,
+    tx?: Transaction,
+  ): Promise<McpServer> {
     const { userId, ...serverData } = server;
 
     const mcpServerName = McpServerModel.constructServerName({
@@ -87,14 +90,18 @@ class McpServerModel {
     });
 
     // ownerId is part of serverData and will be inserted
-    const [createdServer] = await db
+    const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
       .values({ ...serverData, name: mcpServerName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
     if (userId) {
-      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+      await McpServerUserModel.assignUserToMcpServer(
+        createdServer.id,
+        userId,
+        tx,
+      );
     }
 
     return {
@@ -382,6 +389,12 @@ class McpServerModel {
       .where(
         and(
           ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          // Platform-authored apps back a serverType:"app" server that exposes a
+          // ui:// tool too, but they are surfaced as owned apps (and served
+          // viewer-scoped under the platform CSP) — never as external,
+          // server-scoped, author-CSP apps. Excluding them here keeps each app
+          // listed once and preserves its CSP floor.
+          ne(schema.mcpServersTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
           accessibleIds
             ? inArray(schema.mcpServersTable.id, accessibleIds)
@@ -624,6 +637,22 @@ class McpServerModel {
     }
 
     return updatedServer;
+  }
+
+  /**
+   * Set the visibility scope of an MCP server. For installed servers scope is
+   * install-time-only (changed via uninstall+reinstall), but an app backing
+   * server is in-process with no deployment, so its scope can be re-pointed in
+   * place to track the app's scope.
+   */
+  static async setScope(
+    id: string,
+    scope: ResourceVisibilityScope,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({ scope })
+      .where(eq(schema.mcpServersTable.id, id));
   }
 
   /**

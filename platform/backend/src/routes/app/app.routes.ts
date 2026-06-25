@@ -33,6 +33,11 @@ import {
   callerIsAppAdmin,
   resolveOrgTeamIds,
 } from "@/services/apps/app-authorization";
+import {
+  createAppBacking,
+  deleteAppBacking,
+  syncAppBacking,
+} from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
@@ -53,6 +58,7 @@ import {
   UpdateAppSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 
 // REST bodies extend the shared create/update schemas with team assignments,
 // which only the REST surface needs for team-scoped apps.
@@ -67,6 +73,12 @@ const UpdateAppBodySchema = UpdateAppSchema.extend({
 // succeeded; the html has structural issues worth surfacing to the author).
 const AppWithWarningsSchema = SelectAppSchema.extend({
   warnings: z.array(z.string()).optional(),
+});
+
+// The single-app GET resolves the app's team assignments so the detail page can
+// render team-name badges and seed the visibility editor.
+const AppWithTeamsSchema = SelectAppSchema.extend({
+  teams: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -257,25 +269,43 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html,
         uiPermissions: body.uiPermissions,
       });
-      const app = await AppModel.create({
+      // App names are unique per author (apps_org_author_name_uidx); a duplicate
+      // fails this insert before any backing is created.
+      const created = await AppModel.create({
         app: {
           organizationId,
           authorId: user.id,
-          scope,
           name: body.name,
           description: body.description ?? null,
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
-          environmentId: body.environmentId ?? null,
         },
         payload,
-        teamIds,
+      }).catch((error) => {
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `You already have an app named "${body.name}".`,
+          );
+        }
+        throw error;
       });
-      if (!app) {
-        throw new ApiError(
-          409,
-          `An app named "${body.name}" already exists in this scope.`,
-        );
+      // An app must never exist without its backing (the catalog owns its
+      // visibility + environment); on backing failure delete the app row.
+      try {
+        await createAppBacking({
+          app: created,
+          scope,
+          environmentId: body.environmentId ?? null,
+          userId: user.id,
+          organizationId,
+          teamIds,
+        });
+      } catch (error) {
+        await AppModel.purge(created.id);
+        throw error;
       }
+      const app = await AppModel.findById(created.id);
+      if (!app) throw new ApiError(500, "App created but could not be loaded.");
       return reply.send(warnings.length > 0 ? { ...app, warnings } : app);
     },
   );
@@ -288,7 +318,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single app by id, if the caller may view it.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema }),
-        response: constructResponseSchema(SelectAppSchema),
+        response: constructResponseSchema(AppWithTeamsSchema),
       },
     },
     async ({ params: { appId }, user, organizationId }, reply) => {
@@ -297,7 +327,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      return reply.send(app);
+      const teamsByApp = await AppTeamModel.getTeamDetailsForApps([app.id]);
+      return reply.send({ ...app, teams: teamsByApp.get(app.id) ?? [] });
     },
   );
 
@@ -415,10 +446,20 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
         ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
+      }).catch((error) => {
+        // A rename into a name this author already uses hits apps_org_author_name_uidx.
+        if (body.name !== undefined && isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `You already have an app named "${body.name}".`,
+          );
+        }
+        throw error;
       });
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
+      await syncAppBacking(updated);
       return reply.send(
         warnings.length > 0 ? { ...updated, warnings } : updated,
       );
@@ -453,6 +494,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
+      await deleteAppBacking(app);
       logger.info({ appId, userId: user.id }, "App deleted via REST");
       return reply.send({ success });
     },

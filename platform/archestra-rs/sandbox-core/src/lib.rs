@@ -44,6 +44,14 @@ pub enum SandboxError {
         path: String,
         message: String,
     },
+    /// the replay log is long enough that re-materialising it would overflow the
+    /// kernel's single-page overlay mount-options limit (`lowerdir=a:b:c:...`).
+    /// terminal and per-call: a fresh sandbox is required, and unlike
+    /// `EngineUnreachable` it must not flip the runtime into an engine outage.
+    HistoryLimitReached {
+        layers: usize,
+        limit: usize,
+    },
     InvalidInput(String),
     Internal(String),
 }
@@ -69,6 +77,7 @@ impl SandboxError {
             Self::CommandFailed { .. } => "ARCHESTRA_COMMAND_FAILED",
             Self::ArtifactTooLarge { .. } => "ARCHESTRA_ARTIFACT_TOO_LARGE",
             Self::ArtifactNotFound { .. } => "ARCHESTRA_ARTIFACT_NOT_FOUND",
+            Self::HistoryLimitReached { .. } => "ARCHESTRA_SANDBOX_HISTORY_LIMIT",
             Self::InvalidInput(_) => "ARCHESTRA_INVALID_INPUT",
             Self::Internal(_) => "ARCHESTRA_INTERNAL",
         }
@@ -88,6 +97,11 @@ impl fmt::Display for SandboxError {
             | Self::ArtifactNotFound { message, .. }
             | Self::InvalidInput(message)
             | Self::Internal(message) => write!(f, "{message}"),
+            Self::HistoryLimitReached { layers, limit } => write!(
+                f,
+                "sandbox command history is too long to replay ({layers}/{limit} \
+                 filesystem layers); start a fresh sandbox to continue"
+            ),
         }
     }
 }

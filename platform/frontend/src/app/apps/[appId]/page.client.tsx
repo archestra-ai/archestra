@@ -1,84 +1,90 @@
 "use client";
 
+import Link from "next/link";
 import { AppFrame } from "@/components/mcp-app/app-frame";
 import { McpAppStandaloneButton } from "@/components/mcp-app/mcp-app-chrome";
-import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { AppSettingsForm } from "../_parts/app-settings-form";
-import { AppShareTab } from "../_parts/app-share-tab";
-import { AppToolsTab } from "../_parts/app-tools-tab";
-import { AppVersionsTab } from "../_parts/app-versions-tab";
+import { AppChatButton } from "../_parts/app-chat-button";
+import { AppConnectButton } from "../_parts/app-connect-button";
+import { AppDeleteSection } from "../_parts/app-delete-section";
+import { AppEnabledTools } from "../_parts/app-enabled-tools";
+import { AppMeta, AppTitle } from "../_parts/app-header";
+import { AppModelPanel } from "../_parts/app-model-panel";
+import { AppPublishDropdown } from "../_parts/app-publish-dropdown";
+import { AppVersionHistory } from "../_parts/app-version-history";
 
 export default function AppDetailPage({ appId }: { appId: string }) {
   const { data: app, isPending } = useApp(appId);
   const { data: session } = useSession();
-
-  if (!isPending && !app) {
-    return (
-      <PageLayout title="App not found" description="">
-        <p className="text-sm text-muted-foreground">
-          This app does not exist or you do not have access to it.
-        </p>
-      </PageLayout>
-    );
-  }
+  const currentUserId = session?.user?.id;
 
   return (
-    <PageLayout
-      title={
-        <span className="flex items-center gap-2">
-          {app?.name ?? "App"}
-          {app ? (
-            <ResourceVisibilityBadge
-              scope={app.scope}
-              teams={undefined}
-              authorId={app.authorId}
-              authorName={undefined}
-              currentUserId={session?.user?.id}
-            />
-          ) : null}
-        </span>
-      }
-      description={app?.description ?? ""}
-    >
-      <Tabs defaultValue="preview">
-        <TabsList>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
-          <TabsTrigger value="tools">Tools</TabsTrigger>
-          <TabsTrigger value="share">Share</TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+    <div className="flex h-full w-full flex-col">
+      <header className="flex items-start shrink-0 border-b px-6 py-2">
+        <Link
+          href="/apps"
+          className="inline-flex items-center gap-2 tracking-tight text-muted-foreground hover:underline"
+        >
+          Apps
+        </Link>
+      </header>
 
-        <TabsContent value="preview">
-          <div className="h-[70vh] min-h-[400px] overflow-hidden rounded-lg border">
-            <AppFrame
-              endpoint={{ kind: "app", appId }}
-              fillContainer
-              actions={<McpAppStandaloneButton appId={appId} />}
-            />
-          </div>
-        </TabsContent>
+      <div className="mx-auto w-full max-w-[1680px] space-y-16 px-6 pb-6 pt-10">
+        {!isPending && !app ? (
+          <p className="text-sm text-muted-foreground">
+            This app does not exist or you do not have access to it.
+          </p>
+        ) : app ? (
+          <>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <AppTitle app={app} currentUserId={currentUserId} />
+                <p className="text-sm text-muted-foreground">
+                  <AppMeta app={app} currentUserId={currentUserId} />
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <AppChatButton app={app} />
+                <AppConnectButton app={app} />
+                <AppPublishDropdown app={app} />
+              </div>
+            </div>
 
-        <TabsContent value="tools">
-          <AppToolsTab appId={appId} />
-        </TabsContent>
+            <div className="flex flex-col gap-20">
+              <section className="grid gap-10 lg:grid-cols-2 lg:gap-x-20">
+                <div className="space-y-3">
+                  <h2 className="text-lg font-semibold">Preview</h2>
+                  <div className="h-[60vh] min-h-[360px] overflow-hidden rounded-lg border">
+                    <AppFrame
+                      endpoint={{ kind: "app", appId }}
+                      fillContainer
+                      actions={<McpAppStandaloneButton appId={appId} />}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-12">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <h2 className="text-lg font-semibold">Model context</h2>
+                      <p className="max-w-xs text-sm text-muted-foreground">
+                        What the model reads to decide whether this
+                        app&nbsp;is&nbsp;relevant and when to open it.
+                      </p>
+                    </div>
+                    <AppModelPanel app={app} />
+                  </div>
+                  <AppEnabledTools appId={appId} />
+                </div>
+              </section>
 
-        <TabsContent value="share">
-          <AppShareTab appId={appId} />
-        </TabsContent>
+              <AppVersionHistory appId={appId} />
 
-        <TabsContent value="versions">
-          <AppVersionsTab appId={appId} />
-        </TabsContent>
-
-        <TabsContent value="settings">
-          {app ? <AppSettingsForm app={app} /> : null}
-        </TabsContent>
-      </Tabs>
-    </PageLayout>
+              <AppDeleteSection app={app} />
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }

@@ -69,6 +69,12 @@ const AppWithWarningsSchema = SelectAppSchema.extend({
   warnings: z.array(z.string()).optional(),
 });
 
+// The single-app GET resolves the app's team assignments so the detail page can
+// render team-name badges and seed the visibility editor.
+const AppWithTeamsSchema = SelectAppSchema.extend({
+  teams: z.array(z.object({ id: z.string(), name: z.string() })),
+});
+
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Ships dark: routes are always registered (so they appear in the OpenAPI
   // spec + generated client), but every request 404s until the feature is on.
@@ -288,7 +294,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single app by id, if the caller may view it.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema }),
-        response: constructResponseSchema(SelectAppSchema),
+        response: constructResponseSchema(AppWithTeamsSchema),
       },
     },
     async ({ params: { appId }, user, organizationId }, reply) => {
@@ -297,7 +303,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      return reply.send(app);
+      const teamsByApp = await AppTeamModel.getTeamDetailsForApps([app.id]);
+      return reply.send({ ...app, teams: teamsByApp.get(app.id) ?? [] });
     },
   );
 

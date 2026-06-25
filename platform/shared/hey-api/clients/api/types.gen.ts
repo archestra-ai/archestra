@@ -15985,6 +15985,10 @@ export type GetAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 

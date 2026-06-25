@@ -55143,6 +55143,25 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -55158,7 +55177,8 @@
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
-                    "deletedAt"
+                    "deletedAt",
+                    "teams"
                   ],
                   "additionalProperties": false
                 }

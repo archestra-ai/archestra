@@ -54,7 +54,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => null,
 }));
 
-import { AppToolsTab } from "./app-tools-tab";
+import { AppToolsEditor } from "./app-tools-editor";
 
 const APP_ID = "app-1";
 const JIRA_CATALOG_ID = "jira-catalog";
@@ -82,12 +82,12 @@ function renderTab() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AppToolsTab appId={APP_ID} />
+      <AppToolsEditor appId={APP_ID} />
     </QueryClientProvider>,
   );
 }
 
-describe("AppToolsTab", () => {
+describe("AppToolsEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAppMock.mockReturnValue({ data: { environmentId: null } });

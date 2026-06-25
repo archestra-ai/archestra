@@ -83,6 +83,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
+        querystring: z.object({
+          // Apps are hidden from the registry but assignable to a gateway, so the
+          // capabilities picker opts in to their backing catalogs here.
+          includeApps: z.coerce.boolean().optional(),
+        }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
         ),
@@ -94,13 +99,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.headers,
       );
       // Don't expand secrets for list view
+      const opts = {
+        expandSecrets: false,
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      };
+      // App backings are gated by `app:read`, not this route's `mcpRegistry:read`,
+      // so only surface them to callers who could see them on the Apps page.
+      const includeApps =
+        request.query.includeApps === true &&
+        (await hasPermission({ app: ["read"] }, request.headers)).success;
       return reply.send(
-        await InternalMcpCatalogModel.findAll({
-          expandSecrets: false,
-          userId: request.user.id,
-          isAdmin,
-          organizationId: request.organizationId,
-        }),
+        includeApps
+          ? await InternalMcpCatalogModel.findAllWithApps(opts)
+          : await InternalMcpCatalogModel.findAll(opts),
       );
     },
   );

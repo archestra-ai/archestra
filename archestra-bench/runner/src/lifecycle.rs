@@ -238,7 +238,7 @@ impl Instance {
         log_path: PathBuf,
     ) -> Self {
         let run_id = run_id.into();
-        let platform = platform_dir.unwrap_or_else(|| repo_root.join("platform"));
+        let platform = resolve_platform_dir(platform_dir.as_deref(), &repo_root);
         let bench_dev = repo_root.join("archestra-bench").join("dev");
         let bench_compose = bench_dev.join("docker-compose.bench-pg.yml");
         let dagger_compose = bench_dev.join("docker-compose.bench-dagger.yml");
@@ -266,14 +266,7 @@ impl Instance {
     }
 
     pub async fn start(&mut self) -> Result<(), LifecycleError> {
-        let env_path = self.platform.join(".env");
-        if !env_path.is_file() {
-            return Err(LifecycleError::Config(format!(
-                "{} not found; create it from platform/.env.example or start the dev stack",
-                env_path.display()
-            )));
-        }
-        self.env = parse_env_file(&env_path)?;
+        self.env = load_platform_env(&self.platform)?;
         let (bench_db_url, managed) = resolve_bench_db_url(&self.env);
         self.db_managed = managed;
         info!(
@@ -544,6 +537,28 @@ fn expand_env_refs(value: &str, lookup: &HashMap<String, String>) -> String {
     .to_string()
 }
 
+/// Resolve the platform directory: an explicit `--platform-dir` (the prod image lays the app out at
+/// `/app`) wins, otherwise `<repo_root>/platform` for the dev tree.
+pub fn resolve_platform_dir(platform_dir: Option<&Path>, repo_root: &Path) -> PathBuf {
+    platform_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| repo_root.join("platform"))
+}
+
+/// Load `<platform>/.env` into a map, requiring the file to exist. Centralizes the
+/// "missing `.env` is a config error, then parse" step shared by `start`, `preflight`, and the
+/// runner's lane-key resolution so the operator-facing message stays in one place.
+pub fn load_platform_env(platform: &Path) -> Result<HashMap<String, String>, LifecycleError> {
+    let env_path = platform.join(".env");
+    if !env_path.is_file() {
+        return Err(LifecycleError::Config(format!(
+            "{} not found; create it from platform/.env.example or start the dev stack",
+            env_path.display()
+        )));
+    }
+    parse_env_file(&env_path)
+}
+
 pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, LifecycleError> {
     let text = std::fs::read_to_string(path)?;
     let mut env: HashMap<String, String> = HashMap::new();
@@ -653,17 +668,8 @@ pub async fn preflight(
     repo_root: &Path,
     platform_dir: Option<&Path>,
 ) -> Result<(), LifecycleError> {
-    let platform = platform_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| repo_root.join("platform"));
-    let env_path = platform.join(".env");
-    if !env_path.is_file() {
-        return Err(LifecycleError::Config(format!(
-            "{} not found; create it from platform/.env.example or start the dev stack",
-            env_path.display()
-        )));
-    }
-    let (_bench_db_url, managed) = resolve_bench_db_url(&parse_env_file(&env_path)?);
+    let platform = resolve_platform_dir(platform_dir, repo_root);
+    let (_bench_db_url, managed) = resolve_bench_db_url(&load_platform_env(&platform)?);
     let bench_dev = repo_root.join("archestra-bench").join("dev");
     if managed {
         ensure_bench_postgres(&bench_dev.join("docker-compose.bench-pg.yml")).await?;
@@ -1277,6 +1283,13 @@ mod tests {
         let env = parse_env_file(&path).unwrap();
         assert_eq!(env.get("FOO"), Some(&"bar".to_string()));
         assert_eq!(env.get("REF"), Some(&"bar/qux".to_string()));
+    }
+
+    #[test]
+    fn test_load_platform_env_missing_is_config_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = load_platform_env(tmp.path()).unwrap_err();
+        assert!(matches!(err, LifecycleError::Config(_)), "got {err:?}");
     }
 
     #[tokio::test]

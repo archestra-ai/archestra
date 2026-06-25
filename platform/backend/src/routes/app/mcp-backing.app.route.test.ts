@@ -154,15 +154,16 @@ describe("MCP backing for apps", () => {
     expect(nameB.endsWith("__open")).toBe(true);
   });
 
-  test("the app backing server is excluded from external UI-capable detection (no double-listing)", async () => {
+  test("the app backing catalog is excluded from external UI-capable detection (no double-listing)", async () => {
     const appId = await createApp();
     const created = await AppModel.findById(appId);
+    const backing = await McpServerModel.findById(created!.mcpServerId!);
 
     const uiCapable = await McpServerModel.findUiCapableForCaller({
       userId: user.id,
-      isMcpServerAdmin: true,
+      organizationId,
     });
-    expect(uiCapable.some((s) => s.mcpServerId === created!.mcpServerId)).toBe(
+    expect(uiCapable.some((c) => c.catalogId === backing!.catalogId)).toBe(
       false,
     );
   });

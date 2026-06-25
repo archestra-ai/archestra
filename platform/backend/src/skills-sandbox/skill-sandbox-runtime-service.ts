@@ -681,6 +681,11 @@ class SkillSandboxRuntimeService {
           return new SkillSandboxError(
             "the skill sandbox runtime is not enabled",
           );
+        case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
+          // The replay log is too long to re-materialize. Surface the native
+          // message verbatim so the model knows to start a fresh sandbox; this
+          // is a per-session dead end, not an engine outage.
+          return new SkillSandboxError(error.message);
         case "ARCHESTRA_ENGINE_UNREACHABLE":
         case "ARCHESTRA_INTERNAL":
           logger.error({ err: error }, "[SkillSandbox] runtime error");
@@ -1093,4 +1098,5 @@ export const __internals = {
   planAttachmentStaging,
   assignAttachmentPaths,
   sanitizeAttachmentName,
+  shouldRecordOnFailure,
 };

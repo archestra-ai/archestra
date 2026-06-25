@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 type TeamInfo = { id: string; name: string };
 
 // Scope colors mirror AgentBadge so apps/MCP/proxies/skills share one language.
-const scopeStyles = {
+export const scopeStyles = {
   personal:
     "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400 dark:border-blue-400/30",
   team: "bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400 dark:border-green-400/30",

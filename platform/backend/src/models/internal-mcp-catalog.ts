@@ -99,6 +99,36 @@ class InternalMcpCatalogModel {
     isAdmin?: boolean;
     organizationId?: string;
   }): Promise<ListInternalMcpCatalog[]> {
+    return InternalMcpCatalogModel.listAll(options, false);
+  }
+
+  /**
+   * Like {@link InternalMcpCatalogModel.findAll} but also returns app backing
+   * catalogs (`serverType: "app"`). The registry never uses this — only the
+   * gateway capabilities picker, where an app's launch tool is assignable like
+   * any other tool. Apps stay hidden from the registry list and the
+   * agent-callable {@link InternalMcpCatalogModel.searchByQuery}.
+   */
+  static async findAllWithApps(options?: {
+    expandSecrets?: boolean;
+    userId?: string;
+    isAdmin?: boolean;
+    organizationId?: string;
+  }): Promise<ListInternalMcpCatalog[]> {
+    return InternalMcpCatalogModel.listAll(options, true);
+  }
+
+  private static async listAll(
+    options:
+      | {
+          expandSecrets?: boolean;
+          userId?: string;
+          isAdmin?: boolean;
+          organizationId?: string;
+        }
+      | undefined,
+    includeApps: boolean,
+  ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
@@ -108,13 +138,16 @@ class InternalMcpCatalogModel {
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const baseListCondition = and(
+    const listConditions = [
       // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+    ];
+    if (!includeApps) {
       // App backing catalogs are managed on the Apps page, never surfaced in the
       // MCP registry (UI list or the agent-callable registry search).
-      ne(schema.internalMcpCatalogTable.serverType, "app"),
-    );
+      listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
+    }
+    const baseListCondition = and(...listConditions);
 
     if (userId && !isAdmin && !organizationId) {
       return [];

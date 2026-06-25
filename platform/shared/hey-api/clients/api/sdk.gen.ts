@@ -626,7 +626,7 @@ export const createApp = <ThrowOnError extends boolean = false>(options: Options
 });
 
 /**
- * Resolve a single external UI-providing app entry by installed MCP server id (for the standalone run page).
+ * Resolve an external UI-providing app by catalog id: its UI resource and the caller's accessible installs (for the standalone run page's install selector).
  *
  * Authentication:
  *
@@ -636,7 +636,7 @@ export const createApp = <ThrowOnError extends boolean = false>(options: Options
  *
  * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
-export const getExternalApp = <ThrowOnError extends boolean = false>(options: Options<GetExternalAppData, ThrowOnError>) => (options.client ?? client).get<GetExternalAppResponses, GetExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{mcpServerId}', ...options });
+export const getExternalApp = <ThrowOnError extends boolean = false>(options: Options<GetExternalAppData, ThrowOnError>) => (options.client ?? client).get<GetExternalAppResponses, GetExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{catalogId}', ...options });
 
 /**
  * List the curated starter templates a new app can use.

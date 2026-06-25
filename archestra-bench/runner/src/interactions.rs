@@ -6,6 +6,8 @@
 //! bench conversation, so the normal result is exactly one [`EffectivePromptData`]; any variation, an
 //! unhandled provider shape, or a missing system prompt is reported in `errors`.
 
+use std::collections::BTreeSet;
+
 use archestra_bench_core::{EffectivePromptData, SamplingParams};
 use serde_json::Value;
 
@@ -72,6 +74,86 @@ pub fn extract_effective_prompts(interactions: &[Value]) -> ExtractionOutcome {
     }
 
     ExtractionOutcome { prompts, errors }
+}
+
+/// Billable token usage summed across a session's chat interaction rows. Each LLM-proxy row is one
+/// agentic step, so summing the rows recovers the full spend of a multi-step turn — unlike the chat
+/// SSE `data-token-usage` event, whose final value is only the *last* step. The four token categories
+/// are the platform's disjoint counts (`inputTokens` is already net of cache reads and cache writes).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RunUsage {
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    /// Non-embedding interaction rows seen — each is a billed LLM step. Zero means no recorded spend.
+    pub chat_rows: usize,
+    /// Chat rows missing the core `inputTokens`/`outputTokens` fields: a telemetry gap the caller
+    /// treats as unpriceable rather than a measured zero.
+    pub rows_with_null_tokens: usize,
+    /// Distinct `model` values across the chat rows; more than one means the session mixed models
+    /// (e.g. cost-optimization or dual-LLM), which a single lane slug cannot price.
+    pub models: BTreeSet<String>,
+}
+
+impl RunUsage {
+    pub fn add(&mut self, other: &RunUsage) {
+        self.prompt_tokens += other.prompt_tokens;
+        self.completion_tokens += other.completion_tokens;
+        self.cache_read_tokens += other.cache_read_tokens;
+        self.cache_write_tokens += other.cache_write_tokens;
+        self.chat_rows += other.chat_rows;
+        self.rows_with_null_tokens += other.rows_with_null_tokens;
+        self.models.extend(other.models.iter().cloned());
+    }
+
+    /// True when at least one billed LLM step was recorded. Distinguishes a real $0 (no call) from
+    /// measured usage.
+    pub fn had_spend(&self) -> bool {
+        self.chat_rows > 0
+    }
+
+    pub fn total_tokens(&self) -> i64 {
+        self.prompt_tokens
+            + self.completion_tokens
+            + self.cache_read_tokens
+            + self.cache_write_tokens
+    }
+}
+
+/// Sum billable usage across a session's interaction rows. Embedding rows carry no chat generation and
+/// are skipped (matching `extract_effective_prompts`); every other row is a billed step. Negative
+/// counts clamp to zero. A chat row missing `inputTokens`/`outputTokens` is recorded as a telemetry
+/// gap (`rows_with_null_tokens`) rather than summed as zero.
+pub fn sum_usage(interactions: &[Value]) -> RunUsage {
+    let mut usage = RunUsage::default();
+    for interaction in interactions {
+        let type_tag = interaction
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if type_tag.ends_with(":embeddings") {
+            continue;
+        }
+        usage.chat_rows += 1;
+        if let Some(model) = interaction.get("model").and_then(Value::as_str) {
+            usage.models.insert(model.to_string());
+        }
+        let token = |key: &str| interaction.get(key).and_then(Value::as_i64);
+        match (token("inputTokens"), token("outputTokens")) {
+            (Some(input), Some(output)) => {
+                usage.prompt_tokens += input.max(0);
+                usage.completion_tokens += output.max(0);
+                usage.cache_read_tokens += token("cacheReadTokens").unwrap_or(0).max(0);
+                // `cacheWriteTokens` is the full cache-creation count; `cacheWrite1hTokens` is the
+                // 1h-TTL *subset* of it (the platform's premium-pricing breakdown), so it must not be
+                // added on top or the 1h portion is double-counted.
+                usage.cache_write_tokens += token("cacheWriteTokens").unwrap_or(0).max(0);
+            }
+            _ => usage.rows_with_null_tokens += 1,
+        }
+    }
+    usage
 }
 
 // ===== Internal helpers =====
@@ -286,7 +368,10 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "denial rule");
         assert_eq!(out.prompts[0].tools, vec!["run_tool"]);
-        assert_eq!(out.prompts[0].sampling, sampling(Some(1.0), Some(4096), Some(0.9)));
+        assert_eq!(
+            out.prompts[0].sampling,
+            sampling(Some(1.0), Some(4096), Some(0.9))
+        );
     }
 
     #[test]
@@ -303,7 +388,10 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "sys a\nsys b");
         assert_eq!(out.prompts[0].tools, vec!["f1", "f2"]);
-        assert_eq!(out.prompts[0].sampling, sampling(Some(0.5), Some(2048), Some(0.8)));
+        assert_eq!(
+            out.prompts[0].sampling,
+            sampling(Some(0.5), Some(2048), Some(0.8))
+        );
     }
 
     #[test]
@@ -320,7 +408,10 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "responses sys");
         assert_eq!(out.prompts[0].tools, vec!["t1"]);
-        assert_eq!(out.prompts[0].sampling, sampling(Some(0.2), Some(1000), None));
+        assert_eq!(
+            out.prompts[0].sampling,
+            sampling(Some(0.2), Some(1000), None)
+        );
     }
 
     #[test]
@@ -450,5 +541,78 @@ mod tests {
         let out = extract_effective_prompts(&[it]);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].tools, vec!["f1"]);
+    }
+
+    fn usage_row(model: &str, input: i64, output: i64, cache_read: i64, cache_write: i64) -> Value {
+        json!({
+            "type": "anthropic:messages",
+            "model": model,
+            "inputTokens": input,
+            "outputTokens": output,
+            "cacheReadTokens": cache_read,
+            "cacheWriteTokens": cache_write,
+        })
+    }
+
+    #[test]
+    fn sum_usage_sums_every_step_and_counts_cache_writes_once() {
+        let rows = vec![
+            usage_row("claude", 100, 10, 5, 200),
+            json!({
+                "type": "anthropic:messages", "model": "claude",
+                "inputTokens": 300, "outputTokens": 40,
+                "cacheReadTokens": 90, "cacheWriteTokens": 50, "cacheWrite1hTokens": 25,
+            }),
+        ];
+        let u = sum_usage(&rows);
+        assert_eq!(u.chat_rows, 2);
+        assert_eq!(u.prompt_tokens, 400);
+        assert_eq!(u.completion_tokens, 50);
+        assert_eq!(u.cache_read_tokens, 95);
+        // 200 + 50: `cacheWriteTokens` is already the full cache-creation count; the 1h field (25) is
+        // a subset of the second row's 50 and must not be added again.
+        assert_eq!(u.cache_write_tokens, 250);
+        assert_eq!(u.total_tokens(), 400 + 50 + 95 + 250);
+        assert_eq!(u.rows_with_null_tokens, 0);
+        assert_eq!(u.models.len(), 1);
+        assert!(u.had_spend());
+    }
+
+    #[test]
+    fn sum_usage_skips_embeddings_but_counts_them_as_no_chat() {
+        let rows = vec![
+            json!({"type": "openai:embeddings", "model": "embed", "inputTokens": 999, "outputTokens": 0}),
+            usage_row("claude", 100, 10, 0, 0),
+        ];
+        let u = sum_usage(&rows);
+        assert_eq!(u.chat_rows, 1);
+        assert_eq!(u.prompt_tokens, 100);
+        assert!(!u.models.contains("embed"));
+    }
+
+    #[test]
+    fn sum_usage_flags_missing_token_fields_as_a_gap() {
+        // A chat row with no token fields is a telemetry gap, not a measured zero.
+        let rows = vec![json!({"type": "anthropic:messages", "model": "claude"})];
+        let u = sum_usage(&rows);
+        assert_eq!(u.chat_rows, 1);
+        assert_eq!(u.rows_with_null_tokens, 1);
+        assert_eq!(u.prompt_tokens, 0);
+    }
+
+    #[test]
+    fn sum_usage_clamps_negatives_and_unions_models() {
+        let rows = vec![usage_row("a", -5, -5, -5, -5), usage_row("b", 10, 10, 0, 0)];
+        let u = sum_usage(&rows);
+        assert_eq!(u.prompt_tokens, 10);
+        assert_eq!(u.completion_tokens, 10);
+        assert_eq!(u.models.len(), 2);
+    }
+
+    #[test]
+    fn sum_usage_empty_is_no_spend() {
+        let u = sum_usage(&[]);
+        assert!(!u.had_spend());
+        assert_eq!(u.total_tokens(), 0);
     }
 }

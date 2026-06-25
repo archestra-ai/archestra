@@ -282,6 +282,11 @@ export function parseMcpServerConfigPaste(
     );
   }
 
+  const officialRegistryValues = buildOfficialRegistryFormValues(parsed);
+  if (officialRegistryValues) {
+    return officialRegistryValues;
+  }
+
   const inputs = buildInputDefinitions(parsed.inputs);
   const namedServer = extractPastedServerConfig(parsed);
   if (!namedServer) return null;
@@ -926,6 +931,230 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function isArchestraCatalogManifest(value: JsonRecord): boolean {
   return isRecord(value.server) && "display_name" in value && "author" in value;
+}
+
+function buildOfficialRegistryFormValues(
+  value: JsonRecord,
+): Partial<McpCatalogFormValues> | null {
+  const remotes = arrayOfRecords(value.remotes);
+  const remote = remotes.find((item) => typeof item.url === "string");
+  if (remote && typeof remote.url === "string") {
+    const headerConfig = buildHeaderFormValues(
+      getRecordProperty(remote, "headers"),
+      new Map(),
+    );
+
+    return {
+      name: getServerName(value) ?? getServerName(remote) ?? "mcp-server",
+      description:
+        typeof value.description === "string" ? value.description : "",
+      serverType: "remote",
+      serverUrl: remote.url,
+      authMethod: headerConfig.authMethod,
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: headerConfig.additionalHeaders,
+    };
+  }
+
+  const packages = arrayOfRecords(value.packages);
+  const localPackage = packages
+    .map((pkg) => buildOfficialRegistryLocalConfig(pkg))
+    .find((config) => config !== null);
+  if (!localPackage) return null;
+
+  return {
+    name: getServerName(value) ?? "mcp-server",
+    description: typeof value.description === "string" ? value.description : "",
+    serverType: "local",
+    serverUrl: "",
+    authMethod: "none",
+    includeBearerPrefix: true,
+    additionalHeaders: [],
+    localConfig: {
+      command: localPackage.command,
+      arguments: localPackage.arguments.join("\n"),
+      environment: localPackage.environment,
+      envFrom: [],
+      dockerImage: localPackage.dockerImage,
+      transportType: "stdio",
+      httpPort: "",
+      httpPath: "/mcp",
+      serviceAccount: "",
+      imagePullSecrets: [],
+    },
+  };
+}
+
+function buildOfficialRegistryLocalConfig(pkg: JsonRecord): {
+  command: string;
+  arguments: string[];
+  dockerImage: string;
+  environment: NonNullable<McpCatalogFormValues["localConfig"]>["environment"];
+} | null {
+  const registryType = getOfficialRegistryType(pkg);
+  const packageName = getOfficialPackageName(pkg);
+  if (!packageName) return null;
+
+  const runtimeArgs = officialArgumentValues(pkg.runtime_arguments);
+  const packageArgs = officialArgumentValues(pkg.package_arguments);
+  const environment = officialEnvironmentValues(pkg.environment_variables);
+
+  if (registryType === "oci" || registryType === "docker") {
+    return {
+      command: "",
+      arguments: [...runtimeArgs, ...packageArgs],
+      dockerImage: packageName,
+      environment,
+    };
+  }
+
+  if (registryType === "npm") {
+    return {
+      command: "npx",
+      arguments: ["-y", ...runtimeArgs, packageName, ...packageArgs],
+      dockerImage: "",
+      environment,
+    };
+  }
+
+  if (registryType === "pypi") {
+    return {
+      command: "uvx",
+      arguments: [...runtimeArgs, packageName, ...packageArgs],
+      dockerImage: "",
+      environment,
+    };
+  }
+
+  if (registryType === "nuget") {
+    return {
+      command: "dnx",
+      arguments: [...runtimeArgs, packageName, ...packageArgs],
+      dockerImage: "",
+      environment,
+    };
+  }
+
+  return null;
+}
+
+function getOfficialRegistryType(pkg: JsonRecord): string {
+  const direct =
+    typeof pkg.registry_type === "string"
+      ? pkg.registry_type
+      : typeof pkg.registry === "string"
+        ? pkg.registry
+        : typeof pkg.registry_name === "string"
+          ? pkg.registry_name
+          : "";
+
+  return direct.trim().toLowerCase();
+}
+
+function getOfficialPackageName(pkg: JsonRecord): string | undefined {
+  for (const key of ["identifier", "name", "package", "package_name"]) {
+    const value = pkg[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function officialArgumentValues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .flatMap((item) => {
+      if (typeof item === "string") return [item];
+      if (!isRecord(item)) return [];
+
+      const value =
+        stringProperty(item, "value") ??
+        stringProperty(item, "default") ??
+        stringProperty(item, "default_value");
+      if (value) return [value];
+
+      const name = stringProperty(item, "name");
+      return name ? [name] : [];
+    })
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
+function officialEnvironmentValues(
+  value: unknown,
+): NonNullable<McpCatalogFormValues["localConfig"]>["environment"] {
+  const entries: Array<[string, unknown, JsonRecord | null]> = [];
+
+  if (isRecord(value)) {
+    entries.push(
+      ...Object.entries(value).map(([key, rawValue]) => {
+        const metadata = isRecord(rawValue) ? rawValue : null;
+        const entryValue = metadata
+          ? (metadata.value ?? metadata.default ?? metadata.default_value ?? "")
+          : rawValue;
+
+        return [key, entryValue, metadata] as [
+          string,
+          unknown,
+          JsonRecord | null,
+        ];
+      }),
+    );
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!isRecord(item)) continue;
+      const name = stringProperty(item, "name") ?? stringProperty(item, "key");
+      if (!name) continue;
+      entries.push([name, item.value ?? item.default ?? "", item]);
+    }
+  }
+
+  return entries.map(([key, rawValue, metadata]) => {
+    const stringValue = stringifyConfigValue(rawValue);
+    const sensitive =
+      Boolean(metadata?.sensitive ?? metadata?.is_secret ?? metadata?.secret) ||
+      isSecretishName(key);
+    const required = Boolean(
+      metadata?.required ?? metadata?.is_required ?? metadata?.required_field,
+    );
+
+    return {
+      key,
+      type: sensitive ? "secret" : "plain_text",
+      value: looksLikeEmptyOrPlaceholder(stringValue) ? "" : stringValue,
+      promptOnInstallation: required || sensitive || !stringValue,
+      required,
+      description: stringProperty(metadata, "description") ?? "",
+      default: undefined,
+    };
+  });
+}
+
+function arrayOfRecords(value: unknown): JsonRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRecord);
+}
+
+function stringProperty(
+  value: JsonRecord | null | undefined,
+  key: string,
+): string | undefined {
+  const property = value?.[key];
+  return typeof property === "string" ? property : undefined;
+}
+
+function looksLikeEmptyOrPlaceholder(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed.length === 0 ||
+    /^<[^>]+>$/.test(trimmed) ||
+    /^(YOUR_|REPLACE_|INSERT_)/i.test(trimmed) ||
+    /_HERE$/i.test(trimmed)
+  );
 }
 
 function buildInputDefinitions(value: unknown): Map<string, InputDefinition> {

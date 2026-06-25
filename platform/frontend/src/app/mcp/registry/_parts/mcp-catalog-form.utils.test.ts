@@ -258,6 +258,149 @@ describe("parseMcpServerConfigPaste", () => {
       }),
     });
   });
+
+  it("hydrates a remote server from the official MCP registry remotes format", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        name: "io.github.example/remote-mcp",
+        description: "Official registry remote server",
+        remotes: [
+          {
+            type: "streamable-http",
+            url: "https://mcp.example.com/mcp",
+            headers: {
+              Authorization: "Bearer <access-token>",
+              "x-client": "archestra",
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "io.github.example/remote-mcp",
+      description: "Official registry remote server",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      authMethod: "auth_header",
+      additionalHeaders: [
+        expect.objectContaining({
+          headerName: "Authorization",
+          promptOnInstallation: true,
+          value: "",
+          includeBearerPrefix: true,
+          sensitive: true,
+        }),
+        expect.objectContaining({
+          headerName: "x-client",
+          promptOnInstallation: false,
+          value: "archestra",
+        }),
+      ],
+    });
+  });
+
+  it("hydrates an npm server from the official MCP registry packages format", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        name: "io.github.example/npm-mcp",
+        description: "Official registry npm package",
+        packages: [
+          {
+            registry_type: "npm",
+            identifier: "@example/mcp-server",
+            runtime_arguments: ["--yes"],
+            package_arguments: [
+              "--workspace",
+              {
+                name: "--mode",
+                value: "stdio",
+              },
+            ],
+            environment_variables: [
+              {
+                name: "EXAMPLE_API_KEY",
+                description: "API key for Example",
+                required: true,
+                sensitive: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "io.github.example/npm-mcp",
+      description: "Official registry npm package",
+      serverType: "local",
+      localConfig: expect.objectContaining({
+        command: "npx",
+        arguments: "-y\n--yes\n@example/mcp-server\n--workspace\nstdio",
+        dockerImage: "",
+        environment: [
+          expect.objectContaining({
+            key: "EXAMPLE_API_KEY",
+            type: "secret",
+            promptOnInstallation: true,
+            required: true,
+            value: "",
+            description: "API key for Example",
+          }),
+        ],
+      }),
+    });
+  });
+
+  it("hydrates an OCI server from the official MCP registry packages format", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        name: "io.github.example/oci-mcp",
+        packages: [
+          {
+            registry_type: "oci",
+            identifier: "ghcr.io/example/mcp-server:latest",
+            runtime_arguments: ["--network=host"],
+            package_arguments: ["--stdio"],
+            environment_variables: {
+              LOG_LEVEL: "debug",
+              SECRET_TOKEN: {
+                description: "Token for the OCI server",
+                required: true,
+                sensitive: true,
+                default: "<token>",
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "io.github.example/oci-mcp",
+      serverType: "local",
+      localConfig: expect.objectContaining({
+        command: "",
+        arguments: "--network=host\n--stdio",
+        dockerImage: "ghcr.io/example/mcp-server:latest",
+        environment: [
+          expect.objectContaining({
+            key: "LOG_LEVEL",
+            type: "plain_text",
+            value: "debug",
+            promptOnInstallation: false,
+          }),
+          expect.objectContaining({
+            key: "SECRET_TOKEN",
+            type: "secret",
+            value: "",
+            promptOnInstallation: true,
+            description: "Token for the OCI server",
+          }),
+        ],
+      }),
+    });
+  });
 });
 
 describe("transformFormToApiData", () => {

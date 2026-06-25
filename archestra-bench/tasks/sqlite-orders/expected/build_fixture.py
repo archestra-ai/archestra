@@ -94,6 +94,25 @@ def _top_customer(db: Path) -> str:
     return row[0]
 
 
+def _root_page(db: Path) -> int:
+    conn = sqlite3.connect(db)
+    try:
+        row = conn.execute("SELECT rootpage FROM sqlite_master WHERE name='orders'").fetchone()
+    finally:
+        conn.close()
+    assert row is not None, "orders schema row missing before corruption"
+    return row[0]
+
+
+def _recovered_rows(db: Path) -> list[tuple[str, str, int]]:
+    conn = sqlite3.connect(db)
+    try:
+        rows = conn.execute("SELECT region, customer, amount FROM orders").fetchall()
+    finally:
+        conn.close()
+    return sorted(rows)
+
+
 def _drop_schema_entry(path: Path) -> None:
     """Drop the orders row from sqlite_master, orphaning (but not freeing) its data page."""
     conn = sqlite3.connect(path)
@@ -118,7 +137,7 @@ def _assert_broken(path: Path) -> None:
     raise AssertionError("corrupted DB unexpectedly read cleanly")
 
 
-def _assert_recoverable(path: Path, expected: str) -> None:
+def _assert_recoverable(path: Path, rootpage: int) -> None:
     """Re-attach the schema entry on a scratch copy and confirm every row reads back (lossless)."""
     tmp = Path(tempfile.mkdtemp()) / "recovered.sqlite"
     shutil.copyfile(path, tmp)
@@ -127,20 +146,21 @@ def _assert_recoverable(path: Path, expected: str) -> None:
         conn.execute("PRAGMA writable_schema=ON")
         conn.execute(
             "INSERT INTO sqlite_master (type, name, tbl_name, rootpage, sql) "
-            "VALUES ('table', 'orders', 'orders', 2, ?)",
-            (_CREATE_SQL,),
+            "VALUES ('table', 'orders', 'orders', ?, ?)",
+            (rootpage, _CREATE_SQL),
         )
         conn.execute("PRAGMA writable_schema=OFF")
         conn.commit()
     finally:
         conn.close()
     try:
-        assert _top_customer(tmp) == expected, "re-attached schema did not recover the data"
+        recovered = _recovered_rows(tmp)
     finally:
         tmp.unlink(missing_ok=True)
+    assert recovered == sorted(_ROWS), "re-attached schema did not recover every row"
 
 
-def _assert_recover_cli(path: Path, expected: str) -> None:
+def _assert_recover_cli(path: Path) -> None:
     """Optional: confirm the agent's `.recover` path salvages the orphan page into lost_and_found."""
     sqlite_cli = shutil.which("sqlite3")
     if sqlite_cli is None:
@@ -155,14 +175,12 @@ def _assert_recover_cli(path: Path, expected: str) -> None:
     conn = sqlite3.connect(tmp)
     try:
         conn.executescript(sql)
-        top = conn.execute(
-            "SELECT c2 FROM lost_and_found "
-            "GROUP BY c2 ORDER BY SUM(c3) DESC, c2 ASC LIMIT 1"
-        ).fetchone()
+        # lost_and_found columns: c1=region, c2=customer, c3=amount (c0 is the rowid alias).
+        rows = conn.execute("SELECT c1, c2, c3 FROM lost_and_found").fetchall()
     finally:
         conn.close()
         tmp.unlink(missing_ok=True)
-    assert top is not None and top[0] == expected, f".recover salvage mismatch: {top!r}"
+    assert sorted(rows) == sorted(_ROWS), ".recover did not salvage every row"
 
 
 def main() -> None:
@@ -173,10 +191,11 @@ def main() -> None:
 
     _build_clean(out)
     expected = _top_customer(out)
+    rootpage = _root_page(out)
     _drop_schema_entry(out)
     _assert_broken(out)
-    _assert_recoverable(out, expected)
-    _assert_recover_cli(out, expected)
+    _assert_recoverable(out, rootpage)
+    _assert_recover_cli(out)
 
     rows_json.write_text(
         json.dumps([list(row) for row in _ROWS], indent=2) + "\n", encoding="utf-8"

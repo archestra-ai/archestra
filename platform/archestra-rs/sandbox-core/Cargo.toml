@@ -19,7 +19,7 @@ telemetry = [
 
 [dependencies]
 base64 = "0.22"
-dagger-sdk = "=0.21.5"
+dagger-sdk = "=0.21.7"
 eyre = "0.6"
 futures-util = "0.3"
 napi = { version = "3", optional = true }

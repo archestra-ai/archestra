@@ -8,7 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import {
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
@@ -510,7 +510,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         visibility === "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,
@@ -836,7 +836,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         connector.visibility !== "team-scoped" &&
         nextVisibility === "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,

@@ -8,7 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { AgentToolModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   AddTeamExternalGroupBodySchema,
@@ -492,7 +492,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
       // Verify enterprise license
-      if (!config.enterpriseFeatures.core) {
+      if (!enterpriseTier.isCoreActive()) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
@@ -546,7 +546,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Verify enterprise license
-      if (!config.enterpriseFeatures.core) {
+      if (!enterpriseTier.isCoreActive()) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
@@ -611,7 +611,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       // Verify enterprise license
-      if (!config.enterpriseFeatures.core) {
+      if (!enterpriseTier.isCoreActive()) {
         throw new ApiError(
           403,
           "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",

@@ -17,6 +17,8 @@ Identity Providers index.
 
 Archestra supports automatic team membership synchronization based on user group memberships from your identity provider. When users log in via SSO, they are automatically added to or removed from Archestra teams based on their IdP groups.
 
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
+
 ## How team sync works
 
 1. Admin configures an Archestra team and links it to one or more external IdP groups

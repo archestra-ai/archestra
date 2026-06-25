@@ -87,6 +87,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+  useEnterpriseFeature: () => false,
+  useSmallTeamTier: () => undefined,
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({

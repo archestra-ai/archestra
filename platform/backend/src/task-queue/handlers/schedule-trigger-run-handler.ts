@@ -1,3 +1,4 @@
+import { ChatErrorCode, type ChatErrorResponse } from "@archestra/shared";
 import {
   type A2AExecuteResult,
   executeA2AMessage,
@@ -12,6 +13,7 @@ import {
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
+import { ProviderError } from "@/routes/chat/errors";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
@@ -61,6 +63,8 @@ export async function handleScheduleTriggerRunExecution(
 
   let status: "success" | "failed" = "success";
   let errorMessage: string | null = null;
+  // The structured error for a failed run's chat error card (see catch below).
+  let runChatError: ChatErrorResponse | null = null;
   // Captured for post-completion transcript persistence: a project-scoped run's
   // chat conversation is created up front and the executor result is persisted
   // after execution completes.
@@ -126,6 +130,17 @@ export async function handleScheduleTriggerRunExecution(
     errorMessage = formatScheduleTriggerExecutionError(
       error instanceof Error ? error.message : String(error),
     );
+    // Prefer the provider's structured error (proper code + retryability), so a
+    // failed run's chat shows the same rich error card as the interactive chat;
+    // fall back to a generic card carrying the formatted message.
+    runChatError =
+      error instanceof ProviderError
+        ? error.chatErrorResponse
+        : {
+            code: ChatErrorCode.Unknown,
+            message: errorMessage,
+            isRetryable: false,
+          };
     logger.warn(
       { runId: run.id, triggerId: run.triggerId, error: errorMessage },
       "Scheduled trigger run failed",
@@ -162,14 +177,14 @@ export async function handleScheduleTriggerRunExecution(
         "Failed to persist scheduled run conversation messages",
       );
     }
-  } else if (status === "failed" && runConversation) {
+  } else if (status === "failed" && runConversation && runChatError) {
     // A failed project-scoped run keeps its conversation; record the error as a
     // chat error so the run's chat shows an inline error card (rather than a
     // blank transcript). Best-effort: this must not fail the already-failed run.
     try {
       await recordRunConversationError({
         conversationId: runConversation.id,
-        message: errorMessage ?? "The scheduled run failed.",
+        error: runChatError,
       });
     } catch (error) {
       logger.warn(

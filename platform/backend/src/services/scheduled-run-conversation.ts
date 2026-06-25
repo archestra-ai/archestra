@@ -1,5 +1,5 @@
 import {
-  ChatErrorCode,
+  type ChatErrorResponse,
   DynamicInteraction,
   type PartialUIMessage,
 } from "@archestra/shared";
@@ -162,19 +162,17 @@ export async function persistRunConversationMessages(params: {
 /**
  * Record a failed run's error on its (kept) conversation as a chat error, so the
  * run's chat renders it as an inline error card — a failed run opens a normal
- * chat showing what went wrong, rather than a blank transcript.
+ * chat showing what went wrong, rather than a blank transcript. The error is the
+ * provider's structured `ChatErrorResponse` (same one the interactive chat uses),
+ * so the card keeps its proper code and retry affordances.
  */
 export async function recordRunConversationError(params: {
   conversationId: string;
-  message: string;
+  error: ChatErrorResponse;
 }): Promise<void> {
   await ConversationChatErrorModel.create({
     conversationId: params.conversationId,
-    error: {
-      code: ChatErrorCode.Unknown,
-      message: params.message,
-      isRetryable: false,
-    },
+    error: params.error,
   });
 }
 

@@ -1,3 +1,4 @@
+import { ChatErrorCode } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
@@ -293,10 +294,14 @@ test("recordRunConversationError records a failed run's error on its kept conver
 
   await recordRunConversationError({
     conversationId: conversation.id,
-    message: "Connection error.",
+    error: {
+      code: ChatErrorCode.ServerError,
+      message: "Connection error.",
+      isRetryable: true,
+    },
   });
 
-  // The conversation is KEPT, with the error recorded as a chat error.
+  // The conversation is KEPT, with the structured error recorded as a chat error.
   expect(
     await ConversationModel.findByIdInOrganization({
       id: conversation.id,
@@ -308,4 +313,6 @@ test("recordRunConversationError records a failed run's error on its kept conver
   );
   expect(errors).toHaveLength(1);
   expect(errors[0]?.error.message).toBe("Connection error.");
+  expect(errors[0]?.error.code).toBe(ChatErrorCode.ServerError);
+  expect(errors[0]?.error.isRetryable).toBe(true);
 });

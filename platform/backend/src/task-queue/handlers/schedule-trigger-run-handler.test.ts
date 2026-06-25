@@ -349,11 +349,12 @@ describe("handleScheduleTriggerRunExecution", () => {
     });
     expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
     // The failed run keeps its conversation; the error is recorded as a chat
-    // error so the run's chat shows an inline error card.
+    // error so the run's chat shows an inline error card. A plain Error (not a
+    // ProviderError) becomes the generic fallback card carrying the message.
     expect(mockRecordRunConversationError).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: "conv-1",
-        message: "LLM provider down",
+        error: expect.objectContaining({ message: "LLM provider down" }),
       }),
     );
   });

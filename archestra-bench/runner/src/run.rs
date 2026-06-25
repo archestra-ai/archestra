@@ -152,7 +152,12 @@ pub async fn run(
     let lane_list =
         load_lanes(lanes_path, lanes_filter).map_err(|e| RunError::Config(e.to_string()))?;
     let workers = resolve_workers(max_workers, lane_list.len());
-    let api_keys = lane_api_keys(&lane_list)?;
+    // Lane keys prefer `platform/.env` over the process env, so the same `.env` that configures the
+    // backend also seeds the bench's own provider clients. The `.env` is already a hard requirement of
+    // every run (preflight below also loads it).
+    let platform = crate::lifecycle::resolve_platform_dir(platform_dir, &repo_root());
+    let platform_env = crate::lifecycle::load_platform_env(&platform)?;
+    let api_keys = lane_api_keys(&lane_list, &platform_env)?;
 
     // Fetch OpenRouter prices once up front. A failure is non-fatal: every run then reports cost n/a.
     let (prices, price_status) = match pricing::fetch_price_book().await {
@@ -247,15 +252,34 @@ fn resolve_workers(requested: Option<usize>, lane_count: usize) -> usize {
     }
 }
 
-fn lane_api_keys(lanes: &[Lane]) -> Result<HashMap<String, String>, RunError> {
+/// Pick a lane key, preferring the `platform/.env` value over the process-env one. An empty or
+/// whitespace-only value counts as unset and falls through — the same empty-as-unset rule
+/// `resolve_bench_db_url` uses, though its precedence is deliberately the opposite (process env wins
+/// for the bench DB URL; `platform/.env` wins for provider keys).
+fn pick_key(platform: Option<&str>, process: Option<&str>) -> Option<String> {
+    [platform, process]
+        .into_iter()
+        .flatten()
+        .find(|v| !v.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn lane_api_keys(
+    lanes: &[Lane],
+    platform_env: &HashMap<String, String>,
+) -> Result<HashMap<String, String>, RunError> {
     let mut keys = HashMap::new();
     for lane in lanes {
-        let key = std::env::var(lane.key_env()).map_err(|_| {
+        let key_env = lane.key_env();
+        let process = std::env::var(&key_env).ok();
+        let key = pick_key(
+            platform_env.get(&key_env).map(String::as_str),
+            process.as_deref(),
+        )
+        .ok_or_else(|| {
             RunError::Config(format!(
-                "set {} to seed lane {:?} ({})",
-                lane.key_env(),
-                lane.name,
-                lane.provider
+                "set {} in platform/.env or the environment to seed lane {:?} ({})",
+                key_env, lane.name, lane.provider
             ))
         })?;
         keys.insert(lane.name.clone(), key);
@@ -2877,6 +2901,62 @@ mod tests {
         assert_eq!(resolve_workers(None, 2), 2);
         assert_eq!(resolve_workers(None, 10), 4);
         assert_eq!(resolve_workers(None, 0), 1);
+    }
+
+    #[test]
+    fn test_pick_key_prefers_platform_over_process() {
+        let cases = [
+            // platform/.env wins when both are set.
+            (Some("env"), Some("proc"), Some("env")),
+            // empty/whitespace platform value is unset and falls back to the process env.
+            (Some(""), Some("proc"), Some("proc")),
+            (Some("  "), Some("proc"), Some("proc")),
+            // missing platform falls back; missing process is fine when platform has a value.
+            (None, Some("proc"), Some("proc")),
+            (Some("env"), None, Some("env")),
+            // neither set (or both empty) yields nothing.
+            (None, None, None),
+            (Some(" "), Some(""), None),
+        ];
+        for (platform, process, expected) in cases {
+            assert_eq!(
+                pick_key(platform, process),
+                expected.map(str::to_string),
+                "platform={platform:?} process={process:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_lane_api_keys_prefers_platform_env() {
+        // A unique var, absent from the test process env and present only in platform_env, proves
+        // `lane_api_keys` consults and uses the parsed `.env`.
+        let mut lane = dummy_lane("l1");
+        lane.api_key_env = Some("ARCHESTRA_BENCH_TEST_LANE_KEY".to_string());
+        let platform_env = HashMap::from([(
+            "ARCHESTRA_BENCH_TEST_LANE_KEY".to_string(),
+            "from-dotenv".to_string(),
+        )]);
+        let keys = lane_api_keys(&[lane], &platform_env).unwrap();
+        assert_eq!(keys.get("l1"), Some(&"from-dotenv".to_string()));
+    }
+
+    #[test]
+    fn test_lane_api_keys_falls_back_to_process_env() {
+        // `PATH` is reliably set in the test process and absent from platform_env, so it exercises
+        // the process-env fallback (the prod-image CI path) without mutating global state.
+        let mut lane = dummy_lane("l1");
+        lane.api_key_env = Some("PATH".to_string());
+        let keys = lane_api_keys(&[lane], &HashMap::new()).unwrap();
+        assert_eq!(keys.get("l1"), std::env::var("PATH").ok().as_ref());
+    }
+
+    #[test]
+    fn test_lane_api_keys_missing_everywhere_is_config_error() {
+        let mut lane = dummy_lane("l1");
+        lane.api_key_env = Some("ARCHESTRA_BENCH_TEST_UNSET_LANE_KEY".to_string());
+        let err = lane_api_keys(&[lane], &HashMap::new()).unwrap_err();
+        assert!(matches!(err, RunError::Config(_)), "got {err:?}");
     }
 
     fn dummy_task(id: &str) -> Task {

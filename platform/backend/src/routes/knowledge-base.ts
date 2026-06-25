@@ -8,7 +8,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
   didKnowledgeSourceAclInputsChange,

@@ -7,7 +7,7 @@ import logger from "@/logging";
 const SMALL_TEAM_THRESHOLD = 30;
 const REFRESH_INTERVAL_MS = 60_000;
 
-export interface EnterpriseTierState {
+interface EnterpriseTierState {
   userCount: number;
   threshold: number;
   smallTeam: boolean;

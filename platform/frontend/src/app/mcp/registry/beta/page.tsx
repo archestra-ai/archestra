@@ -23,7 +23,12 @@ export default async function McpRegistryBetaPage() {
   try {
     const headers = await getServerApiHeaders();
     const [catalogResponse, serversResponse] = await Promise.all([
-      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      // includeApps surfaces owned-app backings so the registry can manage them;
+      // must match the client query key (useInternalMcpCatalog includeApps).
+      archestraApiSdk.getInternalMcpCatalog({
+        query: { includeApps: true },
+        headers,
+      }),
       archestraApiSdk.getMcpServers({ headers }),
     ]);
     if (catalogResponse.error) {

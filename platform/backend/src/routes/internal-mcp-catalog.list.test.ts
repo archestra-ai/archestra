@@ -147,6 +147,32 @@ describe("GET /api/internal_mcp_catalog", () => {
     );
   });
 
+  test("includeApps enriches an app backing with its appId and providesUi", async ({
+    makeApp,
+  }) => {
+    const ownedApp = await makeApp({
+      organizationId,
+      authorId: user.id,
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const backing = response
+      .json()
+      .find(
+        (item: { serverType: string; appId?: string | null }) =>
+          item.serverType === "app" && item.appId === ownedApp.id,
+      );
+    expect(backing).toBeDefined();
+    // The backing's `open` launch tool exposes a ui:// resource.
+    expect(backing.providesUi).toBe(true);
+  });
+
   test("includeApps is ignored for a caller without app:read", async () => {
     // Grant the route's own mcpRegistry probe but deny the app:read gate.
     mockHasPermission.mockImplementation(

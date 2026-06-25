@@ -4,12 +4,11 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { Globe, Trash2, User, Users } from "lucide-react";
+import { Globe, User, Users } from "lucide-react";
 import Link from "next/link";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { cn } from "@/lib/utils";
 import { deriveAppGlyph } from "./app-icon";
 
@@ -31,11 +30,9 @@ const SCOPE_ORDER: ResourceVisibilityScope[] = ["personal", "team", "org"];
 export function AppCard({
   app,
   currentUserId,
-  onDelete,
 }: {
   app: AppListItem;
   currentUserId: string | undefined;
-  onDelete: (app: Extract<AppListItem, { source: "owned" }>) => void;
 }) {
   // Owned apps open the detail page; external UI-providing catalog items open
   // the standalone run page, or route to install when the caller has no
@@ -108,24 +105,6 @@ export function AppCard({
               ? "Runs as the server · declares its own network"
               : "Install to run · runs as the server"}
           </span>
-        </div>
-      ) : null}
-
-      {app.source === "owned" ? (
-        <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
-          <PermissionButton
-            permissions={{ app: ["delete"] }}
-            variant="ghost"
-            size="icon"
-            className="pointer-events-auto relative z-10 h-8 w-8 text-muted-foreground hover:text-destructive"
-            aria-label={`Delete ${app.name}`}
-            onClick={(e) => {
-              e.preventDefault();
-              onDelete(app);
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </PermissionButton>
         </div>
       ) : null}
     </Card>

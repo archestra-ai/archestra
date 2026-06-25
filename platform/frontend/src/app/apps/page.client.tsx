@@ -19,7 +19,7 @@ import { scopeStyles } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useApps, useDeleteApp } from "@/lib/app.query";
+import { useApps } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 import { AppCard } from "./_parts/app-card";
@@ -46,7 +46,6 @@ export default function AppsPage() {
     offset: 0,
     search: search || undefined,
   });
-  const deleteApp = useDeleteApp();
   const [createOpen, setCreateOpen] = useState(false);
 
   const apps = useMemo(() => data?.data ?? [], [data]);
@@ -211,10 +210,6 @@ export default function AppsPage() {
                 key={app.source === "external" ? app.catalogId : app.id}
                 app={app}
                 currentUserId={currentUserId}
-                onDelete={(owned) => {
-                  if (confirm(`Delete "${owned.name}"? This cannot be undone.`))
-                    deleteApp.mutate(owned.id);
-                }}
               />
             ))}
           </div>

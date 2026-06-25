@@ -388,6 +388,56 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.toolCount).toBe(2);
     });
 
+    test("findAll derives providesUi from a tool's ui:// resource", async ({
+      makeTool,
+    }) => {
+      const uiCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-provides-ui",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: uiCatalog.id,
+        name: "open-ui-tool",
+        meta: { _meta: { ui: { resourceUri: "ui://some-app" } } },
+      });
+
+      const legacyCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-provides-ui-legacy",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: legacyCatalog.id,
+        name: "legacy-ui-tool",
+        meta: { _meta: { "ui/resourceUri": "ui://legacy-app" } },
+      });
+
+      const nonUiCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-non-ui-resource",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: nonUiCatalog.id,
+        name: "https-resource-tool",
+        meta: { _meta: { ui: { resourceUri: "https://example.com" } } },
+      });
+
+      const plainCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-no-ui",
+        serverType: "remote",
+      });
+      await makeTool({ catalogId: plainCatalog.id, name: "plain-tool" });
+
+      const all = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+      const byId = (id: string) => all.find((item) => item.id === id);
+
+      expect(byId(uiCatalog.id)?.providesUi).toBe(true);
+      expect(byId(legacyCatalog.id)?.providesUi).toBe(true);
+      expect(byId(nonUiCatalog.id)?.providesUi).toBe(false);
+      expect(byId(plainCatalog.id)?.providesUi).toBe(false);
+    });
+
     test("findById omits list-only tool count metadata", async ({
       makeTool,
     }) => {

@@ -113,6 +113,38 @@ class AppModel {
     return result ?? null;
   }
 
+  /**
+   * Map backing-catalog ids → app ids for active apps, batched. Lets the
+   * registry link a `serverType:"app"` catalog card to the app it backs. Only
+   * catalogs that back an active app appear in the result.
+   */
+  static async getAppIdsByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Map<string, string>> {
+    if (catalogIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        catalogId: schema.mcpServersTable.catalogId,
+        appId: schema.appsTable.id,
+      })
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return new Map(
+      rows
+        .filter((r): r is { catalogId: string; appId: string } => !!r.catalogId)
+        .map((r) => [r.catalogId, r.appId]),
+    );
+  }
+
   /** A single active app by its backing mcp_server id (the catalog→app link). */
   static async findByMcpServerId(mcpServerId: string): Promise<App | null> {
     const [result] = await appWithCatalogQuery().where(

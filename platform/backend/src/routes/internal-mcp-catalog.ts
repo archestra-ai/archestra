@@ -24,6 +24,7 @@ import {
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
+  AppModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
@@ -110,10 +111,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const includeApps =
         request.query.includeApps === true &&
         (await hasPermission({ app: ["read"] }, request.headers)).success;
+      if (!includeApps) {
+        return reply.send(await InternalMcpCatalogModel.findAll(opts));
+      }
+      // App backings carry an `appId` so the registry can link/manage the app.
+      // Only the (few) serverType:"app" rows need the lookup, so the default
+      // path above never pays for it.
+      const items = await InternalMcpCatalogModel.findAllWithApps(opts);
+      const appCatalogIds = items
+        .filter((item) => item.serverType === "app")
+        .map((item) => item.id);
+      const appIdByCatalog =
+        await AppModel.getAppIdsByCatalogIds(appCatalogIds);
       return reply.send(
-        includeApps
-          ? await InternalMcpCatalogModel.findAllWithApps(opts)
-          : await InternalMcpCatalogModel.findAll(opts),
+        items.map((item) =>
+          item.serverType === "app"
+            ? { ...item, appId: appIdByCatalog.get(item.id) ?? null }
+            : item,
+        ),
       );
     },
   );

@@ -175922,6 +175922,10 @@
                           "no_refresh_token"
                         ]
                       },
+                      "oauthRefreshErrorMessage": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "oauthRefreshFailedAt": {
                         "nullable": true,
                         "type": "string",
@@ -176019,6 +176023,7 @@
                       "localInstallationStatus",
                       "localInstallationError",
                       "oauthRefreshError",
+                      "oauthRefreshErrorMessage",
                       "oauthRefreshFailedAt",
                       "createdAt",
                       "updatedAt"
@@ -176339,6 +176344,10 @@
                       "no_refresh_token"
                     ]
                   },
+                  "oauthRefreshErrorMessage": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "oauthRefreshFailedAt": {
                     "nullable": true
                   },
@@ -176486,6 +176495,10 @@
                         "no_refresh_token"
                       ]
                     },
+                    "oauthRefreshErrorMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -176583,6 +176596,7 @@
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
+                    "oauthRefreshErrorMessage",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -176957,6 +176971,10 @@
                         "no_refresh_token"
                       ]
                     },
+                    "oauthRefreshErrorMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -177054,6 +177072,7 @@
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
+                    "oauthRefreshErrorMessage",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -177737,6 +177756,10 @@
                         "no_refresh_token"
                       ]
                     },
+                    "oauthRefreshErrorMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -177834,6 +177857,7 @@
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
+                    "oauthRefreshErrorMessage",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
@@ -179145,6 +179169,10 @@
                         "no_refresh_token"
                       ]
                     },
+                    "oauthRefreshErrorMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "oauthRefreshFailedAt": {
                       "nullable": true,
                       "type": "string",
@@ -179242,6 +179270,7 @@
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
+                    "oauthRefreshErrorMessage",
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"

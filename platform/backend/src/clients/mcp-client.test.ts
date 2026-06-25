@@ -3046,7 +3046,7 @@ describe("McpClient", () => {
               refresh_token: "refresh-token",
               expires_at: Date.now() + 3_600_000,
             });
-            return true;
+            return { ok: true };
           });
 
         mockConnect.mockResolvedValue(undefined);
@@ -3332,7 +3332,7 @@ describe("McpClient", () => {
               refresh_token: "refresh-token",
               expires_at: Date.now() + 3_600_000,
             });
-            return true;
+            return { ok: true };
           });
 
         mockConnect.mockResolvedValue(undefined);
@@ -3418,7 +3418,12 @@ describe("McpClient", () => {
 
         const refreshSpy = vi
           .spyOn(oauthRoutes, "refreshOAuthToken")
-          .mockResolvedValue(false);
+          .mockResolvedValue({
+            ok: false,
+            kind: "terminal",
+            category: "refresh_failed",
+            message: "refresh_failed",
+          });
 
         mockConnect.mockResolvedValue(undefined);
         mockCallTool.mockResolvedValue({
@@ -3556,7 +3561,7 @@ describe("McpClient", () => {
               refresh_token: "rotated-refresh-token",
               expires_at: Date.now() + 3_600_000,
             });
-            return true;
+            return { ok: true };
           });
 
         const toolCall = {

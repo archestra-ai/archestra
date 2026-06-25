@@ -78,6 +78,7 @@ import {
   McpServerSettingsDialog,
   type SettingsPage,
 } from "./mcp-server-settings-dialog";
+import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -457,9 +458,9 @@ export function McpServerCard({
   // Check for OAuth refresh errors on any credential the user can see
   // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
   const isOAuthServer = !!item.oauthConfig;
-  const hasOAuthRefreshError =
-    isOAuthServer &&
-    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
+  const oauthFailedServer = isOAuthServer
+    ? mcpServerOfCurrentCatalogItem?.find((s) => s.oauthRefreshError)
+    : undefined;
 
   const isInstalling = Boolean(
     !isDeploymentFailed &&
@@ -809,20 +810,16 @@ export function McpServerCard({
               </Tooltip>
             </TooltipProvider>
           </AvatarGroup>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {oauthFailedServer && (
+            <OAuthReauthIndicator
+              errorMessage={oauthFailedServer.oauthRefreshErrorMessage}
+              failedAt={oauthFailedServer.oauthRefreshFailedAt}
+              onActivate={
+                canEditCatalog
+                  ? () => openSettingsPage("connections")
+                  : undefined
+              }
+            />
           )}
         </div>
       )}

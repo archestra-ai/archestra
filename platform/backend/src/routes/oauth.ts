@@ -491,22 +491,146 @@ async function getAndDeleteOAuthState(
 }
 
 /**
- * Refresh an OAuth access token using the stored refresh token.
- * This function is called when an access token is expired or about to expire.
+ * Outcome of an OAuth refresh attempt. A `terminal` failure means the grant is
+ * dead (re-authentication required); a `transient` failure is a recoverable
+ * transport/infrastructure blip that must not change persisted connection
+ * health and is re-attempted on next use.
+ */
+export type OAuthRefreshOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      kind: "terminal";
+      category: "refresh_failed" | "no_refresh_token";
+      message: string;
+    }
+  | {
+      ok: false;
+      kind: "transient";
+      reason:
+        | "network"
+        | "timeout"
+        | "server_error"
+        | "rate_limited"
+        | "unexpected_response";
+    };
+
+const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
+
+// An OAuth `error` code is a restricted ASCII token (RFC 6749 §5.2). Anything
+// outside this shape (URLs, free text, token material) is dropped.
+const OAUTH_ERROR_CODE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+
+export function sanitizeOAuthErrorCode(error?: string | null): string {
+  if (typeof error === "string" && OAUTH_ERROR_CODE_PATTERN.test(error)) {
+    return error;
+  }
+  return "refresh_failed";
+}
+
+// OAuth error codes that signal a temporary server condition, not a dead grant
+// (RFC 6749 §4.1.2.1). Some authorization servers return these on a 400.
+const TRANSIENT_OAUTH_ERRORS = new Set([
+  "temporarily_unavailable",
+  "server_error",
+]);
+
+/**
+ * Classify a token-endpoint response. A genuine grant rejection is a structured
+ * OAuth `error` body, which is terminal — but infrastructure failures
+ * (5xx, 429, or a transient OAuth error code) take precedence over the body so
+ * a temporary outage is not mistaken for a revoked grant. A proxy/WAF 4xx or a
+ * captive-portal 200 with no token are likewise transient, not "re-authenticate".
+ */
+export function classifyRefreshResponse(params: {
+  status: number;
+  body: {
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+  } | null;
+}): OAuthRefreshOutcome {
+  const { status, body } = params;
+
+  if (status >= 200 && status < 300 && body?.access_token) {
+    return { ok: true };
+  }
+
+  if (status >= 500) {
+    return { ok: false, kind: "transient", reason: "server_error" };
+  }
+  if (status === 429) {
+    return { ok: false, kind: "transient", reason: "rate_limited" };
+  }
+  if (body?.error && TRANSIENT_OAUTH_ERRORS.has(body.error)) {
+    return { ok: false, kind: "transient", reason: "server_error" };
+  }
+
+  if (body?.error) {
+    return {
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: sanitizeOAuthErrorCode(body.error),
+    };
+  }
+
+  return { ok: false, kind: "transient", reason: "unexpected_response" };
+}
+
+export function classifyThrownRefreshError(
+  error: unknown,
+): Extract<OAuthRefreshOutcome, { kind: "transient" }> {
+  const isTimeout =
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError");
+  return {
+    ok: false,
+    kind: "transient",
+    reason: isTimeout ? "timeout" : "network",
+  };
+}
+
+/**
+ * Map a refresh outcome to the `mcp_server` fields to persist. Returns `null`
+ * for success and for transient failures (which must persist nothing).
+ */
+export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
+  oauthRefreshError: "refresh_failed" | "no_refresh_token";
+  oauthRefreshErrorMessage: string;
+  oauthRefreshFailedAt: Date;
+} | null {
+  if (outcome.ok || outcome.kind !== "terminal") {
+    return null;
+  }
+  return {
+    oauthRefreshError: outcome.category,
+    oauthRefreshErrorMessage: outcome.message,
+    oauthRefreshFailedAt: new Date(),
+  };
+}
+
+/**
+ * Refresh an OAuth access token using the stored refresh token, called when an
+ * access token is expired or about to expire.
  *
  * @param secretId - The ID of the secret containing the OAuth tokens
  * @param catalogId - The ID of the catalog item (MCP server) for OAuth config
- * @returns true if refresh was successful, false otherwise
  */
 export async function refreshOAuthToken(
   secretId: string,
   catalogId: string,
-): Promise<boolean> {
+): Promise<OAuthRefreshOutcome> {
   try {
     const secret = await secretManager().getSecret(secretId);
     if (!secret?.secret) {
       logger.warn({ secretId }, "refreshOAuthToken: Secret not found");
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
     const currentTokens = secret.secret as {
@@ -526,7 +650,12 @@ export async function refreshOAuthToken(
         { secretId },
         "refreshOAuthToken: No refresh token available",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "no_refresh_token",
+        message: "no_refresh_token",
+      };
     }
 
     // Get catalog item with OAuth configuration
@@ -537,7 +666,12 @@ export async function refreshOAuthToken(
         { catalogId },
         "refreshOAuthToken: Catalog item or OAuth config not found",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
     const oauthConfig = catalogItem.oauthConfig;
@@ -564,7 +698,12 @@ export async function refreshOAuthToken(
         { secretId, catalogId },
         "refreshOAuthToken: No client_id available for token refresh",
       );
-      return false;
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
     }
 
     const oauthResource = getOAuthTokenResource(oauthConfig);
@@ -598,36 +737,52 @@ export async function refreshOAuthToken(
           resource: oauthResource,
         }),
       }),
+      signal: AbortSignal.timeout(OAUTH_TOKEN_REFRESH_TIMEOUT_MS),
     });
 
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      logger.error(
-        { secretId, status: tokenResponse.status, error: errorText },
-        "refreshOAuthToken: Token refresh request failed",
-      );
-      return false;
-    }
-
-    const tokenData = (await tokenResponse.json()) as {
+    // Parse the body once. A non-JSON body (proxy/WAF/captive-portal HTML)
+    // leaves `body` null, which classifyRefreshResponse treats as transient.
+    const rawBody = await tokenResponse.text();
+    let body: {
       access_token?: string;
       refresh_token?: string;
       expires_in?: number;
       error?: string;
       error_description?: string;
-    };
+    } | null = null;
+    try {
+      body = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      body = null;
+    }
 
-    if (!tokenData.access_token) {
+    const outcome = classifyRefreshResponse({
+      status: tokenResponse.status,
+      body,
+    });
+
+    if (!outcome.ok) {
+      // Never log the raw body — it may carry token material.
       logger.error(
         {
           secretId,
-          error: tokenData.error,
-          errorDescription: tokenData.error_description,
+          catalogId,
+          status: tokenResponse.status,
+          classification: outcome.kind,
+          reason:
+            outcome.kind === "terminal" ? outcome.message : outcome.reason,
         },
-        "refreshOAuthToken: No access token in refresh response",
+        "refreshOAuthToken: Token refresh did not succeed",
       );
-      return false;
+      return outcome;
     }
+
+    // classifyRefreshResponse only returns ok for a 2xx body with an access token.
+    const tokenData = body as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
 
     // Store entire OAuth response to preserve provider-specific fields (scope, id_token, etc.)
     const updatedSecretPayload = {
@@ -644,8 +799,31 @@ export async function refreshOAuthToken(
       ...(clientSecret && { client_secret: clientSecret }),
     };
 
-    // Update the secret in storage
-    await secretManager().updateSecret(secretId, updatedSecretPayload);
+    // Persist the refreshed tokens. The grant already succeeded and a rotating
+    // server has now spent the old refresh token, so a persistence failure is
+    // terminal — re-authentication is the only recovery, and treating it as a
+    // transient retry would silently lose the only valid refresh token.
+    try {
+      await secretManager().updateSecret(secretId, updatedSecretPayload);
+    } catch (persistError) {
+      logger.error(
+        {
+          secretId,
+          catalogId,
+          error:
+            persistError instanceof Error
+              ? persistError.message
+              : String(persistError),
+        },
+        "refreshOAuthToken: refreshed token could not be persisted",
+      );
+      return {
+        ok: false,
+        kind: "terminal",
+        category: "refresh_failed",
+        message: "refresh_failed",
+      };
+    }
 
     logger.info(
       {
@@ -657,17 +835,20 @@ export async function refreshOAuthToken(
       "refreshOAuthToken: Token refresh successful",
     );
 
-    return true;
+    return { ok: true };
   } catch (error) {
+    const outcome = classifyThrownRefreshError(error);
     logger.error(
       {
         secretId,
         catalogId,
+        classification: outcome.kind,
+        reason: outcome.kind === "transient" ? outcome.reason : undefined,
         error: error instanceof Error ? error.message : String(error),
       },
       "refreshOAuthToken: Unexpected error during token refresh",
     );
-    return false;
+    return outcome;
   }
 }
 

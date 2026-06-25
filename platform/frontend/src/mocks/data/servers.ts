@@ -20,6 +20,7 @@ export function makeInstalledServer(
     localInstallationStatus: "success",
     localInstallationError: null,
     oauthRefreshError: "no_refresh_token",
+    oauthRefreshErrorMessage: "no_refresh_token",
     oauthRefreshFailedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

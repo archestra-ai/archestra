@@ -816,8 +816,18 @@ function UnifiedConnectionsTable({
                       <TooltipTrigger>
                         <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                       </TooltipTrigger>
-                      <TooltipContent>
-                        Authentication failed. Please re-authenticate.
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium">
+                          Authentication failed — re-authenticate
+                        </p>
+                        <p className="break-words text-xs text-muted-foreground">
+                          {server.oauthRefreshErrorMessage ??
+                            "authentication expired"}
+                          {server.oauthRefreshFailedAt &&
+                            ` · failed ${new Date(
+                              server.oauthRefreshFailedAt,
+                            ).toLocaleString()}`}
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

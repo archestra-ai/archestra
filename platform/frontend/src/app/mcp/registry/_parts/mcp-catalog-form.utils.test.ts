@@ -1,12 +1,236 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
+  parseMcpArgumentsInput,
+  parseMcpServerConfigPaste,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
 
+describe("parseMcpArgumentsInput", () => {
+  it("supports JSON array argument input from MCP catalogs", () => {
+    expect(parseMcpArgumentsInput('["--port", "8080", "--verbose"]')).toEqual([
+      "--port",
+      "8080",
+      "--verbose",
+    ]);
+  });
+
+  it("keeps the existing one-argument-per-line behavior", () => {
+    expect(parseMcpArgumentsInput("--port\n8080\n\n--verbose")).toEqual([
+      "--port",
+      "8080",
+      "--verbose",
+    ]);
+  });
+});
+
+describe("parseMcpServerConfigPaste", () => {
+  it("ignores non-JSON and unrelated JSON paste input", () => {
+    expect(parseMcpServerConfigPaste("just normal text")).toBeNull();
+    expect(parseMcpServerConfigPaste('{"hello":"world"}')).toBeNull();
+  });
+
+  it("hydrates a remote server from a VS Code servers wrapper with inputs", () => {
+    const inputPlaceholder = ["$", "{input:github_mcp_pat}"].join("");
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        servers: {
+          github: {
+            type: "http",
+            url: "https://api.githubcopilot.com/mcp/",
+            headers: {
+              Authorization: `Bearer ${inputPlaceholder}`,
+            },
+          },
+        },
+        inputs: [
+          {
+            type: "promptString",
+            id: "github_mcp_pat",
+            description: "GitHub Personal Access Token",
+            password: true,
+          },
+        ],
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "github",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+      authMethod: "auth_header",
+      additionalHeaders: [
+        expect.objectContaining({
+          headerName: "Authorization",
+          promptOnInstallation: true,
+          required: true,
+          value: "",
+          description: "GitHub Personal Access Token",
+          includeBearerPrefix: true,
+          sensitive: true,
+        }),
+      ],
+    });
+  });
+
+  it("hydrates a local server from a Claude Desktop mcpServers wrapper", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        mcpServers: {
+          filesystem: {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+          },
+        },
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "filesystem",
+      serverType: "local",
+      localConfig: expect.objectContaining({
+        command: "npx",
+        arguments: "-y\n@modelcontextprotocol/server-filesystem\n/tmp",
+        dockerImage: "",
+        transportType: "stdio",
+      }),
+    });
+  });
+
+  it("hydrates a local Docker server with prompted environment placeholders", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        sonarqube: {
+          command: "docker",
+          args: [
+            "run",
+            "--init",
+            "--pull=always",
+            "-i",
+            "--rm",
+            "-e",
+            "SONARQUBE_TOKEN",
+            "-e",
+            "SONARQUBE_ORG",
+            "mcp/sonarqube",
+          ],
+          env: {
+            SONARQUBE_TOKEN: "<token>",
+            SONARQUBE_ORG: "<org>",
+          },
+        },
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "sonarqube",
+      serverType: "local",
+      localConfig: expect.objectContaining({
+        command: "",
+        arguments: "",
+        dockerImage: "mcp/sonarqube",
+        transportType: "stdio",
+        environment: [
+          expect.objectContaining({
+            key: "SONARQUBE_TOKEN",
+            type: "secret",
+            promptOnInstallation: true,
+            value: "",
+          }),
+          expect.objectContaining({
+            key: "SONARQUBE_ORG",
+            type: "plain_text",
+            promptOnInstallation: true,
+            value: "",
+          }),
+        ],
+      }),
+    });
+  });
+
+  it("hydrates Archestra catalog manifests", () => {
+    const values = parseMcpServerConfigPaste(
+      JSON.stringify({
+        description: "GitHub Copilot MCP Server",
+        author: { name: "github" },
+        name: "github-copilot",
+        display_name: "GitHub Copilot MCP",
+        readme: null,
+        category: "Development",
+        quality_score: 80,
+        archestra_config: {
+          client_config_permutations: null,
+          oauth: { provider: null, required: true },
+          works_in_archestra: true,
+        },
+        github_info: null,
+        programming_language: null,
+        framework: null,
+        last_scraped_at: null,
+        evaluation_model: null,
+        raw_dependencies: null,
+        server: {
+          type: "remote",
+          url: "https://api.githubcopilot.com/mcp/",
+          docs_url: "https://github.com/github/github-mcp-server",
+        },
+      }),
+    );
+
+    expect(values).toMatchObject({
+      name: "GitHub Copilot MCP",
+      description: "GitHub Copilot MCP Server",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+    });
+  });
+});
+
 describe("transformFormToApiData", () => {
+  it("converts JSON array arguments to the API arguments array", () => {
+    const values: McpCatalogFormValues = {
+      name: "JSON Args MCP",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: '["server.js", "--verbose"]',
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "/mcp",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+
+    expect(transformFormToApiData(values).localConfig?.arguments).toEqual([
+      "server.js",
+      "--verbose",
+    ]);
+  });
+
   it("maps custom auth and additional headers into userConfig", () => {
     const values: McpCatalogFormValues = {
       name: "Header MCP",

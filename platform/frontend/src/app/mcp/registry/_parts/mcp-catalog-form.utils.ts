@@ -34,13 +34,7 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = parseMcpArgumentsInput(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -256,6 +250,43 @@ export function buildCloneFormValues(
 ): McpCatalogFormValues {
   const values = transformCatalogItemToFormValues(item);
   return { ...values, name: `${values.name}-copy` };
+}
+
+export function parseMcpArgumentsInput(value: string | undefined): string[] {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) return [];
+
+  const parsed = tryParseJson(trimmedValue);
+  if (
+    Array.isArray(parsed) &&
+    parsed.every((item) => typeof item === "string")
+  ) {
+    return parsed.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+  }
+
+  return trimmedValue
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
+export function parseMcpServerConfigPaste(
+  value: string,
+): Partial<McpCatalogFormValues> | null {
+  const parsed = tryParseJson(value.trim());
+  if (!isRecord(parsed)) return null;
+
+  if (isArchestraCatalogManifest(parsed)) {
+    return transformExternalCatalogToFormValues(
+      parsed as archestraCatalogTypes.ArchestraMcpServerManifest,
+    );
+  }
+
+  const inputs = buildInputDefinitions(parsed.inputs);
+  const namedServer = extractPastedServerConfig(parsed);
+  if (!namedServer) return null;
+
+  return buildFormValuesFromPastedServer(namedServer, inputs);
 }
 
 // Transform catalog item to form values
@@ -865,6 +896,382 @@ function getAdditionalHeaderFieldName(params: {
   }
 
   return `${baseFieldName}_${index + 1}`;
+}
+
+type JsonRecord = Record<string, unknown>;
+
+type InputDefinition = {
+  id: string;
+  description?: string;
+  sensitive: boolean;
+  required: boolean;
+};
+
+type NamedPastedServerConfig = {
+  name: string;
+  config: JsonRecord;
+};
+
+function tryParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isArchestraCatalogManifest(value: JsonRecord): boolean {
+  return isRecord(value.server) && "display_name" in value && "author" in value;
+}
+
+function buildInputDefinitions(value: unknown): Map<string, InputDefinition> {
+  const inputs = new Map<string, InputDefinition>();
+  if (!Array.isArray(value)) return inputs;
+
+  for (const input of value) {
+    if (!isRecord(input) || typeof input.id !== "string") continue;
+
+    inputs.set(input.id, {
+      id: input.id,
+      description:
+        typeof input.description === "string" ? input.description : undefined,
+      sensitive: Boolean(input.password),
+      required: true,
+    });
+  }
+
+  return inputs;
+}
+
+function extractPastedServerConfig(
+  value: JsonRecord,
+): NamedPastedServerConfig | null {
+  if (isRecord(value.server)) {
+    return {
+      name: getServerName(value) ?? "mcp-server",
+      config: value.server,
+    };
+  }
+
+  const wrappedServers =
+    getRecordProperty(value, "servers") ??
+    getRecordProperty(value, "mcpServers");
+  if (wrappedServers) {
+    return firstServerFromMap(wrappedServers);
+  }
+
+  if (looksLikeServerConfig(value)) {
+    return {
+      name: getServerName(value) ?? "mcp-server",
+      config: value,
+    };
+  }
+
+  return firstServerFromMap(value);
+}
+
+function firstServerFromMap(value: JsonRecord): NamedPastedServerConfig | null {
+  for (const [name, config] of Object.entries(value)) {
+    if (isRecord(config) && looksLikeServerConfig(config)) {
+      return { name, config };
+    }
+  }
+
+  return null;
+}
+
+function looksLikeServerConfig(value: JsonRecord): boolean {
+  return (
+    typeof value.command === "string" ||
+    Array.isArray(value.args) ||
+    typeof value.url === "string" ||
+    typeof value.type === "string" ||
+    typeof value.docker_image === "string" ||
+    isRecord(value.env) ||
+    isRecord(value.headers)
+  );
+}
+
+function buildFormValuesFromPastedServer(
+  namedServer: NamedPastedServerConfig,
+  inputs: Map<string, InputDefinition>,
+): Partial<McpCatalogFormValues> | null {
+  const { config } = namedServer;
+  const name = getServerName(config) ?? namedServer.name;
+  const type = typeof config.type === "string" ? config.type : undefined;
+  const url = typeof config.url === "string" ? config.url : undefined;
+
+  if ((type === "http" || type === "remote" || url) && url) {
+    return buildRemoteFormValues({ name, url, config, inputs });
+  }
+
+  return buildLocalFormValues({ name, config, inputs });
+}
+
+function buildRemoteFormValues(params: {
+  name: string;
+  url: string;
+  config: JsonRecord;
+  inputs: Map<string, InputDefinition>;
+}): Partial<McpCatalogFormValues> {
+  const headers = getRecordProperty(params.config, "headers");
+  const headerConfig = buildHeaderFormValues(headers, params.inputs);
+
+  return {
+    name: params.name,
+    serverType: "remote",
+    serverUrl: params.url,
+    authMethod: headerConfig.authMethod,
+    includeBearerPrefix: true,
+    authHeaderName: "",
+    additionalHeaders: headerConfig.additionalHeaders,
+  };
+}
+
+function buildLocalFormValues(params: {
+  name: string;
+  config: JsonRecord;
+  inputs: Map<string, InputDefinition>;
+}): Partial<McpCatalogFormValues> | null {
+  const command =
+    typeof params.config.command === "string" ? params.config.command : "";
+  const args = stringArray(params.config.args);
+  const dockerImage =
+    typeof params.config.docker_image === "string"
+      ? params.config.docker_image
+      : inferDockerImageFromArgs(command, args);
+  const dockerConfig = parseDockerArgsToLocalConfig(command, args, dockerImage);
+  const env = buildEnvironmentFormValues(
+    getRecordProperty(params.config, "env"),
+    params.inputs,
+  );
+
+  if (!command && !dockerImage && args.length === 0 && env.length === 0) {
+    return null;
+  }
+
+  return {
+    name: params.name,
+    serverType: "local",
+    serverUrl: "",
+    authMethod: "none",
+    includeBearerPrefix: true,
+    additionalHeaders: [],
+    localConfig: {
+      command: dockerConfig ? (dockerConfig.command ?? "") : command,
+      arguments: (dockerConfig ? (dockerConfig.arguments ?? []) : args).join(
+        "\n",
+      ),
+      environment: env,
+      envFrom: [],
+      dockerImage: dockerConfig?.dockerImage ?? dockerImage ?? "",
+      transportType: dockerConfig?.transportType ?? "stdio",
+      httpPort: dockerConfig?.httpPort?.toString() ?? "",
+      httpPath: "/mcp",
+      serviceAccount: "",
+      imagePullSecrets: [],
+    },
+  };
+}
+
+function buildHeaderFormValues(
+  headers: JsonRecord | null,
+  inputs: Map<string, InputDefinition>,
+): Pick<McpCatalogFormValues, "authMethod" | "additionalHeaders"> {
+  if (!headers) {
+    return { authMethod: "none", additionalHeaders: [] };
+  }
+
+  const additionalHeaders: NonNullable<
+    McpCatalogFormValues["additionalHeaders"]
+  > = [];
+  let authMethod: McpCatalogFormValues["authMethod"] = "none";
+
+  for (const [headerName, rawValue] of Object.entries(headers)) {
+    const headerValue = stringifyConfigValue(rawValue);
+    if (!headerValue) continue;
+
+    const isAuthorization = headerName.toLowerCase() === "authorization";
+    const bearerPrefix = /^Bearer\s+/i.test(headerValue);
+    const headerFormValue = bearerPrefix
+      ? headerValue.replace(/^Bearer\s+/i, "")
+      : headerValue;
+    const placeholder = parsePlaceholder(headerFormValue, inputs);
+
+    additionalHeaders.push({
+      fieldName: undefined,
+      headerName,
+      promptOnInstallation: placeholder.promptOnInstallation,
+      required: placeholder.required,
+      value: placeholder.promptOnInstallation ? "" : headerFormValue,
+      description: placeholder.description ?? "",
+      includeBearerPrefix: isAuthorization && bearerPrefix,
+      sensitive: placeholder.sensitive || isSecretishName(headerName),
+    });
+
+    if (isAuthorization) {
+      authMethod = "auth_header";
+    }
+  }
+
+  return {
+    authMethod,
+    additionalHeaders,
+  };
+}
+
+function buildEnvironmentFormValues(
+  env: JsonRecord | null,
+  inputs: Map<string, InputDefinition>,
+): NonNullable<McpCatalogFormValues["localConfig"]>["environment"] {
+  if (!env) return [];
+
+  return Object.entries(env).map(([key, rawValue]) => {
+    const value = stringifyConfigValue(rawValue);
+    const placeholder = parsePlaceholder(value, inputs);
+    const type =
+      placeholder.sensitive || isSecretishName(key) ? "secret" : "plain_text";
+
+    return {
+      key,
+      type,
+      value: placeholder.promptOnInstallation ? "" : value,
+      promptOnInstallation: placeholder.promptOnInstallation,
+      required: placeholder.required,
+      description: placeholder.description ?? "",
+      default: undefined,
+    };
+  });
+}
+
+function parsePlaceholder(
+  value: string,
+  inputs: Map<string, InputDefinition>,
+): {
+  promptOnInstallation: boolean;
+  required: boolean;
+  description?: string;
+  sensitive: boolean;
+} {
+  const inputMatch = value.match(/^\$\{input:([^}]+)\}$/);
+  if (inputMatch) {
+    const input = inputs.get(inputMatch[1]);
+    return {
+      promptOnInstallation: true,
+      required: input?.required ?? true,
+      description: input?.description,
+      sensitive: input?.sensitive ?? true,
+    };
+  }
+
+  const userConfigMatch = value.match(/^\$\{user_config\.([^}]+)\}$/);
+  if (userConfigMatch) {
+    return {
+      promptOnInstallation: true,
+      required: true,
+      description: userConfigMatch[1],
+      sensitive: isSecretishName(userConfigMatch[1]),
+    };
+  }
+
+  const trimmed = value.trim();
+  if (
+    /^<[^>]+>$/.test(trimmed) ||
+    /^(YOUR_|REPLACE_|INSERT_)/i.test(trimmed) ||
+    /_HERE$/i.test(trimmed)
+  ) {
+    return {
+      promptOnInstallation: true,
+      required: true,
+      sensitive: isSecretishName(trimmed),
+    };
+  }
+
+  return {
+    promptOnInstallation: false,
+    required: false,
+    sensitive: false,
+  };
+}
+
+function inferDockerImageFromArgs(
+  command: string,
+  args: string[],
+): string | undefined {
+  if (command !== "docker" || args[0] !== "run") return undefined;
+
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+    if (!arg) continue;
+
+    if (arg === "--") continue;
+
+    if (arg.startsWith("-")) {
+      i += dockerFlagValueArity(arg);
+      continue;
+    }
+
+    return arg;
+  }
+
+  return undefined;
+}
+
+function dockerFlagValueArity(flag: string): number {
+  if (flag.includes("=")) return 0;
+
+  const flagsWithValue = new Set([
+    "-e",
+    "--env",
+    "--env-file",
+    "-p",
+    "--publish",
+    "-v",
+    "--volume",
+    "--name",
+    "--network",
+    "--pull",
+    "-u",
+    "--user",
+    "-w",
+    "--workdir",
+  ]);
+
+  return flagsWithValue.has(flag) ? 1 : 0;
+}
+
+function getRecordProperty(value: JsonRecord, key: string): JsonRecord | null {
+  return isRecord(value[key]) ? value[key] : null;
+}
+
+function getServerName(value: JsonRecord): string | undefined {
+  if (typeof value.display_name === "string") return value.display_name;
+  if (typeof value.name === "string") return value.name;
+  return undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function stringifyConfigValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function isSecretishName(value: string): boolean {
+  return /token|secret|password|api[_-]?key|pat|credential/i.test(value);
 }
 
 function getHeaderMappedUserConfigEntries(

@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ClipboardEvent, ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -100,6 +100,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import {
+  parseMcpServerConfigPaste,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -402,6 +403,56 @@ export function McpCatalogForm({
     );
     if (next.some((envVar, i) => envVar !== envVars[i])) {
       form.setValue("localConfig.environment", next, { shouldDirty: true });
+    }
+  };
+
+  const handleMcpServerConfigPaste = (
+    event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const pastedText = event.clipboardData.getData("text/plain");
+    const parsedValues = parseMcpServerConfigPaste(pastedText);
+    if (!parsedValues) return;
+
+    event.preventDefault();
+
+    const setOptions = { shouldDirty: true, shouldValidate: true };
+    if (parsedValues.name && !nameDisabled) {
+      form.setValue("name", parsedValues.name, setOptions);
+    }
+    if (parsedValues.description !== undefined) {
+      form.setValue("description", parsedValues.description, setOptions);
+    }
+    if (parsedValues.serverType) {
+      form.setValue("serverType", parsedValues.serverType, setOptions);
+    }
+    if (parsedValues.serverUrl !== undefined) {
+      form.setValue("serverUrl", parsedValues.serverUrl, setOptions);
+    }
+    if (parsedValues.authMethod) {
+      form.setValue("authMethod", parsedValues.authMethod, setOptions);
+    }
+    if (parsedValues.includeBearerPrefix !== undefined) {
+      form.setValue(
+        "includeBearerPrefix",
+        parsedValues.includeBearerPrefix,
+        setOptions,
+      );
+    }
+    if (parsedValues.authHeaderName !== undefined) {
+      form.setValue("authHeaderName", parsedValues.authHeaderName, setOptions);
+    }
+    if (parsedValues.additionalHeaders !== undefined) {
+      form.setValue(
+        "additionalHeaders",
+        parsedValues.additionalHeaders,
+        setOptions,
+      );
+    }
+    if (parsedValues.oauthConfig !== undefined) {
+      form.setValue("oauthConfig", parsedValues.oauthConfig, setOptions);
+    }
+    if (parsedValues.localConfig !== undefined) {
+      form.setValue("localConfig", parsedValues.localConfig, setOptions);
     }
   };
 
@@ -1196,6 +1247,7 @@ export function McpCatalogForm({
                           placeholder="https://api.example.com/mcp"
                           className="font-mono"
                           autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                          onPaste={handleMcpServerConfigPaste}
                           {...field}
                         />
                       </FormControl>
@@ -1221,6 +1273,7 @@ export function McpCatalogForm({
                             placeholder="node"
                             className="font-mono"
                             autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                            onPaste={handleMcpServerConfigPaste}
                             {...field}
                           />
                         </FormControl>
@@ -1247,6 +1300,7 @@ export function McpCatalogForm({
                           <Textarea
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
+                            onPaste={handleMcpServerConfigPaste}
                             {...field}
                           />
                         </FormControl>

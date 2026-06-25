@@ -12,6 +12,7 @@ import db, { schema } from "@/database";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
+import OAuthClientModel from "@/models/oauth-client";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -1028,6 +1029,147 @@ describe("auth routes", () => {
 
       expect(response.statusCode).toBe(201);
       expect(vi.mocked(betterAuth.handler)).toHaveBeenCalled();
+    });
+  });
+
+  describe("offline_access scope for refresh-token DCR clients", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    async function lastForwardedBody(): Promise<Record<string, unknown>> {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? await last.clone().json() : {};
+    }
+
+    test("adds offline_access when the client requests the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Claude Desktop",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+
+    test("does not add offline_access without the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "No Refresh",
+          grant_types: ["authorization_code"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp");
+    });
+
+    test("does not duplicate offline_access when already requested", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Already Offline",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp offline_access",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+  });
+
+  describe("offline_access reconciliation at authorize", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1:5000/callback?code=x" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    function lastForwardedUrl(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.url : null;
+    }
+
+    function authorizeUrl(clientId: string, scope: string): string {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        scope,
+        redirect_uri: "http://127.0.0.1:5000/callback",
+      });
+      return `/api/auth/oauth2/authorize?${params.toString()}`;
+    }
+
+    test("persists offline_access for a refresh-capable client that requests it but registered only mcp", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_cached_client",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp offline_access"),
+      });
+
+      // Self-healed: the client now carries offline_access, so the provider's
+      // scope check (against stored scopes) passes on this same request.
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+      // The request is forwarded with offline_access intact.
+      expect(lastForwardedUrl()).toContain("offline_access");
+    });
+
+    test("injects offline_access when a registered client omits it from the request", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_registered_offline",
+        scopes: ["mcp", "offline_access"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp"),
+      });
+
+      expect(lastForwardedUrl()).toContain("offline_access");
     });
   });
 

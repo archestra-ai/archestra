@@ -10,6 +10,7 @@ import {
   MCP_OAUTH_CLIENT_ID_PREFIX,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_GRANT_TYPE,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -303,21 +304,37 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Forward to better-auth
       const url = new URL(request.url, `http://${request.headers.host}`);
 
-      // Per OAuth 2.1, scopes must be declared as supported both during Dynamic Client
-      // Registration (DCR) and at the token exchange. Some clients (e.g. Cursor) omit
-      // offline_access from the authorization request despite registering it during DCR,
-      // which would prevent refresh token issuance. To handle this, we inject offline_access
-      // into the authorization request if the client registered it during DCR.
-      // We only inject it when the client's DCR registration includes offline_access,
-      // because clients that did not advertise it during DCR (e.g. MCP Inspector) will
-      // reject the authorization response containing an unexpected scope.
+      // Per OAuth 2.1, scopes must be declared at Dynamic Client Registration
+      // (DCR) and re-validated at authorize. The OAuth provider checks the
+      // authorize-time scopes against the client's *stored* scopes, so the two
+      // must agree. Two native-client mismatches need reconciling here:
       const currentScopes = url.searchParams.get("scope") ?? "";
-      if (clientId && !currentScopes.split(" ").includes("offline_access")) {
+      if (clientId) {
         const client = await OAuthClientModel.findByClientId(clientId);
-        if (client?.scopes?.includes("offline_access")) {
+        const clientHasOfflineAccess = !!client?.scopes?.includes(
+          OFFLINE_ACCESS_OAUTH_SCOPE,
+        );
+        if (currentScopes.split(" ").includes(OFFLINE_ACCESS_OAUTH_SCOPE)) {
+          // The client requests offline_access but registered only a narrower
+          // scope (e.g. Claude Desktop registers "mcp"). Persist offline_access
+          // onto the refresh-capable client so the provider's scope check
+          // passes — self-heals clients registered before DCR carried it.
+          if (client && !clientHasOfflineAccess) {
+            await OAuthClientModel.ensureOfflineAccessScope(clientId);
+            logger.info(
+              { clientId },
+              "[auth:oauth2/authorize] Persisted offline_access to client's registered scopes",
+            );
+          }
+        } else if (clientHasOfflineAccess) {
+          // Inverse: the client registered offline_access during DCR but omitted
+          // it from this request (e.g. Cursor), which would prevent refresh
+          // token issuance. Inject it back. We only do this when the client
+          // registered it, because clients that did not advertise it during DCR
+          // (e.g. MCP Inspector) reject an unexpected scope in the response.
           const augmentedScopes = currentScopes
-            ? `${currentScopes} offline_access`
-            : "offline_access";
+            ? `${currentScopes} ${OFFLINE_ACCESS_OAUTH_SCOPE}`
+            : OFFLINE_ACCESS_OAUTH_SCOPE;
           url.searchParams.set("scope", augmentedScopes);
           logger.debug(
             { originalScope: currentScopes, augmentedScope: augmentedScopes },
@@ -676,6 +693,34 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Override any client-provided value — see route comment above
       body.token_endpoint_auth_method = "none";
+
+      // Native MCP clients (e.g. Claude Desktop) register the refresh_token
+      // grant but list only "mcp" in their requested scope, then ask for
+      // offline_access at the authorize step to obtain a refresh token. The
+      // OAuth provider validates authorize-time scopes against the client's
+      // *registered* scopes, so a client that never registered offline_access
+      // gets `invalid_scope` at authorize. Register offline_access whenever the
+      // client asks for the refresh_token grant so the later request succeeds
+      // (this is also what the authorize handler's offline_access injection
+      // assumes — that refresh-capable clients carry the scope from DCR).
+      const grantTypes = Array.isArray(body.grant_types)
+        ? body.grant_types
+        : [];
+      if (
+        grantTypes.includes("refresh_token") &&
+        typeof body.scope === "string" &&
+        body.scope.length > 0
+      ) {
+        const scopes = body.scope.split(" ").filter(Boolean);
+        if (!scopes.includes(OFFLINE_ACCESS_OAUTH_SCOPE)) {
+          scopes.push(OFFLINE_ACCESS_OAUTH_SCOPE);
+          body.scope = scopes.join(" ");
+          logger.info(
+            { clientName: body.client_name, scope: body.scope },
+            "[auth:oauth2/register] Added offline_access to refresh_token client's registered scopes",
+          );
+        }
+      }
 
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = buildBetterAuthForwardedHeaders(request);

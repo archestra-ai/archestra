@@ -299,6 +299,67 @@ describe("auth routes", () => {
     expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
   });
 
+  test("forwards client_secret_basic credentials to better-auth as client_secret_post on the authorization_code grant", async ({
+    makeOrganization,
+  }) => {
+    // A confidential native client (e.g. Claude Desktop) authenticates the token
+    // request with `Authorization: Basic base64(client_id:client_secret)`. Our
+    // better-auth apiKey plugin reads API keys from the Authorization header
+    // (config.api.apiKeyAuthorizationHeaderName), so it would intercept and
+    // reject that header as an invalid API key before the OAuth token handler
+    // runs. The handler must instead lift the Basic credentials into the body
+    // and drop the Authorization header so the request authenticates as
+    // client_secret_post.
+    const organization = await makeOrganization();
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Native Client",
+      grantType: "authorization_code",
+      redirectUris: ["http://127.0.0.1:53280/callback"],
+    });
+
+    let forwardedRequest: Request | undefined;
+    vi.mocked(betterAuth.handler).mockImplementation(async (req: Request) => {
+      forwardedRequest = req;
+      return new Response(
+        JSON.stringify({
+          access_token: "native-client-access-token",
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: MCP_GATEWAY_OAUTH_SCOPE,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    const basic = Buffer.from(
+      `${oauthClient.clientId}:${clientSecret}`,
+    ).toString("base64");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      headers: { authorization: `Basic ${basic}` },
+      payload: {
+        grant_type: "authorization_code",
+        code: "auth-code",
+        code_verifier: "verifier",
+        redirect_uri: "http://127.0.0.1:53280/callback",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    if (!forwardedRequest) {
+      throw new Error("better-auth handler was not called");
+    }
+    // The Authorization header must not reach better-auth, or the apiKey plugin
+    // rejects it before the OAuth client is authenticated.
+    expect(forwardedRequest.headers.get("authorization")).toBeNull();
+    // The credentials are carried in the body as client_secret_post instead.
+    const forwardedBody = JSON.parse(await forwardedRequest.text());
+    expect(forwardedBody.client_id).toBe(oauthClient.clientId);
+    expect(forwardedBody.client_secret).toBe(clientSecret);
+  });
+
   test("rejects MCP OAuth client credentials with an invalid secret", async ({
     makeAgent,
     makeOrganization,

@@ -478,9 +478,43 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
+      // Convert client_secret_basic to client_secret_post for the grants that
+      // forward to better-auth (authorization_code, refresh_token). Confidential
+      // native clients (e.g. Claude Desktop) authenticate with
+      // `Authorization: Basic base64(client_id:client_secret)`, but our
+      // better-auth instance runs the apiKey plugin with apiKeyHeaders:
+      // ["Authorization"] (see config.ts). It intercepts that header, fails to
+      // parse it as an `archestra_` API key, and rejects the request with
+      // {"code":"INVALID_API_KEY"} *before* the OAuth token handler ever
+      // authenticates the client. RFC 6749 Section 2.3.1 lets a client present
+      // its credentials either in the Authorization header or in the body, and
+      // requires the server to support the body form, so lift the Basic
+      // credentials into the body (these MCP OAuth clients are registered as
+      // client_secret_post) and drop the Authorization header so the apiKey
+      // plugin stays out of the OAuth client-authentication path.
+      const authorizationHeader = request.headers.authorization;
+      const usesClientSecretBasic =
+        typeof authorizationHeader === "string" &&
+        authorizationHeader.startsWith("Basic ");
+      if (usesClientSecretBasic && body) {
+        const { clientId: basicClientId, clientSecret: basicClientSecret } =
+          extractOAuthClientCredentials({ authorizationHeader, body });
+        if (basicClientId && body.client_id === undefined) {
+          body.client_id = basicClientId;
+        }
+        if (basicClientSecret && body.client_secret === undefined) {
+          body.client_secret = basicClientSecret;
+        }
+      }
+
       const tokenEndpointOrigin = getPublicRequestOrigin(request);
       const url = new URL(request.url, tokenEndpointOrigin);
-      const headers = buildBetterAuthForwardedHeaders(request);
+      const headers = buildBetterAuthForwardedHeaders(
+        request,
+        usesClientSecretBasic
+          ? (name) => name.toLowerCase() === "authorization"
+          : undefined,
+      );
 
       const contentType = request.headers["content-type"] || "";
       const serializedBody = contentType.includes(

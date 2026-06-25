@@ -905,7 +905,7 @@ export function McpServerCard({
               {item.providesUi && (
                 <Badge variant="secondary" className="shrink-0 gap-1">
                   <AppWindow className="h-3 w-3" />
-                  App UI
+                  App
                 </Badge>
               )}
               {environmentLabel && (

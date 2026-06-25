@@ -9,6 +9,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -241,7 +242,7 @@ const ValidateAppOutputSchema = z.object({
       renderedAt: z.string().nullable(),
     })
     .describe(
-      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen — view it in the sidebar, then re-run.",
+      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version has happened yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and a clean static pass (ok: true) is enough to proceed.",
     ),
 });
 
@@ -253,6 +254,25 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
     .describe(
       "The app's assigned tool names after this call (present when the tools param was given).",
     ),
+});
+
+const SetAppToolsSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id whose tools to set."),
+  // Required (unlike scaffold_app's optional tools param) so an omitted field is
+  // a loud schema error, never a silent wipe; pass [] to deliberately clear.
+  tools: z
+    .array(z.string().min(1))
+    .max(50)
+    .describe(
+      "Upstream MCP tool names (e.g. from search_tools) to assign to the app, replacing its current set exactly — pass the full desired list, or [] to clear all.",
+    ),
+});
+
+const SetAppToolsOutputSchema = z.object({
+  id: z.string(),
+  tools: z
+    .array(z.string())
+    .describe("The app's assigned tool names after this call."),
 });
 
 const RefineAppOutputSchema = z.object({
@@ -531,7 +551,7 @@ const registry = defineArchestraTools([
         ? "\nNo interactive viewer was available, so the questions could not be asked."
         : "";
       const guidance = persisted
-        ? "Spec persisted on the app head. Build the HTML with edit_app."
+        ? "Spec persisted on the app head. Build the HTML with edit_app. Note: tools named in the spec are product requirements, not assignments — assign them with scaffold_app's tools param or set_app_tools."
         : "Consolidate the answers and the listed capability tools into an AppSpec, then call refine_app again with `spec` to persist it.";
       return structuredSuccessResult(
         {
@@ -767,10 +787,72 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_SET_APP_TOOLS_SHORT_NAME,
+    title: "Set App Tools",
+    description:
+      "Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). Tools are otherwise assigned only at scaffold_app time, so use this to add, change, or remove an app's tools afterward without deleting and re-scaffolding it — edit_app and refine_app never touch assignments. Find tool names with search_tools; the set is validated the same way scaffold_app validates its tools param.",
+    schema: SetAppToolsSchema,
+    outputSchema: SetAppToolsOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const { userId, organizationId } = context;
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId,
+        userId,
+        isAppAdmin: await callerIsAppAdmin(userId, organizationId),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      try {
+        await assertCallerMayModifyApp({
+          userId,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      // Fence resolution against the app's bound environment (not the org
+      // default scaffold_app uses), so a tool only valid elsewhere is rejected.
+      const resolution = await resolveToolsParam({
+        organizationId,
+        tools: args.tools,
+        environmentId: app.environmentId,
+      });
+      if (!resolution.ok) return errorResult(resolution.error);
+
+      try {
+        await replaceAppToolAssignments(app.id, resolution.tools ?? []);
+      } catch (error) {
+        logger.warn(
+          { err: error, appId: app.id },
+          "set_app_tools: tool assignment failed",
+        );
+        return errorResult(
+          `Failed to set tools for app "${app.name}" (${app.id}).`,
+        );
+      }
+
+      const toolsParts = toolsResultParts(resolution.tools);
+      return structuredSuccessResult(
+        { id: app.id, tools: toolsParts.structured.tools ?? [] },
+        `Set assigned tools for app "${app.name}" (${app.id}).${toolsParts.note}`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet (open it in the sidebar, then re-run). Fix any errors with edit_app before publishing.",
+      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet. Live diagnostics are captured only when the app renders for a viewer — inline in chat or at its run page — so no_render_observed is the normal state right after authoring: a clean static pass (ok: true) is enough to proceed, and any later render diagnostics surface on the next render or via get_app_diagnostics. Fix any errors with edit_app before publishing.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -826,7 +908,7 @@ const registry = defineArchestraTools([
         : live.status === "errors"
           ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
           : live.status === "no_render_observed"
-            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}, but no live render has been observed yet — confirm it renders (open it in the sidebar) before relying on this result.`
+            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}. No live render has been observed yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and the clean static pass is enough to proceed; render diagnostics surface later, on the next render.`
             : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
       const findingLines = findings.length
         ? `\n${findings
@@ -1345,7 +1427,7 @@ async function buildLiveValidation(params: {
         entries: [],
         renderedAt: null,
       },
-      section: `\nLive render: no render of version ${head} has been observed for you yet — open the app in the sidebar, then re-run validate_app to capture runtime diagnostics.`,
+      section: `\nLive render: no render of version ${head} has been observed for you yet. Runtime diagnostics are captured only when the app renders for a viewer (in chat or its run page), so this is the normal state right after authoring — re-running validate_app will not change it on its own, and a clean static pass is enough to proceed.`,
     };
   }
   const renderedAt = snapshot.renderedAt.toISOString();

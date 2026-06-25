@@ -1640,6 +1640,7 @@ Required RBAC permission: `skill:update`
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
 | `edit_app` | Build up an app's HTML with str_replace edits — the path for any change, from a one-line tweak to a full rewrite (replace the whole document in a single edit). | `app:update` |
+| `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `validate_app` | Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. | `app:read` |
 | `publish_app` | Promote an app out of personal scope so others can run it — to specific teams (scope: team, with teamIds) or the whole organization (scope: org). | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
@@ -1812,6 +1813,24 @@ Required RBAC permission: `app:update`
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 
+#### set_app_tools
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id whose tools to set. |
+| `tools` | `string[]` | Yes | Upstream MCP tool names (e.g. from search_tools) to assign to the app, replacing its current set exactly — pass the full desired list, or [] to clear all. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `tools` | `string[]` | Yes | The app's assigned tool names after this call. |
+
 #### validate_app
 
 Required RBAC permission: `app:read`
@@ -1832,7 +1851,7 @@ Required RBAC permission: `app:read`
 | `findings` | `object[]` | Yes |  |
 | `findings[].severity` | `"error" \| "warning"` | Yes |  |
 | `findings[].message` | `string` | Yes |  |
-| `live` | `object` | Yes | Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen — view it in the sidebar, then re-run. |
+| `live` | `object` | Yes | Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version has happened yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and a clean static pass (ok: true) is enough to proceed. |
 | `live.status` | `"no_render_observed" \| "clean" \| "errors"` | Yes |  |
 | `live.version` | `number` | Yes |  |
 | `live.entries` | `object[]` | Yes |  |

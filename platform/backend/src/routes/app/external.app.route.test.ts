@@ -13,7 +13,7 @@ import {
 } from "@/test";
 import type { User } from "@/types";
 
-describe("GET /api/apps/external/by-catalog/:catalogId", () => {
+describe("GET /api/apps/external/:catalogId", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
@@ -72,7 +72,7 @@ describe("GET /api/apps/external/by-catalog/:catalogId", () => {
 
     const ok = await app.inject({
       method: "GET",
-      url: `/api/apps/external/by-catalog/${catalog.id}`,
+      url: `/api/apps/external/${catalog.id}`,
     });
     expect(ok.statusCode).toBe(200);
     const body = ok.json();
@@ -108,7 +108,7 @@ describe("GET /api/apps/external/by-catalog/:catalogId", () => {
 
     const res = await app.inject({
       method: "GET",
-      url: `/api/apps/external/by-catalog/${catalog.id}`,
+      url: `/api/apps/external/${catalog.id}`,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -119,7 +119,7 @@ describe("GET /api/apps/external/by-catalog/:catalogId", () => {
   test("returns 404 for an unknown catalog id", async () => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/apps/external/by-catalog/${crypto.randomUUID()}`,
+      url: `/api/apps/external/${crypto.randomUUID()}`,
     });
     expect(response.statusCode).toBe(404);
   });
@@ -148,7 +148,7 @@ describe("GET /api/apps/external/by-catalog/:catalogId", () => {
 
     const notUi = await app.inject({
       method: "GET",
-      url: `/api/apps/external/by-catalog/${plainCatalog.id}`,
+      url: `/api/apps/external/${plainCatalog.id}`,
     });
     expect(notUi.statusCode).toBe(404);
   });

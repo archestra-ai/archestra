@@ -83,7 +83,7 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
 // caller can see the catalog but has no accessible install (FR-31);
 // `availabilityScopes` are the scopes of the caller's accessible installs, for
 // the card's chips. The concrete installs (the run-page selector) are resolved
-// lazily via `GET /api/apps/external/by-catalog/:catalogId`.
+// lazily via `GET /api/apps/external/:catalogId`.
 export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("external"),
   catalogId: z.string(),

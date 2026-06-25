@@ -167,7 +167,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/apps/external/by-catalog/:catalogId",
+    "/api/apps/external/:catalogId",
     {
       schema: {
         operationId: RouteId.GetExternalApp,

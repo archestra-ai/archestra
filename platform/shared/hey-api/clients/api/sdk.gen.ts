@@ -636,7 +636,7 @@ export const createApp = <ThrowOnError extends boolean = false>(options: Options
  *
  * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
-export const getExternalApp = <ThrowOnError extends boolean = false>(options: Options<GetExternalAppData, ThrowOnError>) => (options.client ?? client).get<GetExternalAppResponses, GetExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/by-catalog/{catalogId}', ...options });
+export const getExternalApp = <ThrowOnError extends boolean = false>(options: Options<GetExternalAppData, ThrowOnError>) => (options.client ?? client).get<GetExternalAppResponses, GetExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{catalogId}', ...options });
 
 /**
  * List the curated starter templates a new app can use.

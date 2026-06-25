@@ -317,7 +317,9 @@ describe("app tool execution", () => {
     await scaffold({ name: "Dup", scope: "org" });
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
-    expect((second.content[0] as any).text).toContain("already exists");
+    expect((second.content[0] as any).text).toContain(
+      "already have an app named",
+    );
   });
 
   test("scaffold rejects team scope", async () => {

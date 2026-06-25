@@ -1,9 +1,11 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
   jsonb,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AppSpec } from "@/types/app-spec";
@@ -75,9 +77,12 @@ const appsTable = softDeletablePgTable(
     // Backing-server lookups (findByMcpServerId, the catalog-derived access JOINs)
     // filter on this FK, so index it.
     index("apps_mcp_server_id_idx").on(table.mcpServerId),
-    // Visibility (scope/teams), environment, and name-uniqueness are owned by the
-    // backing internal_mcp_catalog (serverType "app"); there are no scope/env
-    // columns or per-scope name indexes on the app row.
+    // Display-name uniqueness per author (soft-deleted rows excluded so deleting
+    // an app frees its name). Visibility (scope/teams) and environment are owned
+    // by the backing internal_mcp_catalog, not the app row.
+    uniqueIndex("apps_org_author_name_uidx")
+      .on(table.organizationId, table.authorId, table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

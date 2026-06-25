@@ -336,23 +336,33 @@ const registry = defineArchestraTools([
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
-      // Like the REST path: create the app, then its backing; on failure delete
-      // the app so it is never left unbacked. scaffold_app defers team +
+      // Like the REST path: create the app, then its backing; on backing failure
+      // delete the app so it is never left unbacked. scaffold_app defers team +
       // environment selection to the REST/UI path, so no teams here. (Hoist
       // narrowed values — closures lose property narrowing.)
       const { userId, organizationId } = context;
       const appName = args.name;
       let app: App | null;
-      const created = await AppModel.create({
-        app: {
-          organizationId,
-          authorId: userId,
-          name: appName,
-          description: args.description ?? null,
-          templateId: DEFAULT_APP_TEMPLATE_ID,
-        },
-        payload,
-      });
+      // App names are unique per author (apps_org_author_name_uidx); a duplicate
+      // fails this insert before any backing is created.
+      let created: Awaited<ReturnType<typeof AppModel.create>>;
+      try {
+        created = await AppModel.create({
+          app: {
+            organizationId,
+            authorId: userId,
+            name: appName,
+            description: args.description ?? null,
+            templateId: DEFAULT_APP_TEMPLATE_ID,
+          },
+          payload,
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          return errorResult(`You already have an app named "${args.name}".`);
+        }
+        throw error;
+      }
       try {
         await createAppBacking({
           app: created,
@@ -365,13 +375,6 @@ const registry = defineArchestraTools([
         app = await AppModel.findById(created.id);
       } catch (error) {
         await AppModel.purge(created.id);
-        // Name-uniqueness lives on the backing catalog now, so a conflict
-        // surfaces as a unique-constraint error from the catalog insert.
-        if (isUniqueConstraintError(error)) {
-          return errorResult(
-            `An app named "${args.name}" already exists in this scope.`,
-          );
-        }
         throw error;
       }
 

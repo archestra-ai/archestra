@@ -269,10 +269,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html,
         uiPermissions: body.uiPermissions,
       });
-      // An app must never exist without its backing (the catalog owns its
-      // visibility + environment). Create the app, then its backing; if the
-      // backing fails (e.g. a name conflict on the catalog's unique index),
-      // delete the app so it is never left unbacked.
+      // App names are unique per author (apps_org_author_name_uidx); a duplicate
+      // fails this insert before any backing is created.
       const created = await AppModel.create({
         app: {
           organizationId,
@@ -282,7 +280,17 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
         },
         payload,
+      }).catch((error) => {
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `You already have an app named "${body.name}".`,
+          );
+        }
+        throw error;
       });
+      // An app must never exist without its backing (the catalog owns its
+      // visibility + environment); on backing failure delete the app row.
       try {
         await createAppBacking({
           app: created,
@@ -294,12 +302,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } catch (error) {
         await AppModel.purge(created.id);
-        if (isUniqueConstraintError(error)) {
-          throw new ApiError(
-            409,
-            `An app named "${body.name}" already exists in this scope.`,
-          );
-        }
         throw error;
       }
       const app = await AppModel.findById(created.id);
@@ -444,6 +446,15 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
         ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
+      }).catch((error) => {
+        // A rename into a name this author already uses hits apps_org_author_name_uidx.
+        if (body.name !== undefined && isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            `You already have an app named "${body.name}".`,
+          );
+        }
+        throw error;
       });
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);

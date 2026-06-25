@@ -125,23 +125,33 @@ describe("MCP backing for apps", () => {
     expect(nameB.endsWith("__open")).toBe(true);
   });
 
-  test("same-named apps in different scopes get distinct launch-tool names", async () => {
-    // The per-scope name index lets one author hold a personal AND an org app
+  test("same-named apps from distinct authors get distinct launch-tool names", async ({
+    makeApp,
+  }) => {
+    // Uniqueness is per author, so two members may each publish a shared app
     // with the same name; their launch tools must NOT both slugify to
     // `<name>__open` or one shadows the other in a shared gateway profile.
-    const personalId = await createApp("personal");
-    const orgId = await createApp("org");
+    const first = await makeApp({
+      name: "Dashboard",
+      scope: "org",
+      organizationId,
+    });
+    const second = await makeApp({
+      name: "Dashboard",
+      scope: "org",
+      organizationId,
+    });
     const nameFor = async (appId: string) => {
       const a = await AppModel.findById(appId);
       const s = await McpServerModel.findById(a!.mcpServerId!);
       const [t] = await ToolModel.findByCatalogIdWithMeta(s!.catalogId);
       return t.name;
     };
-    const personalName = await nameFor(personalId);
-    const orgName = await nameFor(orgId);
-    expect(personalName).not.toBe(orgName);
-    expect(personalName.endsWith("__open")).toBe(true);
-    expect(orgName.endsWith("__open")).toBe(true);
+    const nameA = await nameFor(first.id);
+    const nameB = await nameFor(second.id);
+    expect(nameA).not.toBe(nameB);
+    expect(nameA.endsWith("__open")).toBe(true);
+    expect(nameB.endsWith("__open")).toBe(true);
   });
 
   test("the app backing server is excluded from external UI-capable detection (no double-listing)", async () => {

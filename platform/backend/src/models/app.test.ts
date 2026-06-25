@@ -13,16 +13,23 @@ describe("AppModel.create", () => {
     expect(head?.html).toBe("<h1>hi</h1>");
   });
 
-  test("rejects a name conflict in the same shared namespace", async ({
+  test("rejects a name conflict for the same author", async ({
     makeApp,
+    makeUser,
   }) => {
-    const first = await makeApp({ name: "Dup", scope: "org" });
-    // Name-uniqueness lives on the backing catalog now, so the dup is refused
-    // when its backing catalog is created.
+    const author = await makeUser();
+    const first = await makeApp({
+      name: "Dup",
+      scope: "org",
+      authorId: author.id,
+    });
+    // Names are unique per author (apps_org_author_name_uidx), regardless of
+    // scope, so the same author cannot reuse a name even across scopes.
     await expect(
       makeApp({
         name: "Dup",
-        scope: "org",
+        scope: "personal",
+        authorId: author.id,
         organizationId: first.organizationId,
       }),
     ).rejects.toThrow();

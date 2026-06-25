@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -9,7 +8,6 @@ import {
   text,
   timestamp,
   unique,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
@@ -200,22 +198,6 @@ const internalMcpCatalogTable = pgTable(
     environmentIdIdx: index("internal_mcp_catalog_environment_id_idx").on(
       table.environmentId,
     ),
-    // App name-uniqueness lives on the backing catalog (serverType "app"):
-    // personal per (org, author, name), shared per (org, name).
-    appPersonalNameUnique: uniqueIndex(
-      "internal_mcp_catalog_app_personal_name_uidx",
-    )
-      .on(table.organizationId, table.authorId, table.name)
-      .where(
-        sql`${table.serverType} = 'app' AND ${table.scope} = 'personal' AND ${table.parentCatalogItemId} IS NULL`,
-      ),
-    appSharedNameUnique: uniqueIndex(
-      "internal_mcp_catalog_app_shared_name_uidx",
-    )
-      .on(table.organizationId, table.name)
-      .where(
-        sql`${table.serverType} = 'app' AND ${table.scope} IN ('team', 'org') AND ${table.parentCatalogItemId} IS NULL`,
-      ),
   }),
 );
 

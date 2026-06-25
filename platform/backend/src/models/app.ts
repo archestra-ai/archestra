@@ -160,10 +160,9 @@ class AppModel {
   /**
    * Create the app row and its immutable version 1. Returns the raw row (no
    * scope/environmentId — those are set on the backing catalog by
-   * `createAppBacking`, which the caller runs immediately after). Visibility and
-   * the name-uniqueness namespace live on the backing catalog, so a name
-   * conflict surfaces as a unique-constraint error from the catalog insert, not
-   * here — the caller deletes this app row on backing failure and maps it to 409.
+   * `createAppBacking`, which the caller runs immediately after). Names are
+   * unique per author (apps_org_author_name_uidx), so a duplicate throws a
+   * unique-constraint error from this insert, which the caller maps to 409.
    */
   static async create(
     params: { app: InsertApp; payload: VersionPayload },

@@ -102,9 +102,9 @@ export async function createAppBacking(params: {
       "Created MCP backing for app",
     );
   } catch (error) {
-    // Roll back partial backing so a retry isn't blocked by the catalog's
-    // name-uniqueness index (delete the server before its catalog — the catalog
-    // delete then cascades the launch tool and its assignments).
+    // Roll back partial backing so the app is never left half-wired (delete the
+    // server before its catalog — the catalog delete then cascades the launch
+    // tool and its assignments).
     if (server) await McpServerModel.delete(server.id).catch(() => {});
     if (catalog)
       await InternalMcpCatalogModel.delete(catalog.id).catch(() => {});

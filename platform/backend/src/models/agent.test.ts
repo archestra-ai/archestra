@@ -2261,6 +2261,10 @@ describe("AgentModel", () => {
       expect(agent?.scope).toBe("personal");
       expect(agent?.agentType).toBe("agent");
       expect(agent?.authorId).toBe(user.id);
+      // Inherits the all-tools default: the personal assistant can dynamically
+      // reach any tool its owner can access, via search/run.
+      expect(agent?.accessAllTools).toBe(true);
+      expect(agent?.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent - second call does not create duplicate", async ({
@@ -3025,6 +3029,18 @@ describe("AgentModel", () => {
       expect(agent.toolExposureMode).toBe("search_and_run_only");
     });
 
+    test("create defaults accessAllTools to true and coerces toolExposureMode when omitted", async () => {
+      const agent = await AgentModel.create({
+        name: "Default Tools Agent",
+        teams: [],
+        scope: "org",
+        toolExposureMode: "full",
+      });
+
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+    });
+
     test("create leaves toolExposureMode untouched when accessAllTools is false", async () => {
       const agent = await AgentModel.create({
         name: "Custom Tools Agent",
@@ -3034,6 +3050,7 @@ describe("AgentModel", () => {
         toolExposureMode: "full",
       });
 
+      expect(agent.accessAllTools).toBe(false);
       expect(agent.toolExposureMode).toBe("full");
     });
 

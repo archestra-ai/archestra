@@ -56,6 +56,23 @@ describe("importAgentFromPayload", () => {
     expect(result.warnings).toHaveLength(0);
   });
 
+  test("imports a payload without accessAllTools using the create default", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+
+    // Simulate an export from before the field existed (or one that omits it).
+    const payload = makePayload();
+    delete payload.agent.accessAllTools;
+
+    const result = await importAgentFromPayload(payload, user.id, org.id);
+
+    expect(result.agent.accessAllTools).toBe(true);
+    expect(result.agent.toolExposureMode).toBe("search_and_run_only");
+  });
+
   test("always creates agent with personal scope regardless of payload", async ({
     makeUser,
     makeOrganization,

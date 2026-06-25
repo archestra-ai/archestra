@@ -265,6 +265,10 @@ async function makeAgent(
     labels: [],
     knowledgeBaseIds: [],
     connectorIds: [],
+    // Pin off the all-tools default so the suite is insulated from the
+    // create-time default; tests that exercise dynamic access opt in explicitly.
+    accessAllTools: false,
+    toolExposureMode: "full",
   };
   return await AgentModel.create(
     {

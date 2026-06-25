@@ -285,6 +285,13 @@ class AgentModel {
       organizationId = firstOrg?.id || "";
     }
 
+    // Default new agents to all-tools access: if a caller has access to a tool,
+    // it should be discoverable and runnable without explicit assignment. Only
+    // an explicit `false` opts out. Applied here so every create path (UI, MCP
+    // tools, REST, import, clone) shares the default; the DB column default
+    // stays false so direct bulk-insert backfills are unaffected.
+    agent.accessAllTools ??= true;
+
     // Dynamic tool access only works through the search/run dispatch surface, so
     // an all-tools agent must use progressive loading. Coerce here so every
     // create path (UI, MCP tools, REST, import, clone) keeps the invariant.

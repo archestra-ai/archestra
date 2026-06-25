@@ -144,6 +144,10 @@ describe("agent routes", () => {
       expect(agent.name).toBe(name);
       expect(Array.isArray(agent.tools)).toBe(true);
       expect(Array.isArray(agent.teams)).toBe(true);
+      // accessAllTools omitted in the payload adopts the create default and
+      // coerces the exposure mode.
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("should create agent with suggestedPrompts", async () => {
@@ -480,7 +484,7 @@ describe("agent routes", () => {
         authorId: user.id,
         agentType: "agent",
       });
-      expect(created.accessAllTools).toBe(false); // off by default
+      expect(created.accessAllTools).toBe(false); // makeAgent pins it off
 
       const updateResponse = await app.inject({
         method: "PUT",

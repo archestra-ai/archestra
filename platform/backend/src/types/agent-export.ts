@@ -70,8 +70,9 @@ const ExportAgentConfigSchema = z.object({
   ),
   considerContextUntrusted: z.boolean(),
   toolExposureMode: ToolExposureModeSchema,
-  // default(false) keeps exports from before the field existed importable
-  accessAllTools: z.boolean().default(false),
+  // Optional so exports from before the field existed (and ones that omit it)
+  // adopt the current create-time default; an explicit value is preserved.
+  accessAllTools: z.boolean().optional(),
   incomingEmailEnabled: z.boolean(),
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   incomingEmailAllowedDomain: z.string().nullable(),

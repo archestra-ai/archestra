@@ -96,11 +96,14 @@ describe("McpClient", () => {
   beforeEach(async () => {
     await mcpClient.disconnectAll();
 
-    // Create test agent
+    // Create test agent. Pin off the all-tools default: these tests exercise
+    // assigned-tool credential resolution in full mode, not dynamic access.
     const agent = await AgentModel.create({
       name: "Test Agent",
       scope: "org",
       teams: [],
+      accessAllTools: false,
+      toolExposureMode: "full",
     });
     agentId = agent.id;
 

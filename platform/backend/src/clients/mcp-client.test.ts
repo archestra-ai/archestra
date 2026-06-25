@@ -3182,6 +3182,308 @@ describe("McpClient", () => {
         refreshSpy.mockRestore();
       });
 
+      test("a terminal refresh failure records the needs-reauthentication trio on the server row", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-terminal-persist@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-terminal-persist-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "expired-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-terminal-persist-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-terminal-persist-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-terminal-persist-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockResolvedValue({
+            ok: false,
+            kind: "terminal",
+            category: "refresh_failed",
+            message: "invalid_grant",
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            {
+              type: "text",
+              text: "Authentication failed: access token expired",
+            },
+          ],
+          isError: true,
+        });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_terminal_persist",
+            name: "jira-terminal-persist-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        const row = await McpServerModel.findById(mcpServer.id);
+        expect(row?.oauthRefreshError).toBe("refresh_failed");
+        expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
+
+        refreshSpy.mockRestore();
+      });
+
+      test("a transient refresh failure persists nothing, leaving prior connection health untouched", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-transient-no-persist@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-transient-persist-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "expired-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-transient-persist-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-transient-persist-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        // Pre-seed a prior terminal failure: a transient outcome must neither
+        // set nor clear health, so this state must survive unchanged.
+        const priorFailedAt = new Date(Date.now() - 60_000);
+        await McpServerModel.update(mcpServer.id, {
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshFailedAt: priorFailedAt,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-transient-persist-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockResolvedValue({
+            ok: false,
+            kind: "transient",
+            reason: "server_error",
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool.mockResolvedValue({
+          content: [
+            {
+              type: "text",
+              text: "Authentication failed: access token expired",
+            },
+          ],
+          isError: true,
+        });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_transient_persist",
+            name: "jira-transient-persist-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        const row = await McpServerModel.findById(mcpServer.id);
+        expect(row?.oauthRefreshError).toBe("refresh_failed");
+        expect(row?.oauthRefreshErrorMessage).toBe("invalid_grant");
+        expect(row?.oauthRefreshFailedAt?.getTime()).toBe(
+          priorFailedAt.getTime(),
+        );
+
+        refreshSpy.mockRestore();
+      });
+
+      test("a successful refresh clears a prior needs-reauthentication state", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-success-clears@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "jira-success-clears-server",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.example.com/mcp/",
+          oauthConfig: {
+            name: "Jira",
+            server_url: "https://mcp.atlassian.example.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["read:jira-work"],
+            default_scopes: ["read:jira-work"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        const secret = await secretManager().createSecret(
+          {
+            access_token: "expired-token",
+            refresh_token: "refresh-token",
+            expires_at: Date.now() + 24 * 3_600_000,
+          },
+          "jira-success-clears-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "jira-success-clears-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        await McpServerModel.update(mcpServer.id, {
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshFailedAt: new Date(Date.now() - 60_000),
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "jira-success-clears-server__get_issue",
+          description: "Get issue",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const refreshSpy = vi
+          .spyOn(oauthRoutes, "refreshOAuthToken")
+          .mockImplementation(async () => {
+            await secretManager().updateSecret(secret.id, {
+              access_token: "refreshed-token",
+              refresh_token: "refresh-token",
+              expires_at: Date.now() + 3_600_000,
+            });
+            return { ok: true };
+          });
+
+        mockConnect.mockResolvedValue(undefined);
+        mockCallTool
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: "text",
+                text: "Authentication failed: access token expired",
+              },
+            ],
+            isError: true,
+          })
+          .mockResolvedValueOnce({
+            content: [{ type: "text", text: "Issue fetched" }],
+            isError: false,
+          });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_success_clears",
+            name: "jira-success-clears-server__get_issue",
+            arguments: { issue_key: "CTAZ-1015" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        const row = await McpServerModel.findById(mcpServer.id);
+        expect(row?.oauthRefreshError).toBeNull();
+        expect(row?.oauthRefreshErrorMessage).toBeNull();
+        expect(row?.oauthRefreshFailedAt).toBeNull();
+
+        refreshSpy.mockRestore();
+      });
+
       test("does not refresh when a tool error only mentions bearer auth guidance", async ({
         makeUser,
       }) => {

@@ -1198,7 +1198,7 @@ describe("OAuth refresh-failure classification", () => {
       });
     });
 
-    test("authorization-server 5xx is transient (LIM-15)", () => {
+    test("authorization-server 5xx is transient", () => {
       expect(classifyRefreshResponse({ status: 503, body: null })).toEqual({
         ok: false,
         kind: "transient",
@@ -1206,7 +1206,7 @@ describe("OAuth refresh-failure classification", () => {
       });
     });
 
-    test("429 rate-limit is transient (LIM-15)", () => {
+    test("429 rate-limit is transient", () => {
       expect(classifyRefreshResponse({ status: 429, body: null })).toEqual({
         ok: false,
         kind: "transient",
@@ -1277,7 +1277,7 @@ describe("OAuth refresh-failure classification", () => {
     });
   });
 
-  describe("sanitizeOAuthErrorCode (LIM-14)", () => {
+  describe("sanitizeOAuthErrorCode", () => {
     test("passes a well-formed OAuth error code through unchanged", () => {
       expect(sanitizeOAuthErrorCode("invalid_grant")).toBe("invalid_grant");
     });
@@ -1328,7 +1328,7 @@ describe("OAuth refresh-failure classification", () => {
       expect(fields?.oauthRefreshError).toBe("no_refresh_token");
     });
 
-    test("a transient failure persists nothing (LIM-15)", () => {
+    test("a transient failure persists nothing", () => {
       expect(
         refreshFailureToServerFields({
           ok: false,

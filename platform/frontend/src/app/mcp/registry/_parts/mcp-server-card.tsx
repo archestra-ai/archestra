@@ -83,6 +83,7 @@ import {
   UninstallServerDialog,
   type UninstallServerInstall,
 } from "./uninstall-server-dialog";
+import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -458,9 +459,27 @@ export function McpServerCard({
   // Check for OAuth refresh errors on any credential the user can see
   // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
   const isOAuthServer = !!item.oauthConfig;
-  const oauthFailedServer = isOAuthServer
-    ? mcpServerOfCurrentCatalogItem?.find((s) => s.oauthRefreshError)
-    : undefined;
+  // The re-auth entry point is gated by the caller's permission over the failed
+  // connection, not by catalog-edit access; a caller without it still sees the
+  // failure state but is offered no action. When several connections have failed,
+  // prefer one the caller can re-authenticate so the marker stays actionable
+  // regardless of row order, falling back to any failed one to still surface it.
+  const canReauthenticate = useCanReauthenticate();
+  const oauthFailedServers = isOAuthServer
+    ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
+    : [];
+  const oauthFailedServer =
+    oauthFailedServers.find((s) => canReauthenticate(s)) ??
+    oauthFailedServers[0];
+  const oauthReauthIndicator = oauthFailedServer ? (
+    <OAuthReauthIndicator
+      onActivate={
+        canReauthenticate(oauthFailedServer)
+          ? () => openSettingsPage("connections")
+          : undefined
+      }
+    />
+  ) : null;
 
   const isInstalling = Boolean(
     !isDeploymentFailed &&
@@ -668,7 +687,10 @@ export function McpServerCard({
     showAuthorAvatar ||
     toolsCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
-    (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
+    (!isBuiltinVariant &&
+      (connectionAvatars.length > 0 ||
+        hasOrgConnection ||
+        Boolean(oauthReauthIndicator)));
 
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
@@ -810,19 +832,9 @@ export function McpServerCard({
               </Tooltip>
             </TooltipProvider>
           </AvatarGroup>
-          {oauthFailedServer && (
-            <OAuthReauthIndicator
-              errorMessage={oauthFailedServer.oauthRefreshErrorMessage}
-              failedAt={oauthFailedServer.oauthRefreshFailedAt}
-              onActivate={
-                canEditCatalog
-                  ? () => openSettingsPage("connections")
-                  : undefined
-              }
-            />
-          )}
         </div>
       )}
+      {!isBuiltinVariant && oauthReauthIndicator}
     </div>
   ) : null;
 

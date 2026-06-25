@@ -1,69 +1,52 @@
 import { AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-function formatFailedAt(failedAt: string | null): string | null {
-  if (!failedAt) {
-    return null;
-  }
-  const date = new Date(failedAt);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function buildDetail(errorMessage: string | null, failedAt: string | null) {
-  const reason = errorMessage ?? "authentication expired";
-  const failed = formatFailedAt(failedAt);
-  return failed ? `${reason} · failed ${failed}` : reason;
-}
-
 /**
- * Needs-reauthentication state for an OAuth connection. The sanitized reason and
- * failure date are always visible; `onActivate` adds the re-authenticate control
- * only when the caller is permitted to re-authenticate.
+ * Compact needs-reauthentication marker for an OAuth connection on a server
+ * card: an alert icon and a short label, nothing more. When `onActivate` is
+ * supplied (the caller may re-authenticate the connection), the whole marker is
+ * one click target that opens the credential surface, where the detailed reason
+ * lives; without it the marker is shown but inert.
  */
 export function OAuthReauthIndicator({
-  errorMessage,
-  failedAt,
   onActivate,
   className,
 }: {
-  errorMessage: string | null;
-  failedAt: string | null;
   onActivate?: () => void;
   className?: string;
 }) {
-  const detail = buildDetail(errorMessage, failedAt);
+  const containerClassName = cn(
+    "inline-flex items-center gap-1 text-xs text-amber-600",
+    className,
+  );
+
+  const body = (
+    <>
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <span>Needs re-authentication</span>
+    </>
+  );
+
+  if (!onActivate) {
+    return (
+      <span className={containerClassName} data-testid="oauth-reauth-state">
+        {body}
+      </span>
+    );
+  }
 
   return (
-    <span
+    <button
+      type="button"
+      onClick={onActivate}
       className={cn(
-        "inline-flex max-w-[240px] flex-wrap items-start gap-x-1 gap-y-0.5 text-xs text-amber-600",
-        className,
+        containerClassName,
+        "cursor-pointer rounded-sm underline-offset-2 hover:text-amber-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
       )}
       data-testid="oauth-reauth-state"
+      aria-label="Needs re-authentication, open credentials"
     >
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 break-words">
-        Needs re-authentication · {detail}
-      </span>
-      {onActivate && (
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          onClick={onActivate}
-          className="h-auto shrink-0 px-0 text-xs text-amber-700 underline hover:text-amber-800"
-          data-testid="oauth-reauth-action"
-        >
-          Re-authenticate
-        </Button>
-      )}
-    </span>
+      {body}
+    </button>
   );
 }

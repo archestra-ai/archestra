@@ -15469,23 +15469,23 @@ export type GetAppsResponses = {
         data: Array<{
             name: string;
             description: string | null;
-            scope: 'personal' | 'team' | 'org';
-            authorId: string | null;
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'owned';
             id: string;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
             latestVersion: number;
         } | {
             name: string;
             description: string | null;
-            scope: 'personal' | 'team' | 'org';
-            authorId: string | null;
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'external';
-            mcpServerId: string;
+            catalogId: string;
             resourceUri: string;
+            runnable: boolean;
+            availabilityScopes: Array<'personal' | 'team' | 'org'>;
         }>;
         pagination: {
             currentPage: number;
@@ -15627,10 +15627,10 @@ export type CreateAppResponse = CreateAppResponses[keyof CreateAppResponses];
 export type GetExternalAppData = {
     body?: never;
     path: {
-        mcpServerId: string;
+        catalogId: string;
     };
     query?: never;
-    url: '/api/apps/external/{mcpServerId}';
+    url: '/api/apps/external/{catalogId}';
 };
 
 export type GetExternalAppErrors = {
@@ -15703,15 +15703,19 @@ export type GetExternalAppResponses = {
      * Default Response
      */
     200: {
+        catalogId: string;
         name: string;
         description: string | null;
-        scope: 'personal' | 'team' | 'org';
-        authorId: string | null;
-        executionModel: 'viewer-scoped' | 'server-scoped';
-        cspOrigin: 'platform-pinned' | 'author-declared';
-        source: 'external';
-        mcpServerId: string;
         resourceUri: string;
+        defaultMcpServerId: string | null;
+        installs: Array<{
+            mcpServerId: string;
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            teamId: string | null;
+            name: string;
+            localInstallationStatus: string | null;
+        }>;
     };
 };
 
@@ -36480,7 +36484,9 @@ export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractio
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        includeApps?: boolean;
+    };
     url: '/api/internal_mcp_catalog';
 };
 

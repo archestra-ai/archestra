@@ -3,6 +3,19 @@ use std::collections::HashMap;
 // The outcome taxonomy is the shared run.json contract (analyzer reads the same strings).
 pub use archestra_bench_core::Outcome;
 
+/// A rollout's USD cost. The three states are kept distinct so unaccountable spend is never silently
+/// dropped: `Unpriced` means billable spend happened that we could not price (no lane slug, a slug
+/// absent from the price book, a model with cache-write tokens but no published write rate, mixed
+/// models in one session, or a telemetry gap), and it makes any aggregate it lands in *incomplete*;
+/// `NoSpend` is a real zero (no LLM call). serde_json cannot carry NaN, so the "loud" signal is the
+/// explicit `Unpriced` count, not a NaN sentinel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RunCost {
+    Priced(f64),
+    Unpriced,
+    NoSpend,
+}
+
 #[derive(Debug, Clone)]
 pub struct RunResult {
     pub env_id: String,
@@ -18,10 +31,10 @@ pub struct RunResult {
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub cache_read_tokens: Option<i64>,
-    /// OpenRouter slug the run was priced against, and the resulting USD cost (both `None` when the
-    /// lane has no slug or the slug is absent from the price book).
+    pub cache_write_tokens: Option<i64>,
+    /// OpenRouter slug the run was priced against (`None` when the lane has no slug).
     pub price_model: Option<String>,
-    pub cost_usd: Option<f64>,
+    pub cost: RunCost,
     pub agent_error: Option<String>,
     pub stage_count: usize,
     pub format_attempts: usize,
@@ -68,9 +81,13 @@ pub struct GroupAggregate {
     /// have none, and folding them in as 0 would understate the average).
     pub tokens_n: usize,
     pub total_cost_usd: f64,
-    /// Rollouts that were priced — the denominator for `avg_cost_usd` (unpriced rollouts are excluded
-    /// rather than counted as $0).
+    /// Rollouts that were priced — the denominator for the cost total (no-spend and unpriced rollouts
+    /// are excluded rather than counted as $0).
     pub cost_n: usize,
+    /// Rollouts that incurred billable spend we could not price. When > 0 the group's cost total is
+    /// *incomplete*: it covers only the priced rollouts, so it is reported with a loud marker and
+    /// nulled in JSON rather than passed off as the full figure.
+    pub cost_unpriced_n: usize,
 }
 
 impl GroupAggregate {
@@ -98,11 +115,20 @@ impl GroupAggregate {
         }
     }
 
-    /// Total USD cost of this group's rollouts, or `None` when none were priced (so an unpriced group
-    /// reads as `n/a` rather than a misleading `$0`). Not averaged — with few lanes the per-lane total
-    /// is the figure worth seeing.
+    /// Total USD cost over the group's priced rollouts, or `None` when none were priced (so an
+    /// unpriced/no-spend group reads as `n/a` rather than a misleading `$0`). Not averaged — with few
+    /// lanes the per-lane total is the figure worth seeing.
     pub fn cost_usd(&self) -> Option<f64> {
         (self.cost_n > 0).then_some(self.total_cost_usd)
+    }
+
+    /// JSON cost: the priced total only when every spend-bearing rollout was priced. When any rollout
+    /// is unpriced the total is incomplete, so it is nulled — the `cost_unpriced_n` field carries the
+    /// loud signal that would otherwise be lost (serde_json renders a NaN sentinel as null anyway).
+    pub fn cost_usd_json(&self) -> Option<f64> {
+        (self.cost_unpriced_n == 0)
+            .then(|| self.cost_usd())
+            .flatten()
     }
 }
 
@@ -123,7 +149,8 @@ impl Aggregate {
             "pass_rate": o.pass_rate(),
             "avg_turns": o.avg_turns(),
             "avg_tokens": o.avg_tokens(),
-            "cost_usd": o.cost_usd(),
+            "cost_usd": o.cost_usd_json(),
+            "cost_unpriced_n": o.cost_unpriced_n,
             "total_turns": o.total_turns,
             "total_tokens": o.total_tokens,
             "outcomes": o.outcomes,
@@ -142,7 +169,8 @@ fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
         "pass_rate": g.pass_rate(),
         "avg_turns": g.avg_turns(),
         "avg_tokens": g.avg_tokens(),
-        "cost_usd": g.cost_usd(),
+        "cost_usd": g.cost_usd_json(),
+        "cost_unpriced_n": g.cost_unpriced_n,
         "total_turns": g.total_turns,
         "total_tokens": g.total_tokens,
         "outcomes": g.outcomes,
@@ -172,8 +200,21 @@ fn group_aggregate(key: String, rows: &[&RunResult]) -> GroupAggregate {
         total_turns: rows.iter().map(|r| r.turn_count).sum(),
         total_tokens: rows.iter().filter_map(|r| r.total_tokens).sum(),
         tokens_n: rows.iter().filter(|r| r.total_tokens.is_some()).count(),
-        total_cost_usd: rows.iter().filter_map(|r| r.cost_usd).sum(),
-        cost_n: rows.iter().filter(|r| r.cost_usd.is_some()).count(),
+        total_cost_usd: rows
+            .iter()
+            .filter_map(|r| match r.cost {
+                RunCost::Priced(c) => Some(c),
+                RunCost::Unpriced | RunCost::NoSpend => None,
+            })
+            .sum(),
+        cost_n: rows
+            .iter()
+            .filter(|r| matches!(r.cost, RunCost::Priced(_)))
+            .count(),
+        cost_unpriced_n: rows
+            .iter()
+            .filter(|r| matches!(r.cost, RunCost::Unpriced))
+            .count(),
     }
 }
 
@@ -232,10 +273,14 @@ fn stats(g: &GroupAggregate) -> String {
         .avg_tokens()
         .map(|t| format!("{t:.0}"))
         .unwrap_or_else(|| "n/a".to_string());
-    let cost = g
-        .cost_usd()
-        .map(|c| format!("${c:.4}"))
-        .unwrap_or_else(|| "n/a".to_string());
+    let cost = match (g.cost_n, g.cost_unpriced_n) {
+        (0, 0) => "n/a".to_string(),
+        (_, 0) => format!("${:.4}", g.total_cost_usd),
+        // Spend we could not price makes the total incomplete: show the priced subtotal (if any) with
+        // a loud unpriced count rather than passing it off as the full cost.
+        (0, n) => format!("incomplete ({n} unpriced)"),
+        (_, n) => format!("${:.4} (+{n} unpriced)", g.total_cost_usd),
+    };
     let failures = failure_summary(&g.outcomes);
     let tail = if failures.is_empty() {
         String::new()
@@ -286,8 +331,9 @@ mod tests {
             prompt_tokens: None,
             completion_tokens: None,
             cache_read_tokens: None,
+            cache_write_tokens: None,
             price_model: None,
-            cost_usd: None,
+            cost: RunCost::NoSpend,
             agent_error: None,
             stage_count: 1,
             format_attempts: 0,
@@ -326,19 +372,39 @@ mod tests {
     #[test]
     fn test_aggregate_sums_cost_over_priced_rollouts_only() {
         let mut a = result("basic", "t1", "l1", Outcome::Passed);
-        a.cost_usd = Some(0.01);
+        a.cost = RunCost::Priced(0.01);
         let mut b = result("basic", "t2", "l1", Outcome::Failed);
-        b.cost_usd = Some(0.03);
-        let c = result("basic", "t3", "l1", Outcome::AgentError); // unpriced rollout
+        b.cost = RunCost::Priced(0.03);
+        let c = result("basic", "t3", "l1", Outcome::AgentError); // no-spend rollout
         let agg = aggregate(&[a, b, c]);
         assert_eq!(agg.overall.cost_n, 2);
-        // Total over the priced rollouts (no averaging); the unpriced one contributes nothing.
+        assert_eq!(agg.overall.cost_unpriced_n, 0);
+        // Total over the priced rollouts (no averaging); the no-spend one contributes nothing.
         assert_eq!(agg.overall.cost_usd(), Some(0.04));
+        assert_eq!(agg.overall.cost_usd_json(), Some(0.04));
     }
 
     #[test]
-    fn test_aggregate_cost_is_none_when_unpriced() {
-        let agg = aggregate(&[result("basic", "t1", "l1", Outcome::Passed)]);
+    fn test_unpriced_spend_makes_total_incomplete_and_loud() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.cost = RunCost::Priced(0.01);
+        let mut b = result("basic", "t2", "l1", Outcome::Passed);
+        b.cost = RunCost::Unpriced; // billable spend we could not price
+        let agg = aggregate(&[a, b]);
+        assert_eq!(agg.overall.cost_n, 1);
+        assert_eq!(agg.overall.cost_unpriced_n, 1);
+        // The priced subtotal is still available, but JSON nulls it because the total is incomplete.
+        assert_eq!(agg.overall.cost_usd(), Some(0.01));
+        assert_eq!(agg.overall.cost_usd_json(), None);
+    }
+
+    #[test]
+    fn test_no_spend_rollouts_are_excluded_not_unpriced() {
+        // A rollout with no LLM call is a real $0, not an unpriceable gap: it must not inflate the
+        // unpriced count nor the priced denominator.
+        let agg = aggregate(&[result("basic", "t1", "l1", Outcome::AgentError)]);
+        assert_eq!(agg.overall.cost_n, 0);
+        assert_eq!(agg.overall.cost_unpriced_n, 0);
         assert_eq!(agg.overall.cost_usd(), None);
     }
 
@@ -346,7 +412,7 @@ mod tests {
     fn test_render_markdown_is_aggregate_only() {
         let mut a = result("basic", "t1", "l1", Outcome::Passed);
         a.total_tokens = Some(1500);
-        a.cost_usd = Some(0.0123);
+        a.cost = RunCost::Priced(0.0123);
         let md = render_markdown(&[a, result("basic", "t2", "l1", Outcome::Failed)]);
         assert!(
             !md.contains("Pass matrix"),
@@ -359,6 +425,19 @@ mod tests {
         assert!(!md.contains("avg cost"));
         assert!(md.contains("failed=1"), "failure reasons are reported");
         assert!(md.contains("## By task"));
+    }
+
+    #[test]
+    fn test_render_markdown_marks_unpriced_spend() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.cost = RunCost::Priced(0.05);
+        let mut b = result("basic", "t2", "l1", Outcome::Passed);
+        b.cost = RunCost::Unpriced;
+        let md = render_markdown(&[a, b]);
+        assert!(
+            md.contains("(+1 unpriced)"),
+            "incomplete total is loud: {md}"
+        );
     }
 
     #[test]

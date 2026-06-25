@@ -799,5 +799,31 @@ describe("InternalMcpCatalogModel", () => {
       expect(searchedIds).toContain(remote.id);
       expect(searchedIds).not.toContain(app.id);
     });
+
+    test("findAllWithApps includes serverType:'app' catalogs alongside the rest", async () => {
+      const remote = await InternalMcpCatalogModel.create({
+        name: "Visible Remote ABC",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const app = await InternalMcpCatalogModel.create({
+        name: "Assignable App ABC",
+        serverType: "app",
+        scope: "org",
+      });
+
+      const withAppIds = (await InternalMcpCatalogModel.findAllWithApps()).map(
+        (c) => c.id,
+      );
+      expect(withAppIds).toContain(remote.id);
+      expect(withAppIds).toContain(app.id);
+
+      // The registry list still omits the app — only the picker opts in.
+      const registryIds = (await InternalMcpCatalogModel.findAll()).map(
+        (c) => c.id,
+      );
+      expect(registryIds).toContain(remote.id);
+      expect(registryIds).not.toContain(app.id);
+    });
   });
 });

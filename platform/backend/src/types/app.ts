@@ -66,8 +66,6 @@ export type AppUiPermissions = z.infer<typeof AppUiPermissionsSchema>;
 const AppListItemBaseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
-  scope: AppScopeSchema,
-  authorId: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
 });
@@ -75,13 +73,23 @@ const AppListItemBaseSchema = z.object({
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("owned"),
   id: z.string(),
+  scope: AppScopeSchema,
+  authorId: z.string().nullable(),
   latestVersion: z.number().int(),
 });
 
+// An external item is keyed by its catalog item and listed once, regardless of
+// how many installs back it (mcp-apps.md FR-26). `runnable` is false when the
+// caller can see the catalog but has no accessible install (FR-31);
+// `availabilityScopes` are the scopes of the caller's accessible installs, for
+// the card's chips. The concrete installs (the run-page selector) are resolved
+// lazily via `GET /api/apps/external/:catalogId`.
 export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("external"),
-  mcpServerId: z.string(),
+  catalogId: z.string(),
   resourceUri: z.string(),
+  runnable: z.boolean(),
+  availabilityScopes: z.array(AppScopeSchema),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [
@@ -90,6 +98,32 @@ export const AppListItemSchema = z.discriminatedUnion("source", [
 ]);
 export type AppListItem = z.infer<typeof AppListItemSchema>;
 export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
+
+/** One of the caller's accessible installs of an external app's catalog. */
+export const ExternalAppInstallSchema = z.object({
+  mcpServerId: z.string(),
+  scope: AppScopeSchema,
+  ownerId: z.string().nullable(),
+  teamId: z.string().nullable(),
+  name: z.string(),
+  localInstallationStatus: z.string().nullable(),
+});
+export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
+
+/**
+ * Run-page resolution for an external app: its UI resource plus the caller's
+ * accessible installs and the default install (personal → team → org,
+ * mcp-apps.md FR-31). `defaultMcpServerId` is null when none is accessible.
+ */
+export const ExternalAppResolutionSchema = z.object({
+  catalogId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  resourceUri: z.string(),
+  defaultMcpServerId: z.string().nullable(),
+  installs: z.array(ExternalAppInstallSchema),
+});
+export type ExternalAppResolution = z.infer<typeof ExternalAppResolutionSchema>;
 
 // drizzle-derived schemas (internal: model layer reads/writes through these).
 // Visibility (`scope`) and `environmentId` are NOT app columns — they live on

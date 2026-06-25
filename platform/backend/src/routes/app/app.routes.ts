@@ -51,7 +51,7 @@ import {
   CredentialResolutionModeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  ExternalAppListItemSchema,
+  ExternalAppResolutionSchema,
   SelectAppSchema,
   SelectAppVersionSchema,
   SelectToolSchema,
@@ -110,12 +110,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // and external UI-providing installed MCP servers. Both are access-filtered
       // by their own model; we merge, sort, and paginate over the combined set.
       // Cardinality is small (tens), so fetching all-then-slicing is fine.
-      const isMcpServerAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "mcpServerInstallation",
-        "admin",
-      );
       const accessibleAppIds = await AppTeamModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
@@ -129,7 +123,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         AppModel.countByOrganization(ownedFilters),
         McpServerModel.findUiCapableForCaller({
           userId: user.id,
-          isMcpServerAdmin,
+          organizationId,
           ...(query.search ? { search: query.search } : {}),
         }),
       ]);
@@ -151,14 +145,14 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
         })),
-        ...external.map((server) => ({
+        ...external.map((catalogApp) => ({
           source: "external" as const,
-          mcpServerId: server.mcpServerId,
-          name: server.name,
-          description: server.description,
-          scope: server.scope,
-          authorId: server.ownerId,
-          resourceUri: server.resourceUri,
+          catalogId: catalogApp.catalogId,
+          name: catalogApp.name,
+          description: catalogApp.description,
+          resourceUri: catalogApp.resourceUri,
+          runnable: catalogApp.runnable,
+          availabilityScopes: catalogApp.availabilityScopes,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
         })),
@@ -173,45 +167,27 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/apps/external/:mcpServerId",
+    "/api/apps/external/:catalogId",
     {
       schema: {
         operationId: RouteId.GetExternalApp,
         description:
-          "Resolve a single external UI-providing app entry by installed MCP server id (for the standalone run page).",
+          "Resolve an external UI-providing app by catalog id: its UI resource and the caller's accessible installs (for the standalone run page's install selector).",
         tags: ["Apps"],
-        params: z.object({ mcpServerId: UuidIdSchema }),
-        response: constructResponseSchema(ExternalAppListItemSchema),
+        params: z.object({ catalogId: UuidIdSchema }),
+        response: constructResponseSchema(ExternalAppResolutionSchema),
       },
     },
     async ({ params, user, organizationId }, reply) => {
-      const isMcpServerAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "mcpServerInstallation",
-        "admin",
-      );
-      const candidates = await McpServerModel.findUiCapableForCaller({
+      const resolved = await McpServerModel.findCatalogAppForCaller({
         userId: user.id,
-        isMcpServerAdmin,
+        organizationId,
+        catalogId: params.catalogId,
       });
-      const match = candidates.find(
-        (server) => server.mcpServerId === params.mcpServerId,
-      );
-      if (!match) {
+      if (!resolved) {
         throw new ApiError(404, "Not found");
       }
-      return reply.send({
-        source: "external",
-        mcpServerId: match.mcpServerId,
-        name: match.name,
-        description: match.description,
-        scope: match.scope,
-        authorId: match.ownerId,
-        resourceUri: match.resourceUri,
-        executionModel: "server-scoped",
-        cspOrigin: "author-declared",
-      });
+      return reply.send(resolved);
     },
   );
 

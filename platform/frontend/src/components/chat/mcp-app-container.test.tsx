@@ -53,14 +53,27 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => null,
 }));
 
+// Avoid pulling the real auth client / app query (and their network deps) into
+// the test; the edit pencil is covered by app-frame.test.tsx.
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: false }),
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  useApp: vi.fn(() => ({ data: undefined })),
+}));
+
 // ── Import component under test after mocks ───────────────────────────────────
 
+import { useApp } from "@/lib/app.query";
 import {
   clearAllAppDiagnostics,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
 import { AppsProvider, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
+
+const mockUseApp = vi.mocked(useApp);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,6 +196,28 @@ describe("McpAppSection", () => {
     });
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
+  });
+
+  it("titles an owned app from the live query, not the captured appName prop", async () => {
+    // After an edit invalidates the app query, the address bar must reflect the
+    // new name even though the appName prop was captured at render time.
+    mockUseApp.mockReturnValue({
+      data: { name: "Renamed Dashboard" },
+    } as ReturnType<typeof useApp>);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          appId="11111111-1111-1111-1111-111111111111"
+          appName="Stale Dashboard"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    expect(screen.getByText("Renamed Dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Stale Dashboard")).not.toBeInTheDocument();
   });
 });
 

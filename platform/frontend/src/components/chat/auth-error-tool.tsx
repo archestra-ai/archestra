@@ -1,4 +1,4 @@
-import { ExternalLink, KeyRound } from "lucide-react";
+import { Check, ExternalLink, KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,11 @@ export interface AuthErrorToolProps {
   onAction?: () => void;
   actionTooltipText?: string;
   openInNewTab?: boolean;
+  /**
+   * "success" flips the card to a resolved/connected look (green check, no
+   * action). Defaults to "error" — the outstanding-auth state.
+   */
+  variant?: "error" | "success";
 }
 
 export function AuthErrorTool({
@@ -26,11 +31,16 @@ export function AuthErrorTool({
   onAction,
   actionTooltipText,
   openInNewTab = true,
+  variant = "error",
 }: AuthErrorToolProps) {
   return (
     <div className="mt-3 rounded-xl border border-border px-5 py-4">
       <div className="flex flex-wrap items-start gap-3 text-sm">
-        <KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />
+        {variant === "success" ? (
+          <Check className="mt-0.5 size-4 flex-none text-emerald-600" />
+        ) : (
+          <KeyRound className="mt-0.5 size-4 flex-none text-amber-600" />
+        )}
         <div className="min-w-0 flex-1 text-muted-foreground">
           <span className="font-medium text-foreground">{title}:</span>{" "}
           <span>{description}</span>

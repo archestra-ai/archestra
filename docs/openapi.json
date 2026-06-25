@@ -53577,18 +53577,6 @@
                                 "nullable": true,
                                 "type": "string"
                               },
-                              "scope": {
-                                "type": "string",
-                                "enum": [
-                                  "personal",
-                                  "team",
-                                  "org"
-                                ]
-                              },
-                              "authorId": {
-                                "nullable": true,
-                                "type": "string"
-                              },
                               "executionModel": {
                                 "type": "string",
                                 "enum": [
@@ -53612,6 +53600,18 @@
                               "id": {
                                 "type": "string"
                               },
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "team",
+                                  "org"
+                                ]
+                              },
+                              "authorId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "latestVersion": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
@@ -53621,12 +53621,12 @@
                             "required": [
                               "name",
                               "description",
-                              "scope",
-                              "authorId",
                               "executionModel",
                               "cspOrigin",
                               "source",
                               "id",
+                              "scope",
+                              "authorId",
                               "latestVersion"
                             ],
                             "additionalProperties": false
@@ -53638,18 +53638,6 @@
                                 "type": "string"
                               },
                               "description": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "scope": {
-                                "type": "string",
-                                "enum": [
-                                  "personal",
-                                  "team",
-                                  "org"
-                                ]
-                              },
-                              "authorId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -53673,23 +53661,37 @@
                                   "external"
                                 ]
                               },
-                              "mcpServerId": {
+                              "catalogId": {
                                 "type": "string"
                               },
                               "resourceUri": {
                                 "type": "string"
+                              },
+                              "runnable": {
+                                "type": "boolean"
+                              },
+                              "availabilityScopes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "personal",
+                                    "team",
+                                    "org"
+                                  ]
+                                }
                               }
                             },
                             "required": [
                               "name",
                               "description",
-                              "scope",
-                              "authorId",
                               "executionModel",
                               "cspOrigin",
                               "source",
-                              "mcpServerId",
-                              "resourceUri"
+                              "catalogId",
+                              "resourceUri",
+                              "runnable",
+                              "availabilityScopes"
                             ],
                             "additionalProperties": false
                           }
@@ -54429,13 +54431,13 @@
         }
       }
     },
-    "/api/apps/external/{mcpServerId}": {
+    "/api/apps/external/{catalogId}": {
       "get": {
         "operationId": "getExternalApp",
         "tags": [
           "Apps"
         ],
-        "description": "Resolve a single external UI-providing app entry by installed MCP server id (for the standalone run page).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
+        "description": "Resolve an external UI-providing app by catalog id: its UI resource and the caller's accessible installs (for the standalone run page's install selector).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -54444,7 +54446,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
             },
             "in": "path",
-            "name": "mcpServerId",
+            "name": "catalogId",
             "required": true
           }
         ],
@@ -54456,6 +54458,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "catalogId": {
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -54463,55 +54468,64 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
+                    "resourceUri": {
+                      "type": "string"
                     },
-                    "authorId": {
+                    "defaultMcpServerId": {
                       "nullable": true,
                       "type": "string"
                     },
-                    "executionModel": {
-                      "type": "string",
-                      "enum": [
-                        "viewer-scoped",
-                        "server-scoped"
-                      ]
-                    },
-                    "cspOrigin": {
-                      "type": "string",
-                      "enum": [
-                        "platform-pinned",
-                        "author-declared"
-                      ]
-                    },
-                    "source": {
-                      "type": "string",
-                      "enum": [
-                        "external"
-                      ]
-                    },
-                    "mcpServerId": {
-                      "type": "string"
-                    },
-                    "resourceUri": {
-                      "type": "string"
+                    "installs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "mcpServerId": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "teamId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "localInstallationStatus": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mcpServerId",
+                          "scope",
+                          "ownerId",
+                          "teamId",
+                          "name",
+                          "localInstallationStatus"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
+                    "catalogId",
                     "name",
                     "description",
-                    "scope",
-                    "authorId",
-                    "executionModel",
-                    "cspOrigin",
-                    "source",
-                    "mcpServerId",
-                    "resourceUri"
+                    "resourceUri",
+                    "defaultMcpServerId",
+                    "installs"
                   ],
                   "additionalProperties": false
                 }
@@ -138732,6 +138746,16 @@
           "MCP Catalog"
         ],
         "description": "Get all Internal MCP catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "parameters": [
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeApps",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",

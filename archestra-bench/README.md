@@ -349,8 +349,9 @@ not the raw per-token SSE chunks), `run.json`,
   retry-able flake). For the cleanest connection path, set `ARCHESTRA_BENCH_DATABASE_URL` to a **native
   host Postgres** (e.g. Postgres.app or `brew install postgresql@18 pgvector`), skipping docker and the
   VM entirely; the same override also points the bench at any Postgres you manage.
-- A real provider key in the environment for each lane you run (e.g. `OPENROUTER_API_KEY`,
-  `KIMI_API_KEY`, `ZAI_API_KEY`; see each lane's `api_key_env` in `lanes.toml`).
+- A real provider key for each lane you run (e.g. `OPENROUTER_API_KEY`, `KIMI_API_KEY`, `ZAI_API_KEY`;
+  see each lane's `api_key_env` in `lanes.toml`), in `platform/.env` or the process environment — a
+  non-empty `platform/.env` value wins over the same variable in the environment.
 - A Rust toolchain to build `archestra-bench`, and local `uv` for the ephemeral verifier environments.
 
 ## Checks

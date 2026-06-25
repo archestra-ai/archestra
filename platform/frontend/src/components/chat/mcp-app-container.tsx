@@ -15,6 +15,7 @@ import {
   humanizeToolLabel,
   isSupersededRender,
 } from "@/components/chat/chat-messages.utils";
+import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
 import {
   clampInlineHeight,
   INITIAL_INLINE_HEIGHT,
@@ -24,6 +25,7 @@ import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
   McpAppChangelogPill,
+  McpAppEditButton,
   McpAppFullscreenExitButton,
   McpAppPanelButton,
   McpAppRefreshButton,
@@ -39,6 +41,8 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { useApp } from "@/lib/app.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -155,7 +159,14 @@ export function McpAppSection({
   const { apps, selectedToolCallId, select, showInPanel, portalTarget } =
     useApps();
 
-  const headerName = appName || humanizeToolLabel(toolName);
+  // Owned apps can be renamed/re-described from the address bar. Read the live
+  // app so the title stays in sync after an edit (the appName prop is captured
+  // at render time) and to seed the edit dialog.
+  const { data: canEdit } = useHasPermissions({ app: ["update"] });
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const { data: ownedApp } = useApp(appId ?? null);
+
+  const headerName = ownedApp?.name || appName || humanizeToolLabel(toolName);
   const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
   const panelHostingActive = portalTarget !== null;
   // Only the *selected* app moves to the panel: its iframe is portaled into
@@ -250,12 +261,15 @@ export function McpAppSection({
       </div>
     ) : null;
 
-  const pillActions = (
-    <>
-      <McpAppRefreshButton onClick={reload} />
-      {appId && <McpAppStandaloneButton appId={appId} />}
-    </>
-  );
+  let pillActions: React.ReactNode = null;
+  if (appId) {
+    pillActions = <McpAppStandaloneButton appId={appId} />;
+  }
+
+  let editPencil: React.ReactNode = null;
+  if (appId && canEdit) {
+    editPencil = <McpAppEditButton onClick={() => setEditDialogOpen(true)} />;
+  }
 
   const liveSurface = (
     <McpAppErrorBoundary>
@@ -267,10 +281,8 @@ export function McpAppSection({
         inlineCeiling={inlineCeiling}
         fillContainer={renderInPanel}
         topBar={
-          // Pill carries refresh + open-standalone (owned apps). The right zone
-          // holds open-in-panel, prefixed by a minimize button while the
-          // app-requested fullscreen is active.
           <McpAppTopBar
+            left={<McpAppRefreshButton onClick={reload} />}
             right={
               <>
                 {displayMode === "fullscreen" && (
@@ -290,10 +302,15 @@ export function McpAppSection({
                   label: app.label,
                 }))}
                 onChange={select}
+                leading={editPencil}
                 actions={pillActions}
               />
             ) : (
-              <McpAppAddressPill label={headerName} actions={pillActions} />
+              <McpAppAddressPill
+                label={headerName}
+                leading={editPencil}
+                actions={pillActions}
+              />
             )}
           </McpAppTopBar>
         }
@@ -341,28 +358,39 @@ export function McpAppSection({
     </McpAppErrorBoundary>
   );
 
-  if (renderInPanel) {
-    return (
-      <>
-        <McpAppCard
-          displayMode="inline"
-          onToggleFullscreen={toggleFullscreen}
-          size={size}
-          inlineCeiling={inlineCeiling}
-          frozenHeight={lastInlineHeightRef.current}
-          topBar={
-            <McpAppTopBar>
-              <McpAppAddressPill label={headerName} />
-            </McpAppTopBar>
-          }
-          placeholder={
-            <span className="text-muted-foreground">Showing in panel</span>
-          }
-        />
-        {portalTarget && createPortal(liveSurface, portalTarget)}
-      </>
-    );
-  }
+  const surface = renderInPanel ? (
+    <>
+      <McpAppCard
+        displayMode="inline"
+        onToggleFullscreen={toggleFullscreen}
+        size={size}
+        inlineCeiling={inlineCeiling}
+        frozenHeight={lastInlineHeightRef.current}
+        topBar={
+          <McpAppTopBar>
+            <McpAppAddressPill label={headerName} />
+          </McpAppTopBar>
+        }
+        placeholder={
+          <span className="text-muted-foreground">Showing in panel</span>
+        }
+      />
+      {portalTarget && createPortal(liveSurface, portalTarget)}
+    </>
+  ) : (
+    liveSurface
+  );
 
-  return liveSurface;
+  return (
+    <>
+      {surface}
+      {editDialogOpen && ownedApp && (
+        <AppEditModelContextDialog
+          app={ownedApp}
+          open
+          onOpenChange={setEditDialogOpen}
+        />
+      )}
+    </>
+  );
 }

@@ -80,6 +80,7 @@ import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
+  isInstallAuthResolved,
   parsePolicyDenied,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
@@ -679,6 +680,8 @@ export function ChatMessages({
                           const authToolPart = renderAssistantAuthPart({
                             toolName: "authentication",
                             authState: assistantAuthState,
+                            connectedCatalogIds:
+                              orchestrator.connectedCatalogIds,
                             onInstallMcp:
                               orchestrator.triggerInstallByCatalogId,
                             onReauthMcp:
@@ -1079,6 +1082,9 @@ export function ChatMessages({
                               onReauthMcp={
                                 orchestrator.triggerReauthByCatalogIdAndServerId
                               }
+                              connectedCatalogIds={
+                                orchestrator.connectedCatalogIds
+                              }
                               getToolShortName={getToolShortName}
                               toolIconMap={toolIconMap}
                               earlyToolUiData={
@@ -1179,6 +1185,9 @@ export function ChatMessages({
                                 onReauthMcp={
                                   orchestrator.triggerReauthByCatalogIdAndServerId
                                 }
+                                connectedCatalogIds={
+                                  orchestrator.connectedCatalogIds
+                                }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 onSendMessage={(text) =>
@@ -1252,6 +1261,9 @@ export function ChatMessages({
                                 onReauthMcp={
                                   orchestrator.triggerReauthByCatalogIdAndServerId
                                 }
+                                connectedCatalogIds={
+                                  orchestrator.connectedCatalogIds
+                                }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 earlyToolUiData={
@@ -1319,6 +1331,7 @@ export function ChatMessages({
               onToolApprovalResponse={onToolApprovalResponse}
               onInstallMcp={orchestrator.triggerInstallByCatalogId}
               onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
+              connectedCatalogIds={orchestrator.connectedCatalogIds}
               getToolShortName={getToolShortName}
               toolIconMap={toolIconMap}
             />
@@ -1468,6 +1481,7 @@ const MessageTool = memo(
     onToolApprovalResponse,
     onInstallMcp,
     onReauthMcp,
+    connectedCatalogIds,
     getToolShortName,
     onSendMessage,
     earlyToolUiData,
@@ -1486,6 +1500,7 @@ const MessageTool = memo(
     }) => void;
     onInstallMcp?: (catalogId: string) => void;
     onReauthMcp?: (catalogId: string, serverId: string) => void;
+    connectedCatalogIds: ReadonlySet<string>;
     getToolShortName: (toolName: string) => ArchestraToolShortName | null;
     onSendMessage?: (text: string) => void;
     toolIconMap?: ToolIconMap;
@@ -1605,6 +1620,7 @@ const MessageTool = memo(
     const authToolBody = renderToolAuthPart({
       toolName,
       authState: toolAuthState,
+      connectedCatalogIds,
       onInstallMcp,
       onReauthMcp,
     });
@@ -2439,10 +2455,25 @@ function isMessagePositionBefore(params: {
 function authCardProps(params: {
   toolName: string;
   authState: ToolAuthState | null;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstall?: () => void;
   onReauth?: () => void;
 }): AuthErrorToolProps | null {
-  const { authState, toolName, onInstall, onReauth } = params;
+  const { authState, toolName, connectedCatalogIds, onInstall, onReauth } =
+    params;
+
+  // Once the user connects a server for this catalog, the install prompt is
+  // resolved — flip it to a connected state instead of an outstanding error.
+  if (
+    authState?.kind === "auth-required" &&
+    isInstallAuthResolved({ authState, connectedCatalogIds })
+  ) {
+    return {
+      title: "Authentication successful",
+      description: <>Connected to &ldquo;{authState.catalogName}&rdquo;.</>,
+      variant: "success",
+    };
+  }
 
   switch (authState?.kind) {
     case "auth-expired": {
@@ -2536,18 +2567,31 @@ function resolveAuthActions(params: {
 function renderToolAuthPart(params: {
   toolName: string;
   authState: ReturnType<typeof resolveToolAuthState>;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
+  const {
+    authState,
+    toolName,
+    connectedCatalogIds,
+    onInstallMcp,
+    onReauthMcp,
+  } = params;
   const actions = resolveAuthActions({ authState, onInstallMcp, onReauthMcp });
-  const props = authCardProps({ toolName, authState, ...actions });
+  const props = authCardProps({
+    toolName,
+    authState,
+    connectedCatalogIds,
+    ...actions,
+  });
   return props ? <AuthErrorTool {...props} /> : null;
 }
 
 function renderAssistantAuthPart(params: {
   toolName: string;
   authState: ReturnType<typeof resolveAssistantTextAuthState>;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {

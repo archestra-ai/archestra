@@ -1,6 +1,7 @@
 "use client";
 
-import { AppWindow, Plus, Trash2 } from "lucide-react";
+import type { ResourceVisibilityScope } from "@archestra/shared";
+import { AppWindow, Globe, Plus, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -21,6 +22,18 @@ import { useSession } from "@/lib/auth/auth.query";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 
 const PAGE_SIZE = 100;
+
+// Order + labels for an external app's availability chips (which scopes the
+// caller has an install in). Stable order keeps the chips from reshuffling.
+const SCOPE_META: Record<
+  ResourceVisibilityScope,
+  { label: string; Icon: typeof Globe }
+> = {
+  personal: { label: "Personal", Icon: User },
+  team: { label: "Team", Icon: Users },
+  org: { label: "Organization", Icon: Globe },
+};
+const SCOPE_ORDER: ResourceVisibilityScope[] = ["personal", "team", "org"];
 
 export default function AppsPage() {
   const search = useSearchParams().get("search") ?? "";
@@ -75,14 +88,17 @@ export default function AppsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {apps.map((app) => {
               // The Apps surface lists two kinds: owned apps (open the detail
-              // page) and external UI-providing servers (open the standalone
-              // server run page). The source badge + caption are the FR-29
-              // trust disclosure so the two execution models aren't conflated.
-              const key = app.source === "external" ? app.mcpServerId : app.id;
+              // page) and external UI-providing catalog items (open the catalog
+              // run page, or route to install when the caller has no accessible
+              // install). The source badge + caption are the FR-28 trust
+              // disclosure so the two execution models aren't conflated.
+              const key = app.source === "external" ? app.catalogId : app.id;
               const href =
-                app.source === "external"
-                  ? `/apps/server/${app.mcpServerId}/run`
-                  : `/apps/${app.id}`;
+                app.source === "owned"
+                  ? `/apps/${app.id}`
+                  : app.runnable
+                    ? `/apps/catalog/${app.catalogId}/run`
+                    : `/mcp/registry?search=${encodeURIComponent(app.name)}`;
               return (
                 <Card key={key} className="group relative">
                   <Link
@@ -104,13 +120,38 @@ export default function AppsPage() {
                         >
                           {app.source === "external" ? "External" : "Owned"}
                         </Badge>
-                        <ResourceVisibilityBadge
-                          scope={app.scope}
-                          teams={undefined}
-                          authorId={app.authorId}
-                          authorName={undefined}
-                          currentUserId={session?.user?.id}
-                        />
+                        {app.source === "owned" ? (
+                          <ResourceVisibilityBadge
+                            scope={app.scope}
+                            teams={undefined}
+                            authorId={app.authorId}
+                            authorName={undefined}
+                            currentUserId={session?.user?.id}
+                          />
+                        ) : app.runnable ? (
+                          SCOPE_ORDER.filter((s) =>
+                            app.availabilityScopes.includes(s),
+                          ).map((s) => {
+                            const { label, Icon } = SCOPE_META[s];
+                            return (
+                              <Badge
+                                key={s}
+                                variant="outline"
+                                className="gap-1 text-xs"
+                              >
+                                <Icon className="h-3 w-3" />
+                                {label}
+                              </Badge>
+                            );
+                          })
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-xs text-muted-foreground"
+                          >
+                            Not installed
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     {app.description ? (
@@ -118,9 +159,11 @@ export default function AppsPage() {
                         {app.description}
                       </CardDescription>
                     ) : null}
-                    {app.executionModel === "server-scoped" ? (
+                    {app.source === "external" ? (
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Runs as the server · declares its own network
+                        {app.runnable
+                          ? "Runs as the server · declares its own network"
+                          : "Install to run · runs as the server"}
                       </p>
                     ) : null}
                   </CardHeader>

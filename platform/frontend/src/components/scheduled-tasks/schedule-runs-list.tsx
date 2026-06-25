@@ -1,38 +1,36 @@
 "use client";
 
-import { AlertCircle, ExternalLink, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   runChatHref,
   runRowKind,
 } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
-import {
-  getScheduleTriggerRunSessionId,
-  isScheduleTriggerRunActive,
-} from "@/app/scheduled-tasks/schedule-trigger.utils";
+import { isScheduleTriggerRunActive } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import {
   type ScheduleTriggerRun,
+  useCreateScheduleTriggerRunConversation,
   useScheduleTriggerRuns,
 } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
 
 /**
  * A schedule's runs, reused by the project runs page and the chat right-side
- * Runs panel. A completed run (succeeded OR failed) links to its chat — a failed
- * run's chat shows the error as an inline error card. A failed run that never
- * produced a conversation expands an inline error here instead; a running run is
- * inert. Polls while any run is active; `currentRunId` highlights the current run.
+ * Runs panel. Every run opens a chat: a run with a conversation links straight to
+ * it (a failed run's chat shows the prompt + an inline error card with "Try
+ * again"); a completed run without one (legacy) lazily creates it on click; a
+ * still-running run is inert. Polls while any run is active; `currentRunId`
+ * highlights the current run.
  */
 export function ScheduleRunsList({
   triggerId,
-  projectId,
   currentRunId,
   emptyText = "No runs yet.",
 }: {
   triggerId: string;
-  projectId: string;
   currentRunId?: string | null;
   emptyText?: string;
 }) {
@@ -71,7 +69,6 @@ export function ScheduleRunsList({
         <RunRow
           key={run.id}
           run={run}
-          projectId={projectId}
           triggerId={triggerId}
           isCurrent={run.id === currentRunId}
         />
@@ -84,17 +81,16 @@ export function ScheduleRunsList({
 
 function RunRow({
   run,
-  projectId,
   triggerId,
   isCurrent,
 }: {
   run: ScheduleTriggerRun;
-  projectId: string;
   triggerId: string;
   isCurrent: boolean;
 }) {
   const kind = runRowKind(run);
-  const [errorExpanded, setErrorExpanded] = useState(false);
+  const router = useRouter();
+  const ensureConversation = useCreateScheduleTriggerRunConversation();
 
   const rowContent = (
     <div className="flex items-center gap-3 px-3 py-2.5">
@@ -102,14 +98,14 @@ function RunRow({
       <span className="flex-1 truncate text-sm text-muted-foreground">
         {formatRunTimestamp(run.createdAt)}
       </span>
-      {kind === "running" && (
+      {(kind === "running" || ensureConversation.isPending) && (
         <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
       )}
     </div>
   );
 
   if (kind === "open-chat") {
-    const href = runChatHref({ projectId, triggerId, run });
+    const href = runChatHref({ triggerId, run });
     if (!href) {
       return <div className="rounded-lg border bg-card">{rowContent}</div>;
     }
@@ -126,61 +122,37 @@ function RunRow({
     );
   }
 
-  if (kind === "show-error") {
+  if (kind === "resolve") {
+    // Legacy run without a conversation: create one on click, then open it.
     return (
-      <div
+      <button
+        type="button"
+        disabled={ensureConversation.isPending}
         className={cn(
-          "rounded-lg border bg-card",
+          "block w-full rounded-lg border bg-card text-left transition-colors hover:bg-accent",
           isCurrent && "border-primary bg-accent",
         )}
+        onClick={() =>
+          ensureConversation.mutate(
+            { triggerId, runId: run.id },
+            {
+              onSuccess: (conversation) => {
+                router.push(
+                  `/chat/${conversation.id}?scheduleTriggerId=${triggerId}&scheduleRunId=${run.id}`,
+                );
+              },
+            },
+          )
+        }
       >
-        <button
-          type="button"
-          className="w-full rounded-lg text-left transition-colors hover:bg-accent"
-          onClick={() => setErrorExpanded((v) => !v)}
-        >
-          {rowContent}
-        </button>
-        {errorExpanded && <RunErrorCard runId={run.id} error={run.error} />}
-      </div>
+        {rowContent}
+      </button>
     );
   }
 
   // "running" — inert
   return (
     <div className="rounded-lg border bg-card opacity-80">{rowContent}</div>
-  );
-}
-
-function RunErrorCard({
-  runId,
-  error,
-}: {
-  runId: string;
-  error: string | null;
-}) {
-  const sessionId = getScheduleTriggerRunSessionId(runId);
-  const logsHref = `/llm/logs/session/${encodeURIComponent(sessionId)}`;
-
-  return (
-    <div className="mx-3 mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-destructive">
-        <AlertCircle className="h-3.5 w-3.5" />
-        Error
-      </div>
-      <p className="mb-2 whitespace-pre-wrap text-sm text-foreground">
-        {error ?? "The run failed without an error message."}
-      </p>
-      <a
-        href={logsHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        View session logs
-        <ExternalLink className="h-3 w-3" />
-      </a>
-    </div>
   );
 }
 

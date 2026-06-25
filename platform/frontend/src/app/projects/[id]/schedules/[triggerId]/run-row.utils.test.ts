@@ -9,36 +9,32 @@ describe("run-row.utils", () => {
       );
     });
 
-    it('returns "show-error" for a failed run without a conversation', () => {
-      expect(runRowKind({ status: "failed", chatConversationId: null })).toBe(
-        "show-error",
-      );
-    });
-
-    it('returns "open-chat" for a failed run WITH a conversation (opens its chat, which shows the error card)', () => {
+    it('returns "open-chat" for a failed run WITH a conversation (its chat shows the prompt + error card)', () => {
       expect(runRowKind({ status: "failed", chatConversationId: "c1" })).toBe(
         "open-chat",
       );
     });
 
-    it('returns "running" for a running run', () => {
-      expect(runRowKind({ status: "running", chatConversationId: null })).toBe(
-        "running",
+    it('returns "resolve" for a completed (legacy) run without a conversation', () => {
+      expect(runRowKind({ status: "failed", chatConversationId: null })).toBe(
+        "resolve",
+      );
+      expect(runRowKind({ status: "success", chatConversationId: null })).toBe(
+        "resolve",
       );
     });
 
-    it('returns "running" for a successful run without a conversation yet', () => {
-      expect(runRowKind({ status: "success", chatConversationId: null })).toBe(
+    it('returns "running" for an in-flight run without a conversation yet', () => {
+      expect(runRowKind({ status: "running", chatConversationId: null })).toBe(
         "running",
       );
     });
   });
 
   describe("runChatHref", () => {
-    it("returns the chat URL for an openable run", () => {
+    it("returns the chat URL for a run with a conversation", () => {
       expect(
         runChatHref({
-          projectId: "p1",
           triggerId: "t1",
           run: { id: "r1", status: "success", chatConversationId: "c1" },
         }),
@@ -48,17 +44,15 @@ describe("run-row.utils", () => {
     it("returns the chat URL for a failed run WITH a conversation", () => {
       expect(
         runChatHref({
-          projectId: "p1",
           triggerId: "t1",
           run: { id: "r1", status: "failed", chatConversationId: "c1" },
         }),
       ).toBe("/chat/c1?scheduleTriggerId=t1&scheduleRunId=r1");
     });
 
-    it("returns null for a failed run without a conversation", () => {
+    it("returns null for a completed run without a conversation", () => {
       expect(
         runChatHref({
-          projectId: "p1",
           triggerId: "t1",
           run: { id: "r1", status: "failed", chatConversationId: null },
         }),
@@ -68,19 +62,8 @@ describe("run-row.utils", () => {
     it("returns null for a running run", () => {
       expect(
         runChatHref({
-          projectId: "p1",
           triggerId: "t1",
           run: { id: "r1", status: "running", chatConversationId: null },
-        }),
-      ).toBe(null);
-    });
-
-    it("returns null for a successful run without a conversation", () => {
-      expect(
-        runChatHref({
-          projectId: "p1",
-          triggerId: "t1",
-          run: { id: "r1", status: "success", chatConversationId: null },
         }),
       ).toBe(null);
     });

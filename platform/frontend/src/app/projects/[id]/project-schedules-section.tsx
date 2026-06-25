@@ -10,7 +10,9 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
@@ -39,9 +41,11 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type ScheduleTrigger,
   useCreateScheduleTrigger,
+  useCreateScheduleTriggerRunConversation,
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
+  useScheduleTriggerRuns,
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
@@ -130,6 +134,80 @@ function ScheduleRow({
   const deleteSchedule = useDeleteScheduleTrigger();
   const [editOpen, setEditOpen] = useState(false);
 
+  const router = useRouter();
+  const ensureConversation = useCreateScheduleTriggerRunConversation();
+  // Clicking the schedule opens its LAST run's chat. Fetch just that run (no
+  // polling — the section already refreshes the trigger list).
+  const { data: runsResponse } = useScheduleTriggerRuns(schedule.id, {
+    limit: 1,
+    refetchInterval: false,
+  });
+  const lastRun = runsResponse?.data?.[0];
+
+  const labelClassName = cn(
+    "min-w-0 flex-1 hover:opacity-80 transition-opacity",
+    !schedule.enabled && "opacity-60",
+  );
+  const scheduleLabel = (
+    <>
+      <span className="flex items-center gap-2">
+        <span className="truncate text-sm font-medium">{schedule.name}</span>
+        {!schedule.enabled && (
+          <Badge variant="outline" className="shrink-0">
+            Disabled
+          </Badge>
+        )}
+      </span>
+      <span className="block truncate text-xs text-muted-foreground">
+        {schedule.agent?.name ?? "Default agent"}
+      </span>
+    </>
+  );
+
+  const lastRunChatHref = lastRun
+    ? runChatHref({ triggerId: schedule.id, run: lastRun })
+    : null;
+  // Last run has a chat → link straight to it. Last run without one (legacy) →
+  // create it on click, then open. No runs yet → the runs page (empty state).
+  let nameNode: React.ReactNode;
+  if (lastRunChatHref) {
+    nameNode = (
+      <Link href={lastRunChatHref} className={labelClassName}>
+        {scheduleLabel}
+      </Link>
+    );
+  } else if (lastRun) {
+    nameNode = (
+      <button
+        type="button"
+        disabled={ensureConversation.isPending}
+        className={cn(labelClassName, "text-left")}
+        onClick={() =>
+          ensureConversation.mutate(
+            { triggerId: schedule.id, runId: lastRun.id },
+            {
+              onSuccess: (conversation) =>
+                router.push(
+                  `/chat/${conversation.id}?scheduleTriggerId=${schedule.id}&scheduleRunId=${lastRun.id}`,
+                ),
+            },
+          )
+        }
+      >
+        {scheduleLabel}
+      </button>
+    );
+  } else {
+    nameNode = (
+      <Link
+        href={`/projects/${projectId}/schedules/${schedule.id}`}
+        className={labelClassName}
+      >
+        {scheduleLabel}
+      </Link>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
       <span
@@ -146,25 +224,7 @@ function ScheduleRow({
           aria-hidden
         />
       </span>
-      <Link
-        href={`/projects/${projectId}/schedules/${schedule.id}`}
-        className={cn(
-          "min-w-0 flex-1 hover:opacity-80 transition-opacity",
-          !schedule.enabled && "opacity-60",
-        )}
-      >
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{schedule.name}</span>
-          {!schedule.enabled && (
-            <Badge variant="outline" className="shrink-0">
-              Disabled
-            </Badge>
-          )}
-        </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {schedule.agent?.name ?? "Default agent"}
-        </span>
-      </Link>
+      {nameNode}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Schedule actions">

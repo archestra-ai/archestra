@@ -219,11 +219,7 @@ function RunsPanel({
       <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Runs · {trigger?.name ?? "Schedule"}
       </div>
-      <ScheduleRunsList
-        triggerId={triggerId}
-        projectId={projectId}
-        currentRunId={currentRunId}
-      />
+      <ScheduleRunsList triggerId={triggerId} currentRunId={currentRunId} />
     </div>
   );
 }

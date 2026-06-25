@@ -75,7 +75,7 @@ export function ProjectScheduleRunsClient() {
         </Button>
       </div>
 
-      <ScheduleRunsList triggerId={triggerId} projectId={projectId} />
+      <ScheduleRunsList triggerId={triggerId} />
     </div>
   );
 }

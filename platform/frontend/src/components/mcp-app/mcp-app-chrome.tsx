@@ -244,22 +244,3 @@ export function McpAppChangelogPill({
     </div>
   );
 }
-
-export function McpAppVersionBar({
-  appId,
-  version,
-}: {
-  appId: string;
-  version: number;
-}) {
-  return (
-    <div className="relative z-10 flex h-7 shrink-0 items-center px-3 shadow-[0_-1px_2px_-1px_rgb(0_0_0/0.08)]">
-      <Link
-        href={`/apps/${appId}`}
-        className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
-      >
-        Version {version}
-      </Link>
-    </div>
-  );
-}

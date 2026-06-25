@@ -11,8 +11,8 @@ import {
   McpAppFullscreenExitButton,
   McpAppRefreshButton,
   McpAppTopBar,
-  McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
+import { McpAppMetaBar } from "@/components/mcp-app/mcp-app-meta-bar";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
 import { useApp } from "@/lib/app.query";
@@ -144,9 +144,7 @@ export function AppFrame({
             </McpAppTopBar>
           }
           bottomBar={
-            appId && app.latestVersion != null ? (
-              <McpAppVersionBar appId={appId} version={app.latestVersion} />
-            ) : undefined
+            <McpAppMetaBar app={app} version={app.latestVersion ?? null} />
           }
         >
           {runtime}

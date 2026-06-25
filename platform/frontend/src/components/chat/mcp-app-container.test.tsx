@@ -63,6 +63,12 @@ vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
 }));
 
+// Stub the bottom meta bar (it fetches environments/session); its behavior is
+// covered by mcp-app-meta-bar.test.tsx.
+vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
+  McpAppMetaBar: () => <div data-testid="meta-bar" />,
+}));
+
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { useApp } from "@/lib/app.query";

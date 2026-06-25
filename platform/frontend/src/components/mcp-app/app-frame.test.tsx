@@ -24,6 +24,14 @@ vi.mock("@/components/mcp-app/mcp-app-view", () => ({
 vi.mock("@/lib/app.query", () => ({ useApp: vi.fn() }));
 vi.mock("@/lib/auth/auth.query", () => ({ useHasPermissions: vi.fn() }));
 
+// Stub the meta bar (it fetches environments/session of its own); its own
+// behavior is covered by mcp-app-meta-bar.test.tsx.
+vi.mock("./mcp-app-meta-bar", () => ({
+  McpAppMetaBar: ({ version }: { version: number | null }) => (
+    <div data-testid="meta-bar">v{version}</div>
+  ),
+}));
+
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AppFrame } from "./app-frame";
@@ -57,16 +65,14 @@ describe("AppFrame", () => {
     );
 
     expect(screen.getByTestId("runtime")).toBeInTheDocument();
-    // No address pill: no reload button, no version link.
+    // No address pill: no reload button, no meta bar.
     expect(
       screen.queryByRole("button", { name: /reload app/i }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /version/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("meta-bar")).not.toBeInTheDocument();
   });
 
-  it("wraps owned apps in card chrome with label, version bar, and composed actions", () => {
+  it("wraps owned apps in card chrome with label, meta bar, and composed actions", () => {
     mockUseApp.mockReturnValue({
       data: { name: "Dashboard", latestVersion: 3 },
     } as ReturnType<typeof useApp>);
@@ -84,11 +90,8 @@ describe("AppFrame", () => {
     expect(
       screen.getByRole("button", { name: /reload app/i }),
     ).toBeInTheDocument();
-    // Version bar links to the detail page.
-    expect(screen.getByRole("link", { name: /version 3/i })).toHaveAttribute(
-      "href",
-      "/apps/app-1",
-    );
+    // Meta bar mounts under the runtime, keyed to the head version.
+    expect(screen.getByTestId("meta-bar")).toHaveTextContent("v3");
     // The caller-composed action button is rendered.
     expect(
       screen.getByRole("link", { name: /open standalone/i }),

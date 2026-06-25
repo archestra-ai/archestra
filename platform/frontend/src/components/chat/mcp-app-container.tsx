@@ -32,8 +32,8 @@ import {
   McpAppStandaloneButton,
   McpAppSwitcher,
   McpAppTopBar,
-  McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
+import { McpAppMetaBar } from "@/components/mcp-app/mcp-app-meta-bar";
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
@@ -315,8 +315,8 @@ export function McpAppSection({
           </McpAppTopBar>
         }
         bottomBar={
-          appId && appVersion != null ? (
-            <McpAppVersionBar appId={appId} version={appVersion} />
+          appId && ownedApp ? (
+            <McpAppMetaBar app={ownedApp} version={appVersion ?? null} />
           ) : undefined
         }
       >

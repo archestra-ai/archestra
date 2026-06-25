@@ -246,16 +246,27 @@ export function ConversationFilesPanel({
   const handleConfirmDelete = async () => {
     const items = pendingDelete;
     if (!items || items.length === 0) return;
-    const deletingOpen = items.some((i) => i.id === selectedId);
-    try {
-      if (items.length === 1) await deleteFile.mutateAsync(items[0]);
-      else await bulkDelete.mutateAsync(items);
-    } catch {
-      // Errors are surfaced via the mutation's toast; keep the dialog flow.
+    const openId = selectedId;
+    // Collect the ids that failed so we don't navigate away from, or deselect,
+    // files that are still there.
+    let failed = new Set<string>();
+    if (items.length === 1) {
+      try {
+        await deleteFile.mutateAsync(items[0]);
+      } catch {
+        failed = new Set([items[0].id]);
+      }
+    } else {
+      const { failedIds } = await bulkDelete.mutateAsync(items);
+      failed = new Set(failedIds);
     }
     setPendingDelete(null);
-    if (selectionMode) exitSelection();
-    if (deletingOpen) {
+    if (selectionMode) {
+      if (failed.size === 0) exitSelection();
+      else setSelectedIds(failed); // keep only the failures selected
+    }
+    // Leave the detail view only if the open file was actually deleted.
+    if (openId && items.some((i) => i.id === openId) && !failed.has(openId)) {
       setSelectedId(null);
       setView("list");
     }
@@ -280,7 +291,14 @@ export function ConversationFilesPanel({
   };
 
   const selection = selectionMode
-    ? { selectedIds, onToggle: toggleSelect }
+    ? {
+        selectedIds,
+        onToggle: toggleSelect,
+        isSelectable: (id: string) => {
+          const f = byId.get(id);
+          return !!f && isManagedFile(f);
+        },
+      }
     : undefined;
 
   // A project chat always shows the pinned instructions row, so the empty state
@@ -359,7 +377,7 @@ export function ConversationFilesPanel({
               onSelect={openFile}
               selection={selection}
               leading={
-                showInstructions ? (
+                showInstructions && !selectionMode ? (
                   <InstructionsRow
                     selected={instructionsSelected}
                     hasContent={hasInstructions}
@@ -511,8 +529,14 @@ export function ConversationFilesPanel({
             : `Delete ${pendingDelete?.length ?? 0} files?`
         }
         description={
-          pendingDelete?.some((i) => i.source === "project")
-            ? "Project files are removed for everyone with access to the project. This can't be undone."
+          // A project file — or a file generated in a project chat — is shared,
+          // so deleting it removes it for everyone with access to the project.
+          pendingDelete?.some(
+            (i) =>
+              i.source === "project" ||
+              (i.source === "generated" && projectId != null),
+          )
+            ? "This file is part of the project and will be removed for everyone with access to it. This can't be undone."
             : "This can't be undone."
         }
         isPending={deletePending}

@@ -170,18 +170,24 @@ export function useBulkDeleteConversationFiles(conversationId?: string) {
         items.map((item) => deleteConversationFileItem(item)),
       );
       // hey-api resolves with `{ error }` rather than throwing, so a failure is
-      // either a rejected promise or a present error payload.
-      const failed = results.filter(
-        (r) => r.status === "rejected" || r.value.error,
-      ).length;
-      return { total: items.length, failed };
+      // either a rejected promise or a present error payload. Report the ids
+      // that failed so the caller can keep them selected / still open.
+      const failedIds = items
+        .filter((_, i) => {
+          const r = results[i];
+          return r.status === "rejected" || r.value.error != null;
+        })
+        .map((item) => item.id);
+      return { total: items.length, failedIds };
     },
-    onSuccess: ({ total, failed }) => {
-      const deleted = total - failed;
-      if (failed === 0) {
+    onSuccess: ({ total, failedIds }) => {
+      const deleted = total - failedIds.length;
+      if (failedIds.length === 0) {
         toast.success(`Deleted ${total} ${total === 1 ? "file" : "files"}`);
       } else {
-        toast.error(`Deleted ${deleted} of ${total}; ${failed} failed`);
+        toast.error(
+          `Deleted ${deleted} of ${total}; ${failedIds.length} failed`,
+        );
       }
     },
     onSettled: () => {

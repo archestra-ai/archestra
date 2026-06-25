@@ -55,11 +55,16 @@ export function FileSection({
   /** A pinned first row inside the card (e.g. the instructions entry). */
   leading?: ReactNode;
   /**
-   * When set, each row shows a checkbox and a row click toggles its selection
-   * instead of opening it; trailing actions are hidden. Selection state lives
-   * in the caller — this component only renders it.
+   * When set, selectable rows show a checkbox and a row click toggles selection
+   * instead of opening; trailing actions are hidden while selecting. Rows for
+   * which `isSelectable` returns false get no checkbox and stay openable.
+   * Selection state lives in the caller — this component only renders it.
    */
-  selection?: { selectedIds: Set<string>; onToggle: (id: string) => void };
+  selection?: {
+    selectedIds: Set<string>;
+    onToggle: (id: string) => void;
+    isSelectable?: (id: string) => boolean;
+  };
 }) {
   if (items.length === 0 && !leading) return null;
   const selecting = selection != null;
@@ -75,6 +80,10 @@ export function FileSection({
         {items.map((item, i) => {
           const customActions = renderActions?.(item) ?? null;
           const isSelected = item.id === selectedId;
+          // Only selectable rows participate in selection mode; others (e.g. the
+          // in-memory artifact) keep their normal open-on-click behavior.
+          const rowSelectable =
+            selecting && (selection.isSelectable?.(item.id) ?? true);
           const isChecked = selection?.selectedIds.has(item.id) ?? false;
           return (
             <div
@@ -82,14 +91,14 @@ export function FileSection({
               className={cn(
                 "flex items-center text-sm",
                 (leading != null || i > 0) && "border-t",
-                selecting && isChecked
+                rowSelectable && isChecked
                   ? "bg-accent/60"
                   : !selecting && isSelected
                     ? "bg-accent font-medium text-accent-foreground"
                     : "hover:bg-muted/50",
               )}
             >
-              {selecting && (
+              {rowSelectable && (
                 <Checkbox
                   checked={isChecked}
                   onCheckedChange={() => selection.onToggle(item.id)}
@@ -103,7 +112,9 @@ export function FileSection({
               <button
                 type="button"
                 onClick={() =>
-                  selecting ? selection.onToggle(item.id) : onSelect(item.id)
+                  rowSelectable
+                    ? selection.onToggle(item.id)
+                    : onSelect(item.id)
                 }
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
               >

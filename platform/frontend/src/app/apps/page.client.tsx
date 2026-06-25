@@ -1,43 +1,46 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@archestra/shared";
-import { AppWindow, Globe, Plus, Trash2, User, Users } from "lucide-react";
+import type { archestraApiTypes } from "@archestra/shared";
+import {
+  AppWindow,
+  Globe,
+  LayoutGrid,
+  Plus,
+  Server,
+  Sparkles,
+  User,
+} from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { scopeStyles } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useApps, useDeleteApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { cn } from "@/lib/utils";
+import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 
 const PAGE_SIZE = 100;
 
-// Order + labels for an external app's availability chips (which scopes the
-// caller has an install in). Stable order keeps the chips from reshuffling.
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; Icon: typeof Globe }
-> = {
-  personal: { label: "Personal", Icon: User },
-  team: { label: "Team", Icon: Users },
-  org: { label: "Organization", Icon: Globe },
-};
-const SCOPE_ORDER: ResourceVisibilityScope[] = ["personal", "team", "org"];
+type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
+type TabValue = "apps" | "external";
 
 export default function AppsPage() {
-  const search = useSearchParams().get("search") ?? "";
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.get("search") ?? "";
+  const tab: TabValue =
+    searchParams.get("tab") === "external" ? "external" : "apps";
+  const filter = searchParams.get("filter") ?? "all";
+
   const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data, isPending } = useApps({
     limit: PAGE_SIZE,
     offset: 0,
@@ -46,7 +49,27 @@ export default function AppsPage() {
   const deleteApp = useDeleteApp();
   const [createOpen, setCreateOpen] = useState(false);
 
-  const apps = data?.data ?? [];
+  const apps = useMemo(() => data?.data ?? [], [data]);
+  const owned = useMemo(() => apps.filter((a) => a.source === "owned"), [apps]);
+  const external = useMemo(
+    () => apps.filter((a) => a.source === "external"),
+    [apps],
+  );
+
+  const tabApps = tab === "external" ? external : owned;
+  const filtered = useMemo(
+    () => tabApps.filter((app) => matchesFilter(app, filter, currentUserId)),
+    [tabApps, filter, currentUserId],
+  );
+
+  const setParam = (name: string, value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(name, value);
+    else params.delete(name);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const showCreateCard = tab === "apps" && !search;
 
   return (
     <PageLayout
@@ -58,140 +81,142 @@ export default function AppsPage() {
           onClick={() => setCreateOpen(true)}
         >
           <Plus className="h-4 w-4" />
-          New app
+          Create
         </PermissionButton>
       }
     >
-      <div className="mb-6">
+      <div className="mb-5 flex items-center gap-5 border-b border-border">
+        {(
+          [
+            { value: "apps", label: "Apps", count: owned.length, icon: null },
+            {
+              value: "external",
+              label: "External",
+              count: external.length,
+              icon: Server,
+            },
+          ] as const
+        ).map((t) => {
+          const isActive = tab === t.value;
+          return (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() =>
+                setParam("tab", t.value === "apps" ? null : t.value)
+              }
+              className={cn(
+                "relative -mb-px flex cursor-pointer items-center gap-1.5 pb-3 text-sm font-medium transition-colors hover:text-foreground",
+                isActive ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {t.icon && <t.icon className="h-4 w-4" />}
+              {t.label} <span className="text-muted-foreground">{t.count}</span>
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <SearchInput
           paramName="search"
-          objectNamePlural="apps"
-          searchFields={["name", "description"]}
-          className="relative w-[370px]"
+          placeholder="Search apps"
+          className="relative mr-1 w-[280px]"
         />
+        {[
+          { value: "all", label: "All", icon: LayoutGrid, activeStyle: null },
+          {
+            value: "mine",
+            label: "Mine",
+            icon: User,
+            activeStyle: scopeStyles.personal,
+          },
+          {
+            value: "org",
+            label: "Organization",
+            icon: Globe,
+            activeStyle: scopeStyles.org,
+          },
+        ].map((pill) => {
+          const isActive = filter === pill.value;
+          const Icon = pill.icon;
+          return (
+            <button
+              key={pill.value}
+              type="button"
+              onClick={() =>
+                setParam("filter", pill.value === "all" ? null : pill.value)
+              }
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+                isActive
+                  ? (pill.activeStyle ??
+                      "border-primary/20 bg-primary/10 text-primary")
+                  : "border-border bg-background text-muted-foreground hover:bg-muted",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {pill.label}
+            </button>
+          );
+        })}
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
-        {apps.length === 0 ? (
+        {filtered.length === 0 && !showCreateCard ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
               <AppWindow className="h-6 w-6 text-primary" />
             </div>
             <h2 className="mb-1 text-lg font-semibold">
-              {search ? "No apps match your search" : "No apps yet"}
+              {search
+                ? "No apps match your search"
+                : tab === "external"
+                  ? "No external apps"
+                  : "No apps here yet"}
             </h2>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Create an app from a template to get started.
+              {tab === "external"
+                ? "Installed MCP servers that provide a UI show up here."
+                : "Create an app to get started."}
             </p>
+            {tab === "external" && !search ? (
+              <Button asChild variant="outline" className="mt-4">
+                <Link href="/mcp/registry">Manage MCP servers</Link>
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {apps.map((app) => {
-              // The Apps surface lists two kinds: owned apps (open the detail
-              // page) and external UI-providing catalog items (open the catalog
-              // run page, or route to install when the caller has no accessible
-              // install). The source badge + caption are the FR-28 trust
-              // disclosure so the two execution models aren't conflated.
-              const key = app.source === "external" ? app.catalogId : app.id;
-              const href =
-                app.source === "owned"
-                  ? `/apps/${app.id}`
-                  : app.runnable
-                    ? `/apps/catalog/${app.catalogId}/run`
-                    : `/mcp/registry?search=${encodeURIComponent(app.name)}`;
-              return (
-                <Card key={key} className="group relative">
-                  <Link
-                    href={href}
-                    className="absolute inset-0"
-                    aria-label={`Open ${app.name}`}
-                  />
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="truncate">{app.name}</CardTitle>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            app.source === "external"
-                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                              : ""
-                          }
-                        >
-                          {app.source === "external" ? "External" : "Owned"}
-                        </Badge>
-                        {app.source === "owned" ? (
-                          <ResourceVisibilityBadge
-                            scope={app.scope}
-                            teams={undefined}
-                            authorId={app.authorId}
-                            authorName={undefined}
-                            currentUserId={session?.user?.id}
-                          />
-                        ) : app.runnable ? (
-                          SCOPE_ORDER.filter((s) =>
-                            app.availabilityScopes.includes(s),
-                          ).map((s) => {
-                            const { label, Icon } = SCOPE_META[s];
-                            return (
-                              <Badge
-                                key={s}
-                                variant="outline"
-                                className="gap-1 text-xs"
-                              >
-                                <Icon className="h-3 w-3" />
-                                {label}
-                              </Badge>
-                            );
-                          })
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-xs text-muted-foreground"
-                          >
-                            Not installed
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    {app.description ? (
-                      <CardDescription className="line-clamp-2">
-                        {app.description}
-                      </CardDescription>
-                    ) : null}
-                    {app.source === "external" ? (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {app.runnable
-                          ? "Runs as the server · declares its own network"
-                          : "Install to run · runs as the server"}
-                      </p>
-                    ) : null}
-                  </CardHeader>
-                  {app.source === "owned" ? (
-                    <div className="pointer-events-none absolute bottom-3 right-3 opacity-0 transition-opacity group-hover:opacity-100">
-                      <PermissionButton
-                        permissions={{ app: ["delete"] }}
-                        variant="ghost"
-                        size="icon"
-                        className="pointer-events-auto relative z-10 h-8 w-8 text-muted-foreground hover:text-destructive"
-                        aria-label={`Delete ${app.name}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (
-                            confirm(
-                              `Delete "${app.name}"? This cannot be undone.`,
-                            )
-                          )
-                            deleteApp.mutate(app.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </PermissionButton>
-                    </div>
-                  ) : null}
-                </Card>
-              );
-            })}
+            {showCreateCard ? (
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="flex min-h-[194px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-5 text-center transition-colors hover:bg-muted/50"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <span className="text-sm font-semibold">Create app</span>
+                <span className="text-xs text-muted-foreground">
+                  Describe it — we build it
+                </span>
+              </button>
+            ) : null}
+            {filtered.map((app) => (
+              <AppCard
+                key={app.source === "external" ? app.catalogId : app.id}
+                app={app}
+                currentUserId={currentUserId}
+                onDelete={(owned) => {
+                  if (confirm(`Delete "${owned.name}"? This cannot be undone.`))
+                    deleteApp.mutate(owned.id);
+                }}
+              />
+            ))}
           </div>
         )}
       </LoadingWrapper>
@@ -199,4 +224,23 @@ export default function AppsPage() {
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
+}
+
+function matchesFilter(
+  app: AppListItem,
+  filter: string,
+  currentUserId: string | undefined,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "mine")
+    return (
+      app.source === "owned" &&
+      !!currentUserId &&
+      app.authorId === currentUserId
+    );
+  if (filter === "org")
+    return app.source === "owned"
+      ? app.scope === "org"
+      : app.availabilityScopes.includes("org");
+  return true;
 }

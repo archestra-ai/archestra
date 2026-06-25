@@ -14,6 +14,7 @@ import {
 } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
@@ -56,7 +57,7 @@ export function shouldForwardAnthropicBeta(
   model: string,
   baseUrlOverridden: boolean,
 ): boolean {
-  return !baseUrlOverridden || /claude/i.test(model);
+  return isNativeAnthropicModelShape(model, baseUrlOverridden);
 }
 
 /**

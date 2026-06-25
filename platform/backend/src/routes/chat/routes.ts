@@ -693,18 +693,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (the inline connect card) rather than a generic server error.
                 // Pass agent's llmApiKeyId so it's used without a user access
                 // check; pass conversationId as sessionId to group the session.
-                const { model } = await createLLMModelForAgent({
-                  organizationId,
-                  userId: user.id,
-                  agentId,
-                  model: selectedModel,
-                  provider,
-                  conversationId,
-                  externalAgentId,
-                  sessionId: conversationId,
-                  source: "chat",
-                  agentLlmApiKeyId: agent.llmApiKeyId,
-                });
+                const { model, anthropicNativeEndpoint } =
+                  await createLLMModelForAgent({
+                    organizationId,
+                    userId: user.id,
+                    agentId,
+                    model: selectedModel,
+                    provider,
+                    conversationId,
+                    externalAgentId,
+                    sessionId: conversationId,
+                    source: "chat",
+                    agentLlmApiKeyId: agent.llmApiKeyId,
+                  });
 
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.
@@ -799,6 +800,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   systemPrompt,
                   abortSignal: chatAbortController.signal,
                   emit: (event) => writer.write(event),
+                  anthropicNativeEndpoint,
                 });
 
                 // Per-category breakdown of the assembled request, powering

@@ -563,7 +563,9 @@ test("applyAnthropicCacheControl=false suppresses cache_control but still inline
 
   const filePart = expectPresent(output[0].parts?.[0]);
   // Bytes are still inlined — the data: content is NOT dropped...
-  expect(filePart.url).toBe(`data:text/plain;base64,${bytes.toString("base64")}`);
+  expect(filePart.url).toBe(
+    `data:text/plain;base64,${bytes.toString("base64")}`,
+  );
   // ...but the Anthropic-only cache_control marker is suppressed.
   expect(filePart.providerMetadata).toBeUndefined();
 });
@@ -631,8 +633,18 @@ test("attachment routing is unchanged when cache_control is suppressed (non-inge
 
   // Suppressing cache_control must not add or remove the existing
   // non-ingestible → sandbox-pointer routing: same result as the cache-on path.
-  const off = await materializeAttachments(input, conversation.id, INGESTIBLE, false);
-  const on = await materializeAttachments(input, conversation.id, INGESTIBLE, true);
+  const off = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+    false,
+  );
+  const on = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+    true,
+  );
 
   for (const output of [off, on]) {
     const part = expectPresent(output[0].parts?.[0]);

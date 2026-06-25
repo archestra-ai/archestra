@@ -384,4 +384,30 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("You are a careful analyst.");
     expect(prompt).not.toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
   });
+
+  test("does not add the default persona when an authored template renders empty", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // The author wrote a real prompt that happens to render to nothing; gating on
+    // the raw field (not the rendered output) means we respect their choice and
+    // never substitute the default.
+    const agent = await makeAgent({
+      systemPrompt: "{{#if user.nonexistentField}}hidden{{/if}}",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    expect(prompt).not.toContain(DEFAULT_AGENT_SYSTEM_PROMPT);
+  });
 });

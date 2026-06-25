@@ -39,8 +39,9 @@ export const TOOL_UI_RESULT_INSTRUCTION =
  * by the interactive chat path and the autonomous A2A path so both produce the
  * same prompt from the same inputs.
  *
- * Builds prompts for user-facing agents (`agentType === "agent"`); when the
- * author left the prompt blank it falls back to `DEFAULT_AGENT_SYSTEM_PROMPT`.
+ * Both callers (chat, A2A) pass only user-facing agents (`agentType === "agent"`);
+ * the blank-prompt fallback to `DEFAULT_AGENT_SYSTEM_PROMPT` assumes that and is
+ * not enforced here — do not route built-in/internal agents through this helper.
  */
 export async function buildAgentSystemPrompt(params: {
   agent: {

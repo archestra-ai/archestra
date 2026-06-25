@@ -2306,8 +2306,14 @@ fn run_cost(run: Option<&ChatRunResult>, prices: &PriceBook, price_model: Option
         return RunCost::NoSpend;
     };
     let usage = &run.usage;
-    // An incomplete fetch on a rollout that took turns means real spend we cannot fully account.
-    if run.turn_count > 0 && (run.usage_fetch_failed || usage.chat_rows == 0) {
+    // A failed fetch leaves usage incomplete whenever there is any sign the rollout did LLM work
+    // (recorded turns or rows); recorded turns with no rows at all is the same incompleteness. Either
+    // way it is real spend we cannot fully account — kept consistent with `reliable_usage`, which
+    // withholds the token totals for exactly these cases.
+    if run.usage_fetch_failed && (run.turn_count > 0 || usage.chat_rows > 0) {
+        return RunCost::Unpriced;
+    }
+    if run.turn_count > 0 && usage.chat_rows == 0 {
         return RunCost::Unpriced;
     }
     if !usage.had_spend() {

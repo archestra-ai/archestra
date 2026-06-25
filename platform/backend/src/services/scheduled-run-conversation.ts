@@ -160,6 +160,34 @@ export async function persistRunConversationMessages(params: {
 }
 
 /**
+ * Persist the scheduled prompt as the run conversation's user message so a failed
+ * run's chat carries it: the inline error card renders beneath the prompt and the
+ * scheduled-run "Try again" can resend it. Idempotent — a no-op once the
+ * conversation has any message, so it never duplicates the prompt the success
+ * path (`persistRunConversationMessages`) writes, nor double-seeds on a retry.
+ */
+export async function persistRunUserMessage(params: {
+  conversation: Conversation;
+  userText: string;
+}): Promise<void> {
+  const { conversation, userText } = params;
+
+  const existing = await MessageModel.findByConversation(conversation.id);
+  if (existing.length > 0) {
+    return;
+  }
+
+  // Single message, so no createdAt ordering to control (defaults at insert).
+  await MessageModel.bulkCreate([
+    {
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: userText }] },
+    },
+  ]);
+}
+
+/**
  * Record a failed run's error on its (kept) conversation as a chat error, so the
  * run's chat renders it as an inline error card — a failed run opens a normal
  * chat showing what went wrong, rather than a blank transcript. The error is the

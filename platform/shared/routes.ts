@@ -303,6 +303,7 @@ export const RouteId = {
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",
   DeleteChatConversation: "deleteChatConversation",
+  ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",

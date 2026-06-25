@@ -17,6 +17,7 @@ import { ProviderError } from "@/routes/chat/errors";
 import {
   createAndLinkRunConversation,
   persistRunConversationMessages,
+  persistRunUserMessage,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import type { Conversation } from "@/types";
@@ -177,15 +178,23 @@ export async function handleScheduleTriggerRunExecution(
         "Failed to persist scheduled run conversation messages",
       );
     }
-  } else if (status === "failed" && runConversation && runChatError) {
-    // A failed project-scoped run keeps its conversation; record the error as a
-    // chat error so the run's chat shows an inline error card (rather than a
-    // blank transcript). Best-effort: this must not fail the already-failed run.
+  } else if (status === "failed" && runConversation) {
+    // A failed project-scoped run keeps its conversation: persist the scheduled
+    // prompt as the user message (so the chat carries it and the scheduled-run
+    // "Try again" can resend it) and record the structured error as a chat error
+    // so the run's chat shows an inline error card rather than a blank transcript.
+    // Best-effort: this must not fail the already-failed run.
     try {
-      await recordRunConversationError({
-        conversationId: runConversation.id,
-        error: runChatError,
+      await persistRunUserMessage({
+        conversation: runConversation,
+        userText: trigger.messageTemplate,
       });
+      if (runChatError) {
+        await recordRunConversationError({
+          conversationId: runConversation.id,
+          error: runChatError,
+        });
+      }
     } catch (error) {
       logger.warn(
         {

@@ -58,9 +58,13 @@ const mockPersistRunConversationMessages = vi.hoisted(() =>
 const mockRecordRunConversationError = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
+const mockPersistRunUserMessage = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
 vi.mock("@/services/scheduled-run-conversation", () => ({
   createAndLinkRunConversation: mockCreateAndLinkRunConversation,
   persistRunConversationMessages: mockPersistRunConversationMessages,
+  persistRunUserMessage: mockPersistRunUserMessage,
   recordRunConversationError: mockRecordRunConversationError,
 }));
 
@@ -134,6 +138,8 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockPersistRunConversationMessages.mockResolvedValue(undefined);
     mockRecordRunConversationError.mockReset();
     mockRecordRunConversationError.mockResolvedValue(undefined);
+    mockPersistRunUserMessage.mockReset();
+    mockPersistRunUserMessage.mockResolvedValue(undefined);
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
@@ -348,9 +354,17 @@ describe("handleScheduleTriggerRunExecution", () => {
       error: "LLM provider down",
     });
     expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
-    // The failed run keeps its conversation; the error is recorded as a chat
-    // error so the run's chat shows an inline error card. A plain Error (not a
-    // ProviderError) becomes the generic fallback card carrying the message.
+    // The failed run keeps its conversation: the scheduled prompt is persisted as
+    // the user message (so the chat carries it and "Try again" can resend it)...
+    expect(mockPersistRunUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        userText: "Run the task",
+      }),
+    );
+    // ...and the error is recorded as a chat error so the run's chat shows an
+    // inline error card. A plain Error (not a ProviderError) becomes the generic
+    // fallback card carrying the message.
     expect(mockRecordRunConversationError).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: "conv-1",

@@ -9,6 +9,7 @@ import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
   persistRunConversationMessages,
+  persistRunUserMessage,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
@@ -315,4 +316,62 @@ test("recordRunConversationError records a failed run's error on its kept conver
   expect(errors[0]?.error.message).toBe("Connection error.");
   expect(errors[0]?.error.code).toBe(ChatErrorCode.ServerError);
   expect(errors[0]?.error.isRetryable).toBe(true);
+});
+
+test("persistRunUserMessage writes the prompt as a user message, once", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const conversation = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+
+  await persistRunUserMessage({
+    conversation,
+    userText: trigger.messageTemplate,
+  });
+
+  const messages = await MessageModel.findByConversation(conversation.id);
+  expect(messages.map((m) => m.role)).toEqual(["user"]);
+  const userContent = messages[0].content as {
+    parts: Array<{ text?: string }>;
+  };
+  expect(userContent.parts[0].text).toBe("write a joke");
+
+  // Idempotent: a second call (or the lazy view path) does not duplicate.
+  await persistRunUserMessage({
+    conversation,
+    userText: trigger.messageTemplate,
+  });
+  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+    1,
+  );
 });

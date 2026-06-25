@@ -2035,6 +2035,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/chat/conversations/:id/chat-errors",
+    {
+      schema: {
+        operationId: RouteId.ClearChatConversationErrors,
+        description: "Clear a conversation's recorded chat errors",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Owner+org-scoped lookup (matches the other conversation mutations) so a
+      // caller can only clear errors on a conversation they own.
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationChatErrorModel.deleteByConversation(id);
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations/:id/compact",
     {

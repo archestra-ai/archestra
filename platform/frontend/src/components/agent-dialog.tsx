@@ -1637,6 +1637,7 @@ export function AgentDialog({
                           agentEnvironmentName={agentEnvironmentName}
                           onConflictsChange={setMcpEnvConflicts}
                           openComboboxOnMount={openToolsCombobox}
+                          includeAppCatalogs={agentType === "mcp_gateway"}
                         />
                       </div>
                       <div className="space-y-2">

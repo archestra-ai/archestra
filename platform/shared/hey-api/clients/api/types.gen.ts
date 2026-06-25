@@ -36480,7 +36480,9 @@ export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractio
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        includeApps?: boolean;
+    };
     url: '/api/internal_mcp_catalog';
 };
 

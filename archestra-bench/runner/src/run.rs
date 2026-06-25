@@ -18,12 +18,12 @@ use crate::client::{AgentCreate, EvalClient, FilePart};
 use crate::config::types::{EnvConfig, Stage, Task, ToolExposureMode};
 use crate::config::{Lane, load_envs, load_lanes};
 use crate::fixture_mcp::{FIXTURE_MCP_NAME, FixtureMcp};
-use crate::interactions::extract_effective_prompts;
+use crate::interactions::{RunUsage, extract_effective_prompts, sum_usage};
 use crate::lifecycle::Instance;
 use crate::mcp_lock;
 use crate::mcp_server::{BenchmarkMcp, Submission};
 use crate::pricing::{self, PriceBook};
-use crate::results::{Outcome, RunResult, render_markdown};
+use crate::results::{Outcome, RunCost, RunResult, render_markdown};
 use crate::seeding::{
     ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures,
     seed_skill_ref, tool_name,
@@ -999,8 +999,9 @@ fn infra_results_for_lane(
             prompt_tokens: None,
             completion_tokens: None,
             cache_read_tokens: None,
+            cache_write_tokens: None,
             price_model: None,
-            cost_usd: None,
+            cost: RunCost::NoSpend,
             agent_error: Some(format!("infra: {error}")),
             stage_count: task.stages.len(),
             format_attempts: 0,
@@ -1361,8 +1362,9 @@ async fn run_one(
                     prompt_tokens: None,
                     completion_tokens: None,
                     cache_read_tokens: None,
+                    cache_write_tokens: None,
                     price_model: None,
-                    cost_usd: None,
+                    cost: RunCost::NoSpend,
                     agent_error: Some(format!("artifact directory error: {e}")),
                     stage_count: task.stages.len(),
                     format_attempts: 0,
@@ -1432,9 +1434,8 @@ async fn run_one(
 /// loud `effective_prompt_error` event plus a warn log, but never propagated — a capture problem must
 /// not fail an otherwise-complete rollout.
 async fn capture_effective_prompts(
-    client: &EvalClient,
+    interactions: &[serde_json::Value],
     conversation_id: &str,
-    turn_count: usize,
     artifacts: &RunArtifacts,
 ) {
     // Every emitted event carries `conversation_id` so a multi-conversation rollout's captured prompts
@@ -1448,24 +1449,7 @@ async fn capture_effective_prompts(
             .await;
     };
 
-    let interactions = match client.fetch_session_interactions(conversation_id).await {
-        Ok(rows) => rows,
-        Err(e) => {
-            let msg = format!("failed to fetch interactions: {e}");
-            warn!("{msg}");
-            emit_error(&msg).await;
-            return;
-        }
-    };
-
-    if turn_count > 0 && interactions.is_empty() {
-        let msg = "no interactions found despite the conversation taking turns".to_string();
-        warn!("{msg}");
-        emit_error(&msg).await;
-        return;
-    }
-
-    let outcome = extract_effective_prompts(&interactions);
+    let outcome = extract_effective_prompts(interactions);
     for prompt in &outcome.prompts {
         match serde_json::to_value(prompt) {
             Ok(mut value) => {
@@ -1668,24 +1652,62 @@ async fn grade_rollout(
         .await?;
     }
 
-    // Capture every conversation the rollout drove, not just the last -- a `new_conversation` task
-    // splits its turns across several, and each one's effective prompts are worth recording.
+    // Source the rollout's billable usage from the persisted LLM-proxy interaction rows, summed across
+    // every conversation it drove -- one row per agentic step, so the total covers all steps rather
+    // than only the last one the chat SSE event reports, and includes cache-write tokens the event
+    // omits. A `new_conversation` task splits its turns across several conversations; each one's
+    // effective prompts are recorded too, from the same fetched rows.
+    let mut usage = RunUsage::default();
     for cid in &conversation_ids {
-        capture_effective_prompts(&client, cid, run.turn_count, artifacts).await;
+        match client.fetch_session_interactions(cid).await {
+            Ok(rows) => {
+                if run.turn_count > 0 && rows.is_empty() {
+                    let msg = "no interactions found despite the conversation taking turns";
+                    warn!("{msg}");
+                    artifacts
+                        .append(
+                            "effective_prompt_error",
+                            serde_json::json!({"conversation_id": cid, "error": msg}),
+                        )
+                        .await;
+                }
+                capture_effective_prompts(&rows, cid, artifacts).await;
+                usage.add(&sum_usage(&rows));
+            }
+            Err(e) => {
+                // A fetch failure leaves the rollout's usage incomplete; record it so cost is reported
+                // as unpriceable rather than silently under-summed.
+                let msg = format!("failed to fetch interactions: {e}");
+                warn!("{msg}");
+                artifacts
+                    .append(
+                        "effective_prompt_error",
+                        serde_json::json!({"conversation_id": cid, "error": msg}),
+                    )
+                    .await;
+                run.usage_fetch_failed = true;
+            }
+        }
     }
+    run.usage = usage;
 
+    let token_meta = |value: i64| -> serde_json::Value {
+        // `None` keeps "never measured" (no LLM call) distinct from a measured zero.
+        if run.usage.had_spend() {
+            serde_json::Value::from(value)
+        } else {
+            serde_json::Value::Null
+        }
+    };
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
     metadata["tool_call_count"] = serde_json::Value::Number((run.tool_calls.len() as i64).into());
     metadata["turn_count"] = serde_json::Value::Number((run.turn_count as i64).into());
-    metadata["total_tokens"] =
-        serde_json::to_value(run.total_tokens).unwrap_or(serde_json::Value::Null);
-    metadata["prompt_tokens"] =
-        serde_json::to_value(run.prompt_tokens).unwrap_or(serde_json::Value::Null);
-    metadata["completion_tokens"] =
-        serde_json::to_value(run.completion_tokens).unwrap_or(serde_json::Value::Null);
-    metadata["cache_read_tokens"] =
-        serde_json::to_value(run.cache_read_tokens).unwrap_or(serde_json::Value::Null);
+    metadata["total_tokens"] = token_meta(run.usage.total_tokens());
+    metadata["prompt_tokens"] = token_meta(run.usage.prompt_tokens);
+    metadata["completion_tokens"] = token_meta(run.usage.completion_tokens);
+    metadata["cache_read_tokens"] = token_meta(run.usage.cache_read_tokens);
+    metadata["cache_write_tokens"] = token_meta(run.usage.cache_write_tokens);
 
     let submission = bench_mcp.take_submission(rollout_key).await;
     match submission {
@@ -1984,10 +2006,6 @@ async fn drive_stage(
     let text = stage_message(&expand_runtime(&stage.text, runtime), submission_open);
     let mut stream_parse_error: Option<String> = None;
     let mut coalescer = StreamCoalescer::new(artifacts);
-    run.stage_tokens = None;
-    run.stage_prompt_tokens = None;
-    run.stage_completion_tokens = None;
-    run.stage_cache_read_tokens = None;
 
     let mut stream = client
         .stream_chat_records(conversation_id, prior_messages, &text, &files, turn_id)
@@ -2022,24 +2040,9 @@ async fn drive_stage(
         }
     }
     coalescer.flush().await;
-    // Sum each stage's final cumulative usage into the run totals, field by field, so the persisted
-    // split stays consistent with `total_tokens`.
-    if let Some(stage_tokens) = run.stage_tokens {
-        run.total_tokens = Some(run.total_tokens.unwrap_or(0) + stage_tokens);
-    }
-    add_stage_into(&mut run.prompt_tokens, run.stage_prompt_tokens);
-    add_stage_into(&mut run.completion_tokens, run.stage_completion_tokens);
-    add_stage_into(&mut run.cache_read_tokens, run.stage_cache_read_tokens);
-
+    // Token usage is no longer read from the stream: the run's billable totals are summed post-run from
+    // the persisted interaction rows (see grade_rollout), which capture every agentic step.
     Ok(combine_errors(run.stream_error.clone(), stream_parse_error))
-}
-
-/// Fold one stage's value into a run-level running total, leaving the total `None` until at least one
-/// stage reports (so "never measured" stays distinct from a measured zero).
-fn add_stage_into(total: &mut Option<i64>, stage: Option<i64>) {
-    if let Some(stage) = stage {
-        *total = Some(total.unwrap_or(0) + stage);
-    }
 }
 
 fn combine_errors(first: Option<String>, second: Option<String>) -> Option<String> {
@@ -2233,16 +2236,25 @@ async fn finish(
     agent_error: Option<String>,
     prices: &PriceBook,
 ) -> RunResult {
-    let prompt_tokens = run.and_then(|r| r.prompt_tokens);
-    let completion_tokens = run.and_then(|r| r.completion_tokens);
-    let cache_read_tokens = run.and_then(|r| r.cache_read_tokens);
+    let usage = run.map(|r| &r.usage);
+    let (total_tokens, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens) =
+        match usage {
+            Some(u) if u.had_spend() => (
+                Some(u.total_tokens()),
+                Some(u.prompt_tokens),
+                Some(u.completion_tokens),
+                Some(u.cache_read_tokens),
+                Some(u.cache_write_tokens),
+            ),
+            _ => (None, None, None, None, None),
+        };
     let price_model = lane.price_model();
-    let cost_usd = prices.cost(
-        prompt_tokens,
-        completion_tokens,
-        cache_read_tokens,
-        price_model.as_deref(),
-    );
+    let cost = run_cost(run, prices, price_model.as_deref());
+    let (cost_value, cost_status) = match cost {
+        RunCost::Priced(c) => (serde_json::Value::from(c), "priced"),
+        RunCost::Unpriced => (serde_json::Value::Null, "unpriced"),
+        RunCost::NoSpend => (serde_json::Value::Null, "no_spend"),
+    };
     if let serde_json::Value::Object(map) = metadata {
         map["finished_at"] = serde_json::Value::String(timestamp());
         map["outcome"] = serde_json::Value::String(outcome.value().to_string());
@@ -2254,9 +2266,10 @@ async fn finish(
             "price_model".to_string(),
             serde_json::to_value(&price_model).unwrap_or(serde_json::Value::Null),
         );
+        map.insert("cost_usd".to_string(), cost_value);
         map.insert(
-            "cost_usd".to_string(),
-            serde_json::to_value(cost_usd).unwrap_or(serde_json::Value::Null),
+            "cost_status".to_string(),
+            serde_json::Value::String(cost_status.to_string()),
         );
     }
     artifacts.write_run(metadata).await;
@@ -2270,16 +2283,49 @@ async fn finish(
         finish_reason: run.and_then(|r| r.finish_reason.clone()),
         tool_call_count: run.map(|r| r.tool_calls.len()).unwrap_or(0),
         turn_count: run.map(|r| r.turn_count).unwrap_or(0),
-        total_tokens: run.and_then(|r| r.total_tokens),
+        total_tokens,
         prompt_tokens,
         completion_tokens,
         cache_read_tokens,
+        cache_write_tokens,
         price_model,
-        cost_usd,
+        cost,
         agent_error,
         stage_count: task.stages.len(),
         format_attempts,
         artifact_dir: Some(artifacts.path.to_string_lossy().to_string()),
+    }
+}
+
+/// Classify a rollout's USD cost from its interaction-sourced usage. Billable spend that we cannot
+/// fully and faithfully price is `Unpriced` (loud), never silently dropped: an incomplete fetch, no
+/// recorded rows despite turns, a per-row telemetry gap, or a session that mixed models (which one
+/// lane slug cannot price) all unprice it, as does a slug absent from the price book. A rollout with
+/// no recorded LLM call is `NoSpend` (a real zero).
+fn run_cost(run: Option<&ChatRunResult>, prices: &PriceBook, price_model: Option<&str>) -> RunCost {
+    let Some(run) = run else {
+        return RunCost::NoSpend;
+    };
+    let usage = &run.usage;
+    // An incomplete fetch on a rollout that took turns means real spend we cannot fully account.
+    if run.turn_count > 0 && (run.usage_fetch_failed || usage.chat_rows == 0) {
+        return RunCost::Unpriced;
+    }
+    if !usage.had_spend() {
+        return RunCost::NoSpend;
+    }
+    if usage.rows_with_null_tokens > 0 || usage.models.len() > 1 {
+        return RunCost::Unpriced;
+    }
+    match prices.cost(
+        Some(usage.prompt_tokens),
+        Some(usage.completion_tokens),
+        Some(usage.cache_read_tokens),
+        Some(usage.cache_write_tokens),
+        price_model,
+    ) {
+        Some(c) => RunCost::Priced(c),
+        None => RunCost::Unpriced,
     }
 }
 
@@ -3064,8 +3110,14 @@ mod tests {
         lane.model = "vendor/cheap".to_string();
         let task = dummy_task("t1");
         let run = ChatRunResult {
-            prompt_tokens: Some(1000),
-            completion_tokens: Some(500),
+            turn_count: 2,
+            usage: RunUsage {
+                prompt_tokens: 1000,
+                completion_tokens: 500,
+                chat_rows: 2,
+                models: ["vendor/cheap".to_string()].into_iter().collect(),
+                ..Default::default()
+            },
             ..Default::default()
         };
         let mut metadata = serde_json::json!({
@@ -3085,20 +3137,25 @@ mod tests {
         )
         .await;
         // 1000 * 1e-6 + 500 * 2e-6 = 0.002
-        assert_eq!(result.cost_usd, Some(0.002));
+        let RunCost::Priced(c) = result.cost else {
+            panic!("expected a priced cost, got {:?}", result.cost);
+        };
+        assert!((c - 0.002).abs() < 1e-12);
         assert_eq!(result.price_model.as_deref(), Some("vendor/cheap"));
         assert_eq!(result.prompt_tokens, Some(1000));
         assert_eq!(result.completion_tokens, Some(500));
-        // finish owns price_model/cost_usd in run.json (the token split is written upstream by grade_rollout).
+        assert_eq!(result.total_tokens, Some(1500));
+        // finish owns price_model/cost in run.json (the token split is written upstream by grade_rollout).
         let written: serde_json::Value =
             serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
                 .unwrap();
         assert_eq!(written["cost_usd"], 0.002);
+        assert_eq!(written["cost_status"], "priced");
         assert_eq!(written["price_model"], "vendor/cheap");
     }
 
     #[tokio::test]
-    async fn finish_leaves_cost_null_without_price_model() {
+    async fn finish_marks_spend_unpriced_without_price_model() {
         let tmp = tempfile::tempdir().unwrap();
         let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
             .await
@@ -3106,8 +3163,14 @@ mod tests {
         let lane = dummy_lane("l1"); // openai provider, no openrouter_model → no price_model
         let task = dummy_task("t1");
         let run = ChatRunResult {
-            prompt_tokens: Some(1000),
-            completion_tokens: Some(500),
+            turn_count: 2,
+            usage: RunUsage {
+                prompt_tokens: 1000,
+                completion_tokens: 500,
+                chat_rows: 2,
+                models: ["openai/gpt".to_string()].into_iter().collect(),
+                ..Default::default()
+            },
             ..Default::default()
         };
         let mut metadata = serde_json::json!({
@@ -3126,8 +3189,49 @@ mod tests {
             &priced_book(),
         )
         .await;
-        assert_eq!(result.cost_usd, None);
+        // Spend happened but there is no slug to price it: unpriceable, not a silent zero.
+        assert_eq!(result.cost, RunCost::Unpriced);
         assert_eq!(result.price_model, None);
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
+                .unwrap();
+        assert_eq!(written["cost_status"], "unpriced");
+        assert!(written["cost_usd"].is_null());
+    }
+
+    #[tokio::test]
+    async fn finish_reports_no_spend_when_no_llm_call() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
+            .await
+            .unwrap();
+        let mut lane = dummy_lane("l1");
+        lane.provider = archestra_bench_core::Provider::Openrouter;
+        lane.model = "vendor/cheap".to_string();
+        let task = dummy_task("t1");
+        let run = ChatRunResult::default(); // no turns, no interaction rows
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::AgentError,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            Some("boom".to_string()),
+            &priced_book(),
+        )
+        .await;
+        assert_eq!(result.cost, RunCost::NoSpend);
+        assert_eq!(result.total_tokens, None);
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
+                .unwrap();
+        assert_eq!(written["cost_status"], "no_spend");
     }
 
     #[tokio::test]

@@ -15,15 +15,11 @@ const mockUserSearchableSelect = vi.fn(
   }) => <div data-testid="user-searchable-select" />,
 );
 
-vi.mock("@/lib/config/config", () => ({
-  default: {
-    enterpriseFeatures: {
-      core: false,
-    },
-  },
+vi.mock("@/lib/config/config.query", () => ({
+  useEnterpriseFeature: () => false,
 }));
 
-vi.mock("@/components/roles/roles-list", () => ({
+vi.mock("@/components/roles/roles-list.ee", () => ({
   RolesList: () => <div>roles list</div>,
 }));
 

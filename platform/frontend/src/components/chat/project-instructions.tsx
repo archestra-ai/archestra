@@ -32,17 +32,18 @@ export function InstructionsRow({ onSelect }: { onSelect: () => void }) {
       onClick={onSelect}
       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
     >
-      {/* Same muted icon + filename treatment as a regular .md file row — the
+      {/* Single line, same muted-icon treatment as a regular .md file row — the
           instructions entry looks like the rest of the list, only pinned and
-          with a one-line description. */}
+          with an inline description after the filename. */}
       <FileText
         className="h-5 w-5 shrink-0 text-muted-foreground"
         aria-hidden
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{PROJECT_INSTRUCTIONS_FILENAME}</span>
-        <span className="block truncate text-xs font-normal text-muted-foreground">
-          guidance for every chat
+      <span className="min-w-0 flex-1 truncate">
+        {PROJECT_INSTRUCTIONS_FILENAME}
+        <span className="text-muted-foreground">
+          {" "}
+          · guidance for every chat
         </span>
       </span>
     </button>

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
@@ -82,6 +83,7 @@ export default function RolesSettingsPage() {
   const enterpriseCoreActive = useEnterpriseFeature("core");
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner featureName="RBAC" />
       <RoleDebuggerCallout />
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
         <RolesListEnterprise />

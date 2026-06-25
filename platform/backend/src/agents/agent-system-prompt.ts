@@ -1,6 +1,5 @@
 import {
   buildUserSystemPromptContext,
-  DEFAULT_AGENT_SYSTEM_PROMPT,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -38,10 +37,6 @@ export const TOOL_UI_RESULT_INSTRUCTION =
  * tool-behavior instructions implied by its tool set and exposure mode. Shared
  * by the interactive chat path and the autonomous A2A path so both produce the
  * same prompt from the same inputs.
- *
- * Both callers (chat, A2A) pass only user-facing agents (`agentType === "agent"`);
- * the blank-prompt fallback to `DEFAULT_AGENT_SYSTEM_PROMPT` assumes that and is
- * not enforced here — do not route built-in/internal agents through this helper.
  */
 export async function buildAgentSystemPrompt(params: {
   agent: {
@@ -76,14 +71,12 @@ export async function buildAgentSystemPrompt(params: {
     projectInstructions,
   } = params;
 
-  const renderedPrompt = agent.systemPrompt?.trim()
-    ? await renderAgentPrompt({
-        systemPrompt: agent.systemPrompt,
-        organizationId,
-        userId,
-        user,
-      })
-    : DEFAULT_AGENT_SYSTEM_PROMPT;
+  const renderedPrompt = await renderAgentPrompt({
+    systemPrompt: agent.systemPrompt,
+    organizationId,
+    userId,
+    user,
+  });
 
   const toolLoadingInstructions =
     agent.toolExposureMode === "search_and_run_only"

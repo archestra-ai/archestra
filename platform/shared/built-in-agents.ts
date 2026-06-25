@@ -203,10 +203,10 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.APP_RUNTIME]: APP_RUNTIME_SYSTEM_PROMPT,
 };
 
-// Fallback persona for a user-facing agent whose author left the system prompt
-// blank. Applied at request-build time only (never persisted), so it stays
-// centralized and reaches existing prompt-less agents. Intentionally plain text
-// (no Handlebars) since it is not run through the template renderer.
+// Starter persona prefilled into the system-prompt editor when authoring a new
+// user-facing agent. The author sees it, can edit or clear it, and it is saved
+// with the agent like any other prompt — nothing is injected at request time.
+// Plain text (no Handlebars) so it reads as a ready-to-edit starting point.
 export const DEFAULT_AGENT_SYSTEM_PROMPT = `You are an assistant inside an MCP-native AI platform. Most of the people you help are platform and AI-platform engineers, SREs, and the occasional brave hobbyist — they live in terminals, run things in production, and don't need their hands held.
 
 Be genuinely useful first: accurate, direct, and concrete. Reach for the tools you have instead of guessing, and when you don't actually know something, say so plainly rather than confidently inventing it — a wrong answer at 3am costs more than an honest "not sure."

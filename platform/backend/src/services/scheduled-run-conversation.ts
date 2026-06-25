@@ -155,34 +155,6 @@ export async function persistRunConversationMessages(params: {
 }
 
 /**
- * Drop a failed run's eagerly-created conversation when it has no messages. A
- * run's transcript is persisted only on success, so a failed run's conversation
- * is always empty — an orphaned blank chat. Delete it and unlink the run so it
- * never dangles at a missing row. Guarded on emptiness so a conversation that
- * somehow has messages is never destroyed.
- */
-export async function deleteEmptyRunConversation(params: {
-  conversation: Conversation;
-  runId: string;
-  organizationId: string;
-}): Promise<void> {
-  const { conversation, runId, organizationId } = params;
-
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
-    return;
-  }
-
-  // Unlink first so the run never points at a row that's about to vanish.
-  await ScheduleTriggerRunModel.clearChatConversationId(runId);
-  await ConversationModel.delete(
-    conversation.id,
-    conversation.userId,
-    organizationId,
-  );
-}
-
-/**
  * Backfill chat messages from the run's interactions when the conversation has
  * none yet. No-op until interactions exist, so it is safe to call repeatedly
  * (and must NOT be called before execution, or it would seed placeholders).

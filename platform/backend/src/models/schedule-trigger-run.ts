@@ -171,18 +171,6 @@ class ScheduleTriggerRunModel {
     return !!updated;
   }
 
-  /**
-   * Unlink the run from its conversation. Used when a failed run's empty,
-   * eagerly-created conversation is deleted, so the run never dangles at a
-   * missing row.
-   */
-  static async clearChatConversationId(runId: string): Promise<void> {
-    await db
-      .update(schema.scheduleTriggerRunsTable)
-      .set({ chatConversationId: null })
-      .where(eq(schema.scheduleTriggerRunsTable.id, runId));
-  }
-
   static async setArtifact(runId: string, artifact: string): Promise<boolean> {
     const [updated] = await db
       .update(schema.scheduleTriggerRunsTable)

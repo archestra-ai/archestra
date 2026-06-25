@@ -102,11 +102,6 @@ function RunRow({
       <span className="flex-1 truncate text-sm text-muted-foreground">
         {formatRunTimestamp(run.createdAt)}
       </span>
-      {isCurrent && (
-        <span className="shrink-0 text-xs font-medium text-primary">
-          current
-        </span>
-      )}
       {kind === "running" && (
         <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
       )}
@@ -123,7 +118,7 @@ function RunRow({
         href={href}
         className={cn(
           "block rounded-lg border bg-card transition-colors hover:bg-accent",
-          isCurrent && "border-primary/50 bg-accent",
+          isCurrent && "border-primary bg-accent",
         )}
       >
         {rowContent}
@@ -136,7 +131,7 @@ function RunRow({
       <div
         className={cn(
           "rounded-lg border bg-card",
-          isCurrent && "border-primary/50",
+          isCurrent && "border-primary bg-accent",
         )}
       >
         <button

@@ -89,6 +89,7 @@ import {
 } from "@/lib/chat/app-diagnostics-store";
 import {
   fetchConversationEnabledTools,
+  useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
@@ -775,12 +776,10 @@ export function ChatPageContent({
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
 
-  // After the user connects a per-user provider (e.g. GitHub Copilot) via the
-  // inline auth card, re-run their original prompt automatically. The connect
-  // mutation already invalidated the model/key caches; find the last user
-  // message and regenerate its turn. A no-op while a turn is in flight so a
-  // connect can't double-send.
-  const handleProviderConnected = useCallback(() => {
+  // Re-send the most recent user message by regenerating its turn. Shared by the
+  // provider-connect auto-rerun and the scheduled-run "Try again". A no-op while
+  // a turn is in flight so it can't double-send.
+  const resendLastUserMessage = useCallback(() => {
     if (status === "submitted" || status === "streaming") return;
     if (!regenerateUserMessage) return;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -794,6 +793,20 @@ export function ChatPageContent({
       return;
     }
   }, [messages, regenerateUserMessage, status]);
+
+  // After the user connects a per-user provider (e.g. GitHub Copilot) via the
+  // inline auth card, re-run their original prompt automatically. The connect
+  // mutation already invalidated the model/key caches.
+  const handleProviderConnected = resendLastUserMessage;
+
+  // Scheduled-run "Try again": clear the persisted error so the card disappears,
+  // then resend the scheduled prompt. Only wired for scheduled-run chats.
+  const clearChatErrors = useClearChatErrors();
+  const handleScheduledRunRetry = useCallback(async () => {
+    if (!conversationId) return;
+    await clearChatErrors.mutateAsync({ id: conversationId });
+    resendLastUserMessage();
+  }, [conversationId, clearChatErrors, resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as
@@ -1955,6 +1968,9 @@ export function ChatPageContent({
                       compactions={conversation?.compactions ?? []}
                       onRegenerateUserMessage={regenerateUserMessage}
                       onProviderConnected={handleProviderConnected}
+                      onChatErrorRetry={
+                        scheduledRun ? handleScheduledRunRetry : undefined
+                      }
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse

@@ -27,6 +27,7 @@ const {
   createChatConversation,
   updateChatConversation,
   setConversationHooksDebug,
+  clearChatConversationErrors,
   compactChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
@@ -297,6 +298,25 @@ export function useCompactConversation() {
         ["conversation", variables.id],
         data.conversation,
       );
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
+    },
+  });
+}
+
+/**
+ * Clear a conversation's recorded chat errors. Used by the scheduled-run
+ * "Try again" affordance: after wiping the error rows we invalidate the
+ * conversation so the inline error card disappears before the prompt is resent.
+ */
+export function useClearChatErrors() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      callApi(() => clearChatConversationErrors({ path: { id } }), null),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });

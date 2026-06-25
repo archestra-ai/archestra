@@ -369,17 +369,20 @@ export function ConversationFilesPanel({
             )}
           </div>
 
+          {/* The list never highlights a "current" row: opening a file drills
+              into the full-height detail view, so there's no list-beside-preview
+              for a selection marker to point at. Pass selectedId={null}. */}
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             <FileSection
               title={showHeaders ? "Results" : undefined}
               items={results}
-              selectedId={selectedId}
+              selectedId={null}
               onSelect={openFile}
               selection={selection}
               leading={
                 showInstructions && !selectionMode ? (
                   <InstructionsRow
-                    selected={instructionsSelected}
+                    selected={false}
                     hasContent={hasInstructions}
                     onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
                   />
@@ -390,7 +393,7 @@ export function ConversationFilesPanel({
             <FileSection
               title={showHeaders ? "Attachments" : undefined}
               items={attachments}
-              selectedId={selectedId}
+              selectedId={null}
               onSelect={openFile}
               selection={selection}
               renderActions={renderRowActions}

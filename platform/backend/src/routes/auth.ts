@@ -18,6 +18,7 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
   AccountModel,
@@ -889,7 +890,7 @@ async function rewriteGoogleSsoResponseWithHostedDomainHint(params: {
 }
 
 async function getGoogleHostedDomainHint(): Promise<string | undefined> {
-  if (!config.enterpriseFeatures.core) {
+  if (!enterpriseTier.isCoreActive()) {
     return undefined;
   }
 

@@ -19,6 +19,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -35,6 +36,7 @@ import {
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
 } from "@/models";
@@ -1100,6 +1102,157 @@ describe("scaffold_app tools param", () => {
     const created = await scaffold({ name: "CrossOrg", tools: [foreignName] });
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
+});
+
+describe("set_app_tools", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+  let userId: string;
+  let toolName: string;
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent({ name: "Set Tools Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      userId = user.id;
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        organizationId,
+        userId: user.id,
+      };
+
+      const catalog = await makeInternalMcpCatalog({ organizationId });
+      toolName = `acme__search_${crypto.randomUUID().slice(0, 8)}`;
+      await makeTool({ name: toolName, catalogId: catalog.id });
+    },
+  );
+
+  function scaffold(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args,
+      context,
+    );
+  }
+
+  function setTools(args: Record<string, unknown>, ctx = context) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_TOOLS_SHORT_NAME),
+      args,
+      ctx,
+    );
+  }
+
+  test("assigns a tool to an app scaffolded without any", async () => {
+    const created = await scaffold({ name: "Recoverable" });
+    const appId = structured(created).id as string;
+    expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
+
+    const res = await setTools({ appId, tools: [toolName] });
+    expect(res.isError).toBe(false);
+    expect(structured(res).tools).toEqual([toolName]);
+    const assigned = await AppToolModel.getToolsForApp(appId);
+    expect(assigned.map((tool) => tool.name)).toEqual([toolName]);
+  });
+
+  test("an unknown tool name fails and leaves the prior set intact", async () => {
+    const created = await scaffold({ name: "Keeper", tools: [toolName] });
+    const appId = structured(created).id as string;
+
+    const res = await setTools({ appId, tools: ["nope__missing"] });
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as any).text).toContain("nope__missing");
+    const assigned = await AppToolModel.getToolsForApp(appId);
+    expect(assigned.map((tool) => tool.name)).toEqual([toolName]);
+  });
+
+  test("an empty list clears the assigned set", async () => {
+    const created = await scaffold({ name: "Clearable", tools: [toolName] });
+    const appId = structured(created).id as string;
+
+    const res = await setTools({ appId, tools: [] });
+    expect(res.isError).toBe(false);
+    expect(structured(res).tools).toEqual([]);
+    expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
+  });
+
+  test("resolves tools in the app's bound environment, not the org default", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+    makeApp,
+  }) => {
+    const env = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const envCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      environmentId: env.id,
+    });
+    const envToolName = `acme__env_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: envToolName, catalogId: envCatalog.id });
+
+    const app = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+      environmentId: env.id,
+    });
+
+    // Succeeds only because resolution fences on app.environmentId (env), not the
+    // org default (null) scaffold_app uses — a default-env resolve would reject it.
+    const res = await setTools({ appId: app.id, tools: [envToolName] });
+    expect(res.isError).toBe(false);
+    expect(structured(res).tools).toEqual([envToolName]);
+  });
+
+  test("rejects a default-env tool for an env-bound app, leaving it unchanged", async ({
+    makeApp,
+  }) => {
+    // toolName (beforeEach) lives in the org-default environment (null); the app
+    // is bound to a non-default environment — the counterfactual of the test
+    // above. A resolve against the org default would wrongly accept it.
+    const env = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const app = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+      environmentId: env.id,
+    });
+
+    const res = await setTools({ appId: app.id, tools: [toolName] });
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as any).text).toContain("Unknown tool name");
+    expect(await AppToolModel.getToolsForApp(app.id)).toEqual([]);
+  });
+
+  test("a member who cannot modify the app is refused, leaving it unchanged", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await scaffold({ name: "OrgApp", scope: "org" });
+    const appId = structured(created).id as string;
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+
+    const res = await setTools(
+      { appId, tools: [toolName] },
+      { ...context, userId: member.id },
+    );
+    expect(res.isError).toBe(true);
+    expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
   });
 });
 

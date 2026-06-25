@@ -14,6 +14,7 @@ import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -60,6 +61,7 @@ import { useSetSettingsAction } from "../layout";
 export default function UsersPageClient() {
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner />
       <UsersPageContent />
     </ErrorBoundary>
   );

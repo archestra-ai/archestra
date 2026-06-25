@@ -25,7 +25,7 @@ Each connector has a visibility setting that determines which users can retrieve
 
 Users with the `knowledgeSource:admin` role can view and query every connector regardless of visibility.
 
-> **Enterprise only.** Team-scoped visibility and auto-synced ACLs require an enterprise license. Contact [sales@archestra.ai](mailto:sales@archestra.ai) for licensing information.
+> **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## Jira
 

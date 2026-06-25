@@ -42,7 +42,8 @@ type NativeSandboxErrorCode =
   | "ARCHESTRA_COMMAND_FAILED"
   | "ARCHESTRA_ENGINE_UNREACHABLE"
   | "ARCHESTRA_INTERNAL"
-  | "ARCHESTRA_INVALID_INPUT";
+  | "ARCHESTRA_INVALID_INPUT"
+  | "ARCHESTRA_SANDBOX_HISTORY_LIMIT";
 
 interface LimitOverrides {
   outputBytesLimit?: number;
@@ -405,6 +406,9 @@ class SandboxRuntimeService {
       case "ARCHESTRA_ARTIFACT_TOO_LARGE":
       case "ARCHESTRA_COMMAND_FAILED":
       case "ARCHESTRA_INVALID_INPUT":
+      // a per-session replay limit, not an engine outage — surface the actionable
+      // message and leave runtime status untouched (no cooldown gate).
+      case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
         return new SandboxRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
         // genuine engine outage — flip status so the cooldown gate kicks in.
@@ -471,6 +475,7 @@ function getNativeSandboxError(error: unknown): {
     case "ARCHESTRA_ENGINE_UNREACHABLE":
     case "ARCHESTRA_INTERNAL":
     case "ARCHESTRA_INVALID_INPUT":
+    case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
       return { code, message: error.message };
     default:
       return { code: null, message: error.message };

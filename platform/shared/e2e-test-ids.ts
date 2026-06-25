@@ -5,7 +5,6 @@ export const E2eTestId = {
   CloneAgentButton: "clone-agent-button",
   DeleteAgentButton: "delete-agent-button",
   OnboardingNextButton: "onboarding-next-button",
-  OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
   SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
@@ -82,6 +81,10 @@ export const E2eTestId = {
   ManageCredentialsAddToOrgButton: "manage-credentials-add-to-org-button",
   ManageCredentialsAddToTeamButton: "manage-credentials-add-to-team-button",
   ManageCredentialsAddToTeamOption: "manage-credentials-add-to-team-option",
+  ManageCredentialsAddServiceAccountButton:
+    "manage-credentials-add-service-account-button",
+  AddServiceAccountConfirmButton: "add-service-account-confirm-button",
+  ManageServiceAccountsTable: "manage-service-accounts-table",
   ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",

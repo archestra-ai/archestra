@@ -12,11 +12,15 @@ const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 
 /// Per-token USD prices for one model. `cache_read` is the discounted rate for cached prompt tokens,
 /// absent when OpenRouter publishes none (the caller then prices cache reads at the normal input rate).
+/// `cache_write` is the premium rate for writing prompt tokens into the cache; absent when OpenRouter
+/// publishes none, in which case a model that emitted cache-write tokens is left unpriced rather than
+/// charged a fabricated multiple of the input rate.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct ModelPrice {
     pub input: f64,
     pub output: f64,
     pub cache_read: Option<f64>,
+    pub cache_write: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -32,24 +36,39 @@ impl PriceBook {
     /// USD cost of one run. `None` — reported as `n/a`, never `0` — when the lane has no slug, the slug
     /// is absent from the book, or token counts are missing.
     ///
-    /// `prompt` is the backend's `inputTokens`, which is already **net of** cache reads (the platform
-    /// emits a fully-cached request as `inputTokens == 0`, with the cache shown separately — see
-    /// `calculateCost` in the platform's cost-optimization). So input and cache tokens are disjoint and
-    /// summed, not subtracted. Cache reads are billed at the cache rate when OpenRouter publishes one,
-    /// else at the input rate (the conservative estimate when the discount is unknown).
+    /// `prompt` is the backend's `inputTokens`, which is already **net of** cache reads and cache
+    /// writes (the platform reports `inputTokens`, `cacheReadTokens`, and `cacheWriteTokens` as
+    /// disjoint counts — see `calculateInteractionCosts` in the platform's cost-optimization). So the
+    /// four categories are summed, not subtracted. Cache reads are billed at the cache-read rate when
+    /// OpenRouter publishes one, else at the input rate (the conservative estimate when the discount is
+    /// unknown). Cache writes are billed only at the published cache-write rate: a model that emitted
+    /// cache-write tokens but has no published write rate yields `None` (unpriceable, surfaced as
+    /// `n/a`) rather than a fabricated charge.
     pub fn cost(
         &self,
         prompt: Option<i64>,
         completion: Option<i64>,
         cache_read: Option<i64>,
+        cache_write: Option<i64>,
         slug: Option<&str>,
     ) -> Option<f64> {
         let price = self.models.get(slug?)?;
         let prompt = prompt?.max(0) as f64;
         let completion = completion?.max(0) as f64;
         let cache_read = cache_read.unwrap_or(0).max(0) as f64;
-        let cache_price = price.cache_read.unwrap_or(price.input);
-        Some(prompt * price.input + cache_read * cache_price + completion * price.output)
+        let cache_write = cache_write.unwrap_or(0).max(0) as f64;
+        let cache_read_price = price.cache_read.unwrap_or(price.input);
+        let cache_write_cost = if cache_write > 0.0 {
+            cache_write * price.cache_write?
+        } else {
+            0.0
+        };
+        Some(
+            prompt * price.input
+                + cache_read * cache_read_price
+                + cache_write_cost
+                + completion * price.output,
+        )
     }
 }
 
@@ -93,6 +112,7 @@ pub fn parse_price_book(models_json: &JsonValue) -> PriceBook {
                     input,
                     output,
                     cache_read: field("input_cache_read"),
+                    cache_write: field("input_cache_write"),
                 },
             );
         }
@@ -115,7 +135,8 @@ mod tests {
             "data": [
                 { "id": "vendor/cheap", "pricing": { "prompt": "0.000001", "completion": "0.000002" } },
                 { "id": "vendor/cached", "pricing": {
-                    "prompt": "0.000001", "completion": "0.000002", "input_cache_read": "0.0000001" } },
+                    "prompt": "0.000001", "completion": "0.000002",
+                    "input_cache_read": "0.0000001", "input_cache_write": "0.00000125" } },
                 { "id": "vendor/free", "pricing": { "prompt": "0", "completion": "0" } },
                 { "id": "vendor/dynamic", "pricing": { "prompt": "-1", "completion": "-1" } },
                 { "id": "vendor/partial", "pricing": { "prompt": "0.000001" } },
@@ -134,14 +155,19 @@ mod tests {
             book.get("vendor/cached").unwrap().cache_read,
             Some(0.0000001)
         );
+        assert_eq!(
+            book.get("vendor/cached").unwrap().cache_write,
+            Some(0.00000125)
+        );
         assert_eq!(book.get("vendor/cheap").unwrap().cache_read, None);
+        assert_eq!(book.get("vendor/cheap").unwrap().cache_write, None);
     }
 
     #[test]
     fn cost_uses_input_and_output_rates() {
         let book = book();
         // 1000 input * 1e-6 + 500 output * 2e-6 = 0.001 + 0.001
-        let cost = book.cost(Some(1000), Some(500), None, Some("vendor/cheap"));
+        let cost = book.cost(Some(1000), Some(500), None, None, Some("vendor/cheap"));
         assert_eq!(cost, Some(0.002));
     }
 
@@ -151,20 +177,59 @@ mod tests {
         // input (1000) is already net of cache; cache reads (200) are disjoint and priced separately:
         // 1000*1e-6 + 200*1e-7 + 500*2e-6
         let cost = book
-            .cost(Some(1000), Some(500), Some(200), Some("vendor/cached"))
+            .cost(
+                Some(1000),
+                Some(500),
+                Some(200),
+                None,
+                Some("vendor/cached"),
+            )
             .unwrap();
         assert!((cost - (0.001 + 0.00002 + 0.001)).abs() < 1e-12);
     }
 
     #[test]
+    fn cost_adds_cache_writes_at_cache_write_rate() {
+        let book = book();
+        // cache writes (400) are disjoint and billed at the published write rate (1.25e-6):
+        // 1000*1e-6 + 200*1e-7 + 400*1.25e-6 + 500*2e-6
+        let cost = book
+            .cost(
+                Some(1000),
+                Some(500),
+                Some(200),
+                Some(400),
+                Some("vendor/cached"),
+            )
+            .unwrap();
+        assert!((cost - (0.001 + 0.00002 + 0.0005 + 0.001)).abs() < 1e-12);
+    }
+
+    #[test]
     fn cache_reads_without_rate_priced_at_input() {
         let book = book();
-        // vendor/cheap has no cache rate → cache reads billed at the input rate, added on top of input.
+        // vendor/cheap has no cache-read rate → cache reads billed at the input rate, added on top.
         let with_cache = book
-            .cost(Some(1000), Some(500), Some(300), Some("vendor/cheap"))
+            .cost(Some(1000), Some(500), Some(300), None, Some("vendor/cheap"))
             .unwrap();
         // 1000*1e-6 + 300*1e-6 + 500*2e-6
         assert!((with_cache - (0.001 + 0.0003 + 0.001)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cache_writes_without_rate_are_unpriced() {
+        let book = book();
+        // vendor/cheap publishes no cache-write rate; cache-write tokens must NOT be charged a
+        // fabricated rate — the whole run is unpriceable instead.
+        assert_eq!(
+            book.cost(Some(1000), Some(500), None, Some(300), Some("vendor/cheap")),
+            None
+        );
+        // Zero cache-write tokens need no write rate, so pricing still succeeds.
+        assert!(
+            book.cost(Some(1000), Some(500), None, Some(0), Some("vendor/cheap"))
+                .is_some()
+        );
     }
 
     #[test]
@@ -172,7 +237,13 @@ mod tests {
         let book = book();
         // A malformed negative count must not produce a negative cost.
         let cost = book
-            .cost(Some(-5), Some(-5), Some(-5), Some("vendor/cached"))
+            .cost(
+                Some(-5),
+                Some(-5),
+                Some(-5),
+                Some(-5),
+                Some("vendor/cached"),
+            )
             .unwrap();
         assert_eq!(cost, 0.0);
     }
@@ -180,9 +251,18 @@ mod tests {
     #[test]
     fn unknown_slug_or_missing_tokens_is_none() {
         let book = book();
-        assert_eq!(book.cost(Some(10), Some(10), None, Some("nope")), None);
-        assert_eq!(book.cost(Some(10), Some(10), None, None), None);
-        assert_eq!(book.cost(None, Some(10), None, Some("vendor/cheap")), None);
-        assert_eq!(book.cost(Some(10), None, None, Some("vendor/cheap")), None);
+        assert_eq!(
+            book.cost(Some(10), Some(10), None, None, Some("nope")),
+            None
+        );
+        assert_eq!(book.cost(Some(10), Some(10), None, None, None), None);
+        assert_eq!(
+            book.cost(None, Some(10), None, None, Some("vendor/cheap")),
+            None
+        );
+        assert_eq!(
+            book.cost(Some(10), None, None, None, Some("vendor/cheap")),
+            None
+        );
     }
 }

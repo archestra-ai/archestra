@@ -130,6 +130,8 @@ vi.mock("@/lib/llm-models.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+  useEnterpriseFeature: () => false,
+  useSmallTeamTier: () => undefined,
   useProviderBaseUrls: () => ({
     data: {},
   }),

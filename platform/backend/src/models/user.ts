@@ -4,7 +4,7 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@archestra/shared";
-import { eq, getTableColumns, inArray } from "drizzle-orm";
+import { count, eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -114,6 +114,15 @@ class UserModel {
       .from(schema.usersTable)
       .where(inArray(schema.usersTable.id, ids));
     return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  /**
+   * Total number of user rows. Used by the enterprise-tier service to apply
+   * the small-team free tier (every row counts, banned or not).
+   */
+  static async countAll(): Promise<number> {
+    const [row] = await db.select({ count: count() }).from(schema.usersTable);
+    return row?.count ?? 0;
   }
 
   /**

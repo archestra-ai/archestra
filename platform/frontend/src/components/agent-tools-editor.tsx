@@ -60,6 +60,15 @@ type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 type CatalogTool =
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+
+/**
+ * Apps and built-in servers run in-process with no installed MCP server or stored
+ * credentials, so the picker neither gates their assignment on an installed
+ * server nor offers a credential selector for them.
+ */
+const isCredentialLessCatalogType = (
+  serverType: InternalMcpCatalogItem["serverType"],
+) => serverType === "builtin" || serverType === "app";
 type ResourceTool = archestraApiTypes.GetAgentToolsResponses["200"][number];
 type AssignedTool = {
   tool: ResourceTool;
@@ -115,6 +124,12 @@ interface AgentToolsEditorProps {
   layout?: "pills" | "cards";
   /** When true, the "Add MCP server" combobox starts open. */
   openComboboxOnMount?: boolean;
+  /**
+   * Include assignable App backing catalogs in the picker. Only the MCP gateway
+   * dialog sets this — Apps launch through a gateway, and the backend still
+   * gates their inclusion on `app:read`.
+   */
+  includeAppCatalogs?: boolean;
 }
 
 export const AgentToolsEditor = forwardRef<
@@ -132,6 +147,7 @@ export const AgentToolsEditor = forwardRef<
     onConflictsChange,
     layout = "pills",
     openComboboxOnMount,
+    includeAppCatalogs,
   },
   ref,
 ) {
@@ -147,6 +163,7 @@ export const AgentToolsEditor = forwardRef<
       onConflictsChange={onConflictsChange}
       layout={layout}
       openComboboxOnMount={openComboboxOnMount}
+      includeAppCatalogs={includeAppCatalogs}
       ref={ref}
     />
   );
@@ -167,6 +184,7 @@ const AgentToolsEditorContent = forwardRef<
     onConflictsChange,
     layout = "pills",
     openComboboxOnMount,
+    includeAppCatalogs = false,
   },
   ref,
 ) {
@@ -175,8 +193,11 @@ const AgentToolsEditorContent = forwardRef<
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
-  // Fetch catalog items (MCP servers in registry).
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
+  // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
+  // in to assignable App backings via includeAppCatalogs).
+  const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
+    includeApps: includeAppCatalogs,
+  });
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)
   const allCredentials = useMcpServersGroupedByCatalog({
@@ -374,8 +395,11 @@ const AgentToolsEditorContent = forwardRef<
           changes.catalogItem.enterpriseManagedConfig != null;
 
         // Remove and add tools in parallel (skip invalidation, will do it once at the end)
+        // Apps resolve their launch tool in-process per viewer, so they bind
+        // dynamically like Playwright — there is no credential to pick.
         const useDynamicCredential =
           isPlaywrightCatalogItem(changes.catalogItem.id) ||
+          changes.catalogItem.serverType === "app" ||
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
         const useEnterpriseManagedCredential =
           prefersEnterpriseManaged && useDynamicCredential;
@@ -584,7 +608,7 @@ const AgentToolsEditorContent = forwardRef<
       const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
       const hasNoTools = totalCount === 0;
       const hasNoCredentials =
-        catalog.serverType !== "builtin" &&
+        !isCredentialLessCatalogType(catalog.serverType) &&
         !allCredentials?.[catalog.id]?.length;
       const isEnvIncompatible =
         environmentScopingEnabled && !isEnvCompatible(catalog);
@@ -668,7 +692,7 @@ const AgentToolsEditorContent = forwardRef<
           const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
           const hasNoTools = totalCount === 0;
           const hasNoCredentials =
-            catalog.serverType !== "builtin" &&
+            !isCredentialLessCatalogType(catalog.serverType) &&
             !allCredentials?.[catalog.id]?.length;
           const isDisabled = hasNoTools || hasNoCredentials;
 
@@ -933,8 +957,12 @@ function McpServerPill({
     return false;
   }, [selectedToolIds, currentAssignedToolIds]);
 
-  // Don't show MCP server if no credentials are available (except for builtin servers)
-  if (catalogItem.serverType !== "builtin" && mcpServers.length === 0) {
+  // Don't show MCP server if no credentials are available (except for builtin
+  // servers and in-process Apps, which need neither an install nor credentials)
+  if (
+    !isCredentialLessCatalogType(catalogItem.serverType) &&
+    mcpServers.length === 0
+  ) {
     return null;
   }
 
@@ -945,10 +973,11 @@ function McpServerPill({
     : assignedCount;
   const isEmpty = displayedCount === 0;
 
-  // Show credential selector for non-builtin, non-Playwright servers that have credentials available
+  // Show credential selector for non-builtin, non-App, non-Playwright servers
+  // that have credentials available
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    catalogItem.serverType !== "builtin" &&
+    !isCredentialLessCatalogType(catalogItem.serverType) &&
     !isPlaywright &&
     mcpServers.length > 0;
   return (

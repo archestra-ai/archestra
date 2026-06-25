@@ -21,11 +21,26 @@ import type { ChatMessage, ChatMessagePart } from "@/types";
 export function prepareMessagesForProvider(params: {
   messages: ChatMessage[];
   provider: SupportedProvider;
+  /**
+   * For the `anthropic` provider, false means an Anthropic-compatible
+   * third-party endpoint that rejects native `document` content blocks — take
+   * the generic content-preserving inline-as-text path instead so text
+   * documents are delivered as decoded text rather than Anthropic documents.
+   * Defaults to true (genuine Anthropic). Ignored for other providers.
+   */
+  anthropicNativeEndpoint?: boolean;
 }): ChatMessage[] {
-  const { messages, provider } = params;
+  const { messages, provider, anthropicNativeEndpoint = true } = params;
+
+  if (provider === "anthropic" && anthropicNativeEndpoint) {
+    return messages.map(normalizeAnthropicMessageFileParts);
+  }
 
   if (provider === "anthropic") {
-    return messages.map(normalizeAnthropicMessageFileParts);
+    // Anthropic-compatible third-party endpoint: inline text documents as
+    // decoded text (content preserved — the data: bytes are decoded into the
+    // message, not dropped) so the upstream doesn't reject a `document` block.
+    return messages.map(inlineTextDocumentMessageFileParts);
   }
 
   if (provider === "bedrock") {

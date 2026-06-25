@@ -57,10 +57,24 @@ function catalogMutationError(body: {
   return error;
 }
 
-export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
+/**
+ * `includeApps` adds App backing catalogs (whose launch tool is assignable from
+ * the gateway capabilities picker) to the result. Apps stay out of the registry,
+ * so registry surfaces omit it. The backend only honors it for callers with
+ * `app:read`, so a caller without that permission silently gets the app-free list.
+ */
+export function useInternalMcpCatalog(
+  params?: InternalMcpCatalogParams & { includeApps?: boolean },
+) {
+  const includeApps = params?.includeApps ?? false;
   return useQuery({
-    queryKey: ["mcp-catalog"],
-    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
+    queryKey: includeApps ? ["mcp-catalog", "with-apps"] : ["mcp-catalog"],
+    queryFn: async () =>
+      (
+        await getInternalMcpCatalog(
+          includeApps ? { query: { includeApps } } : {},
+        )
+      ).data ?? [],
     initialData: params?.initialData,
     enabled: params?.enabled,
   });

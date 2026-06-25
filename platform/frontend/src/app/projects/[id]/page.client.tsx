@@ -329,14 +329,10 @@ function ChatsList({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">
-                      {conv.title ?? "Untitled chat"}
+                      {isScheduled
+                        ? (conv.scheduleName ?? "Scheduled task")
+                        : (conv.title ?? "Untitled chat")}
                     </span>
-                    {isScheduled && (
-                      <Badge variant="outline" className="shrink-0 gap-1">
-                        <CalendarClock className="h-3 w-3" />
-                        scheduled
-                      </Badge>
-                    )}
                     {conv.readOnly && (
                       <Badge variant="outline" className="shrink-0 gap-1">
                         <Eye className="h-3 w-3" />
@@ -346,7 +342,7 @@ function ChatsList({
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {isScheduled
-                      ? (conv.scheduleName ?? "Scheduled task")
+                      ? (conv.title ?? "No prompt")
                       : conv.readOnly
                         ? `by ${conv.authorName ?? "someone else"}`
                         : "by you"}

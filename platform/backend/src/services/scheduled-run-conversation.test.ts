@@ -6,6 +6,7 @@ import { projectService } from "@/services/project";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
+  deleteEmptyRunConversation,
   persistRunConversationMessages,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
@@ -213,7 +214,9 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
       },
       { type: "text" as const, text: "I wrote a joke and saved it." },
     ],
-  } as unknown as Parameters<typeof persistRunConversationMessages>[0]["assistantMessage"];
+  } as unknown as Parameters<
+    typeof persistRunConversationMessages
+  >[0]["assistantMessage"];
 
   await persistRunConversationMessages({
     conversation,
@@ -224,7 +227,9 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
   const messages = await MessageModel.findByConversation(conversation.id);
   expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
 
-  const userContent = messages[0].content as { parts: Array<{ text?: string }> };
+  const userContent = messages[0].content as {
+    parts: Array<{ text?: string }>;
+  };
   expect(userContent.parts[0].text).toBe("write a joke");
 
   // The final answer text — the thing the old interaction-reconstruction dropped —
@@ -245,5 +250,87 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
     userText: trigger.messageTemplate,
     assistantMessage,
   });
-  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(2);
+  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+    2,
+  );
+});
+
+test("deleteEmptyRunConversation removes an empty conversation and unlinks the run; keeps a non-empty one", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+
+  // Empty conversation (a failed run): deleted + run unlinked.
+  const emptyRun = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const emptyConv = await createAndLinkRunConversation({
+    run: emptyRun,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  await deleteEmptyRunConversation({
+    conversation: emptyConv,
+    runId: emptyRun.id,
+    organizationId: org.id,
+  });
+  expect(
+    await ConversationModel.findByIdInOrganization({
+      id: emptyConv.id,
+      organizationId: org.id,
+    }),
+  ).toBeNull();
+  expect(
+    (await ScheduleTriggerRunModel.findById(emptyRun.id))?.chatConversationId,
+  ).toBeNull();
+
+  // A conversation with messages is never destroyed.
+  const keptRun = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const keptConv = await createAndLinkRunConversation({
+    run: keptRun,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  await MessageModel.bulkCreate([
+    {
+      conversationId: keptConv.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: "hi" }] },
+    },
+  ]);
+  await deleteEmptyRunConversation({
+    conversation: keptConv,
+    runId: keptRun.id,
+    organizationId: org.id,
+  });
+  expect(await MessageModel.findByConversation(keptConv.id)).toHaveLength(1);
+  expect(
+    (await ScheduleTriggerRunModel.findById(keptRun.id))?.chatConversationId,
+  ).toBe(keptConv.id);
 });

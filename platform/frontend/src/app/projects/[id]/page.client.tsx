@@ -7,6 +7,7 @@ import {
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import {
+  CalendarClock,
   Eye,
   FileText,
   Globe,
@@ -24,7 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { collapseProjectChats } from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -280,54 +281,80 @@ function ChatsList({
     origin: "user" | "schedule_trigger";
     lastMessageAt: string;
     readOnly: boolean;
+    scheduleTriggerId: string | null;
+    scheduleRunId: string | null;
   }>;
 }) {
-  const userConversations = conversations.filter(
-    (c) => !isScheduledRunConversation(c),
-  );
+  // A schedule's runs collapse to one row (its latest run); user chats are shown
+  // as-is. Newest activity first.
+  const chats = collapseProjectChats(conversations);
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
         Chats
       </h2>
-      {userConversations.length === 0 ? (
+      {chats.length === 0 ? (
         <p className="rounded-xl border px-3 py-8 text-center text-sm text-muted-foreground">
           No chats yet — type above to start one.
         </p>
       ) : (
         <div className="space-y-2">
-          {userConversations.map((conv) => (
-            <Link
-              key={conv.id}
-              href={`/chat/${conv.id}`}
-              className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">
-                    {conv.title ?? "Untitled chat"}
-                  </span>
-                  {conv.readOnly && (
-                    <Badge variant="outline" className="shrink-0 gap-1">
-                      <Eye className="h-3 w-3" />
-                      read-only
-                    </Badge>
+          {chats.map((conv) => {
+            const isScheduled = conv.origin === "schedule_trigger";
+            // A scheduled row opens its latest run's chat WITH the schedule
+            // context, so the chat sidebar shows the runs navigator for the rest.
+            const href = isScheduled
+              ? `/chat/${conv.id}?scheduleTriggerId=${conv.scheduleTriggerId}&scheduleRunId=${conv.scheduleRunId}`
+              : `/chat/${conv.id}`;
+            return (
+              <Link
+                key={conv.id}
+                href={href}
+                className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  {isScheduled ? (
+                    <CalendarClock
+                      className="h-4 w-4 text-primary"
+                      aria-hidden
+                    />
+                  ) : (
+                    <MessageCircle
+                      className="h-4 w-4 text-primary"
+                      aria-hidden
+                    />
                   )}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {conv.readOnly
-                    ? `by ${conv.authorName ?? "someone else"}`
-                    : "by you"}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">
+                      {conv.title ?? "Untitled chat"}
+                    </span>
+                    {isScheduled && (
+                      <Badge variant="outline" className="shrink-0 gap-1">
+                        <CalendarClock className="h-3 w-3" />
+                        scheduled
+                      </Badge>
+                    )}
+                    {conv.readOnly && (
+                      <Badge variant="outline" className="shrink-0 gap-1">
+                        <Eye className="h-3 w-3" />
+                        read-only
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {conv.readOnly
+                      ? `by ${conv.authorName ?? "someone else"}`
+                      : "by you"}
+                  </span>
                 </span>
-              </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {formatRelativeTimeFromNow(conv.lastMessageAt)}
-              </span>
-            </Link>
-          ))}
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {formatRelativeTimeFromNow(conv.lastMessageAt)}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>

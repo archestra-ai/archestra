@@ -98,6 +98,10 @@ export const ProjectConversationItemSchema = z.object({
   createdAt: z.date(),
   /** True when the caller is not the chat's author (view-only). */
   readOnly: z.boolean(),
+  /** The schedule (trigger) + run behind a `schedule_trigger` chat; null for
+   * user chats. Used to collapse a schedule's runs into one chat-list row. */
+  scheduleTriggerId: z.string().nullable(),
+  scheduleRunId: z.string().nullable(),
 });
 export type ProjectConversationItem = z.infer<
   typeof ProjectConversationItemSchema

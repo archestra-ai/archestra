@@ -54508,6 +54508,8 @@ export type GetProjectConversationsResponses = {
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
+        scheduleTriggerId: string | null;
+        scheduleRunId: string | null;
     }>;
 };
 

@@ -601,7 +601,6 @@ async fn setup_shared_env(
         format!("{}-{}", ctx.run_id, env.id),
         log_path,
     );
-    instance.set_backend_env(env.backend_env.clone().into_iter().collect());
     instance.start().await.map_err(|e| e.to_string())?;
 
     let client = instance.client.clone();
@@ -786,7 +785,6 @@ async fn run_isolated_lane(
         format!("{}-{}-{}", ctx.run_id, env.id, lane.name),
         log_path,
     );
-    instance.set_backend_env(env.backend_env.clone().into_iter().collect());
     if let Err(e) = instance.start().await {
         return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e.to_string());
     }
@@ -3118,7 +3116,6 @@ mod tests {
             tools: vec![],
             share_backend: false,
             fixture_mcp: false,
-            backend_env: std::collections::BTreeMap::new(),
             platform: crate::config::types::PlatformConfig::default(),
         }
     }

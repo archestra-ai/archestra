@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -80,10 +79,6 @@ pub struct EnvConfig {
     /// When set, the harness starts its synthetic `acme_it` MCP and registers it to this env's agents.
     /// Works in both modes: shared backends start one instance for all lanes, isolated lanes one each.
     pub fixture_mcp: bool,
-    /// Extra environment variables injected into this env's backend process (a `[backend_env]` table).
-    /// Used to toggle backend feature flags per-env (e.g. `ARCHESTRA_APPS_ENABLED`) without changing
-    /// every other env's tool surface. Empty for envs that don't declare the table.
-    pub backend_env: BTreeMap<String, String>,
     pub platform: PlatformConfig,
 }
 

@@ -215,7 +215,6 @@ pub struct Instance {
     db_created: Arc<Mutex<bool>>,
     platform: PathBuf,
     env: HashMap<String, String>,
-    extra_backend_env: HashMap<String, String>,
     maint_db_url: String,
     db_url: String,
     db_managed: bool,
@@ -254,7 +253,6 @@ impl Instance {
             db_created: Arc::new(Mutex::new(false)),
             platform,
             env: HashMap::new(),
-            extra_backend_env: HashMap::new(),
             maint_db_url: String::new(),
             db_url: String::new(),
             db_managed: true,
@@ -265,12 +263,6 @@ impl Instance {
             dagger_runner_host: String::new(),
             teardown_id: None,
         }
-    }
-
-    /// Extra env vars (an env's `[backend_env]` table) injected into the backend process on top of the
-    /// inherited process env and `.env`. Set before [`start`]; backend feature flags travel this way.
-    pub fn set_backend_env(&mut self, extra: HashMap<String, String>) {
-        self.extra_backend_env = extra;
     }
 
     pub async fn start(&mut self) -> Result<(), LifecycleError> {
@@ -495,7 +487,6 @@ impl Instance {
     fn backend_env(&self) -> HashMap<String, String> {
         build_backend_env(
             &self.env,
-            &self.extra_backend_env,
             &self.db_url,
             &self.base_url,
             self.metrics_port,
@@ -993,7 +984,6 @@ pub fn redacted_db_location(db_url: &str) -> String {
 
 pub fn build_backend_env(
     base_env: &HashMap<String, String>,
-    extra_env: &HashMap<String, String>,
     db_url: &str,
     api_base_url: &str,
     metrics_port: u16,
@@ -1002,9 +992,6 @@ pub fn build_backend_env(
 ) -> HashMap<String, String> {
     let mut env: HashMap<String, String> = std::env::vars().collect();
     env.extend(base_env.iter().map(|(k, v)| (k.clone(), v.clone())));
-    // An env's `[backend_env]` overrides inherited/`.env` values but not the bench-controlled keys
-    // force-set below (db url, dagger host, etc.) -- those keys aren't ones an env should steer.
-    env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
     env.entry("ARCHESTRA_AUTH_SECRET".to_string())
         .or_insert_with(|| DEV_AUTH_SECRET.to_string());
     env.insert("ARCHESTRA_DATABASE_URL".to_string(), db_url.to_string());
@@ -1037,6 +1024,18 @@ pub fn build_backend_env(
     // Per-lane projects isolate file ownership so lanes sharing one backend don't collide on common
     // artifact names; the feature must be on for `POST /api/projects` and project-scoped conversations.
     env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
+    // MCP Apps and agent environments ship dark behind these flags; the bench turns them on for every
+    // env (like the sandbox/projects flags above) so a run never depends on the operator's `.env` or
+    // `ARCHESTRA_BETA`. With Apps on, the platform assigns the app authoring tools to every agent at
+    // creation time (AgentModel.create -> assignAppToolsToAgent), independent of the bench's
+    // auto-assignment toggle, so non-apps agents carry them too. That mirrors the real product -- a
+    // user with Apps enabled has those tools -- and under the default search_and_run_only exposure
+    // they sit behind search_tools rather than in the upfront context, acting as realistic distractors.
+    env.insert("ARCHESTRA_APPS_ENABLED".to_string(), "true".to_string());
+    env.insert(
+        "ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED".to_string(),
+        "true".to_string(),
+    );
     env
 }
 
@@ -1206,10 +1205,8 @@ mod tests {
         // The runner host arrives already resolved and is force-set verbatim (the `.env` base map
         // cannot steer it); the CLI bin still falls back to the passed default when unset.
         let base = HashMap::new();
-        let extra = HashMap::new();
         let env = build_backend_env(
             &base,
-            &extra,
             "postgres://h/db",
             "http://localhost:1",
             2,
@@ -1227,12 +1224,12 @@ mod tests {
     }
 
     #[test]
-    fn test_build_backend_env_injects_extra() {
+    fn test_build_backend_env_force_enables_apps_and_environments() {
+        // Apps + agent environments are force-on for every env so a run doesn't depend on the
+        // operator's `.env`/`ARCHESTRA_BETA`; the apps env's tools can't resolve without them.
         let base = HashMap::new();
-        let extra = HashMap::from([("ARCHESTRA_APPS_ENABLED".to_string(), "true".to_string())]);
         let env = build_backend_env(
             &base,
-            &extra,
             "postgres://h/db",
             "http://localhost:1",
             2,
@@ -1240,6 +1237,10 @@ mod tests {
             "/dev/dagger",
         );
         assert_eq!(env.get("ARCHESTRA_APPS_ENABLED"), Some(&"true".to_string()));
+        assert_eq!(
+            env.get("ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED"),
+            Some(&"true".to_string())
+        );
     }
 
     #[test]

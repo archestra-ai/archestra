@@ -13,7 +13,7 @@ import {
 } from "@/test";
 import type { User } from "@/types";
 
-describe("GET /api/apps/external/:mcpServerId", () => {
+describe("GET /api/apps/external/by-catalog/:catalogId", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
@@ -51,7 +51,7 @@ describe("GET /api/apps/external/:mcpServerId", () => {
     await app.close();
   });
 
-  test("resolves a single external UI-providing server by id", async ({
+  test("resolves an external app by catalog id with its UI resource, installs, and default", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -72,25 +72,59 @@ describe("GET /api/apps/external/:mcpServerId", () => {
 
     const ok = await app.inject({
       method: "GET",
-      url: `/api/apps/external/${server.id}`,
+      url: `/api/apps/external/by-catalog/${catalog.id}`,
     });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json()).toMatchObject({
-      source: "external",
-      mcpServerId: server.id,
+    const body = ok.json();
+    expect(body).toMatchObject({
+      catalogId: catalog.id,
+      name: "Get Time",
       resourceUri: "ui://gt/app.html",
+      defaultMcpServerId: server.id,
     });
+    expect(
+      body.installs.some(
+        (i: { mcpServerId: string }) => i.mcpServerId === server.id,
+      ),
+    ).toBe(true);
   });
 
-  test("returns 404 for an unknown server id", async () => {
+  test("resolves a visible catalog with no accessible install to a null default and no installs", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Uninstalled",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "draw",
+      meta: { _meta: { ui: { resourceUri: "ui://un/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/by-catalog/${catalog.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.defaultMcpServerId).toBeNull();
+    expect(body.installs).toEqual([]);
+  });
+
+  test("returns 404 for an unknown catalog id", async () => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/apps/external/${crypto.randomUUID()}`,
+      url: `/api/apps/external/by-catalog/${crypto.randomUUID()}`,
     });
     expect(response.statusCode).toBe(404);
   });
 
-  test("returns 404 for an installed server without a ui:// tool", async ({
+  test("returns 404 for a catalog without a ui:// tool", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -102,7 +136,7 @@ describe("GET /api/apps/external/:mcpServerId", () => {
       serverUrl: "https://example.com/mcp",
       scope: "org",
     });
-    const plain = await makeMcpServer({
+    await makeMcpServer({
       catalogId: plainCatalog.id,
       scope: "org",
     });
@@ -114,7 +148,7 @@ describe("GET /api/apps/external/:mcpServerId", () => {
 
     const notUi = await app.inject({
       method: "GET",
-      url: `/api/apps/external/${plain.id}`,
+      url: `/api/apps/external/by-catalog/${plainCatalog.id}`,
     });
     expect(notUi.statusCode).toBe(404);
   });

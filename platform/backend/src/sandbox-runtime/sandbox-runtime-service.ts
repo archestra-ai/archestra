@@ -5,6 +5,7 @@ import {
 } from "@opentelemetry/api";
 import config from "@/config";
 import logger from "@/logging";
+import * as metrics from "@/observability/metrics";
 
 // lazy-load the native addon: importing this module for codegen / openapi
 // generation, or running with the runtime disabled, must not require the
@@ -41,7 +42,8 @@ type NativeSandboxErrorCode =
   | "ARCHESTRA_COMMAND_FAILED"
   | "ARCHESTRA_ENGINE_UNREACHABLE"
   | "ARCHESTRA_INTERNAL"
-  | "ARCHESTRA_INVALID_INPUT";
+  | "ARCHESTRA_INVALID_INPUT"
+  | "ARCHESTRA_SANDBOX_HISTORY_LIMIT";
 
 interface LimitOverrides {
   outputBytesLimit?: number;
@@ -134,7 +136,7 @@ class SandboxRuntimeService {
 
   async init(): Promise<void> {
     if (!config.daggerRuntime.enabled) {
-      this.status = "disabled";
+      this.setStatus("disabled");
       return;
     }
     if (this.status === "ready") return;
@@ -219,7 +221,7 @@ class SandboxRuntimeService {
 
   async shutdown(): Promise<void> {
     if (this.status === "disabled") return;
-    this.status = "stopped";
+    this.setStatus("stopped");
     this.drainWaiters(
       new SandboxRuntimeError(
         "the sandbox runtime is shutting down",
@@ -241,6 +243,16 @@ class SandboxRuntimeService {
   }
 
   // === private ===
+
+  /**
+   * Single seam for every status transition. Mirrors the gauge to the new
+   * status (1 for current, 0 for others) so the engine `error` window is
+   * graphable. Purely additive — no change to transition logic.
+   */
+  private setStatus(next: SandboxRuntimeStatus): void {
+    this.status = next;
+    metrics.sandbox.reportRuntimeStatus({ status: next });
+  }
 
   private async ensureReady(): Promise<void> {
     if (!config.daggerRuntime.enabled) {
@@ -268,12 +280,12 @@ class SandboxRuntimeService {
 
   private async doInit(): Promise<void> {
     if (!config.daggerRuntime.enabled) {
-      this.status = "disabled";
+      this.setStatus("disabled");
       return;
     }
     this.applyDaggerEnv();
     this.lastInitAttemptAt = Date.now();
-    this.status = "initializing";
+    this.setStatus("initializing");
 
     try {
       const { checkSession } = await loadNative();
@@ -281,11 +293,11 @@ class SandboxRuntimeService {
       // shutdown() may have fired while we were awaiting; don't revive it.
       // re-read status as the union type since TS narrows past the await.
       if ((this.status as SandboxRuntimeStatus) === "stopped") return;
-      this.status = "ready";
+      this.setStatus("ready");
       logger.info("[SandboxRuntime] ready — shared session + warm base online");
     } catch (error) {
       if ((this.status as SandboxRuntimeStatus) !== "stopped") {
-        this.status = "error";
+        this.setStatus("error");
       }
       logger.error(
         { err: error },
@@ -363,7 +375,11 @@ class SandboxRuntimeService {
     try {
       return await new Promise<T>((resolve, reject) => {
         backstopHandle = setTimeout(() => {
-          if (this.status !== "stopped") this.status = "error";
+          if (this.status !== "stopped") this.setStatus("error");
+          // Count it here: the rejection below is already a SandboxRuntimeError,
+          // so normalizeError short-circuits and never reaches its
+          // engine_unreachable counter for the backstop path.
+          metrics.sandbox.reportRuntimeError({ code: "engine_unreachable" });
           logger.error(
             { totalMs },
             "[SandboxRuntime] native call exceeded backstop — engine assumed wedged",
@@ -390,12 +406,16 @@ class SandboxRuntimeService {
       case "ARCHESTRA_ARTIFACT_TOO_LARGE":
       case "ARCHESTRA_COMMAND_FAILED":
       case "ARCHESTRA_INVALID_INPUT":
+      // a per-session replay limit, not an engine outage — surface the actionable
+      // message and leave runtime status untouched (no cooldown gate).
+      case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
         return new SandboxRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
         // genuine engine outage — flip status so the cooldown gate kicks in.
         // never overwrite 'stopped': shutdown is the terminal state and
         // late-arriving errors must not silently re-enable retries.
-        if (this.status !== "stopped") this.status = "error";
+        if (this.status !== "stopped") this.setStatus("error");
+        metrics.sandbox.reportRuntimeError({ code: "engine_unreachable" });
         logger.error(
           { err: error, code: native.code },
           "[SandboxRuntime] engine unreachable",
@@ -408,6 +428,7 @@ class SandboxRuntimeService {
       case null:
         // per-call failure that doesn't necessarily mean the engine is gone.
         // surface the original message and leave runtime status untouched.
+        metrics.sandbox.reportRuntimeError({ code: "internal" });
         logger.warn(
           { err: error, code: native.code },
           "[SandboxRuntime] execution failed",
@@ -454,6 +475,7 @@ function getNativeSandboxError(error: unknown): {
     case "ARCHESTRA_ENGINE_UNREACHABLE":
     case "ARCHESTRA_INTERNAL":
     case "ARCHESTRA_INVALID_INPUT":
+    case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
       return { code, message: error.message };
     default:
       return { code: null, message: error.message };

@@ -17,6 +17,7 @@
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
 10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
+11. If you think there is an important bit of information worth remembering between sessions, suggest adding it to CLAUDE.md instead of memorizing it yourself. CLAUDE.md is the single source of truth for all important information about the platform, its architecture, and its development practices.
 
 ## Docs
 

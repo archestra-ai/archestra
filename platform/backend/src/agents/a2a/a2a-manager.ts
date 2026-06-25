@@ -1,3 +1,4 @@
+import { coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -194,8 +195,10 @@ export class A2AManager {
           : task && taskWasSwitchedToWorkingState
             ? task.history
             : [];
-      const contextUiMessages = contextDbMessages.map(
-        (m) => m.content as UIMessage,
+      // Repair malformed tool inputs at the source so both the provider request
+      // and the UI-continuation copy (`originalUiMessages` below) stay valid.
+      const contextUiMessages = coerceMalformedToolInputs(
+        contextDbMessages.map((m) => m.content as UIMessage),
       );
       const requestMessages: ModelMessage[] =
         await convertToModelMessages(contextUiMessages);

@@ -240,7 +240,7 @@ const contentNavGroups: NavGroup[] = [
         title: "Apps",
         url: "/apps",
         icon: AppWindow,
-        customIsActive: (pathname: string) => pathname.startsWith("/apps"),
+        customIsActive: (pathname: string) => pathname === "/apps",
       },
     ],
   },

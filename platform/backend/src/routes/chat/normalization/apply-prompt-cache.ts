@@ -88,8 +88,18 @@ export function applyPromptCacheBreakpoints(params: {
   /** Resolved model id; used to decide cache TTL. Absent → 5-minute default. */
   model?: string;
   messages: ModelMessage[];
+  /**
+   * For the `anthropic` provider, false means an Anthropic-compatible
+   * third-party endpoint that rejects `cache_control` markers — skip
+   * breakpoints entirely. Defaults to true (genuine Anthropic). Ignored for
+   * other providers (Bedrock keys off its own provider entry).
+   */
+  anthropicNativeEndpoint?: boolean;
 }): ModelMessage[] {
-  const { provider, model, messages } = params;
+  const { provider, model, messages, anthropicNativeEndpoint = true } = params;
+  if (provider === "anthropic" && !anthropicNativeEndpoint) {
+    return messages;
+  }
   const config = (CACHE_BREAKPOINTS as Record<string, CacheBreakpointConfig>)[
     provider
   ];

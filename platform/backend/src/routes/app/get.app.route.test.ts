@@ -64,6 +64,27 @@ describe("GET /api/apps/:appId", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ id: created.id, name: "Viewable" });
+    expect(response.json().teams).toEqual([]);
+  });
+
+  test("returns the app's assigned teams (id + name)", async ({
+    makeTeam,
+    makeApp,
+  }) => {
+    const team = await makeTeam(organizationId, user.id, { name: "Design" });
+    const created = await makeApp({
+      organizationId,
+      scope: "team",
+      authorId: user.id,
+      teamIds: [team.id],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().teams).toEqual([{ id: team.id, name: "Design" }]);
   });
 
   test("returns 404 for an unknown app id", async () => {

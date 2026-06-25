@@ -38,7 +38,7 @@ import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import {
@@ -91,8 +91,8 @@ class ToolModel {
     return serverName !== null ? toolName : slugifiedName;
   }
 
-  static async create(tool: InsertTool): Promise<Tool> {
-    const [createdTool] = await db
+  static async create(tool: InsertTool, tx?: Transaction): Promise<Tool> {
+    const [createdTool] = await (tx ?? db)
       .insert(schema.toolsTable)
       .values(tool)
       .returning();

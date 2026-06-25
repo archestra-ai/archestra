@@ -6,6 +6,7 @@ import {
 } from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
 import { asSandboxId } from "@/types";
+import { SandboxRuntimeError } from "../sandbox-runtime/sandbox-runtime-service";
 import {
   __internals,
   skillSandboxRuntimeService,
@@ -427,6 +428,22 @@ describe("__internals", () => {
     expect(notices).toHaveLength(1);
     expect(notices[0]).toContain("huge.bin");
     expect(notices[0]).toContain("exceeds");
+  });
+
+  test("a history-limit failure is not recorded as a synthetic replay row", () => {
+    // recording the failing command would append yet another replay step and
+    // make the over-limit sandbox permanently unrecoverable. only genuine
+    // mid-stream engine failures (INTERNAL) get a synthetic row.
+    expect(
+      __internals.shouldRecordOnFailure(
+        new SandboxRuntimeError("too long", "ARCHESTRA_SANDBOX_HISTORY_LIMIT"),
+      ),
+    ).toBe(false);
+    expect(
+      __internals.shouldRecordOnFailure(
+        new SandboxRuntimeError("boom", "ARCHESTRA_INTERNAL"),
+      ),
+    ).toBe(true);
   });
 });
 

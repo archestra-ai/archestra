@@ -135,6 +135,14 @@ export type McpServerCardProps = {
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
 
+export function cardVariantForServerType(
+  serverType: string,
+): McpServerCardVariant {
+  if (serverType === "builtin") return "builtin";
+  if (serverType === "remote") return "remote";
+  return "local";
+}
+
 export type McpServerCardBaseProps = McpServerCardProps & {
   variant: McpServerCardVariant;
 };
@@ -970,7 +978,7 @@ export function McpServerCard({
         showConnections={!isBuiltinVariant}
         connectionCount={allServersForCatalog.length}
         showDebug={isLogsAvailable}
-        showInspector
+        showInspector={true}
         showYaml={variant === "local"}
         onAddPersonalConnection={onAddPersonalConnection}
         onAddSharedConnection={onAddSharedConnection}

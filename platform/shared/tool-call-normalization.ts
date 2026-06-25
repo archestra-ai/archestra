@@ -4,6 +4,10 @@ type ToolPartLike = {
   type?: unknown;
 };
 
+type ToolInputPartLike = ToolPartLike & {
+  input?: unknown;
+};
+
 type MessageWithParts<TPart extends ToolPartLike> = {
   parts?: TPart[];
 };
@@ -53,6 +57,70 @@ function collectCompletedToolCallIds<
   }
 
   return completedToolCallIds;
+}
+
+// Anthropic (and other providers) require every `tool_use` block's `input` to be
+// a JSON object. A model can stream malformed tool-argument JSON that the AI SDK
+// fails to parse, leaving the persisted tool-call part with a non-object `input`
+// (a raw string, or nothing at all). Replaying that history then fails provider
+// validation on every turn, permanently bricking the conversation. Repair such
+// parts to an object so the history stays replayable: recover a parsed object
+// from a JSON string when possible, otherwise fall back to an empty object.
+export function coerceMalformedToolInputs<
+  TPart extends ToolInputPartLike,
+  TMessage extends MessageWithParts<TPart>,
+>(messages: TMessage[]): TMessage[] {
+  return messages.map((message) => {
+    if (!message.parts?.length) {
+      return message;
+    }
+
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      if (!isCoercibleToolCallPart(part) || isPlainObject(part.input)) {
+        return part;
+      }
+      changed = true;
+      return { ...part, input: coerceToolInputValue(part.input) } as TPart;
+    });
+
+    return changed ? { ...message, parts } : message;
+  });
+}
+
+// A part that converts to a provider `tool_use` block and therefore needs an
+// object `input`. Excludes `tool-result` (it carries output, not input) and
+// `input-streaming` parts (still mid-stream, no complete input yet).
+function isCoercibleToolCallPart(part: ToolInputPartLike): boolean {
+  if (part.state === "input-streaming") {
+    return false;
+  }
+  if (part.type === "dynamic-tool") {
+    return true;
+  }
+  return (
+    typeof part.type === "string" &&
+    part.type.startsWith("tool-") &&
+    part.type !== "tool-result"
+  );
+}
+
+function coerceToolInputValue(input: unknown): Record<string, unknown> {
+  if (typeof input === "string") {
+    try {
+      const parsed: unknown = JSON.parse(input);
+      if (isPlainObject(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // unparseable remnant — fall through to an empty object
+    }
+  }
+  return {};
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isCompletedToolPart(part: ToolPartLike) {

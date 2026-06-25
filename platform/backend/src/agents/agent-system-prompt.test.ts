@@ -2,6 +2,7 @@ import { ADMIN_ROLE_NAME, TOOL_LOAD_SKILL_SHORT_NAME } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { SkillModel } from "@/models";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
 import {
   buildAgentSystemPrompt,
@@ -149,6 +150,8 @@ describe("buildAgentSystemPrompt", () => {
         agentId: agent.id,
       });
       expect(withSandbox).toContain("code execution environment");
+      // attachment staging guidance rides on the same sandbox-available gate
+      expect(withSandbox).toContain(SKILL_SANDBOX_ATTACHMENTS_DIR);
 
       // the same agent gets no instruction once the sandbox is disabled on the
       // deployment, even with the tools assigned and the permission granted
@@ -161,6 +164,7 @@ describe("buildAgentSystemPrompt", () => {
         agentId: agent.id,
       });
       expect(withoutSandbox).not.toContain("code execution environment");
+      expect(withoutSandbox).not.toContain(SKILL_SANDBOX_ATTACHMENTS_DIR);
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
     }

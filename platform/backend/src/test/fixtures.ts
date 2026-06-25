@@ -29,6 +29,7 @@ import {
   TrustedDataPolicyModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,
   AgentTool,
@@ -66,6 +67,7 @@ import type {
   ToolInvocation,
   TrustedData,
 } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 type MakeUserOverrides = Partial<
   Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
@@ -403,6 +405,8 @@ async function makeApp(
   overrides: Partial<InsertApp> & {
     html?: string;
     teamIds?: string[];
+    scope?: ResourceVisibilityScope;
+    environmentId?: string | null;
   } = {},
 ): Promise<App> {
   let organizationId = overrides.organizationId;
@@ -410,24 +414,41 @@ async function makeApp(
     const org = await makeOrganization();
     organizationId = org.id;
   }
-  const { html, teamIds, ...appOverrides } = overrides;
+  const {
+    html,
+    teamIds,
+    scope: scopeOverride,
+    environmentId,
+    ...appOverrides
+  } = overrides;
+  const scope = scopeOverride ?? "org";
+  // Visibility/environment live on the backing catalog, so an author is needed
+  // (catalog authorId + personal-scope access checks).
+  const authorId = appOverrides.authorId ?? (await makeUser()).id;
 
-  const app = await AppModel.create({
+  const created = await AppModel.create({
     app: {
       name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
-      scope: "org",
       ...appOverrides,
+      authorId,
       organizationId,
     },
     payload: {
       html: html ?? "<!doctype html><title>test app</title>",
       uiPermissions: null,
     },
-    teamIds,
   });
-  if (!app) {
-    throw new Error("makeApp: name conflict in the app's visibility namespace");
-  }
+  await createAppBacking({
+    app: created,
+    scope,
+    environmentId: environmentId ?? null,
+    userId: authorId,
+    organizationId,
+    teamIds: teamIds ?? [],
+  });
+
+  const app = await AppModel.findById(created.id);
+  if (!app) throw new Error("makeApp: failed to load created app");
   return app;
 }
 

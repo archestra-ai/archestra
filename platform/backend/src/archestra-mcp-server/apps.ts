@@ -44,6 +44,11 @@ import {
   escapeAngleBrackets,
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
+import {
+  createAppBacking,
+  deleteAppBacking,
+  syncAppBacking,
+} from "@/services/apps/app-mcp-backing";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
@@ -59,6 +64,7 @@ import {
   RefineAppToolSchema,
   ScaffoldAppSchema,
 } from "@/types/app";
+import { isUniqueConstraintError } from "@/utils/db";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -350,22 +356,50 @@ const registry = defineArchestraTools([
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
-      const app = await AppModel.create({
-        app: {
-          organizationId: context.organizationId,
-          authorId: context.userId,
+      // Like the REST path: create the app, then its backing; on backing failure
+      // delete the app so it is never left unbacked. scaffold_app defers team +
+      // environment selection to the REST/UI path, so no teams here. (Hoist
+      // narrowed values — closures lose property narrowing.)
+      const { userId, organizationId } = context;
+      const appName = args.name;
+      let app: App | null;
+      // App names are unique per author (apps_org_author_name_uidx); a duplicate
+      // fails this insert before any backing is created.
+      let created: Awaited<ReturnType<typeof AppModel.create>>;
+      try {
+        created = await AppModel.create({
+          app: {
+            organizationId,
+            authorId: userId,
+            name: appName,
+            description: args.description ?? null,
+            templateId: DEFAULT_APP_TEMPLATE_ID,
+          },
+          payload,
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          return errorResult(`You already have an app named "${args.name}".`);
+        }
+        throw error;
+      }
+      try {
+        await createAppBacking({
+          app: created,
           scope,
-          name: args.name,
-          description: args.description ?? null,
-          templateId: DEFAULT_APP_TEMPLATE_ID,
-        },
-        payload,
-      });
+          environmentId: null,
+          userId,
+          organizationId,
+          teamIds: [],
+        });
+        app = await AppModel.findById(created.id);
+      } catch (error) {
+        await AppModel.purge(created.id);
+        throw error;
+      }
 
       if (!app) {
-        return errorResult(
-          `An app named "${args.name}" already exists in this scope.`,
-        );
+        return errorResult("App created but could not be loaded.");
       }
 
       if (resolvedTools !== undefined && resolvedTools.length > 0) {
@@ -959,6 +993,10 @@ const registry = defineArchestraTools([
       if (!updated) {
         return errorResult(`Failed to publish app ${args.appId}.`);
       }
+      // Keep the backing server/catalog scope in sync with the published scope,
+      // exactly as the REST re-scope path does — otherwise the registry/gateway
+      // would expose the app under its old scope.
+      await syncAppBacking(updated);
 
       const runUrl = `/a/${updated.id}`;
       const audience =
@@ -1207,6 +1245,7 @@ const registry = defineArchestraTools([
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
       }
+      await deleteAppBacking(app);
       logger.info(
         { appId: args.appId, userId: context.userId },
         "App deleted via Archestra tool",

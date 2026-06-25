@@ -55,7 +55,6 @@ export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
 export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
-export { default as appTeamTable } from "./app-team";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";

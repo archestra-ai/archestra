@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
@@ -6,6 +6,7 @@ import type { NoAuthInstallResult } from "@/app/mcp/registry/_parts/no-auth-inst
 import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 import type { McpServerInstallScope } from "@/app/mcp/registry/_parts/select-mcp-server-credential-type-and-teams";
 import type { OAuthInstallResult } from "@/components/oauth-confirmation-dialog";
+import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   clearPendingAfterEnvVars,
@@ -23,6 +24,7 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import { getUsableConnectedCatalogIds } from "@/lib/mcp/connected-catalogs";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,
@@ -49,6 +51,24 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
+
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+
+  // Catalogs the current user can use a connected server for. An "Authentication
+  // Required" install card flips to a connected state once its catalog appears
+  // here (the install/reauth mutations and the OAuth callback both invalidate
+  // `useMcpServers`, so this refreshes when a connection completes). Scoped to
+  // servers the user can actually use — not merely see — so an admin viewing
+  // another user's personal install does not falsely resolve the prompt.
+  const connectedCatalogIds = useMemo(
+    () =>
+      getUsableConnectedCatalogIds({
+        servers: installedServers,
+        currentUserId,
+      }),
+    [installedServers, currentUserId],
+  );
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<DialogKey>();
 
@@ -372,6 +392,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     // Public API
     triggerInstallByCatalogId,
     triggerReauthByCatalogIdAndServerId,
+    connectedCatalogIds,
 
     // Dialog state (for rendering)
     isDialogOpened,

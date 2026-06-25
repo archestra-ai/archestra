@@ -54080,14 +54080,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -54098,12 +54090,6 @@
                     "templateId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "mcpServerId": {
                       "nullable": true,
@@ -54164,6 +54150,20 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "warnings": {
                       "type": "array",
                       "items": {
@@ -54175,17 +54175,17 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "templateId",
-                    "environmentId",
                     "mcpServerId",
                     "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
-                    "deletedAt"
+                    "deletedAt",
+                    "scope",
+                    "environmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -55073,14 +55073,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -55091,12 +55083,6 @@
                     "templateId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "mcpServerId": {
                       "nullable": true,
@@ -55157,6 +55143,20 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -55181,17 +55181,17 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "templateId",
-                    "environmentId",
                     "mcpServerId",
                     "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
+                    "scope",
+                    "environmentId",
                     "teams"
                   ],
                   "additionalProperties": false
@@ -55543,14 +55543,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -55561,12 +55553,6 @@
                     "templateId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "mcpServerId": {
                       "nullable": true,
@@ -55627,6 +55613,20 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "warnings": {
                       "type": "array",
                       "items": {
@@ -55638,17 +55638,17 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "templateId",
-                    "environmentId",
                     "mcpServerId",
                     "spec",
                     "latestVersion",
                     "createdAt",
                     "updatedAt",
-                    "deletedAt"
+                    "deletedAt",
+                    "scope",
+                    "environmentId"
                   ],
                   "additionalProperties": false
                 }

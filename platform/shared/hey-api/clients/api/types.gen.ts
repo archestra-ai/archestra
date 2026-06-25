@@ -15601,11 +15601,9 @@ export type CreateAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
         mcpServerId: string | null;
         spec: {
             summary: string;
@@ -15618,6 +15616,8 @@ export type CreateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         warnings?: Array<string>;
     };
 };
@@ -15970,11 +15970,9 @@ export type GetAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
         mcpServerId: string | null;
         spec: {
             summary: string;
@@ -15987,6 +15985,8 @@ export type GetAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         teams: Array<{
             id: string;
             name: string;
@@ -16099,11 +16099,9 @@ export type UpdateAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
         mcpServerId: string | null;
         spec: {
             summary: string;
@@ -16116,6 +16114,8 @@ export type UpdateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         warnings?: Array<string>;
     };
 };

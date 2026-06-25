@@ -15,41 +15,50 @@
 # than the kube-context default would strand the Service (and break the
 # port-forward below). Since this runtime is dev-only, a dedicated namespace
 # buys nothing here.
-k8s_yaml(local(
-  'helm template dagger-runtime ../helm/dagger-runtime --namespace default ' +
-  '--set networkPolicy.create=false ' +
-  '--set service.create=true ' +
-  '--set dagger.engine.port=1234 ' +
-  # the production default request (8Gi) does not fit a default colima VM;
-  # 4Gi is plenty for local code-runtime use.
-  '--set dagger.engine.resources.requests.memory=4Gi ' +
-  '--set dagger.engine.readinessProbeSettings.periodSeconds=60 ' +
-  '--set dagger.engine.livenessProbeSettings.periodSeconds=120',
-  quiet=True,
-))
+# When ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST is set in .env the backend is
+# pointed at an already-running engine (e.g. a parallel worktree stack sharing
+# the main stack's engine on :1234). Deploying a second engine then would only
+# collide — same `default`-namespace helm release and the same :1234
+# port-forward — so skip the engine + port-forward and just build the napi addon
+# below. A single Dagger engine is session-multiplexed, so sharing one is fine.
+external_engine = bool(os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST'))
 
-# the backend reaches this service through the local port-forward below.
-k8s_resource(
-  'dagger-runtime-engine',
-  new_name='dagger-engine',
-  labels=['code-runtime'],
-  # bundle the chart's free-floating objects into this resource so Tilt groups
-  # them with the engine instead of leaving them in `uncategorized`. the Service
-  # auto-attaches via its selector on the StatefulSet, so it is not listed here.
-  objects=[
-    'dagger-runtime:serviceaccount',
-    'dagger-runtime-engine-config:configmap',
-  ],
-)
+if not external_engine:
+  k8s_yaml(local(
+    'helm template dagger-runtime ../helm/dagger-runtime --namespace default ' +
+    '--set networkPolicy.create=false ' +
+    '--set service.create=true ' +
+    '--set dagger.engine.port=1234 ' +
+    # the production default request (8Gi) does not fit a default colima VM;
+    # 4Gi is plenty for local code-runtime use.
+    '--set dagger.engine.resources.requests.memory=4Gi ' +
+    '--set dagger.engine.readinessProbeSettings.periodSeconds=60 ' +
+    '--set dagger.engine.livenessProbeSettings.periodSeconds=120',
+    quiet=True,
+  ))
 
-# everything renders into `default`, so the Service has live endpoints (its pod
-# is in the same namespace) and we can port-forward the Service directly.
-local_resource(
-  'dagger-runtime-port-forward',
-  serve_cmd='while true; do kubectl -n default wait --for=condition=Ready pod -l name=dagger-runtime-engine --timeout=60s >/dev/null 2>&1 && kubectl -n default port-forward svc/dagger-runtime 1234:1234; sleep 2; done',
-  labels=['code-runtime'],
-  resource_deps=['dagger-engine'],
-)
+  # the backend reaches this service through the local port-forward below.
+  k8s_resource(
+    'dagger-runtime-engine',
+    new_name='dagger-engine',
+    labels=['code-runtime'],
+    # bundle the chart's free-floating objects into this resource so Tilt groups
+    # them with the engine instead of leaving them in `uncategorized`. the Service
+    # auto-attaches via its selector on the StatefulSet, so it is not listed here.
+    objects=[
+      'dagger-runtime:serviceaccount',
+      'dagger-runtime-engine-config:configmap',
+    ],
+  )
+
+  # everything renders into `default`, so the Service has live endpoints (its pod
+  # is in the same namespace) and we can port-forward the Service directly.
+  local_resource(
+    'dagger-runtime-port-forward',
+    serve_cmd='while true; do kubectl -n default wait --for=condition=Ready pod -l name=dagger-runtime-engine --timeout=60s >/dev/null 2>&1 && kubectl -n default port-forward svc/dagger-runtime 1234:1234; sleep 2; done',
+    labels=['code-runtime'],
+    resource_deps=['dagger-engine'],
+  )
 
 # Rebuild the native skill-sandbox addon (napi) when its Rust sources change.
 # Tilt has no other knowledge of the cargo build, and the compiled .node is

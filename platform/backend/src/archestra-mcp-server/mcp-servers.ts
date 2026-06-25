@@ -837,6 +837,16 @@ async function handleEditMcpConfig(
     if (!existing) {
       return errorResult("MCP server not found.");
     }
+    // App-backed catalogs have no deployable config and are managed through the
+    // Apps API. The schema blocks setting serverType TO "app", but without this
+    // an app author (who has modify rights on their own backing catalog) could
+    // flip it to local/remote and attach a command, escaping the Apps lifecycle
+    // and registry-creation controls. Mirrors the REST route's app-catalog guard.
+    if (existing.serverType === "app") {
+      return errorResult(
+        "App-backed catalog items are managed through the Apps API and cannot be configured here.",
+      );
+    }
 
     try {
       requireMcpCatalogModifyPermission({

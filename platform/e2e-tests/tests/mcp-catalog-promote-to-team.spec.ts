@@ -40,36 +40,37 @@ test.describe("MCP Catalog promotion", () => {
     expect(created.scope).toBe("personal");
 
     // The editor promotes it to the Engineering team through the edit form.
+    // The card opens the routed detail page; "Edit" opens the configuration
+    // form where visibility is changed (no settings dialog anymore).
     await goToMcpRegistry(editorPage);
     await editorPage
       .getByTestId(`${E2eTestId.McpServerSettingsButton}-${name}`)
       .click();
+    await editorPage.waitForLoadState("domcontentloaded");
 
-    const settingsDialog = editorPage.getByRole("dialog", {
-      name: new RegExp(`${name} Settings`, "i"),
-    });
-    await expect(settingsDialog).toBeVisible({ timeout: 30_000 });
+    await editorPage.getByRole("link", { name: "Edit" }).click();
+    await editorPage.waitForLoadState("domcontentloaded");
 
     // Switch visibility Personal -> Teams. The visibility selector renders
     // collapsed (showing only the current Personal option), so expand it
     // first; the Teams option's description is unique within the expanded
     // list, so match on it.
-    await settingsDialog
+    await editorPage
       .getByRole("button", { name: /Only you can access this MCP server/i })
       .click();
-    await settingsDialog
+    await editorPage
       .getByRole("button", {
         name: /Share this MCP server with selected teams/i,
       })
       .click();
 
     // Pick the Engineering team (the editor is a member of it).
-    await settingsDialog.getByPlaceholder("Select teams...").click();
+    await editorPage.getByPlaceholder("Select teams...").click();
     await editorPage
       .getByRole("option", { name: ENGINEERING_TEAM_NAME })
       .click();
 
-    await settingsDialog.getByRole("button", { name: /Save Changes/i }).click();
+    await editorPage.getByRole("button", { name: /Save Changes/i }).click();
 
     // The item is now team-scoped and assigned to Engineering.
     await expect

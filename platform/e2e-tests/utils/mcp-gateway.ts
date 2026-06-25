@@ -1,7 +1,4 @@
-import {
-  archestraApiSdk,
-  getManageCredentialsButtonTestId,
-} from "@archestra/shared";
+import { archestraApiSdk } from "@archestra/shared";
 import {
   type APIRequestContext,
   type APIResponse,
@@ -17,7 +14,6 @@ import {
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
 } from "../consts";
-import { closeOpenDialogs } from "./dialogs";
 
 export async function verifyToolCallResultViaApi({
   request,
@@ -522,47 +518,33 @@ export async function openManageCredentialsDialog(
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );
-  const settingsDialog = page.getByRole("dialog", {
-    name: new RegExp(`^${escapeRegExp(catalogItemName)} Settings$`),
-  });
-  const connectionsNavButton = settingsDialog.getByTestId(
-    E2eTestId.McpServerSettingsConnectionsNavButton,
-  );
-  const connectionsHeading = settingsDialog.getByRole("heading", {
+  // Credentials now live on the routed detail page's Credentials tab, not in a
+  // settings dialog. The heading renders once the tab is active.
+  const connectionsHeading = page.getByRole("heading", {
     name: "Credentials",
     exact: true,
   });
-  if (await settingsDialog.isVisible().catch(() => false)) {
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
-    }
-    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
-    return;
-  }
+  const connectionsTab = page.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
 
-  const standaloneDialog = page.getByTestId(E2eTestId.ManageCredentialsDialog);
-  if (await standaloneDialog.isVisible().catch(() => false)) {
+  if (await connectionsHeading.isVisible().catch(() => false)) {
     return;
   }
 
   await expect(async () => {
-    if (await settingsDialog.isVisible().catch(() => false)) {
-      if (!(await connectionsHeading.isVisible().catch(() => false))) {
-        await connectionsNavButton.click();
-      }
+    if (await connectionsHeading.isVisible().catch(() => false)) {
+      return;
+    }
+
+    // Already on the detail page — just switch to the Credentials tab.
+    if (await connectionsTab.isVisible().catch(() => false)) {
+      await connectionsTab.click();
       await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
       return;
     }
 
-    if (await standaloneDialog.isVisible().catch(() => false)) {
-      return;
-    }
-
-    const anyVisibleDialog = page.getByRole("dialog").filter({ visible: true });
-    if ((await anyVisibleDialog.count()) > 0) {
-      await closeOpenDialogs(page, { timeoutMs: 3_000 });
-    }
-
+    // Otherwise we're on the registry list: open the server's detail page.
     if (!(await targetCard.isVisible().catch(() => false))) {
       // Newly-installed servers may not be in the rendered list yet — re-fetch
       // and re-apply the search filter rather than waiting on a stale page.
@@ -574,38 +556,24 @@ export async function openManageCredentialsDialog(
     }
     await expect(targetCard).toBeVisible({ timeout: 5_000 });
 
-    const manageButton = targetCard.getByTestId(
-      getManageCredentialsButtonTestId(catalogItemName),
-    );
-    const deploymentButton = targetCard.getByRole("button", {
-      name: /^\d+\/\d+$/,
-    });
+    await targetCard
+      .getByTestId(`${E2eTestId.McpServerSettingsButton}-${catalogItemName}`)
+      .click({ force: true });
+    await page.waitForLoadState("domcontentloaded");
 
-    if (await manageButton.isVisible().catch(() => false)) {
-      await manageButton.click({ force: true });
-    } else {
-      await expect(deploymentButton).toBeVisible({ timeout: 5_000 });
-      await deploymentButton.click();
-    }
-
-    await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
-    }
+    await expect(connectionsTab).toBeVisible({ timeout: 5_000 });
+    await connectionsTab.click();
     await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  const visibleDialog = page
-    .getByRole("dialog")
-    .filter({ visible: true })
-    .last();
-  const connectionsNavButton = visibleDialog.getByRole("button", {
+  // Credentials render on the detail page's Credentials tab (no dialog). The
+  // tab trigger carries the connection-count badge.
+  const connectionsTab = page.getByRole("tab", {
     name: /^Credentials\b/,
   });
-  const badgeText =
-    (await connectionsNavButton.textContent().catch(() => "")) ?? "";
+  const badgeText = (await connectionsTab.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(
     badgeText.match(/\d+/)?.[0] ?? "0",
     10,
@@ -614,16 +582,13 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
   if (expectedConnectionCount > 0) {
     await expect
       .poll(
-        async () =>
-          await visibleDialog.getByTestId(E2eTestId.CredentialOwner).count(),
+        async () => await page.getByTestId(E2eTestId.CredentialOwner).count(),
         { timeout: 10_000, intervals: [250, 500, 1000] },
       )
       .toBeGreaterThan(0);
   }
 
-  return await visibleDialog
-    .getByTestId(E2eTestId.CredentialOwner)
-    .allTextContents();
+  return await page.getByTestId(E2eTestId.CredentialOwner).allTextContents();
 }
 
 export async function getVisibleStaticCredentials(
@@ -753,8 +718,4 @@ export async function createTeamMcpGatewayViaApi({
     );
   }
   return { id: createResponse.data.id, name: createResponse.data.name };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

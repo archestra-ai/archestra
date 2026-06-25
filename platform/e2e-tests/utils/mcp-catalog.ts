@@ -33,19 +33,17 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  const createDialog = page.getByRole("dialog", {
-    name: /Add MCP Server to the Private Registry/i,
-  });
-  await expect(createDialog).toBeVisible({ timeout: 30_000 });
+  // The routed "Add MCP Server" page opens on the source step; pick the
+  // manual path to reveal the create form (now a page, not a dialog).
+  await page.getByRole("button", { name: "Start from scratch" }).click();
+  await page.waitForLoadState("domcontentloaded");
 
-  await createDialog.getByRole("button", { name: "Self-hosted" }).click();
-  await createDialog
-    .getByRole("textbox", { name: "Name *" })
-    .fill(catalogItemName);
-  await createDialog.getByLabel("stdio").click();
-  await createDialog.getByRole("textbox", { name: "Command" }).fill("sh");
+  await page.getByRole("button", { name: "Self-hosted" }).click();
+  await page.getByRole("textbox", { name: "Name *" }).fill(catalogItemName);
+  await page.getByLabel("stdio").click();
+  await page.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
-  await createDialog
+  await page
     .getByRole("textbox", { name: "Arguments (one per line)" })
     .fill(`-c\n${singleLineCommand}`);
   if (envVars) {
@@ -53,7 +51,7 @@ export async function addCustomSelfHostedCatalogItem({
     // (`environment-variable-dialog.tsx`) opened by the "Add Variable"
     // button. All the env-var-specific inputs scope to that sub-dialog
     // now — not the parent "Add MCP Server" dialog.
-    await createDialog.getByRole("button", { name: "Add Variable" }).click();
+    await page.getByRole("button", { name: "Add Variable" }).click();
     const envVarDialog = page.getByRole("dialog", {
       name: /Add environment variable/i,
     });
@@ -127,15 +125,15 @@ export async function addCustomSelfHostedCatalogItem({
     await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
   if (scope && scope !== "personal") {
-    await createDialog
+    await page
       .getByRole("button", { name: /Only you can access this MCP server/i })
       .click();
     const scopeLabel = scope === "org" ? "Organization" : "Teams";
-    await createDialog
+    await page
       .getByRole("button", { name: new RegExp(scopeLabel, "i") })
       .click();
   }
-  await createDialog.getByRole("button", { name: "Add Server" }).click();
+  await page.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("domcontentloaded");
 
   let newCatalogItem: { id: string; name: string } | null = null;
@@ -172,10 +170,6 @@ export async function addCustomSelfHostedCatalogItem({
   }
 
   const createdCatalogItem = newCatalogItem as { id: string; name: string };
-
-  if (await createDialog.isVisible().catch(() => false)) {
-    await page.keyboard.press("Escape").catch(() => undefined);
-  }
 
   return {
     id: createdCatalogItem.id,

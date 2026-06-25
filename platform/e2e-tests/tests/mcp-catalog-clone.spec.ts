@@ -50,22 +50,17 @@ test.describe("MCP Catalog clone", () => {
     try {
       await goToMcpRegistry(adminPage);
 
+      // The card opens the routed detail page; Clone lives in its
+      // "More actions" menu and routes to the pre-filled add page.
       await adminPage
         .getByTestId(`${E2eTestId.McpServerSettingsButton}-${sourceName}`)
         .click();
+      await adminPage.waitForLoadState("domcontentloaded");
 
-      const settingsDialog = adminPage.getByRole("dialog", {
-        name: new RegExp(`${sourceName} Settings`, "i"),
-      });
-      await expect(settingsDialog).toBeVisible({ timeout: 30_000 });
-      await settingsDialog
-        .getByRole("button", { name: "Clone", exact: true })
-        .click();
+      await adminPage.getByRole("button", { name: "More actions" }).click();
+      await adminPage.getByRole("menuitem", { name: "Clone" }).click();
+      await adminPage.waitForLoadState("domcontentloaded");
 
-      const cloneDialog = adminPage.getByRole("dialog", {
-        name: /Add MCP Server to the Private Registry/i,
-      });
-      await expect(cloneDialog).toBeVisible({ timeout: 30_000 });
       // Clone form is pre-filled (name becomes `<source>-copy`); submit as-is.
       await submitAddServer(adminPage);
 

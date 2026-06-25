@@ -165,13 +165,10 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               server.teamDetails?.name ?? server.ownerEmail ?? "Deleted user",
           ) ?? [];
       await openManageCredentialsDialog(page, catalogItemName);
-      const connectionsButton = page
-        .getByRole("dialog")
-        .filter({ visible: true })
-        .last()
-        .getByRole("button", { name: /^Credentials\b/ });
+      const connectionsButton = page.getByRole("tab", {
+        name: /^Credentials\b/,
+      });
       await expect(connectionsButton).toBeVisible();
-      await closeOpenDialogs(page);
 
       if (user !== "Member") {
         const gatewayNameForAssignment = adminSharedGateway?.name;
@@ -336,13 +333,10 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   const checkCredentialsCount = async (page: Page) => {
     await goToPage(page, "/mcp/registry");
     await openManageCredentialsDialog(page, catalogItemName);
-    const connectionsButton = page
-      .getByRole("dialog")
-      .filter({ visible: true })
-      .last()
-      .getByRole("button", { name: /^Credentials\b/ });
+    const connectionsButton = page.getByRole("tab", {
+      name: /^Credentials\b/,
+    });
     await expect(connectionsButton).toBeVisible();
-    await closeOpenDialogs(page);
   };
   for (const { page } of MATRIX) {
     await checkCredentialsCount(page);

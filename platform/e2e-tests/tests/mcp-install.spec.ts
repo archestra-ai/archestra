@@ -152,6 +152,10 @@ rl.on("line", (line) => {
     await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
     await adminPage.waitForLoadState("domcontentloaded");
 
+    // The routed add page opens on the source step; pick the manual path.
+    await adminPage.getByRole("button", { name: "Start from scratch" }).click();
+    await adminPage.waitForLoadState("domcontentloaded");
+
     await adminPage
       .getByRole("button", {
         name: "Self-hosted",

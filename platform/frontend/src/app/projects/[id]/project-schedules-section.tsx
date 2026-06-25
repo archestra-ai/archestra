@@ -10,7 +10,6 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import {
@@ -19,6 +18,7 @@ import {
   type ScheduleTriggerFormState,
 } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentSelector } from "@/components/agent-selector";
+import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,6 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type ScheduleTrigger,
   useCreateScheduleTrigger,
-  useCreateScheduleTriggerRunConversation,
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
@@ -134,8 +133,7 @@ function ScheduleRow({
   const deleteSchedule = useDeleteScheduleTrigger();
   const [editOpen, setEditOpen] = useState(false);
 
-  const router = useRouter();
-  const ensureConversation = useCreateScheduleTriggerRunConversation();
+  const { resolve, isResolving } = useResolveRunChat();
   // Clicking the schedule opens its LAST run's chat. Fetch just that run (no
   // polling — the section already refreshes the trigger list).
   const { data: runsResponse } = useScheduleTriggerRuns(schedule.id, {
@@ -180,19 +178,9 @@ function ScheduleRow({
     nameNode = (
       <button
         type="button"
-        disabled={ensureConversation.isPending}
+        disabled={isResolving}
         className={cn(labelClassName, "text-left")}
-        onClick={() =>
-          ensureConversation.mutate(
-            { triggerId: schedule.id, runId: lastRun.id },
-            {
-              onSuccess: (conversation) =>
-                router.push(
-                  `/chat/${conversation.id}?scheduleTriggerId=${schedule.id}&scheduleRunId=${lastRun.id}`,
-                ),
-            },
-          )
-        }
+        onClick={() => resolve(schedule.id, lastRun.id)}
       >
         {scheduleLabel}
       </button>

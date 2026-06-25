@@ -2,7 +2,6 @@
 
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   runChatHref,
@@ -10,9 +9,9 @@ import {
 } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { isScheduleTriggerRunActive } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
+import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import {
   type ScheduleTriggerRun,
-  useCreateScheduleTriggerRunConversation,
   useScheduleTriggerRuns,
 } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
@@ -89,8 +88,7 @@ function RunRow({
   isCurrent: boolean;
 }) {
   const kind = runRowKind(run);
-  const router = useRouter();
-  const ensureConversation = useCreateScheduleTriggerRunConversation();
+  const { resolve, isResolving } = useResolveRunChat();
 
   const rowContent = (
     <div className="flex items-center gap-3 px-3 py-2.5">
@@ -98,7 +96,7 @@ function RunRow({
       <span className="flex-1 truncate text-sm text-muted-foreground">
         {formatRunTimestamp(run.createdAt)}
       </span>
-      {(kind === "running" || ensureConversation.isPending) && (
+      {(kind === "running" || isResolving) && (
         <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
       )}
     </div>
@@ -127,23 +125,12 @@ function RunRow({
     return (
       <button
         type="button"
-        disabled={ensureConversation.isPending}
+        disabled={isResolving}
         className={cn(
           "block w-full rounded-lg border bg-card text-left transition-colors hover:bg-accent",
           isCurrent && "border-primary bg-accent",
         )}
-        onClick={() =>
-          ensureConversation.mutate(
-            { triggerId, runId: run.id },
-            {
-              onSuccess: (conversation) => {
-                router.push(
-                  `/chat/${conversation.id}?scheduleTriggerId=${triggerId}&scheduleRunId=${run.id}`,
-                );
-              },
-            },
-          )
-        }
+        onClick={() => resolve(triggerId, run.id)}
       >
         {rowContent}
       </button>

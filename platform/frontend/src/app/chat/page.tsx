@@ -777,21 +777,23 @@ export function ChatPageContent({
   const stop = chatSession?.stop;
 
   // Re-send the most recent user message by regenerating its turn. Shared by the
-  // provider-connect auto-rerun and the scheduled-run "Try again". A no-op while
-  // a turn is in flight so it can't double-send.
-  const resendLastUserMessage = useCallback(() => {
-    if (status === "submitted" || status === "streaming") return;
-    if (!regenerateUserMessage) return;
+  // provider-connect auto-rerun and the scheduled-run "Try again". Returns whether
+  // a resend was actually started (false while a turn is in flight or there's no
+  // user message), so callers can skip side effects when nothing is resent.
+  const resendLastUserMessage = useCallback((): boolean => {
+    if (status === "submitted" || status === "streaming") return false;
+    if (!regenerateUserMessage) return false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role !== "user") continue;
       const partIndex = message.parts.findIndex((part) => part.type === "text");
-      if (partIndex < 0) return;
+      if (partIndex < 0) return false;
       const part = message.parts[partIndex];
       const text = "text" in part ? part.text : "";
       void regenerateUserMessage({ messageId: message.id, partIndex, text });
-      return;
+      return true;
     }
+    return false;
   }, [messages, regenerateUserMessage, status]);
 
   // After the user connects a per-user provider (e.g. GitHub Copilot) via the
@@ -799,13 +801,16 @@ export function ChatPageContent({
   // mutation already invalidated the model/key caches.
   const handleProviderConnected = resendLastUserMessage;
 
-  // Scheduled-run "Try again": clear the persisted error so the card disappears,
-  // then resend the scheduled prompt. Only wired for scheduled-run chats.
+  // Scheduled-run "Try again": resend the scheduled prompt, and only once that's
+  // underway clear the persisted error so the card disappears. Ordering matters —
+  // clearing first would wipe the error card even if the resend couldn't start.
+  // Only wired for scheduled-run chats (and the chat is owner-editable here, since
+  // read-only viewers render MessageThread instead of this).
   const clearChatErrors = useClearChatErrors();
   const handleScheduledRunRetry = useCallback(async () => {
     if (!conversationId) return;
+    if (!resendLastUserMessage()) return;
     await clearChatErrors.mutateAsync({ id: conversationId });
-    resendLastUserMessage();
   }, [conversationId, clearChatErrors, resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection

@@ -524,7 +524,7 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([]);
   });
 
-  it("de-dupes non-owned renders by resourceUri, keeping the latest render", () => {
+  it("keeps every external render of the same resourceUri as its own entry", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -555,6 +555,14 @@ describe("deriveAppsFromMessages", () => {
     ] as never;
 
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "Pm / Show Board",
+        uiResourceUri: "ui://pm/board",
+        appId: null,
+        version: null,
+        createdAt: Date.parse("2026-05-29T18:00:00.000Z"),
+      },
       {
         toolCallId: "call_2",
         label: "Pm / Show Board",
@@ -812,45 +820,53 @@ describe("identifyCompactToolGroups", () => {
 });
 
 describe("isSupersededRender", () => {
-  const app = (toolCallId: string, uiResourceUri: string): PanelApp => ({
+  const app = (
+    toolCallId: string,
+    uiResourceUri: string,
+    appId: string | null = "app-1",
+  ): PanelApp => ({
     toolCallId,
     label: "Dashboard",
     uiResourceUri,
+    appId,
     version: 1,
     createdAt: 0,
   });
 
-  it("returns false for the latest render of an app (registry points at it)", () => {
+  it("returns false for the latest render of an owned app (registry points at it)", () => {
     const apps = [app("tc2", "ui://app-1")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc2",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc2", appId: "app-1" }),
     ).toBe(false);
   });
 
-  it("returns true for a prior render once a newer render registers", () => {
+  it("returns true for a prior owned render once a newer render registers", () => {
     const apps = [app("tc2", "ui://app-1")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc1",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
     ).toBe(true);
   });
 
-  it("returns false when the app has no registry entry yet (mid-stream)", () => {
-    const apps = [app("tc9", "ui://other-app")];
+  it("returns false when the owned app has no registry entry yet (mid-stream)", () => {
+    const apps = [app("tc9", "ui://other-app", "other-app")];
     expect(
-      isSupersededRender({
-        apps,
-        uiResourceUri: "ui://app-1",
-        toolCallId: "tc1",
-      }),
+      isSupersededRender({ apps, toolCallId: "tc1", appId: "app-1" }),
     ).toBe(false);
+  });
+
+  it("never supersedes external renders sharing a resourceUri", () => {
+    // External renders carry no appId: each tool call is its own live entry,
+    // even when a sibling render holds the same resourceUri.
+    const apps = [
+      app("tc1", "ui://excalidraw", null),
+      app("tc2", "ui://excalidraw", null),
+    ];
+    expect(isSupersededRender({ apps, toolCallId: "tc1", appId: null })).toBe(
+      false,
+    );
+    expect(isSupersededRender({ apps, toolCallId: "tc2", appId: null })).toBe(
+      false,
+    );
   });
 });
 

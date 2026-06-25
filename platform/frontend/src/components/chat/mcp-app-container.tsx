@@ -232,7 +232,7 @@ export function McpAppSection({
   // pill instead of mounting the live runtime, so only the latest render of each
   // app stays live. Applies to both owned apps and external MCP-UI calls; the
   // pill degrades to just the label for non-owned renders (no version/verb).
-  if (isSupersededRender({ apps, uiResourceUri, toolCallId })) {
+  if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
       <McpAppChangelogPill
         appName={appName ?? humanizeToolLabel(toolName)}

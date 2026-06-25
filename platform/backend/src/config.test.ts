@@ -1045,6 +1045,53 @@ describe("chat active run config", () => {
   });
 });
 
+describe("chatops sticky thread auto-reply config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("defaults to enabled when env unset", async () => {
+    delete process.env.ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chatops).toMatchObject({ stickyThreadAutoReplyEnabled: true });
+  });
+
+  test('disables only for the literal "false"', async () => {
+    process.env.ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED = "false";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chatops.stickyThreadAutoReplyEnabled).toBe(false);
+  });
+
+  test('stays enabled for the literal "true"', async () => {
+    process.env.ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED = "true";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chatops.stickyThreadAutoReplyEnabled).toBe(true);
+  });
+
+  test('stays enabled for non-"false" values', async () => {
+    process.env.ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED = "1";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.chatops.stickyThreadAutoReplyEnabled).toBe(true);
+  });
+});
+
 describe("getCorsOrigins", () => {
   const originalEnv = process.env;
 

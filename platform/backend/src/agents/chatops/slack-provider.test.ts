@@ -28,6 +28,7 @@ vi.mock("@/cache-manager", async (importOriginal) => {
 });
 
 import { CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import SlackProvider from "./slack-provider";
 
 // =============================================================================
@@ -705,6 +706,169 @@ describe("SlackProvider.parseWebhookNotification — sticky thread auto-reply", 
     );
 
     expect(topLevel).toBeNull();
+  });
+
+  // Multi-person group DMs (mpim) have channel_type !== "im", so isDM is false
+  // and they are gated exactly like channels.
+  test("un-mentioned mpim message in a fresh thread returns null", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "G_STICKY_MPIM_INACTIVE",
+          channel_type: "mpim",
+          text: "no mention in a group dm",
+          thread_ts: "5555555555.000009",
+        },
+      ),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("mentioned mpim message is processed and activates the thread", async () => {
+    const provider = createProvider();
+    const threadTs = "5555555555.000010";
+
+    const mention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "G_STICKY_MPIM_ACTIVE",
+          channel_type: "mpim",
+          text: "<@UBOT123> help in the group dm",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mention).not.toBeNull();
+
+    // Follow-up without a mention in the same mpim thread → still processed,
+    // proving the mention activated the thread.
+    const followUp = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "G_STICKY_MPIM_ACTIVE",
+          channel_type: "mpim",
+          text: "follow-up without mention",
+          ts: "5555555555.000011",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(followUp).not.toBeNull();
+    expect(followUp?.text).toBe("follow-up without mention");
+  });
+});
+
+// =============================================================================
+// Sticky channel auto-reply DISABLED via
+// ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED=false
+// =============================================================================
+
+describe("SlackProvider.parseWebhookNotification — sticky thread auto-reply disabled", () => {
+  beforeEach(() => {
+    config.chatops.stickyThreadAutoReplyEnabled = false;
+  });
+
+  afterEach(() => {
+    config.chatops.stickyThreadAutoReplyEnabled = true;
+  });
+
+  // Assert the sticky-thread activation cache is never written while the flag
+  // is off — activation keys are `CacheKey.SlackThreadActive`-prefixed.
+  function expectNoThreadActivation(setSpy: ReturnType<typeof vi.spyOn>) {
+    const wroteActivation = (
+      setSpy.mock.calls as ReadonlyArray<readonly unknown[]>
+    ).some(([key]) => String(key).startsWith(CacheKey.SlackThreadActive));
+    expect(wroteActivation).toBe(false);
+  }
+
+  test("an un-mentioned reply in a previously-activated thread is NOT auto-replied", async () => {
+    const provider = createProvider();
+    const threadTs = "6666666666.000001";
+    const setSpy = vi.spyOn(cacheManager, "set");
+
+    // A mention is processed (and would normally activate the thread).
+    const mention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_DISABLED_STICKY",
+          text: "<@UBOT123> help me",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mention).not.toBeNull();
+
+    // Follow-up in the same thread without a mention → gated, because sticky
+    // auto-reply is disabled (no activation persistence).
+    const followUp = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_DISABLED_STICKY",
+          text: "and another thing",
+          ts: "6666666666.000002",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(followUp).toBeNull();
+
+    // Neither the mentioned nor the un-mentioned message activated the thread.
+    expectNoThreadActivation(setSpy);
+  });
+
+  test("a mentioned channel message is still processed without activating the thread", async () => {
+    const provider = createProvider();
+    const setSpy = vi.spyOn(cacheManager, "set");
+
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel: "C_DISABLED_MENTION",
+          text: "<@UBOT123> hi there",
+          thread_ts: "6666666666.000003",
+        },
+      ),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expectNoThreadActivation(setSpy);
+  });
+
+  test("a DM is still processed without any mention", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "D_DISABLED_DM",
+          channel_type: "im",
+          text: "direct message, no mention",
+          thread_ts: undefined,
+        },
+      ),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("direct message, no mention");
   });
 });
 

@@ -1273,6 +1273,14 @@ These environment variables configure the Incoming Email feature, which allows e
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
 
+#### Shared (Slack and Microsoft Teams)
+
+- **`ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED`** - Controls sticky-thread auto-reply for both Slack and Microsoft Teams.
+  - Defaults to `true` (enabled). Only the literal value `false` disables it; any other value keeps it on.
+  - When enabled: once the bot is @-mentioned in a channel thread, it keeps replying to that thread without further mentions until the activation TTL lapses.
+  - Set to `false` to disable: in channels the bot only responds when explicitly @-mentioned. Direct messages always process regardless of this flag.
+  - Disabling takes effect immediately — no restart or cache clear needed; any in-flight thread activations recorded while it was enabled are ignored and expire on their own via the activation TTL.
+
 #### Microsoft Teams
 
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED`** - Enable Microsoft Teams integration.

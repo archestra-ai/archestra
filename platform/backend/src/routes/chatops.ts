@@ -17,6 +17,7 @@ import {
 import {
   isChannelThreadActive,
   markChannelThreadActive,
+  resolveChannelGateAction,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
@@ -27,6 +28,7 @@ import {
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -279,15 +281,24 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // further mentions. Group chats and DMs always reply (no gate).
             // Runs before sender resolution so we don't do Graph lookups for
             // the many un-mentioned channel messages the bot now receives.
-            if (context.activity.conversation?.conversationType === "channel") {
+            const gateAction = resolveChannelGateAction({
+              conversationType:
+                context.activity.conversation?.conversationType ?? "",
+              stickyEnabled: config.chatops.stickyThreadAutoReplyEnabled,
+              wasMentioned: provider.wasBotMentioned(context.activity),
+            });
+            if (gateAction !== "process") {
               const activation = {
                 provider: "ms-teams" as const,
                 channelId: message.channelId,
                 threadId: message.threadId ?? message.channelId,
               };
-              if (provider.wasBotMentioned(context.activity)) {
+              if (gateAction === "process-and-activate") {
                 await markChannelThreadActive(activation);
+              } else if (gateAction === "skip") {
+                return;
               } else if (!(await isChannelThreadActive(activation))) {
+                // gateAction === "check-active"
                 return;
               }
             }

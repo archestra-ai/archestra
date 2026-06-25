@@ -1152,6 +1152,15 @@ const config = {
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
   },
+  chatops: {
+    // Slack/Teams sticky-thread auto-reply: once the bot is @mentioned in a
+    // channel thread, it keeps replying to that thread without further mentions
+    // until the activation TTL lapses. Set to "false" to disable — the bot then
+    // only responds when explicitly @-mentioned (no thread activation/persistence).
+    stickyThreadAutoReplyEnabled:
+      process.env.ARCHESTRA_CHATOPS_STICKY_THREAD_AUTO_REPLY_ENABLED !==
+      "false",
+  },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     knowledgeBase:

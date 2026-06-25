@@ -14,6 +14,7 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ChatOpsChannelBindingModel } from "@/models";
 import type {
@@ -40,6 +41,7 @@ import {
 import {
   isChannelThreadActive,
   markChannelThreadActive,
+  resolveChannelGateAction,
 } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -288,15 +290,25 @@ class SlackProvider implements ChatOpsProvider {
     // @mentioned (app_mention event or message text containing <@BOT_ID>),
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
-    if (!isDM) {
+    // Slack gates everything that is !isDM — including multi-person group DMs
+    // (mpim) — like a channel, so map !isDM to "channel".
+    const gateAction = resolveChannelGateAction({
+      conversationType: isDM ? "personal" : "channel",
+      stickyEnabled: config.chatops.stickyThreadAutoReplyEnabled,
+      wasMentioned: hasBotMention,
+    });
+    if (gateAction !== "process") {
       const activation = {
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
       };
-      if (hasBotMention) {
+      if (gateAction === "process-and-activate") {
         await markChannelThreadActive(activation);
+      } else if (gateAction === "skip") {
+        return null;
       } else if (!(await isChannelThreadActive(activation))) {
+        // gateAction === "check-active"
         return null;
       }
     }

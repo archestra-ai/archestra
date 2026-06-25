@@ -242,7 +242,7 @@ const ValidateAppOutputSchema = z.object({
       renderedAt: z.string().nullable(),
     })
     .describe(
-      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version was seen yet — these only appear after a human views the app, so a clean static pass (ok: true) is the most a headless caller can confirm and is enough to proceed.",
+      "Diagnostics from the most recent live render of the head version (untrusted iframe output). status no_render_observed means no render of this version has happened yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and a clean static pass (ok: true) is enough to proceed.",
     ),
 });
 
@@ -852,7 +852,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
-      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet. Live diagnostics only exist once a human has viewed the app (or after get_app_diagnostics following a render), so in a headless context a clean static pass (ok: true) is the most that can be confirmed and is enough to proceed. Fix any errors with edit_app before publishing.",
+      "Validate an app's current head version: static structural checks plus the diagnostics from its most recent live render. Static checks flag SDK self-bootstrap, platform script/stylesheet self-loads, and unparseable markup as errors, and a missing document root, <script>/<link> hosts outside the CDN allowlist, or browser-storage use (localStorage/sessionStorage/indexedDB instead of archestra.storage) as warnings. It then reports the head version's live render diagnostics — runtime errors / CSP violations captured the last time it rendered for you (framed as untrusted data), or that no render of this version has been observed yet. Live diagnostics are captured only when the app renders for a viewer — inline in chat or at its run page — so no_render_observed is the normal state right after authoring: a clean static pass (ok: true) is enough to proceed, and any later render diagnostics surface on the next render or via get_app_diagnostics. Fix any errors with edit_app before publishing.",
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
@@ -908,7 +908,7 @@ const registry = defineArchestraTools([
         : live.status === "errors"
           ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
           : live.status === "no_render_observed"
-            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}. No live render has been observed yet — live diagnostics only appear once a human views the app, so in a headless context this clean static pass is the most you can confirm and is enough to proceed; have a human view it when one is available.`
+            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}. No live render has been observed yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and the clean static pass is enough to proceed; render diagnostics surface later, on the next render.`
             : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
       const findingLines = findings.length
         ? `\n${findings
@@ -1427,7 +1427,7 @@ async function buildLiveValidation(params: {
         entries: [],
         renderedAt: null,
       },
-      section: `\nLive render: no render of version ${head} has been observed for you yet. Runtime diagnostics are only captured once a human views the app (in chat or its run page), so re-running validate_app in a headless context will not change this — a clean static pass is enough to proceed.`,
+      section: `\nLive render: no render of version ${head} has been observed for you yet. Runtime diagnostics are captured only when the app renders for a viewer (in chat or its run page), so this is the normal state right after authoring — re-running validate_app will not change it on its own, and a clean static pass is enough to proceed.`,
     };
   }
   const renderedAt = snapshot.renderedAt.toISOString();

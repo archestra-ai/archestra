@@ -3,7 +3,6 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
 import { type ReactNode, useState } from "react";
 import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
-import { useInlineCeiling } from "@/components/mcp-app/app-height";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
@@ -62,7 +61,6 @@ export function AppFrame({
   /** When false, render the bare runtime with no card/chrome (external run page). */
   chrome?: boolean;
 }) {
-  const inlineCeiling = useInlineCeiling();
   const {
     displayMode,
     setDisplayMode,
@@ -124,8 +122,6 @@ export function AppFrame({
         <McpAppCard
           displayMode={displayMode}
           onToggleFullscreen={toggleFullscreen}
-          size={null}
-          inlineCeiling={inlineCeiling}
           fillContainer={fillContainer}
           topBar={
             <McpAppTopBar

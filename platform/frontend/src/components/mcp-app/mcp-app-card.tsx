@@ -1,10 +1,6 @@
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import type React from "react";
 import { useEffect, useState } from "react";
-import {
-  clampInlineHeight,
-  INITIAL_INLINE_HEIGHT,
-} from "@/components/mcp-app/app-height";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,8 +25,6 @@ export function McpAppCard({
   onToggleFullscreen,
   children,
   diagnostics,
-  size,
-  inlineCeiling,
   fillContainer = false,
   placeholder,
   frozenHeight,
@@ -46,8 +40,6 @@ export function McpAppCard({
    * badge stretched to full height would shove the app below the fold.
    */
   diagnostics?: React.ReactNode;
-  size: { width: number; height: number } | null;
-  inlineCeiling: number;
   fillContainer?: boolean;
   /**
    * When set, the body renders this node — frozen to `frozenHeight`, frosted —
@@ -132,13 +124,9 @@ export function McpAppCard({
       ) : (
         <div
           style={
-            fillContainer && !isFullscreen
-              ? undefined
-              : {
-                  maxHeight: isFullscreen
-                    ? `${bounds?.height || 1000}px`
-                    : `${clampInlineHeight(size?.height ?? INITIAL_INLINE_HEIGHT, inlineCeiling)}px`,
-                }
+            isFullscreen
+              ? { maxHeight: `${bounds?.height || 1000}px` }
+              : undefined
           }
           className={cn(
             "transition-[max-height] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
@@ -146,7 +134,7 @@ export function McpAppCard({
               ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
               : fillContainer
                 ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
-                : "[&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
+                : "[&_iframe]:!w-full",
           )}
         >
           {children}

@@ -8,6 +8,8 @@ import {
 } from "@archestra/shared";
 import {
   CalendarClock,
+  ChevronLeft,
+  Download,
   Eye,
   FileText,
   Globe,
@@ -22,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
@@ -73,7 +75,6 @@ import {
 } from "@/lib/projects/projects.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
@@ -357,6 +358,7 @@ function ProjectFilesSidebar({
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "detail">("list");
 
   // The instructions file is surfaced only as the pinned entry, so keep it out
   // of the ordinary list (filtered from `items` below).
@@ -372,18 +374,25 @@ function ProjectFilesSidebar({
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
-  const previewing = selected !== null || instructionsSelected;
+  const detailName = instructionsSelected
+    ? PROJECT_INSTRUCTIONS_FILENAME
+    : (selected?.name ?? "");
 
-  // Open with the newest file previewed, like the chat panel does. Only once —
-  // an explicitly closed preview stays closed. The instructions entry is opened
-  // only on click, never by default.
-  const defaultApplied = useRef(false);
-  const newestId = items.at(-1)?.id;
+  const openFile = (id: string) => {
+    setSelectedId(id);
+    setView("detail");
+  };
+  const backToList = () => setView("list");
+
+  // If the open file disappears (e.g. deleted elsewhere), fall back to the list.
+  const selectedMissing =
+    selectedId !== null && !instructionsSelected && selected === null;
   useEffect(() => {
-    if (defaultApplied.current || !newestId) return;
-    defaultApplied.current = true;
-    setSelectedId(newestId);
-  }, [newestId]);
+    if (selectedMissing) {
+      setSelectedId(null);
+      setView("list");
+    }
+  }, [selectedMissing]);
 
   return (
     <ResizableRightPanel>
@@ -404,40 +413,65 @@ function ProjectFilesSidebar({
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
-            <div
-              className={cn(
-                "overflow-y-auto px-3 py-3",
-                previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
-              )}
-            >
-              <FileSection
-                items={items}
-                selectedId={null}
-                onSelect={setSelectedId}
-                leading={
-                  <InstructionsRow
-                    onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+            {view === "list" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                <FileSection
+                  items={items}
+                  selectedId={null}
+                  onSelect={openFile}
+                  leading={
+                    <InstructionsRow
+                      onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
+                    />
+                  }
+                />
+                {items.length === 0 && (
+                  <p className="px-1 pt-3 text-xs text-muted-foreground">
+                    Results the agent saves in this project will appear here.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+                    onClick={backToList}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Files
+                  </Button>
+                  <span className="shrink-0 text-muted-foreground">·</span>
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm font-medium"
+                    title={detailName}
+                  >
+                    {detailName}
+                  </span>
+                  {selected && !instructionsSelected && selected.contentUrl && (
+                    <a
+                      href={selected.contentUrl}
+                      download={selected.name}
+                      title={`Download ${selected.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="sr-only">Download {selected.name}</span>
+                    </a>
+                  )}
+                </div>
+                {instructionsSelected ? (
+                  <ProjectInstructionsPanel
+                    projectId={projectId}
+                    isOwner={isOwner}
+                    onClose={backToList}
                   />
-                }
-              />
-              {items.length === 0 && (
-                <p className="px-1 pt-3 text-xs text-muted-foreground">
-                  Results the agent saves in this project will appear here.
-                </p>
-              )}
-            </div>
-            {instructionsSelected && (
-              <ProjectInstructionsPanel
-                projectId={projectId}
-                isOwner={isOwner}
-                onClose={() => setSelectedId(null)}
-              />
-            )}
-            {selected && (
-              <FilePreview
-                file={selected}
-                onClose={() => setSelectedId(null)}
-              />
+                ) : selected ? (
+                  <FilePreview file={selected} onClose={backToList} />
+                ) : null}
+              </>
             )}
           </div>
         </div>

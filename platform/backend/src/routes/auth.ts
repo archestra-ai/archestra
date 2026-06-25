@@ -53,6 +53,7 @@ import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "@/utils/network";
+import { isPublicOAuthCorsPath } from "./oauth-cors";
 import { getPublicRequestOrigin } from "./request-origin";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -1194,7 +1195,11 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
  *   real browser request (those always send Origin on cross-origin POSTs).
  */
 function buildBetterAuthForwardedHeaders(
-  request: { headers: Record<string, unknown>; ip?: string | null },
+  request: {
+    headers: Record<string, unknown>;
+    ip?: string | null;
+    url: string;
+  },
   skipHeader?: (headerName: string) => boolean,
 ): Headers {
   const headers = new Headers();
@@ -1207,8 +1212,13 @@ function buildBetterAuthForwardedHeaders(
   if (request.ip) {
     headers.set("x-archestra-client-ip", request.ip);
   }
+  // Back-fill a missing Origin only on the public OAuth endpoints (see the
+  // docstring above and `isPublicOAuthCorsPath`). Scoping it to those paths is
+  // what keeps the credentialed browser routes (sign-in, consent, authorize)
+  // on Better Auth's full origin-based CSRF protection — a missing Origin on
+  // those must stay missing rather than be back-filled with the frontend origin.
   const origin = headers.get("origin");
-  if (!origin || origin === "null") {
+  if ((!origin || origin === "null") && isPublicOAuthCorsPath(request.url)) {
     headers.set("origin", config.frontendBaseUrl);
   }
   return headers;

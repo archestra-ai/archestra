@@ -91,7 +91,11 @@ describe("auth routes", () => {
         grant_type: "authorization_code",
         client_id: client.clientId,
         code: "auth-code",
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        // Build the resource on the configured issuer origin (not a hardcoded
+        // localhost) so the lifetime lookup's origin check in
+        // getProfileIdFromResource resolves the gateway regardless of whether a
+        // local .env points the frontend origin at a tunnel domain.
+        resource: `${new URL(config.frontendBaseUrl).origin}/v1/mcp/${agent.id}`,
       },
     });
 

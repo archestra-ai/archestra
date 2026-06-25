@@ -55,9 +55,13 @@ const mockCreateAndLinkRunConversation = vi.hoisted(() => vi.fn());
 const mockPersistRunConversationMessages = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
+const mockDeleteEmptyRunConversation = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
 vi.mock("@/services/scheduled-run-conversation", () => ({
   createAndLinkRunConversation: mockCreateAndLinkRunConversation,
   persistRunConversationMessages: mockPersistRunConversationMessages,
+  deleteEmptyRunConversation: mockDeleteEmptyRunConversation,
 }));
 
 vi.mock("@/logging", () => ({
@@ -128,6 +132,8 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockCreateAndLinkRunConversation.mockReset();
     mockPersistRunConversationMessages.mockReset();
     mockPersistRunConversationMessages.mockResolvedValue(undefined);
+    mockDeleteEmptyRunConversation.mockReset();
+    mockDeleteEmptyRunConversation.mockResolvedValue(undefined);
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
@@ -342,6 +348,14 @@ describe("handleScheduleTriggerRunExecution", () => {
       error: "LLM provider down",
     });
     expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
+    // The eagerly-created (now empty) conversation is dropped + the run unlinked.
+    expect(mockDeleteEmptyRunConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        runId: "run-1",
+        organizationId: "org-1",
+      }),
+    );
   });
 
   test("a persist failure does not fail the run", async () => {

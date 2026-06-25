@@ -1,6 +1,9 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import config from "@/lib/config/config";
+import {
+  useEnterpriseFeature,
+  usePublicEnterpriseCoreActive,
+} from "@/lib/config/config.query";
 
 export const identityProviderReadKeys = {
   all: ["identity-provider"] as const,
@@ -8,6 +11,8 @@ export const identityProviderReadKeys = {
 };
 
 export function usePublicIdentityProviders() {
+  // Pre-auth surface (login page), so check the public config flag.
+  const enterpriseCoreActive = usePublicEnterpriseCoreActive();
   return useQuery({
     queryKey: identityProviderReadKeys.public,
     queryFn: async () => {
@@ -16,11 +21,12 @@ export function usePublicIdentityProviders() {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core,
+    enabled: enterpriseCoreActive === true,
   });
 }
 
 export function useIdentityProviders(params?: { enabled?: boolean }) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return useQuery({
     queryKey: identityProviderReadKeys.all,
     queryFn: async () => {
@@ -29,6 +35,6 @@ export function useIdentityProviders(params?: { enabled?: boolean }) {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core && (params?.enabled ?? true),
+    enabled: enterpriseCoreActive && (params?.enabled ?? true),
   });
 }

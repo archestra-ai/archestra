@@ -8,14 +8,12 @@ import {
 } from "@archestra/shared";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
-import config from "@/lib/config/config";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 import type { IdentityProviderDialogSection } from "./identity-provider-dialog-shell.ee";
@@ -355,11 +353,9 @@ export function IdentityProvidersSettingsContent() {
     [clearEditDeepLink],
   );
 
-  // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!config.enterpriseFeatures.core) {
-    return <EnterpriseLicenseRequired featureName="Identity Providers" />;
-  }
-
+  // Gating is handled by the parent (DisabledEnterpriseSection in
+  // identity-providers/page.tsx). When disabled the wrapper renders this UI
+  // dimmed and non-interactive, so we no longer short-circuit here.
   if (isLoading) return <LoadingSpinner />;
 
   return (

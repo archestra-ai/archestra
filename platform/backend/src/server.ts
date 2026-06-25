@@ -55,6 +55,7 @@ import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -113,13 +114,11 @@ import {
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
-// Load enterprise routes if license is activated OR if running in codegen mode
-// (codegen mode ensures OpenAPI spec always includes all enterprise routes)
-const eeRoutes =
-  config.enterpriseFeatures.core || config.codegenMode
-    ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-      await import("./routes/index.ee")
-    : ({} as Record<string, never>);
+// Enterprise routes are always loaded. Access is gated at request time by the
+// EnterpriseTierService, which auto-enables enterprise features for teams below
+// the small-team threshold even when no enterprise license env var is set.
+// biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+import * as eeRoutes from "./routes/index.ee";
 
 const {
   api: {
@@ -968,6 +967,10 @@ const startWebServer = async () => {
     // Start cache manager's background cleanup interval
     cacheManager.start();
 
+    // Start the enterprise tier service so it has a fresh user count
+    // before the first request hits a license-gated route.
+    await enterpriseTier.start();
+
     // Initialize metrics with keys of custom agent labels
     // Set OpenMetrics content type to enable exemplar support on histograms
     const promClient = await import("prom-client");
@@ -1266,6 +1269,7 @@ const startWorker = async () => {
   try {
     await initializeDatabase();
     cacheManager.start();
+    await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
     // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.

@@ -1,7 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import config from "@/lib/config/config";
+import {
+  useEnterpriseFeature,
+  usePublicEnterpriseCoreActive,
+} from "@/lib/config/config.query";
 import { handleApiError } from "@/lib/utils";
 
 /**
@@ -21,6 +24,8 @@ export const identityProviderKeys = {
  * Automatically disabled when enterprise license is not activated.
  */
 export function usePublicIdentityProviders() {
+  // Pre-auth surface (login page + sign-in selector), so check the public flag.
+  const enterpriseCoreActive = usePublicEnterpriseCoreActive();
   return useQuery({
     queryKey: identityProviderKeys.public,
     queryFn: async () => {
@@ -29,7 +34,7 @@ export function usePublicIdentityProviders() {
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    enabled: config.enterpriseFeatures.core,
+    enabled: enterpriseCoreActive === true,
   });
 }
 
@@ -39,6 +44,7 @@ export function usePublicIdentityProviders() {
  * Automatically disabled when enterprise license is not activated.
  */
 export function useIdentityProviders(params?: { enabled?: boolean }) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return useQuery({
     queryKey: identityProviderKeys.all,
     queryFn: async () => {
@@ -47,7 +53,7 @@ export function useIdentityProviders(params?: { enabled?: boolean }) {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core && (params?.enabled ?? true),
+    enabled: enterpriseCoreActive && (params?.enabled ?? true),
   });
 }
 
@@ -55,6 +61,7 @@ export function useIdentityProviders(params?: { enabled?: boolean }) {
  * Get single identity provider
  */
 export function useIdentityProvider(id: string) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return useQuery({
     queryKey: [...identityProviderKeys.details(), id],
     queryFn: async () => {
@@ -65,11 +72,12 @@ export function useIdentityProvider(id: string) {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core,
+    enabled: enterpriseCoreActive,
   });
 }
 
 export function useIdentityProviderLatestIdTokenClaims(id: string | undefined) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return useQuery({
     queryKey: identityProviderKeys.latestIdTokenClaims(id ?? ""),
     queryFn: async () => {
@@ -86,7 +94,7 @@ export function useIdentityProviderLatestIdTokenClaims(id: string | undefined) {
     },
     retry: false,
     throwOnError: false,
-    enabled: config.enterpriseFeatures.core && !!id,
+    enabled: enterpriseCoreActive && !!id,
     refetchOnMount: "always",
   });
 }

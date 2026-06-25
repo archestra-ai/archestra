@@ -39,20 +39,21 @@ import {
   clearSsoSignInAttempt,
   hasSsoSignInAttempt,
 } from "@/lib/auth/sso-sign-in-attempt";
-import config from "@/lib/config/config";
-import { usePublicConfig } from "@/lib/config/config.query";
+import {
+  usePublicConfig,
+  usePublicEnterpriseCoreActive,
+} from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 import { TwoFactorView } from "./two-factor-view";
 
-const IdentityProviderSelector = dynamic(async () => {
-  if (!config.enterpriseFeatures.core) return () => null;
-
-  // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
-  const module = await import("@/components/identity-provider-selector.ee");
-  return module.IdentityProviderSelector;
-});
+const IdentityProviderSelector = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("@/components/identity-provider-selector.ee").then((m) => ({
+    default: m.IdentityProviderSelector,
+  })),
+);
 
 /**
  * Map of SSO error codes to user-friendly messages.
@@ -153,6 +154,8 @@ export function AuthViewWithErrorHandling({
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const appName = useAppName();
+  // Pre-auth surface — read enterprise flag from the public config endpoint.
+  const enterpriseCoreActive = usePublicEnterpriseCoreActive() === true;
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
   const [originError, setOriginError] = useState<string | null>(null);
@@ -345,7 +348,7 @@ export function AuthViewWithErrorHandling({
     isBasicAuthDisabled &&
     hasIdentityProviders &&
     isSignInPage &&
-    config.enterpriseFeatures.core
+    enterpriseCoreActive
   ) {
     return (
       <div className="w-full max-w-md space-y-4">
@@ -460,7 +463,7 @@ export function AuthViewWithErrorHandling({
         {!isBasicAuthDisabled && isSignInPage && (
           <SignInView callbackURL={callbackURL} />
         )}
-        {isSignInPage && config.enterpriseFeatures.core && (
+        {isSignInPage && enterpriseCoreActive && (
           <IdentityProviderSelector
             showDivider={!isBasicAuthDisabled}
             callbackURL={callbackURL}

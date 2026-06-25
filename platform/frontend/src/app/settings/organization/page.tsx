@@ -8,6 +8,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -254,6 +255,7 @@ export default function OrganizationSettingsPage() {
 
   return (
     <SettingsSectionStack>
+      <SmallTeamTierBanner />
       {/* Appearance Section */}
       <div>
         <h3 className="text-lg font-medium mb-4">Appearance</h3>

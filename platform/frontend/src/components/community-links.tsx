@@ -13,7 +13,9 @@ export function CommunityLinks() {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  if (config.enterpriseFeatures.fullWhiteLabeling) {
+  // Hide community links only when the Enterprise license env var is set
+  // (not when the small-team free tier auto-enables enterprise features).
+  if (config.enterpriseFeatures.core) {
     return null;
   }
   // SPDX-SnippetEnd

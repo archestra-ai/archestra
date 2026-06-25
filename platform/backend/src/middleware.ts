@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import config from "@/config";
 import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
+import { enterpriseTier } from "@/enterprise-tier";
 import { ApiError } from "@/types";
 
 // Pattern to match team external groups routes: /api/teams/:id/external-groups
@@ -41,7 +41,7 @@ const enterpriseLicenseMiddlewarePlugin: FastifyPluginAsync = async (
 ) => {
   fastify.addHook("preHandler", async (request) => {
     if (isEnterpriseOnlyRoute(request.url)) {
-      if (!config.enterpriseFeatures.core) {
+      if (!enterpriseTier.isCoreActive()) {
         // Provide feature-specific error messages
         if (request.url.startsWith(IDENTITY_PROVIDERS_API_PREFIX)) {
           throw new ApiError(

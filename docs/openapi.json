@@ -90915,6 +90915,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "enterpriseCoreActive": {
+                      "type": "boolean"
+                    },
                     "analytics": {
                       "type": "object",
                       "properties": {
@@ -90956,6 +90959,7 @@
                     "disableBasicAuth",
                     "disableInvitations",
                     "maintenanceMode",
+                    "enterpriseCoreActive",
                     "analytics"
                   ],
                   "additionalProperties": false
@@ -91003,6 +91007,34 @@
                         "core",
                         "knowledgeBase",
                         "fullWhiteLabeling"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "smallTeamTier": {
+                      "type": "object",
+                      "properties": {
+                        "threshold": {
+                          "type": "number"
+                        },
+                        "userCount": {
+                          "type": "number"
+                        },
+                        "smallTeam": {
+                          "type": "boolean"
+                        },
+                        "envFlag": {
+                          "type": "boolean"
+                        },
+                        "communicate": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "threshold",
+                        "userCount",
+                        "smallTeam",
+                        "envFlag",
+                        "communicate"
                       ],
                       "additionalProperties": false
                     },
@@ -91175,6 +91207,7 @@
                   },
                   "required": [
                     "enterpriseFeatures",
+                    "smallTeamTier",
                     "features",
                     "providerBaseUrls"
                   ],

@@ -21,6 +21,7 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
@@ -183,6 +184,7 @@ function KnowledgeBasesList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >
+      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">

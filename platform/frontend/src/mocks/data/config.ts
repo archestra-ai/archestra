@@ -5,6 +5,7 @@ type Config = archestraApiTypes.GetConfigResponses["200"];
 export function makeConfig(
   overrides: {
     enterpriseFeatures?: Partial<Config["enterpriseFeatures"]>;
+    smallTeamTier?: Partial<Config["smallTeamTier"]>;
     features?: Partial<Config["features"]>;
     providerBaseUrls?: Config["providerBaseUrls"];
   } = {},
@@ -15,6 +16,14 @@ export function makeConfig(
       knowledgeBase: false,
       fullWhiteLabeling: false,
       ...overrides.enterpriseFeatures,
+    },
+    smallTeamTier: {
+      threshold: 30,
+      userCount: 0,
+      smallTeam: true,
+      envFlag: false,
+      communicate: true,
+      ...overrides.smallTeamTier,
     },
     features: {
       betaEnabled: false,
@@ -57,6 +66,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    enterpriseCoreActive: false,
     analytics: {
       enabled: false,
       instanceId: null,

@@ -25507,6 +25507,7 @@ export type GetPublicConfigResponses = {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
         maintenanceMode: string | null;
+        enterpriseCoreActive: boolean;
         analytics: {
             enabled: boolean;
             instanceId: string | null;
@@ -25536,6 +25537,13 @@ export type GetConfigResponses = {
             core: boolean;
             knowledgeBase: boolean;
             fullWhiteLabeling: boolean;
+        };
+        smallTeamTier: {
+            threshold: number;
+            userCount: number;
+            smallTeam: boolean;
+            envFlag: boolean;
+            communicate: boolean;
         };
         features: {
             betaEnabled: boolean;

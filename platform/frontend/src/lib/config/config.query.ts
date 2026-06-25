@@ -40,6 +40,17 @@ export function useDisableInvitations(): boolean | undefined {
   return data.disableInvitations;
 }
 
+/**
+ * Effective enterprise-core flag from the public (unauthenticated) config.
+ * Use this on pre-login surfaces (sign-in page, SSO picker); authenticated
+ * pages should use {@link useEnterpriseFeature}("core") instead.
+ */
+export function usePublicEnterpriseCoreActive(): boolean | undefined {
+  const { data, isLoading } = usePublicConfig();
+  if (isLoading || !data) return undefined;
+  return data.enterpriseCoreActive;
+}
+
 export function useProviderBaseUrls() {
   const { data, ...rest } = useConfig();
   return { data: data?.providerBaseUrls ?? null, ...rest };
@@ -60,6 +71,13 @@ export function useEnterpriseFeature(feature: EnterpriseFeatureKey): boolean {
   const { data, isLoading } = useConfig();
   if (isLoading || !data) return false;
   return data.enterpriseFeatures[feature] ?? false;
+}
+
+export type SmallTeamTierState = ConfigResponse["smallTeamTier"];
+
+export function useSmallTeamTier(): SmallTeamTierState | undefined {
+  const { data } = useConfig();
+  return data?.smallTeamTier;
 }
 
 export function usePublicBaseUrl(options?: { ignoreNgrok?: boolean }): string {

@@ -6,6 +6,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
@@ -50,6 +51,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               core: z.boolean(),
               knowledgeBase: z.boolean(),
               fullWhiteLabeling: z.boolean(),
+            }),
+            smallTeamTier: z.strictObject({
+              threshold: z.number(),
+              userCount: z.number(),
+              smallTeam: z.boolean(),
+              envFlag: z.boolean(),
+              communicate: z.boolean(),
             }),
             features: z.strictObject({
               betaEnabled: z.boolean(),
@@ -96,11 +104,20 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const globalToolPolicy: GlobalToolPolicy =
         org?.globalToolPolicy ?? "permissive";
 
+      const tier = enterpriseTier.getState();
+
       return reply.send({
         enterpriseFeatures: {
-          core: config.enterpriseFeatures.core,
-          knowledgeBase: config.enterpriseFeatures.knowledgeBase,
+          core: tier.coreActive,
+          knowledgeBase: tier.knowledgeBaseActive,
           fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
+        },
+        smallTeamTier: {
+          threshold: tier.threshold,
+          userCount: tier.userCount,
+          smallTeam: tier.smallTeam,
+          envFlag: tier.envFlag,
+          communicate: tier.communicate,
         },
         features: {
           betaEnabled: config.beta,
@@ -161,6 +178,9 @@ const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
   maintenanceMode: z.string().nullable(),
+  // Effective enterprise core flag (env var OR small-team free tier). Exposed
+  // pre-auth so the login screen can decide whether to render the SSO picker.
+  enterpriseCoreActive: z.boolean(),
   analytics: z.strictObject({
     enabled: z.boolean(),
     instanceId: z.string().uuid().nullable(),
@@ -182,6 +202,7 @@ async function getPublicConfigResponse(): Promise<
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
     maintenanceMode: config.maintenanceMode,
+    enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),

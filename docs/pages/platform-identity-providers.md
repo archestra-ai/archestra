@@ -32,7 +32,7 @@ Archestra integrates with your identity provider (IdP) for two related purposes:
 - **Sign-in (SSO)** — users authenticate with their existing IdP credentials. See [SSO](/docs/platform-sso).
 - **Downstream MCP tool calls (Enterprise-Managed Auth)** — Archestra exchanges the signed-in user's IdP token for a downstream API token at tool-call time, so the tool runs as *that user*, not a service account. See [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth).
 
-> **Enterprise feature:** please reach out to sales@archestra.ai for instructions about how to enable the feature.
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## Supported providers
 

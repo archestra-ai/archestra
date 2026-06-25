@@ -74,10 +74,7 @@ export function ConversationFilesPanel({
   const canManageFiles = files?.canManageFiles ?? false;
 
   // In a project chat, instructions.md is surfaced only as the pinned entry —
-  // keep it out of the ordinary project file list. Its presence drives the row.
-  const hasInstructions = sections.projectFiles.some(
-    (f) => f.name === PROJECT_INSTRUCTIONS_FILENAME,
-  );
+  // keep it out of the ordinary project file list.
   const projectFiles = sections.projectFiles.filter(
     (f) => f.name !== PROJECT_INSTRUCTIONS_FILENAME,
   );
@@ -382,8 +379,6 @@ export function ConversationFilesPanel({
               leading={
                 showInstructions && !selectionMode ? (
                   <InstructionsRow
-                    selected={false}
-                    hasContent={hasInstructions}
                     onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
                   />
                 ) : undefined

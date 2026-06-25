@@ -25,44 +25,24 @@ import { cn } from "@/lib/utils";
 export const INSTRUCTIONS_SELECTION = "__project_instructions__";
 
 /** The always-present, pinned instructions entry at the top of the file list. */
-export function InstructionsRow({
-  selected,
-  hasContent,
-  onSelect,
-}: {
-  selected: boolean;
-  hasContent: boolean;
-  onSelect: () => void;
-}) {
+export function InstructionsRow({ onSelect }: { onSelect: () => void }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={cn(
-        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
-        selected
-          ? "bg-accent font-medium text-accent-foreground"
-          : "hover:bg-muted/50",
-      )}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
     >
-      {/* Same muted icon treatment as a regular .md file row — the instructions
-          entry looks like the rest of the list, only pinned and with a
-          one-line description. */}
+      {/* Same muted icon + filename treatment as a regular .md file row — the
+          instructions entry looks like the rest of the list, only pinned and
+          with a one-line description. */}
       <FileText
         className="h-5 w-5 shrink-0 text-muted-foreground"
         aria-hidden
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate">
-          Instructions{" "}
-          <span className="font-normal text-muted-foreground">
-            · {PROJECT_INSTRUCTIONS_FILENAME}
-          </span>
-        </span>
+        <span className="block truncate">{PROJECT_INSTRUCTIONS_FILENAME}</span>
         <span className="block truncate text-xs font-normal text-muted-foreground">
-          {hasContent
-            ? "Project guidance for every chat"
-            : "Empty — add guidance for every chat"}
+          guidance for every chat
         </span>
       </span>
     </button>

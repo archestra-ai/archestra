@@ -359,12 +359,7 @@ function ProjectFilesSidebar({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // The instructions file is surfaced only as the pinned entry, so keep it out
-  // of the ordinary list. Its presence + size drives the pinned row's state.
-  const instructionsFile = (files ?? []).find(
-    (f) => f.filename === PROJECT_INSTRUCTIONS_FILENAME,
-  );
-  const hasInstructions = (instructionsFile?.sizeBytes ?? 0) > 0;
-
+  // of the ordinary list (filtered from `items` below).
   const items: FileListItem[] = (files ?? [])
     .filter(
       (f) => f.downloadable && f.filename !== PROJECT_INSTRUCTIONS_FILENAME,
@@ -417,12 +412,10 @@ function ProjectFilesSidebar({
             >
               <FileSection
                 items={items}
-                selectedId={selectedId}
+                selectedId={null}
                 onSelect={setSelectedId}
                 leading={
                   <InstructionsRow
-                    selected={instructionsSelected}
-                    hasContent={hasInstructions}
                     onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
                   />
                 }

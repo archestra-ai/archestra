@@ -1,10 +1,8 @@
 "use client";
 
-import { Settings2 } from "lucide-react";
 import Link from "next/link";
 import { AppFrame } from "@/components/mcp-app/app-frame";
 import { McpAppStandaloneButton } from "@/components/mcp-app/mcp-app-chrome";
-import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppChatButton } from "../_parts/app-chat-button";
@@ -46,12 +44,6 @@ export default function AppDetailPage({ appId }: { appId: string }) {
               <div className="flex items-center gap-2">
                 <AppChatButton app={app} />
                 <AppConnectButton app={app} />
-                <Button asChild variant="outline">
-                  <Link href="/mcp/registry">
-                    <Settings2 className="h-4 w-4" />
-                    Manage in registry
-                  </Link>
-                </Button>
               </div>
             </div>
 

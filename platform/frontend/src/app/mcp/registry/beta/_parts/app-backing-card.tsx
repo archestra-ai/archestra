@@ -3,18 +3,15 @@
 import { AppWindow, ExternalLink, MessageSquare, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
-import { useBulkAssignTools } from "@/lib/agent-tools.query";
+import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
-import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { resolveCatalogEnvironmentLabel } from "../../_parts/catalog-environment-label";
 import { AppSettingsDialog } from "./app-settings-dialog";
@@ -28,12 +25,8 @@ import type { CatalogItem } from "./mcp-server-card";
  */
 export function AppBackingCard({ item }: { item: CatalogItem }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [isChatCreating, setIsChatCreating] = useState(false);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-
-  const createAgent = useCreateProfile();
-  const bulkAssignTools = useBulkAssignTools();
 
   const { data: canUpdate } = useHasPermissions({ app: ["update"] });
   const { data: canAdmin } = useHasPermissions({ app: ["admin"] });
@@ -49,53 +42,6 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
     environments: environmentList?.environments ?? [],
     defaultEnvironmentName: defaultEnvironment.name,
   });
-
-  // Mirror McpServerCard's "Chat": get-or-create a personal agent named after
-  // the app, assign the app's MCP tools, and open a fresh chat with it.
-  const handleChatWithApp = async () => {
-    setIsChatCreating(true);
-    try {
-      const existingAgents = await fetchInternalAgents();
-      const existing = existingAgents?.find(
-        (a) => a.name === item.name && a.authorId === currentUserId,
-      );
-
-      const agent =
-        existing ??
-        (await createAgent.mutateAsync({
-          name: item.name,
-          agentType: "agent",
-          scope: "personal",
-          teams: [],
-          icon: item.icon ?? undefined,
-        }));
-
-      const tools = await fetchCatalogTools(item.id);
-
-      if (agent && tools.length > 0) {
-        await bulkAssignTools.mutateAsync({
-          assignments: tools.map((tool) => ({
-            agentId: agent.id,
-            toolId: tool.id,
-            resolveAtCallTime: true,
-            ...(item.enterpriseManagedConfig
-              ? { credentialResolutionMode: "enterprise_managed" as const }
-              : {}),
-          })),
-        });
-      }
-
-      if (agent) {
-        window.location.href = `/chat/new?agent_id=${agent.id}`;
-      }
-    } catch {
-      toast.error("Failed to create chat agent");
-    } finally {
-      setIsChatCreating(false);
-    }
-  };
-
-  const toolsCount = item.toolCount ?? 0;
 
   return (
     <Card
@@ -158,20 +104,23 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
           </div>
           {item.appId && (
             <div className="flex items-center gap-2">
-              {toolsCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  disabled={isChatCreating}
-                  onClick={handleChatWithApp}
+              <Button asChild variant="outline" size="sm" className="flex-1">
+                <Link
+                  href={buildAppChatHandoffUrl({
+                    appId: item.appId,
+                    appName: item.name,
+                  })}
                 >
                   <MessageSquare className="h-4 w-4" />
-                  {isChatCreating ? "Creating..." : "Chat"}
-                </Button>
-              )}
+                  Chat
+                </Link>
+              </Button>
               <Button asChild variant="outline" size="sm" className="flex-1">
-                <Link href={`/apps/${item.appId}`}>
+                <Link
+                  href={`/a/${item.appId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   <ExternalLink className="h-4 w-4" />
                   Open standalone
                 </Link>

@@ -28,6 +28,19 @@ pub struct ChatRunResult {
     pub stream_error: Option<String>,
 }
 
+impl ChatRunResult {
+    /// Usage trustworthy enough to publish as token totals: spend occurred, every conversation's rows
+    /// were fetched, and no chat row had a telemetry gap. Incomplete usage is reported as no
+    /// measurement (`None`) rather than a partial count masquerading as a complete one — the same
+    /// "loud, never silent" discipline the cost classification follows.
+    pub fn reliable_usage(&self) -> Option<&RunUsage> {
+        (self.usage.had_spend()
+            && !self.usage_fetch_failed
+            && self.usage.rows_with_null_tokens == 0)
+            .then_some(&self.usage)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatStreamRecord {
     pub kind: ChatRecordKind,

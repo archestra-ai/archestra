@@ -145,8 +145,10 @@ pub fn sum_usage(interactions: &[Value]) -> RunUsage {
                 usage.prompt_tokens += input.max(0);
                 usage.completion_tokens += output.max(0);
                 usage.cache_read_tokens += token("cacheReadTokens").unwrap_or(0).max(0);
-                usage.cache_write_tokens += token("cacheWriteTokens").unwrap_or(0).max(0)
-                    + token("cacheWrite1hTokens").unwrap_or(0).max(0);
+                // `cacheWriteTokens` is the full cache-creation count; `cacheWrite1hTokens` is the
+                // 1h-TTL *subset* of it (the platform's premium-pricing breakdown), so it must not be
+                // added on top or the 1h portion is double-counted.
+                usage.cache_write_tokens += token("cacheWriteTokens").unwrap_or(0).max(0);
             }
             _ => usage.rows_with_null_tokens += 1,
         }
@@ -553,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn sum_usage_sums_every_step_and_both_cache_write_tiers() {
+    fn sum_usage_sums_every_step_and_counts_cache_writes_once() {
         let rows = vec![
             usage_row("claude", 100, 10, 5, 200),
             json!({
@@ -567,9 +569,10 @@ mod tests {
         assert_eq!(u.prompt_tokens, 400);
         assert_eq!(u.completion_tokens, 50);
         assert_eq!(u.cache_read_tokens, 95);
-        // 200 + (50 + 25): the 1h tier folds into cache_write.
-        assert_eq!(u.cache_write_tokens, 275);
-        assert_eq!(u.total_tokens(), 400 + 50 + 95 + 275);
+        // 200 + 50: `cacheWriteTokens` is already the full cache-creation count; the 1h field (25) is
+        // a subset of the second row's 50 and must not be added again.
+        assert_eq!(u.cache_write_tokens, 250);
+        assert_eq!(u.total_tokens(), 400 + 50 + 95 + 250);
         assert_eq!(u.rows_with_null_tokens, 0);
         assert_eq!(u.models.len(), 1);
         assert!(u.had_spend());

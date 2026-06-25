@@ -1691,23 +1691,21 @@ async fn grade_rollout(
     }
     run.usage = usage;
 
-    let token_meta = |value: i64| -> serde_json::Value {
-        // `None` keeps "never measured" (no LLM call) distinct from a measured zero.
-        if run.usage.had_spend() {
-            serde_json::Value::from(value)
-        } else {
-            serde_json::Value::Null
-        }
+    // Publish token totals only when the usage is reliable (complete fetch, no telemetry gap); an
+    // incomplete sum is reported as no measurement, never a partial count read as complete.
+    let reliable = run.reliable_usage().cloned();
+    let token_meta = |value: Option<i64>| -> serde_json::Value {
+        value.map_or(serde_json::Value::Null, serde_json::Value::from)
     };
     metadata["finish_reason"] =
         serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
     metadata["tool_call_count"] = serde_json::Value::Number((run.tool_calls.len() as i64).into());
     metadata["turn_count"] = serde_json::Value::Number((run.turn_count as i64).into());
-    metadata["total_tokens"] = token_meta(run.usage.total_tokens());
-    metadata["prompt_tokens"] = token_meta(run.usage.prompt_tokens);
-    metadata["completion_tokens"] = token_meta(run.usage.completion_tokens);
-    metadata["cache_read_tokens"] = token_meta(run.usage.cache_read_tokens);
-    metadata["cache_write_tokens"] = token_meta(run.usage.cache_write_tokens);
+    metadata["total_tokens"] = token_meta(reliable.as_ref().map(RunUsage::total_tokens));
+    metadata["prompt_tokens"] = token_meta(reliable.as_ref().map(|u| u.prompt_tokens));
+    metadata["completion_tokens"] = token_meta(reliable.as_ref().map(|u| u.completion_tokens));
+    metadata["cache_read_tokens"] = token_meta(reliable.as_ref().map(|u| u.cache_read_tokens));
+    metadata["cache_write_tokens"] = token_meta(reliable.as_ref().map(|u| u.cache_write_tokens));
 
     let submission = bench_mcp.take_submission(rollout_key).await;
     match submission {
@@ -2236,17 +2234,18 @@ async fn finish(
     agent_error: Option<String>,
     prices: &PriceBook,
 ) -> RunResult {
-    let usage = run.map(|r| &r.usage);
+    // Reported token totals come from reliable usage only, so an incomplete sum never skews the token
+    // aggregates; cost classification (run_cost) looks at the full usage independently.
     let (total_tokens, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens) =
-        match usage {
-            Some(u) if u.had_spend() => (
+        match run.and_then(ChatRunResult::reliable_usage) {
+            Some(u) => (
                 Some(u.total_tokens()),
                 Some(u.prompt_tokens),
                 Some(u.completion_tokens),
                 Some(u.cache_read_tokens),
                 Some(u.cache_write_tokens),
             ),
-            _ => (None, None, None, None, None),
+            None => (None, None, None, None, None),
         };
     let price_model = lane.price_model();
     let cost = run_cost(run, prices, price_model.as_deref());
@@ -3197,6 +3196,50 @@ mod tests {
                 .unwrap();
         assert_eq!(written["cost_status"], "unpriced");
         assert!(written["cost_usd"].is_null());
+    }
+
+    #[tokio::test]
+    async fn finish_withholds_token_totals_when_usage_is_incomplete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
+            .await
+            .unwrap();
+        let mut lane = dummy_lane("l1");
+        lane.provider = archestra_bench_core::Provider::Openrouter;
+        lane.model = "vendor/cheap".to_string();
+        let task = dummy_task("t1");
+        // A conversation's interaction fetch failed: the summed usage is partial, so neither cost nor
+        // token totals may be presented as complete.
+        let run = ChatRunResult {
+            turn_count: 2,
+            usage_fetch_failed: true,
+            usage: RunUsage {
+                prompt_tokens: 1000,
+                completion_tokens: 500,
+                chat_rows: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::Passed,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            None,
+            &priced_book(),
+        )
+        .await;
+        assert_eq!(result.cost, RunCost::Unpriced);
+        assert_eq!(result.total_tokens, None);
+        assert_eq!(result.prompt_tokens, None);
     }
 
     #[tokio::test]

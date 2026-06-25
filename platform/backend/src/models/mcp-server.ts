@@ -29,7 +29,6 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
 import ToolModel from "./tool";
-import { toolUiResourceUriSql } from "./tool-ui-resource";
 
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
@@ -505,9 +504,13 @@ class McpServerModel {
     if (catalogIds.length === 0) return [];
     const searchTerm = search?.trim();
     // An MCP App UI resource must use the ui:// scheme; a tool whose
-    // _meta.ui.resourceUri is some other URI is not an app. Shared with the
-    // catalog list's `providesUi` flag so the two never drift.
-    const uiResourceUri = toolUiResourceUriSql();
+    // _meta.ui.resourceUri is some other URI is not an app. Canonical key
+    // first, then the legacy flat key.
+    const toolMeta = schema.toolsTable.meta;
+    const uiResourceUri = sql<string | null>`coalesce(
+      case when ${toolMeta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->'ui'->>'resourceUri' end,
+      case when ${toolMeta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->>'ui/resourceUri' end
+    )`;
     const rows = await db
       .select({
         catalogId: schema.internalMcpCatalogTable.id,

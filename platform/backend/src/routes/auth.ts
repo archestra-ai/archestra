@@ -1174,7 +1174,7 @@ function buildBetterAuthForwardedHeaders(
     headers.set("x-archestra-client-ip", request.ip);
   }
   const origin = headers.get("origin");
-  if ((!origin || origin === "null")) {
+  if (!origin || origin === "null") {
     headers.set("origin", config.frontendBaseUrl);
   }
   return headers;

@@ -24,7 +24,7 @@ import {
   LocalConfigEnvironmentDefaultSchema,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
-import fastifyCors from "@fastify/cors";
+import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
@@ -98,6 +98,7 @@ import {
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
+import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
@@ -1065,8 +1066,19 @@ const startWebServer = async () => {
      */
     await registerMetricsPlugin(fastify, false);
 
-    // Register CORS plugin to allow cross-origin requests
-    await fastify.register(fastifyCors, {
+    // Register CORS plugin to allow cross-origin requests. The policy is
+    // resolved per request:
+    //   - the browser-facing OAuth `authorize` endpoint gets CORS disabled
+    //     (no Access-Control-Allow-Origin): it is only ever a top-level
+    //     navigation carrying the session cookie, so the browser blocks any
+    //     cross-origin fetch while navigation still works — and it needs no
+    //     configured-origin allow-list. See isOAuthAuthorizePath.
+    //   - the public OAuth authorization-server endpoints get a permissive,
+    //     credential-less policy (reflect any origin) so browser-based MCP
+    //     clients on arbitrary origins can complete the OAuth handshake.
+    //   - every other route keeps the restricted, credentialed policy bound to
+    //     the configured origins. See isPublicOAuthCorsPath for the rationale.
+    const restrictedCorsOptions: FastifyCorsOptions = {
       origin: corsOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
@@ -1077,7 +1089,28 @@ const startWebServer = async () => {
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
-    });
+    };
+    const publicOAuthCorsOptions: FastifyCorsOptions = {
+      origin: true,
+      methods: ["GET", "POST", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    };
+    // `origin: false` makes @fastify/cors emit no Access-Control-Allow-Origin,
+    // which disables CORS for the route: cross-origin fetches are blocked by the
+    // browser, while top-level navigation (how `authorize` is actually reached)
+    // is unaffected.
+    const authorizeDisabledCorsOptions: FastifyCorsOptions = {
+      origin: false,
+    };
+    await fastify.register(
+      fastifyCors,
+      createOAuthAwareCorsDelegate({
+        restricted: restrictedCorsOptions,
+        publicOAuth: publicOAuthCorsOptions,
+        authorizeDisabled: authorizeDisabledCorsOptions,
+      }),
+    );
 
     logger.info(
       {

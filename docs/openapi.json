@@ -139346,6 +139346,13 @@
                         "type": "integer",
                         "minimum": -9007199254740991,
                         "maximum": 9007199254740991
+                      },
+                      "providesUi": {
+                        "type": "boolean"
+                      },
+                      "appId": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [

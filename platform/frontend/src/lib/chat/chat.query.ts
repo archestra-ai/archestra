@@ -16,6 +16,10 @@ import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useSession } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import {
+  type ConversationFileItem,
+  deleteTargetFor,
+} from "@/lib/chat/conversation-files";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
 
@@ -43,6 +47,8 @@ const {
   getMemberDefaultModel,
   resolveChatMcpElicitation,
   updateMemberDefaultModel,
+  deleteChatAttachment,
+  deleteSkillSandboxArtifact,
 } = archestraApiSdk;
 
 export function mergeUpdatedConversationIntoCache(
@@ -117,6 +123,74 @@ export function useConversationFiles(conversationId?: string) {
     staleTime: 0,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+  });
+}
+
+/** Route a single file to its delete endpoint by source. */
+async function deleteConversationFileItem(item: ConversationFileItem) {
+  return deleteTargetFor(item).kind === "attachment"
+    ? deleteChatAttachment({ path: { id: item.id } })
+    : deleteSkillSandboxArtifact({ path: { artifactId: item.id } });
+}
+
+/** Delete one file from the chat Files panel (attachment or artifact). */
+export function useDeleteConversationFile(conversationId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: ConversationFileItem) => {
+      const { error } = await deleteConversationFileItem(item);
+      if (error) {
+        handleApiError(error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("File deleted");
+    },
+    onSettled: () => {
+      if (conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-files", conversationId],
+        });
+      }
+    },
+  });
+}
+
+/**
+ * Delete several files at once. Runs the per-file deletes concurrently and
+ * reports a single summary toast and a single cache invalidation, instead of
+ * one of each per file.
+ */
+export function useBulkDeleteConversationFiles(conversationId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: ConversationFileItem[]) => {
+      const results = await Promise.allSettled(
+        items.map((item) => deleteConversationFileItem(item)),
+      );
+      // hey-api resolves with `{ error }` rather than throwing, so a failure is
+      // either a rejected promise or a present error payload.
+      const failed = results.filter(
+        (r) => r.status === "rejected" || r.value.error,
+      ).length;
+      return { total: items.length, failed };
+    },
+    onSuccess: ({ total, failed }) => {
+      const deleted = total - failed;
+      if (failed === 0) {
+        toast.success(`Deleted ${total} ${total === 1 ? "file" : "files"}`);
+      } else {
+        toast.error(`Deleted ${deleted} of ${total}; ${failed} failed`);
+      }
+    },
+    onSettled: () => {
+      if (conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-files", conversationId],
+        });
+      }
+    },
   });
 }
 

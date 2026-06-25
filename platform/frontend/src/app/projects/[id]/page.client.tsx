@@ -415,18 +415,19 @@ function ProjectFilesSidebar({
                 previewing ? "max-h-[45%] shrink-0 border-b" : "flex-1",
               )}
             >
-              <InstructionsRow
-                selected={instructionsSelected}
-                hasContent={hasInstructions}
-                onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+              <FileSection
+                items={items}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                leading={
+                  <InstructionsRow
+                    selected={instructionsSelected}
+                    hasContent={hasInstructions}
+                    onSelect={() => setSelectedId(INSTRUCTIONS_SELECTION)}
+                  />
+                }
               />
-              {items.length > 0 ? (
-                <FileSection
-                  items={items}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                />
-              ) : (
+              {items.length === 0 && (
                 <p className="px-1 pt-3 text-xs text-muted-foreground">
                   Results the agent saves in this project will appear here.
                 </p>

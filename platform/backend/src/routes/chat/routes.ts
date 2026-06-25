@@ -1645,6 +1645,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/chat/attachments/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteChatAttachment,
+        description:
+          "Soft-delete a chat attachment by id. Owner-gated: only the " +
+          "conversation owner may remove its attachments.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }) => {
+      await conversationFilesService.deleteAttachment({
+        attachmentId: id,
+        userId: user.id,
+        organizationId,
+      });
+      return { ok: true as const };
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations/:id/fork",
     {

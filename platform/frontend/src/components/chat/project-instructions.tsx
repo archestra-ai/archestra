@@ -39,19 +39,30 @@ export function InstructionsRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-        selected ? "border-primary/40 bg-muted" : "hover:bg-muted/50",
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+        selected
+          ? "bg-accent font-medium text-accent-foreground"
+          : "hover:bg-muted/50",
       )}
     >
-      <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+      {/* Same muted icon treatment as a regular .md file row — the instructions
+          entry looks like the rest of the list, only pinned and with a
+          one-line description. */}
+      <FileText
+        className="h-5 w-5 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {PROJECT_INSTRUCTIONS_FILENAME}
+        <span className="block truncate">
+          Instructions{" "}
+          <span className="font-normal text-muted-foreground">
+            · {PROJECT_INSTRUCTIONS_FILENAME}
+          </span>
         </span>
-        <span className="block truncate text-xs text-muted-foreground">
+        <span className="block truncate text-xs font-normal text-muted-foreground">
           {hasContent
-            ? "Project instructions for every chat"
-            : "Empty — add instructions for every chat"}
+            ? "Project guidance for every chat"
+            : "Empty — add guidance for every chat"}
         </span>
       </span>
     </button>

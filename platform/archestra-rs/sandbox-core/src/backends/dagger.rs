@@ -769,10 +769,12 @@ async fn checkpoint(client: &DaggerConn, container: Container) -> Result<Contain
 /// single-page (~4 KB) mount-options limit, `mount(2)` rejects the overlay with
 /// an opaque `ENOENT`. fail fast with a clear terminal error well before that.
 ///
-/// this is a heuristic: the real limit is on the lowerdir *string length*, not a
-/// fixed entry count, and BuildKit's content-addressed dedup means the layer-op
-/// count over-estimates the distinct layers actually chained — so the guard errs
-/// toward firing early. a rare zero-dedup session could still exceed the kernel
+/// this is a heuristic, not an exact bound, in three ways: the real limit is on
+/// the lowerdir *string length*, not a fixed entry count; BuildKit's
+/// content-addressed dedup means the layer-op count over-estimates the distinct
+/// layers actually chained (so the guard errs toward firing early); and the warm
+/// base's own image + setup layers consume the same mount-options budget but are
+/// not counted here. so a rare zero-dedup session can still exceed the kernel
 /// limit below this count, in which case the raw overlay error surfaces as today.
 const MAX_REPLAY_FS_LAYERS: usize = 256;
 
@@ -800,15 +802,25 @@ fn replay_fs_layers(steps: &[ReplayStep]) -> usize {
     steps.iter().map(replay_step_fs_layers).sum()
 }
 
+/// build the terminal history-limit error with consistent, actionable wording;
+/// `detail` names why we tripped (the layer estimate, or the overlay mount).
+fn history_limit_error(detail: &str) -> SandboxError {
+    SandboxError::HistoryLimitReached {
+        message: format!(
+            "sandbox command history is too long to replay ({detail}); \
+             start a fresh sandbox to continue"
+        ),
+    }
+}
+
 /// reject a replay log that would overflow the overlay mount before any container
 /// work happens, turning the opaque kernel `ENOENT` into a diagnosable error.
 fn check_replay_layer_budget(steps: &[ReplayStep]) -> Result<()> {
     let layers = replay_fs_layers(steps);
     if layers > MAX_REPLAY_FS_LAYERS {
-        return Err(SandboxError::HistoryLimitReached {
-            layers,
-            limit: MAX_REPLAY_FS_LAYERS,
-        });
+        return Err(history_limit_error(&format!(
+            "{layers}/{MAX_REPLAY_FS_LAYERS} filesystem layers"
+        )));
     }
     Ok(())
 }
@@ -1029,16 +1041,35 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
 /// `CommandFailed`; everything else is a real transport/engine failure, tagged
 /// with the specific fault so the session layer can pick a retry policy.
 fn from_sdk(err: DaggerError) -> SandboxError {
-    match exec_exit_code(&err) {
-        Some(exit_code) => SandboxError::CommandFailed {
+    if let Some(exit_code) = exec_exit_code(&err) {
+        return SandboxError::CommandFailed {
             exit_code,
             message: err.to_string(),
-        },
-        None => SandboxError::EngineUnreachable {
-            fault: classify_engine_fault(&err),
-            message: err.to_string(),
-        },
+        };
     }
+    // backstop for the replay-layer budget: an overlong chain whose layer
+    // estimate slipped under the budget still fails at the kernel overlay mount.
+    // relabel that exact failure so it surfaces as the terminal, per-call history
+    // limit instead of a phantom engine outage (which would trip the cooldown).
+    if is_overlay_mount_overflow(&err) {
+        return history_limit_error("overlay mount-options limit reached");
+    }
+    SandboxError::EngineUnreachable {
+        fault: classify_engine_fault(&err),
+        message: err.to_string(),
+    }
+}
+
+/// the kernel rejects an overlay mount whose `lowerdir=a:b:c:...` option string
+/// outgrows its single-page limit; dagger reports it as a domain error naming the
+/// failed rootfs overlay mount. recognise that one failure — as narrowly as the
+/// stale-attachables classifier — so the replay backstop can relabel it.
+fn is_overlay_mount_overflow(err: &DaggerError) -> bool {
+    matches!(
+        err,
+        DaggerError::Query(GraphQLError::DomainError { message, .. })
+            if message.contains("mount rootfs") && message.contains("overlay")
+    )
 }
 
 /// build an engine-unreachable error from a non-exec SDK failure (warm-base
@@ -1675,23 +1706,38 @@ mod tests {
     fn check_replay_layer_budget_rejects_above_the_limit() {
         let steps = vec![command_step(); MAX_REPLAY_FS_LAYERS + 1];
         match check_replay_layer_budget(&steps) {
-            Err(SandboxError::HistoryLimitReached { layers, limit }) => {
-                assert_eq!(layers, MAX_REPLAY_FS_LAYERS + 1);
-                assert_eq!(limit, MAX_REPLAY_FS_LAYERS);
+            Err(err @ SandboxError::HistoryLimitReached { .. }) => {
+                assert_eq!(err.code(), "ARCHESTRA_SANDBOX_HISTORY_LIMIT");
+                let message = err.to_string();
+                // the actual over-budget count is reported for diagnosis.
+                assert!(message.contains(&(MAX_REPLAY_FS_LAYERS + 1).to_string()));
+                assert!(message.contains(&MAX_REPLAY_FS_LAYERS.to_string()));
             }
             other => panic!("expected HistoryLimitReached, got {other:?}"),
         }
     }
 
     #[test]
-    fn history_limit_error_is_a_distinct_actionable_code() {
-        let err = SandboxError::HistoryLimitReached {
-            layers: 300,
-            limit: MAX_REPLAY_FS_LAYERS,
-        };
-        assert_eq!(err.code(), "ARCHESTRA_SANDBOX_HISTORY_LIMIT");
-        let message = err.to_string();
-        assert!(message.contains("300"));
-        assert!(message.contains(&MAX_REPLAY_FS_LAYERS.to_string()));
+    fn from_sdk_relabels_the_overlay_mount_overflow_as_a_history_limit() {
+        // the memo's verbatim kernel failure: the replay chain's lowerdir string
+        // outgrew the page limit and mount(2) rejected the rootfs overlay.
+        let err = domain_error(
+            "mount rootfs: mount source: \"overlay\", target: \"/tmp/rootfs1234567\", \
+             fstype: overlay, flags: 0, data: \"...lowerdir=6946/fs:6940/fs:...\", \
+             err: no such file or directory",
+            None,
+        );
+        let mapped = from_sdk(err);
+        assert_eq!(mapped.code(), "ARCHESTRA_SANDBOX_HISTORY_LIMIT");
+    }
+
+    #[test]
+    fn from_sdk_keeps_unrelated_domain_errors_as_engine_unreachable() {
+        // a domain error that isn't the overlay rootfs mount must not be relabeled.
+        let err = domain_error("some other engine domain failure", None);
+        assert!(matches!(
+            from_sdk(err),
+            SandboxError::EngineUnreachable { .. }
+        ));
     }
 }

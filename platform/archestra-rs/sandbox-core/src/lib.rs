@@ -46,11 +46,12 @@ pub enum SandboxError {
     },
     /// the replay log is long enough that re-materialising it would overflow the
     /// kernel's single-page overlay mount-options limit (`lowerdir=a:b:c:...`).
-    /// terminal and per-call: a fresh sandbox is required, and unlike
-    /// `EngineUnreachable` it must not flip the runtime into an engine outage.
+    /// raised proactively by the replay-layer budget, and as a backstop when the
+    /// overlay mount itself fails. terminal and per-call: a fresh sandbox is
+    /// required, and unlike `EngineUnreachable` it must not flip the runtime into
+    /// an engine outage.
     HistoryLimitReached {
-        layers: usize,
-        limit: usize,
+        message: String,
     },
     InvalidInput(String),
     Internal(String),
@@ -96,12 +97,8 @@ impl fmt::Display for SandboxError {
             | Self::ArtifactTooLarge { message, .. }
             | Self::ArtifactNotFound { message, .. }
             | Self::InvalidInput(message)
-            | Self::Internal(message) => write!(f, "{message}"),
-            Self::HistoryLimitReached { layers, limit } => write!(
-                f,
-                "sandbox command history is too long to replay ({layers}/{limit} \
-                 filesystem layers); start a fresh sandbox to continue"
-            ),
+            | Self::Internal(message)
+            | Self::HistoryLimitReached { message } => write!(f, "{message}"),
         }
     }
 }

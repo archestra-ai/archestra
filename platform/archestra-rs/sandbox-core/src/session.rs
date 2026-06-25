@@ -631,8 +631,7 @@ mod tests {
         // the overlay history limit is a per-call dead end: a fresh sandbox is
         // required, so retrying the same log on a new session can't recover it.
         let err = SandboxError::HistoryLimitReached {
-            layers: 300,
-            limit: 256,
+            message: "sandbox command history is too long to replay".to_string(),
         };
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
         assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);

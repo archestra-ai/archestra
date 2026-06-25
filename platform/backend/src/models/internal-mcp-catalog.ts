@@ -24,7 +24,7 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
-import ToolModel from "./tool";
+import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
@@ -945,10 +945,7 @@ class InternalMcpCatalogModel {
       .select({
         catalogId: schema.toolsTable.catalogId,
         toolCount: count(schema.toolsTable.id),
-        providesUi: sql<boolean>`bool_or(coalesce(
-          case when ${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' end,
-          case when ${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' end
-        ) is not null)`,
+        providesUi: sql<boolean>`bool_or(${toolUiResourceUriSql()} is not null)`,
       })
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.catalogId, catalogIds))

@@ -17,6 +17,7 @@ const mockUserSearchableSelect = vi.fn(
 
 vi.mock("@/lib/config/config.query", () => ({
   useEnterpriseFeature: () => false,
+  useSmallTeamTier: () => undefined,
 }));
 
 vi.mock("@/components/roles/roles-list.ee", () => ({

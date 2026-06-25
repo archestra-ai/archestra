@@ -564,7 +564,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const isAppCatalog = originalCatalogItem.serverType === "app";
       // A non-app catalog cannot be converted into an app (the inverse of the
       // create guard): an "app" catalog only makes sense when an actual app row
-      // and `show_app` tool back it, which this path can't create.
+      // and the `open` launch tool back it, which this path can't create.
       if (!isAppCatalog && restBody.serverType === "app") {
         throw new ApiError(400, "Catalog items cannot be converted to apps.");
       }

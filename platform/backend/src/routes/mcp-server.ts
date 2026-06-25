@@ -1358,7 +1358,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // App backing servers are owned by the Apps lifecycle. Deleting one here
-      // would orphan the app (FK set null) and strip its show_app surface — the
+      // would orphan the app (FK set null) and strip its launch-tool surface — the
       // app must be deleted via the Apps API instead.
       if (mcpServer.serverType === "app") {
         throw new ApiError(

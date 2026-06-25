@@ -385,7 +385,7 @@ class McpClient {
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
 
-    // App backing servers have no upstream to connect to: the `show_app` tool is
+    // App backing servers have no upstream to connect to: the `open` launch tool is
     // served in-process. Hand the host the app's UI resource pointer (the
     // resource itself is resolved by the gateway's resources/read path, which
     // serves it under the platform-pinned CSP). This short-circuits before any

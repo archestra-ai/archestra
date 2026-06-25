@@ -10,23 +10,12 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import type { App } from "@/types/app";
+import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
- * The gateway-visible tool every app's backing server exposes. Calling it hands
- * the host the app's `ui://` resource (resolved in-process by the gateway), so
- * the app renders through the standard MCP serving path. It is the real,
- * policy-governable `tool` row counterpart of the serve-time-synthesized
- * launch tool (`APP_LAUNCH_TOOL_NAME` = "open") in mcp-app-gateway.utils.ts —
- * unlike that one, this row exists in the catalog so it shows up in the
- * guardrails UI and is environment- and scope-filtered like any tool.
- */
-const APP_SHOW_TOOL_NAME = "show_app";
-
-/**
  * Make an app a first-class catalog entity: create its backing
- * `internal_mcp_catalog` + `mcp_server` rows and a `show_app` tool, then link
+ * `internal_mcp_catalog` + `mcp_server` rows and the `open` launch tool, then link
  * the app to the server. The backing server is `serverType: "app"` — it opts
  * out of K8s deploy / install / discovery and is served in-process. The rows
  * are created in sequence rather than in one transaction (the model read-backs
@@ -71,16 +60,19 @@ export async function createAppBacking(params: {
       localInstallationStatus: "success",
     });
 
-    // Plain insert (not bulkCreateToolsIfNotExists, which would adopt a
-    // pre-existing NULL-catalog proxy tool of the same name). The launch-tool
-    // name is suffixed with the app id so two apps that legitimately share a
-    // name across scopes (the per-scope name index allows it) don't produce the
-    // same `<name>__show_app` and shadow each other in the gateway's
-    // dedupe-by-name when both are assigned to one profile.
+    // The persisted, policy-governable `tool` row for the app's launch tool —
+    // the catalog counterpart of the serve-time-synthesized one
+    // (APP_LAUNCH_TOOL_NAME) so it shows up in the guardrails UI and is
+    // env/scope-filtered like any tool. Plain insert (not
+    // bulkCreateToolsIfNotExists, which would adopt a pre-existing NULL-catalog
+    // proxy tool of the same name). The name is suffixed with the app id so two
+    // apps that legitimately share a name across scopes don't produce the same
+    // `<name>__open` and shadow each other in the gateway's dedupe-by-name when
+    // both are assigned to one profile.
     const tool = await ToolModel.create({
       name: ToolModel.slugifyName(
         `${app.name}-${app.id.slice(0, 8)}`,
-        APP_SHOW_TOOL_NAME,
+        APP_LAUNCH_TOOL_NAME,
       ),
       description: `Open the "${app.name}" app and render its UI.`,
       parameters: { type: "object", properties: {} },
@@ -90,7 +82,7 @@ export async function createAppBacking(params: {
       },
     });
 
-    // Auto-assign show_app to the creator's personal gateway so they can connect
+    // Auto-assign the launch tool to the creator's personal gateway so they can connect
     // and see it immediately (mirrors the install auto-assign). Dynamic mode: the
     // call short-circuits in-process, but dynamic is the only mode that fits an
     // org-shared, viewer-scoped app.
@@ -112,7 +104,7 @@ export async function createAppBacking(params: {
   } catch (error) {
     // Roll back partial backing so a retry isn't blocked by the catalog's
     // name-uniqueness index (delete the server before its catalog — the catalog
-    // delete then cascades the show_app tool and its assignments).
+    // delete then cascades the launch tool and its assignments).
     if (server) await McpServerModel.delete(server.id).catch(() => {});
     if (catalog)
       await InternalMcpCatalogModel.delete(catalog.id).catch(() => {});
@@ -217,7 +209,7 @@ export async function propagateAppCatalogChange(
 
 /**
  * Tear down an app's backing rows. Deleting the catalog cascade-removes the
- * `show_app` tool (and its assignments); the server is removed explicitly first
+ * `open` launch tool (and its assignments); the server is removed explicitly first
  * (its `catalogId` FK only nulls on catalog delete). Best-effort.
  */
 export async function deleteAppBacking(app: App): Promise<void> {

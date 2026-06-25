@@ -70,7 +70,7 @@ describe("MCP backing for apps", () => {
     return response.json().id as string;
   }
 
-  test("creating an app provisions a serverType:'app' catalog, server, and show_app tool", async () => {
+  test("creating an app provisions a serverType:'app' catalog, server, and open launch tool", async () => {
     const appId = await createApp();
 
     const created = await AppModel.findById(appId);
@@ -85,11 +85,11 @@ describe("MCP backing for apps", () => {
 
     const tools = await ToolModel.findByCatalogIdWithMeta(server!.catalogId);
     // The launch tool is slugified per the discovered-tool convention
-    // (`<server>__show_app`) so apps don't collide in the gateway's
+    // (`<server>__open`) so apps don't collide in the gateway's
     // dedupe-by-name; it is the only tool on the app's catalog.
     expect(tools).toHaveLength(1);
     const showApp = tools[0];
-    expect(showApp.name.endsWith("__show_app")).toBe(true);
+    expect(showApp.name.endsWith("__open")).toBe(true);
     // The tool points at the app's ui:// resource and stores no CSP (the CSP
     // floor is applied at serve time, never persisted).
     const ui = (showApp?.meta as { _meta?: { ui?: Record<string, unknown> } })
@@ -121,14 +121,14 @@ describe("MCP backing for apps", () => {
     const nameA = await nameFor(appAId);
     const nameB = await nameFor(appBId);
     expect(nameA).not.toBe(nameB);
-    expect(nameA.endsWith("__show_app")).toBe(true);
-    expect(nameB.endsWith("__show_app")).toBe(true);
+    expect(nameA.endsWith("__open")).toBe(true);
+    expect(nameB.endsWith("__open")).toBe(true);
   });
 
   test("same-named apps in different scopes get distinct launch-tool names", async () => {
     // The per-scope name index lets one author hold a personal AND an org app
     // with the same name; their launch tools must NOT both slugify to
-    // `<name>__show_app` or one shadows the other in a shared gateway profile.
+    // `<name>__open` or one shadows the other in a shared gateway profile.
     const personalId = await createApp("personal");
     const orgId = await createApp("org");
     const nameFor = async (appId: string) => {
@@ -140,8 +140,8 @@ describe("MCP backing for apps", () => {
     const personalName = await nameFor(personalId);
     const orgName = await nameFor(orgId);
     expect(personalName).not.toBe(orgName);
-    expect(personalName.endsWith("__show_app")).toBe(true);
-    expect(orgName.endsWith("__show_app")).toBe(true);
+    expect(personalName.endsWith("__open")).toBe(true);
+    expect(orgName.endsWith("__open")).toBe(true);
   });
 
   test("the app backing server is excluded from external UI-capable detection (no double-listing)", async () => {
@@ -276,7 +276,7 @@ describe("MCP backing for apps", () => {
     // rename does NOT re-slugify it — that can't reintroduce a dedupe collision.
     const [toolAfter] = await ToolModel.findByCatalogIdWithMeta(catalogId);
     expect(toolAfter.name).toBe(toolBefore.name);
-    expect(toolAfter.name.endsWith("__show_app")).toBe(true);
+    expect(toolAfter.name.endsWith("__open")).toBe(true);
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

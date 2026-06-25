@@ -436,8 +436,9 @@ class InternalMcpCatalogModel {
 
     // Name immutability: matches the existing UI-enforced posture and avoids
     // cascading rename to k8s deployment names and pre-slugified tool rows.
-    // App backing catalogs are exempt — they have no k8s deployment and a fixed
-    // tool name (`show_app`), so they track the app's name on rename.
+    // App backing catalogs are exempt — they have no k8s deployment, and their
+    // launch tool's name is id-suffixed (stable across renames), so renaming an
+    // app's catalog is safe.
     if (dbValues.name !== undefined) {
       const [existing] = await db
         .select({

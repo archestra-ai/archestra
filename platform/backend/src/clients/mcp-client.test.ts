@@ -366,8 +366,8 @@ describe("McpClient", () => {
     });
   });
 
-  describe("executeToolCallForOwner (app backing show_app)", () => {
-    test("audits the show_app launch and still returns the ui:// pointer", async () => {
+  describe("executeToolCallForOwner (app backing launch tool)", () => {
+    test("audits the open launch and still returns the ui:// pointer", async () => {
       const appCatalog = await InternalMcpCatalogModel.create({
         name: "Clock App",
         serverType: "app",
@@ -380,7 +380,7 @@ describe("McpClient", () => {
       });
       const uri = "ui://archestra-app/clock-app";
       const showApp = await ToolModel.create({
-        name: "clock_app__show_app",
+        name: "clock_app__open",
         description: "Open the Clock App.",
         parameters: { type: "object", properties: {} },
         catalogId: appCatalog.id,
@@ -391,7 +391,7 @@ describe("McpClient", () => {
       });
 
       const result = await mcpClient.executeToolCallForOwner(
-        { id: "call_show_app", name: showApp.name, arguments: {} },
+        { id: "call_open", name: showApp.name, arguments: {} },
         agentOwner(agentId),
       );
 

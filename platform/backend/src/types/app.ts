@@ -10,6 +10,15 @@ import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
 export type AppScope = z.infer<typeof AppScopeSchema>;
 
+// The launch tool that hands a host the app's `ui://` resource so it renders the
+// app. ext-apps hosts discover a renderable UI from a tool's
+// `_meta.ui.resourceUri`, so an external client needs a tool to call. Shared by
+// BOTH the serve-time synthesized tool (the app server's own tools/list) and the
+// persisted catalog `tool` row (prefixed `<app>__open` when assigned to a
+// gateway), so the two never diverge. Always offered to a viewer who already
+// passed the app's visibility check, so it sits outside the per-tool RBAC filter.
+export const APP_LAUNCH_TOOL_NAME = "open";
+
 // Limits. The html cap is enforced by byte length (not char count) so the
 // stored size is bounded regardless of multi-byte content.
 export const APP_NAME_MAX_LENGTH = 100;

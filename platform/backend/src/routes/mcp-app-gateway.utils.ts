@@ -44,7 +44,7 @@ import { APP_RUNTIME_BUILTIN_SHORT_NAMES } from "@/services/apps/app-tool-runtim
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
-import type { App } from "@/types/app";
+import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import {
   deriveAuthMethod,
@@ -52,16 +52,6 @@ import {
 } from "./mcp-gateway.utils";
 
 type McpListTool = ListToolsResult["tools"][number];
-
-/**
- * Synthetic per-app tool that hands a host the app's UI resource. ext-apps
- * hosts discover a renderable UI from a tool's `_meta.ui.resourceUri` (not from
- * resources/list), so an external MCP client needs a tool to call to open the
- * app. Always offered to a viewer who can already see the app (they passed the
- * visibility check to reach this server), so it sits outside the per-tool RBAC
- * filter applied to assigned upstream tools.
- */
-export const APP_LAUNCH_TOOL_NAME = "open";
 
 /**
  * Build the app-bound MCP server: a single endpoint carrying an app's whole

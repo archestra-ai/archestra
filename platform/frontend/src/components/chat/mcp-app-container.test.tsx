@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
@@ -36,6 +36,12 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
+
 vi.mock("@/lib/config/config", () => ({
   getMcpSandboxBaseUrl: () => ({
     baseUrl: "http://127.0.0.1:9000",
@@ -47,14 +53,27 @@ vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => null,
 }));
 
+// Avoid pulling the real auth client / app query (and their network deps) into
+// the test; the edit pencil is covered by app-frame.test.tsx.
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: false }),
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  useApp: vi.fn(() => ({ data: undefined })),
+}));
+
 // ── Import component under test after mocks ───────────────────────────────────
 
+import { useApp } from "@/lib/app.query";
 import {
   clearAllAppDiagnostics,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
 import { AppsProvider, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
+
+const mockUseApp = vi.mocked(useApp);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -178,6 +197,28 @@ describe("McpAppSection", () => {
 
     expect(document.querySelector("iframe")).toBeInTheDocument();
   });
+
+  it("titles an owned app from the live query, not the captured appName prop", async () => {
+    // After an edit invalidates the app query, the address bar must reflect the
+    // new name even though the appName prop was captured at render time.
+    mockUseApp.mockReturnValue({
+      data: { name: "Renamed Dashboard" },
+    } as ReturnType<typeof useApp>);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          appId="11111111-1111-1111-1111-111111111111"
+          appName="Stale Dashboard"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    expect(screen.getByText("Renamed Dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Stale Dashboard")).not.toBeInTheDocument();
+  });
 });
 
 describe("McpAppContainer (via McpAppSection)", () => {
@@ -283,8 +324,8 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     vi.clearAllMocks();
   });
 
-  // Drives the app into the sidebar portal so renderInSidebar becomes true.
-  function SidebarDriver({ target }: { target: HTMLElement }) {
+  // Drives the app into the panel portal so renderInPanel becomes true.
+  function PanelDriver({ target }: { target: HTMLElement }) {
     const { setPortalTarget, select } = useApps();
     useEffect(() => {
       setPortalTarget(target);
@@ -298,7 +339,7 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
   // proxy is a true process boundary, so faking its ready message is legitimate.
   async function renderReadyApp(
     viewportHeight: number,
-    { sidebar = false }: { sidebar?: boolean } = {},
+    { panel = false }: { panel?: boolean } = {},
   ) {
     Object.defineProperty(window, "innerHeight", {
       value: viewportHeight,
@@ -339,11 +380,18 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
 
     await act(async () => {
       render(
-        sidebar ? (
+        panel ? (
           <AppsProvider
-            apps={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+            apps={[
+              {
+                toolCallId: "tc1",
+                label: "app",
+                uiResourceUri: defaultProps.uiResourceUri,
+                createdAt: 0,
+              },
+            ]}
           >
-            <SidebarDriver target={document.body} />
+            <PanelDriver target={document.body} />
             <McpAppSection
               {...defaultProps}
               toolCallId="tc1"
@@ -421,13 +469,13 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
   });
 
-  it("hints no cap to the guest when the app fills the sidebar", async () => {
-    const bridge = await renderReadyApp(2000, { sidebar: true });
+  it("hints no cap to the guest when the app fills the panel", async () => {
+    const bridge = await renderReadyApp(2000, { panel: true });
     expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
 });
 
-describe("McpAppSection sidebar hosting", () => {
+describe("McpAppSection panel hosting", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
 
   beforeEach(() => {
@@ -435,9 +483,9 @@ describe("McpAppSection sidebar hosting", () => {
     clearAllAppDiagnostics();
   });
 
-  // Opens the sidebar app host (portalTarget) so the selected owned-app section
+  // Opens the panel app host (portalTarget) so the selected owned-app section
   // portals its iframe into the target.
-  function SidebarHost({ target }: { target: HTMLElement }) {
+  function PanelHost({ target }: { target: HTMLElement }) {
     const { setPortalTarget } = useApps();
     useEffect(() => {
       setPortalTarget(target);
@@ -445,16 +493,23 @@ describe("McpAppSection sidebar hosting", () => {
     return null;
   }
 
-  it("hosts an owned-app render in the sidebar app host", async () => {
+  it("hosts an owned-app render in the panel app host", async () => {
     const target = document.createElement("div");
     document.body.appendChild(target);
 
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -466,9 +521,9 @@ describe("McpAppSection sidebar hosting", () => {
     });
 
     // Opening the app host auto-selects the sole app, portaling the live
-    // owned-app iframe into the sidebar target (not left inline).
+    // owned-app iframe into the panel target (not left inline).
     expect(target.querySelector("iframe")).toBeInTheDocument();
-    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+    expect(screen.getByText(/showing in panel/i)).toBeInTheDocument();
 
     target.remove();
   });
@@ -476,7 +531,7 @@ describe("McpAppSection sidebar hosting", () => {
   it("keeps the diagnostics badge out of the stretched app wrapper when hosted", async () => {
     // The error badge must not share the fill-container wrapper with the iframe:
     // that wrapper applies `[&>div]:!h-full`, so a badge inside it gets stretched
-    // to full height and shoves the iframe below the sidebar fold (blank render).
+    // to full height and shoves the iframe below the panel fold (blank render).
     reportAppDiagnostic(APP_ID, 1, {
       type: "csp-violation",
       message: "script-src blocked eval",
@@ -487,9 +542,16 @@ describe("McpAppSection sidebar hosting", () => {
     await act(async () => {
       render(
         <AppsProvider
-          apps={[{ toolCallId: "tc1", label: "To Do App", createdAt: 0 }]}
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "To Do App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
+          ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -521,7 +583,7 @@ describe("McpAppSection sidebar hosting", () => {
     target.remove();
   });
 
-  it("offers a Show in sidebar control for a second, unselected app", async () => {
+  it("keeps a second, unselected app live inline while the panel hosts another", async () => {
     const user = userEvent.setup();
     const target = document.createElement("div");
     document.body.appendChild(target);
@@ -532,11 +594,21 @@ describe("McpAppSection sidebar hosting", () => {
         // selection and the rendered tc2 section stays unselected.
         <AppsProvider
           apps={[
-            { toolCallId: "tc1", label: "First App", createdAt: 1 },
-            { toolCallId: "tc2", label: "Second App", createdAt: 0 },
+            {
+              toolCallId: "tc1",
+              label: "First App",
+              uiResourceUri: "resource://test-server/ui-other",
+              createdAt: 1,
+            },
+            {
+              toolCallId: "tc2",
+              label: "Second App",
+              uiResourceUri: defaultProps.uiResourceUri,
+              createdAt: 0,
+            },
           ]}
         >
-          <SidebarHost target={target} />
+          <PanelHost target={target} />
           <McpAppSection
             {...defaultProps}
             appId={APP_ID}
@@ -547,19 +619,96 @@ describe("McpAppSection sidebar hosting", () => {
       );
     });
 
-    // tc1 auto-selected (latest), so tc2 shows the placeholder control; clicking
-    // it selects tc2 and portals its iframe into the sidebar target.
-    const showButton = screen.getByRole("button", { name: /show in sidebar/i });
+    // tc1 is auto-selected and hosted in the panel. The unselected tc2 keeps
+    // rendering live inline (not a placeholder) and is NOT shown in the panel,
+    // while still offering its own Show in panel control.
+    const showButton = screen.getByRole("button", { name: /show in panel/i });
     expect(target.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText(/showing in panel/i)).not.toBeInTheDocument();
+    // tc2's live iframe renders inline (in the document, outside the panel target).
+    expect(document.querySelector("iframe")).toBeInTheDocument();
 
+    // Clicking it selects tc2 and portals its iframe into the panel target.
     await act(async () => {
       await user.click(showButton);
     });
 
     expect(target.querySelector("iframe")).toBeInTheDocument();
-    expect(screen.getByText(/showing in sidebar/i)).toBeInTheDocument();
+    expect(screen.getByText(/showing in panel/i)).toBeInTheDocument();
 
     target.remove();
+  });
+});
+
+describe("McpAppSection superseded renders", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("collapses to a changelog pill when a newer render of the same app exists", async () => {
+    await act(async () => {
+      render(
+        // Registry's latest render of APP_ID is tc2, so the tc1 section below is
+        // superseded and must render the static pill, not a live iframe.
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc2",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 1,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(screen.getByText(/Dashboard · v1 · Updated/)).toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("renders the live surface for the latest render of an app", async () => {
+    await act(async () => {
+      render(
+        <AppsProvider
+          apps={[
+            {
+              toolCallId: "tc1",
+              label: "Dashboard",
+              uiResourceUri: defaultProps.uiResourceUri,
+              appId: APP_ID,
+              createdAt: 0,
+            },
+          ]}
+        >
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            appVersion={1}
+            toolName="archestra__edit_app"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+    expect(screen.queryByText(/· Updated/)).not.toBeInTheDocument();
   });
 });
 

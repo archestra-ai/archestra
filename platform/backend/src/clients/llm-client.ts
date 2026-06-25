@@ -23,6 +23,7 @@ import {
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
@@ -212,6 +213,13 @@ export async function createLLMModelForAgent(params: {
   model: LLMModel;
   provider: SupportedProvider;
   apiKeySource: string;
+  /**
+   * True when this resolves to genuine Anthropic (vs an Anthropic-compatible
+   * endpoint behind a custom base URL serving a non-Claude model). Gates
+   * Anthropic-only request-body features in chat normalization, mirroring the
+   * proxy's `anthropic-beta` header gating so the two can't drift.
+   */
+  anthropicNativeEndpoint: boolean;
 }> {
   const {
     organizationId,
@@ -298,7 +306,13 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
   });
 
-  return { model, provider, apiKeySource };
+  const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
+    provider,
+    model: modelName,
+    baseUrl,
+  });
+
+  return { model, provider, apiKeySource, anthropicNativeEndpoint };
 }
 
 // =============================================================================

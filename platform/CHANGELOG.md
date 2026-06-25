@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.73](https://github.com/archestra-ai/archestra/compare/platform-v1.2.72...platform-v1.2.73) (2026-06-23)
+
+
+### Features
+
+* **backend:** add ARCHESTRA_BETA master switch for preview feature flags ([#5805](https://github.com/archestra-ai/archestra/issues/5805)) ([77a66ff](https://github.com/archestra-ai/archestra/commit/77a66ff6eb1e7b3a86bff3b4c607bb7937e5ed8a))
+* **mcp-registry:** routed catalog detail & edit pages with tabbed la… ([#5776](https://github.com/archestra-ai/archestra/issues/5776)) ([cb0cb91](https://github.com/archestra-ai/archestra/commit/cb0cb91ace118829faab7077a8a44104aa3cac62))
+* pinned projects ([#5802](https://github.com/archestra-ai/archestra/issues/5802)) ([5eeddc1](https://github.com/archestra-ai/archestra/commit/5eeddc122e13e5be0ae7f8b4b34efcdffbdc2fdd))
+
+
+### Bug Fixes
+
+* **oauth:** return to originating chat after a remote MCP OAuth connect ([#5816](https://github.com/archestra-ai/archestra/issues/5816)) ([2c2e29e](https://github.com/archestra-ai/archestra/commit/2c2e29e06f513ee5cb5f69dca13bc970eba6952b))
+* **oauth:** use white-label app name in remote MCP consent client name ([#5810](https://github.com/archestra-ai/archestra/issues/5810)) ([b4f3cc4](https://github.com/archestra-ai/archestra/commit/b4f3cc4dc2528389436f704838d12c61cb73b90d))
+* **sandbox:** force-kill dagger session children on teardown + backend channel keepalive ([#5801](https://github.com/archestra-ai/archestra/issues/5801)) ([4a793ee](https://github.com/archestra-ai/archestra/commit/4a793ee707c3621d09a7d8207b3a369dfeb1b517))
+
+
+### Miscellaneous Chores
+
+* **projects:** cap project description, preserve project link on shared-chat fork, and remove file-tool download links ([#5796](https://github.com/archestra-ai/archestra/issues/5796)) ([41cc49f](https://github.com/archestra-ai/archestra/commit/41cc49f5b75e3a9101e3316d0ee9c43dd306a0fa))
+* solving licensing ambiguity, making Archestra.AI free for small teams ([#5811](https://github.com/archestra-ai/archestra/issues/5811)) ([bc15f47](https://github.com/archestra-ai/archestra/commit/bc15f47bc6f9f1baabdba9ab0ec843bfb9ce2a9a))
+
 ## [1.2.72](https://github.com/archestra-ai/archestra/compare/platform-v1.2.71...platform-v1.2.72) (2026-06-23)
 
 

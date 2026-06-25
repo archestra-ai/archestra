@@ -91,6 +91,13 @@ jobs:
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       push_image: true
       auth_provider: gar
+      # amd64-only ONLY for the automated staging deploy (push to main, via
+      # on-commits-to-main): staging runs amd64 nodes, so the arm64 leg (~9-10
+      # min, the long pole) produced an image nothing schedules. The
+      # `deploy-dev-platform-images` label and workflow_dispatch stay multi-arch
+      # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
+      # Release images (build-dockerhub-image.yml) are always multi-arch.
+      amd64_only: ${{ github.event_name == 'push' }}
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:

@@ -1,3 +1,4 @@
+import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import config from "@/config";
 import {
   FileModel,
@@ -21,6 +22,28 @@ import {
   readRowBytes,
 } from "./file-storage";
 import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
+import { SkillSandboxError } from "./types";
+
+/** MIME type the project instructions file is stored as. */
+const INSTRUCTIONS_MIME_TYPE = "text/markdown";
+
+/**
+ * A delete targeted the project's instructions file (`instructions.md`). The
+ * instructions file is an ordinary, available project file in every other
+ * respect, but it cannot be deleted through the generic file surface — the way
+ * to remove its guidance is to save empty content. Extends
+ * {@link SkillSandboxError} so the sandbox tool handlers surface it as a clean,
+ * model-facing message.
+ */
+export class FileNotDeletableError extends SkillSandboxError {
+  constructor(filename: string) {
+    super(
+      `"${filename}" is the project's instructions file and can't be deleted. ` +
+        `Clear its contents from the project's Instructions panel instead.`,
+    );
+    this.name = "FileNotDeletableError";
+  }
+}
 
 /** Which files a `search` lists — a single owner scope. */
 type FileSearchScope =
@@ -146,34 +169,83 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return null;
       if (!(await this.canAccessScope(parsed.scope, params))) return null;
-      if (!(await this.objectRefOwned(parsed, store))) return null;
-      let data: Buffer;
-      try {
-        data = await store.read(parsed.key);
-      } catch (error) {
-        // a path escaping the root reads as "not found", not a 500.
-        if (error instanceof UnsafePathError) return null;
-        throw error;
-      }
-      const name = keyName(parsed.key);
-      return {
-        id: null,
-        filename: name,
-        mimeType: resolveArtifactMime({
-          buffer: data,
-          claimed: mimeFromExtension(name),
-        }),
-        data,
-      };
+      return this.readObjectResolved(parsed, store);
     }
     const file = await this.authorizedFile(params);
-    if (!file) return null;
-    return {
-      id: file.id,
-      filename: file.filename,
-      mimeType: file.mimeType,
-      data: await readRowBytes(file),
-    };
+    return file ? this.rowToResolved(file) : null;
+  }
+
+  /**
+   * Read-only bytes for a `project:admin` overseeing a foreign project: resolves
+   * only PROJECT-scoped files/objects (never personal ones) in the org, WITHOUT
+   * the owner/share check. The caller (artifact route) must have already
+   * confirmed `project:admin`. Distinct from {@link get}/{@link delete} so the
+   * admin allowance can never reach a write/delete path.
+   */
+  async getProjectScopedForAdmin(params: {
+    ref: string;
+    organizationId: string;
+  }): Promise<ResolvedFile | null> {
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return null;
+      const store = getObjectStore();
+      if (!store) return null;
+      if (!(await this.projectInOrg(parsed.scope.projectId, params))) {
+        return null;
+      }
+      return this.readObjectResolved(parsed, store);
+    }
+    if (!UUID_RE.test(params.ref)) return null;
+    const file = await FileModel.findById(params.ref);
+    if (!file || file.organizationId !== params.organizationId) return null;
+    if (!file.projectId) return null; // never expose personal files
+    if (!(await this.projectInOrg(file.projectId, params))) return null;
+    return this.rowToResolved(file);
+  }
+
+  /**
+   * Delete a PROJECT-scoped file/object for a confirmed `project:admin`, without
+   * the owner/share check — oversight delete of a foreign project's files. Never
+   * touches personal (no-project) files. The route MUST verify `project:admin`
+   * before calling this; `delete` stays the share/owner path for everyone else.
+   */
+  async deleteProjectScopedForAdmin(params: {
+    ref: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return false;
+      const store = getObjectStore();
+      if (!store) return false;
+      if (!(await this.projectInOrg(parsed.scope.projectId, params))) {
+        return false;
+      }
+      // The instructions file is never deletable — not even via admin oversight.
+      if (keyName(parsed.key) === PROJECT_INSTRUCTIONS_FILENAME) {
+        throw new FileNotDeletableError(PROJECT_INSTRUCTIONS_FILENAME);
+      }
+      // Bind key→scope so a crafted ref can't delete a sibling folder's object.
+      if (!(await this.objectRefOwned(parsed, store))) return false;
+      await store.remove(parsed.key).catch(() => {});
+      return true;
+    }
+    if (!UUID_RE.test(params.ref)) return false;
+    const file = await FileModel.findById(params.ref);
+    if (!file || file.organizationId !== params.organizationId) return false;
+    if (!file.projectId) return false; // never delete personal files
+    if (!(await this.projectInOrg(file.projectId, params))) return false;
+    // The instructions file is never deletable — not even via admin oversight.
+    if (file.filename === PROJECT_INSTRUCTIONS_FILENAME) {
+      throw new FileNotDeletableError(file.filename);
+    }
+    await FileModel.deleteById(file.id);
+    await deleteRowBytes({
+      provider: file.storageProvider,
+      objectKey: file.objectKey,
+    }).catch(() => {});
+    return true;
   }
 
   /** Delete a file (row first, then its bytes) the caller may access. */
@@ -187,6 +259,16 @@ class FileStore {
       const store = getObjectStore();
       if (!store) return false;
       if (!(await this.canAccessScope(parsed.scope, params))) return false;
+      // The instructions file is never deletable — including via an object ref
+      // that addresses its bytes directly. Without this, deleting through the
+      // object path would orphan the row (bytes gone, row left unreadable),
+      // bypassing the row-level guard below.
+      if (
+        parsed.scope.kind === "project" &&
+        keyName(parsed.key) === PROJECT_INSTRUCTIONS_FILENAME
+      ) {
+        throw new FileNotDeletableError(PROJECT_INSTRUCTIONS_FILENAME);
+      }
       // Same key→scope binding as `get`: a crafted ref carrying the caller's own
       // scope but a sibling folder's key must NOT delete another scope's object.
       if (!(await this.objectRefOwned(parsed, store))) return false;
@@ -195,6 +277,11 @@ class FileStore {
     }
     const file = await this.authorizedFile(params);
     if (!file) return false;
+    // The project instructions file is available like any other file, but it is
+    // never deletable — emptying it is the way to remove its guidance.
+    if (file.projectId && file.filename === PROJECT_INSTRUCTIONS_FILENAME) {
+      throw new FileNotDeletableError(file.filename);
+    }
     await FileModel.deleteById(file.id);
     await deleteRowBytes({
       provider: file.storageProvider,
@@ -477,6 +564,63 @@ class FileStore {
     });
   }
 
+  /**
+   * Read a project's instructions file content, or null when it has never been
+   * saved. Resolves the backing row by name only — a same-named hand-placed
+   * object never stands in for the (possibly empty) real file, so "no row" is the
+   * single source of the virtual/empty state.
+   */
+  async readProjectInstructions(params: {
+    organizationId: string;
+    projectId: string;
+  }): Promise<string | null> {
+    const row = await FileModel.findByProjectAndName({
+      organizationId: params.organizationId,
+      projectId: params.projectId,
+      filename: PROJECT_INSTRUCTIONS_FILENAME,
+    });
+    if (!row) return null;
+    return (await readRowBytes(row)).toString("utf8");
+  }
+
+  /**
+   * Create or replace a project's instructions file with `content` (empty is a
+   * valid, kept file). Upserts the reserved name through the normal write path.
+   */
+  async writeProjectInstructions(params: {
+    organizationId: string;
+    userId: string;
+    projectId: string;
+    content: string;
+  }): Promise<void> {
+    const data = Buffer.from(params.content, "utf8");
+    const existing = await FileModel.findByProjectAndName({
+      organizationId: params.organizationId,
+      projectId: params.projectId,
+      filename: PROJECT_INSTRUCTIONS_FILENAME,
+    });
+    if (existing) {
+      await this.update({
+        file: existing,
+        mimeType: INSTRUCTIONS_MIME_TYPE,
+        sizeBytes: data.byteLength,
+        data,
+      });
+      return;
+    }
+    await this.put({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      projectId: params.projectId,
+      conversationId: null,
+      sandboxId: null,
+      filename: PROJECT_INSTRUCTIONS_FILENAME,
+      mimeType: INSTRUCTIONS_MIME_TYPE,
+      sizeBytes: data.byteLength,
+      data,
+    });
+  }
+
   // === internal ===
 
   /**
@@ -675,6 +819,51 @@ class FileStore {
       return canAccess ? file : null;
     }
     return file.userId === params.userId ? file : null;
+  }
+
+  /** Is this project in the caller's org? (admin-oversight read gate) */
+  private async projectInOrg(
+    projectId: string,
+    ctx: { organizationId: string },
+  ): Promise<boolean> {
+    const project = await ProjectModel.findById(projectId);
+    return !!project && project.organizationId === ctx.organizationId;
+  }
+
+  /** Read + build a ResolvedFile for an untracked object (after authorization). */
+  private async readObjectResolved(
+    parsed: { scope: RefScope; key: string },
+    store: NonNullable<ReturnType<typeof getObjectStore>>,
+  ): Promise<ResolvedFile | null> {
+    if (!(await this.objectRefOwned(parsed, store))) return null;
+    let data: Buffer;
+    try {
+      data = await store.read(parsed.key);
+    } catch (error) {
+      // a path escaping the root reads as "not found", not a 500.
+      if (error instanceof UnsafePathError) return null;
+      throw error;
+    }
+    const name = keyName(parsed.key);
+    return {
+      id: null,
+      filename: name,
+      mimeType: resolveArtifactMime({
+        buffer: data,
+        claimed: mimeFromExtension(name),
+      }),
+      data,
+    };
+  }
+
+  /** Build a ResolvedFile for a persisted row (after authorization). */
+  private async rowToResolved(file: PersistedFile): Promise<ResolvedFile> {
+    return {
+      id: file.id,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      data: await readRowBytes(file),
+    };
   }
 
   /**

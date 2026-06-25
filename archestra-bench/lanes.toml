@@ -5,8 +5,11 @@
 #   name         unique slug, the selection handle and the lane's agent / log / artifact dir
 #   provider     one of: anthropic, openai, gemini, openrouter (what the backend seeds the key as)
 #   model        the model id to resolve on that provider
-#   base_url     optional endpoint override (e.g. an Anthropic-compatible gateway)
-#   api_key_env  optional env var holding the key (default: <PROVIDER>_API_KEY)
+#   base_url         optional endpoint override (e.g. an Anthropic-compatible gateway)
+#   api_key_env      optional env var holding the key (default: <PROVIDER>_API_KEY)
+#   openrouter_model optional OpenRouter slug to price this lane against. An openrouter lane is priced
+#                    off its own model; set this only to map a lane served elsewhere onto an OR
+#                    offering. Unset on a non-openrouter lane ⇒ run cost is reported as n/a.
 
 # [[lane]]
 # name = "or-nex"
@@ -19,21 +22,37 @@
 # model = "openrouter/owl-alpha"
 
 [[lane]]
-name = "minimax-3"
+name = "deepseek-flash"
 provider = "openrouter"
-model = "minimax/minimax-m3"
+model = "deepseek/deepseek-v4-flash"
+
+[[lane]]
+name = "qwen37-plus"
+provider = "openrouter"
+model = "qwen/qwen3.7-plus"
+
+[[lane]]
+name = "gemma-4-31b"
+provider = "openrouter"
+model = "google/gemma-4-31b-it"
+
+[[lane]]
+name = "gemini-35-flash"
+provider = "openrouter"
+model = "google/gemini-3.5-flash"
 
 [[lane]]
 name = "minimax-27"
 provider = "openrouter"
 model = "minimax/minimax-m2.7"
 
-# [[lane]]
-# name = "kimi"
-# provider = "anthropic"
-# model = "kimi-for-coding"
-# base_url = "https://api.kimi.com/coding/"
-# api_key_env = "KIMI_API_KEY"
+[[lane]]
+name = "kimi"
+provider = "anthropic"
+model = "kimi-for-coding"
+base_url = "https://api.kimi.com/coding/"
+api_key_env = "KIMI_API_KEY"
+openrouter_model = "moonshotai/kimi-k2.7-code"
 
 [[lane]]
 name = "glm"
@@ -41,10 +60,4 @@ provider = "anthropic"
 model = "glm-5.2"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
-
-[[lane]]
-name = "glm-flash"
-provider = "anthropic"
-model = "glm-4.5-air"
-base_url = "https://api.z.ai/api/anthropic"
-api_key_env = "ZAI_API_KEY"
+openrouter_model = "z-ai/glm-5.2"

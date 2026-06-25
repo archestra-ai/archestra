@@ -1,14 +1,18 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { getArchestraToolShortName } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
+import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
   filterOptimisticToolCalls,
+  getAppRenderVerb,
   hasTextPart,
+  humanizeToolLabel,
   identifyCompactToolGroups,
+  isSupersededRender,
 } from "./chat-messages.utils";
 
 const getToolShortName = (toolName: string) =>
@@ -239,6 +243,28 @@ describe("collectBrowserToolCallIds", () => {
   });
 });
 
+describe("humanizeToolLabel", () => {
+  it("humanizes server and tool from a prefixed name", () => {
+    expect(humanizeToolLabel("system__get-system-stats")).toBe(
+      "System / Get System Stats",
+    );
+  });
+
+  it("handles underscore-separated tool names", () => {
+    expect(humanizeToolLabel("weather__get_forecast")).toBe(
+      "Weather / Get Forecast",
+    );
+  });
+
+  it("splits camelCase tool names", () => {
+    expect(humanizeToolLabel("fs__listFiles")).toBe("Fs / List Files");
+  });
+
+  it("humanizes a bare tool name with no server prefix", () => {
+    expect(humanizeToolLabel("render_app")).toBe("Render App");
+  });
+});
+
 describe("deriveAppsFromMessages", () => {
   it("returns an app for a tool call whose output carries _meta.ui.resourceUri", () => {
     const messages = [
@@ -261,7 +287,8 @@ describe("deriveAppsFromMessages", () => {
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
+        label: "Pm / Show Board",
+        uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
         createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
@@ -300,7 +327,8 @@ describe("deriveAppsFromMessages", () => {
     ).toEqual([
       {
         toolCallId: "call_1",
-        label: "show_board",
+        label: "Pm / Show Board",
+        uiResourceUri: "ui://pm/board",
         appId: null,
         version: null,
         createdAt: 0,
@@ -340,7 +368,7 @@ describe("deriveAppsFromMessages", () => {
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({
       toolCallId: "call_1",
-      label: "show_board",
+      label: "Pm / Show Board",
     });
   });
 
@@ -371,6 +399,8 @@ describe("deriveAppsFromMessages", () => {
       {
         toolCallId: "call_app",
         label: "To Do App",
+        uiResourceUri:
+          "ui://archestra-app/947051c7-ea8e-48ed-8077-a3cc904d9d61",
         appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
         version: 1,
         createdAt: 0,
@@ -424,6 +454,8 @@ describe("deriveAppsFromMessages", () => {
       {
         toolCallId: "call_v3",
         label: "To Do App",
+        uiResourceUri:
+          "ui://archestra-app/947051c7-ea8e-48ed-8077-a3cc904d9d61",
         appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
         version: 3,
         createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
@@ -490,6 +522,74 @@ describe("deriveAppsFromMessages", () => {
     ] as never;
 
     expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([]);
+  });
+
+  it("de-dupes non-owned renders by resourceUri, keeping the latest render", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:00:00.000Z" },
+        parts: [
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:05:00.000Z" },
+        parts: [
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_2",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveAppsFromMessages(messages, {}, getToolShortName)).toEqual([
+      {
+        toolCallId: "call_2",
+        label: "Pm / Show Board",
+        uiResourceUri: "ui://pm/board",
+        appId: null,
+        version: null,
+        createdAt: Date.parse("2026-05-29T18:05:00.000Z"),
+      },
+    ]);
+  });
+
+  it("keeps non-owned renders with distinct resourceUris as separate entries", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_a",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board-a" } } },
+          },
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_b",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board-b" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const apps = deriveAppsFromMessages(messages, {}, getToolShortName);
+    expect(apps.map((a) => a.toolCallId)).toEqual(["call_a", "call_b"]);
   });
 });
 
@@ -708,5 +808,60 @@ describe("identifyCompactToolGroups", () => {
     expect(groupMap.size).toBe(2);
     expect(groupMap.get(0)?.entries).toHaveLength(1);
     expect(groupMap.get(4)?.entries).toHaveLength(1);
+  });
+});
+
+describe("isSupersededRender", () => {
+  const app = (toolCallId: string, uiResourceUri: string): PanelApp => ({
+    toolCallId,
+    label: "Dashboard",
+    uiResourceUri,
+    version: 1,
+    createdAt: 0,
+  });
+
+  it("returns false for the latest render of an app (registry points at it)", () => {
+    const apps = [app("tc2", "ui://app-1")];
+    expect(
+      isSupersededRender({
+        apps,
+        uiResourceUri: "ui://app-1",
+        toolCallId: "tc2",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for a prior render once a newer render registers", () => {
+    const apps = [app("tc2", "ui://app-1")];
+    expect(
+      isSupersededRender({
+        apps,
+        uiResourceUri: "ui://app-1",
+        toolCallId: "tc1",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false when the app has no registry entry yet (mid-stream)", () => {
+    const apps = [app("tc9", "ui://other-app")];
+    expect(
+      isSupersededRender({
+        apps,
+        uiResourceUri: "ui://app-1",
+        toolCallId: "tc1",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("getAppRenderVerb", () => {
+  it("maps each app-rendering tool to its past-tense verb", () => {
+    expect(getAppRenderVerb("archestra__scaffold_app")).toBe("Created");
+    expect(getAppRenderVerb("archestra__edit_app")).toBe("Updated");
+    expect(getAppRenderVerb("archestra__render_app")).toBe("Rendered");
+  });
+
+  it("returns null for non-app tools", () => {
+    expect(getAppRenderVerb("google__search")).toBeNull();
   });
 });

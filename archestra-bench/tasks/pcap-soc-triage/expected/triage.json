@@ -1,0 +1,21 @@
+{
+  "beaconing_src_ips": [
+    "10.0.0.7"
+  ],
+  "dos_src_ips": [
+    "10.0.0.6"
+  ],
+  "flags": {
+    "beaconing": true,
+    "dos": true,
+    "port_scan": true
+  },
+  "port_scan_src_ips": [
+    "10.0.0.5"
+  ],
+  "protocol_counts": {
+    "icmp": 4,
+    "tcp": 69,
+    "udp": 5
+  }
+}

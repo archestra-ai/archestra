@@ -15469,23 +15469,23 @@ export type GetAppsResponses = {
         data: Array<{
             name: string;
             description: string | null;
-            scope: 'personal' | 'team' | 'org';
-            authorId: string | null;
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'owned';
             id: string;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
             latestVersion: number;
         } | {
             name: string;
             description: string | null;
-            scope: 'personal' | 'team' | 'org';
-            authorId: string | null;
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             source: 'external';
-            mcpServerId: string;
+            catalogId: string;
             resourceUri: string;
+            runnable: boolean;
+            availabilityScopes: Array<'personal' | 'team' | 'org'>;
         }>;
         pagination: {
             currentPage: number;
@@ -15601,11 +15601,10 @@ export type CreateAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -15617,6 +15616,8 @@ export type CreateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         warnings?: Array<string>;
     };
 };
@@ -15626,10 +15627,10 @@ export type CreateAppResponse = CreateAppResponses[keyof CreateAppResponses];
 export type GetExternalAppData = {
     body?: never;
     path: {
-        mcpServerId: string;
+        catalogId: string;
     };
     query?: never;
-    url: '/api/apps/external/{mcpServerId}';
+    url: '/api/apps/external/{catalogId}';
 };
 
 export type GetExternalAppErrors = {
@@ -15702,15 +15703,19 @@ export type GetExternalAppResponses = {
      * Default Response
      */
     200: {
+        catalogId: string;
         name: string;
         description: string | null;
-        scope: 'personal' | 'team' | 'org';
-        authorId: string | null;
-        executionModel: 'viewer-scoped' | 'server-scoped';
-        cspOrigin: 'platform-pinned' | 'author-declared';
-        source: 'external';
-        mcpServerId: string;
         resourceUri: string;
+        defaultMcpServerId: string | null;
+        installs: Array<{
+            mcpServerId: string;
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            teamId: string | null;
+            name: string;
+            localInstallationStatus: string | null;
+        }>;
     };
 };
 
@@ -15969,11 +15974,10 @@ export type GetAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -15985,6 +15989,12 @@ export type GetAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -16093,11 +16103,10 @@ export type UpdateAppResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         templateId: string | null;
-        environmentId: string | null;
+        mcpServerId: string | null;
         spec: {
             summary: string;
             features: Array<string>;
@@ -16109,6 +16118,8 @@ export type UpdateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         warnings?: Array<string>;
     };
 };
@@ -25531,6 +25542,7 @@ export type GetConfigResponses = {
             fullWhiteLabeling: boolean;
         };
         features: {
+            betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             agentSkillsEnabled: boolean;
@@ -29051,6 +29063,8 @@ export type GetReadyResponses = {
         status: 'ok' | 'maintenance';
         version: string;
         database: 'connected' | 'not_checked';
+        sandbox: 'ready' | 'initializing' | 'disabled' | 'unreachable';
+        sandboxReason?: string;
     };
 };
 
@@ -36470,7 +36484,9 @@ export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractio
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        includeApps?: boolean;
+    };
     url: '/api/internal_mcp_catalog';
 };
 
@@ -36560,7 +36576,7 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -36693,7 +36709,7 @@ export type CreateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant?: boolean;
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
@@ -36890,7 +36906,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -37184,7 +37200,7 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -37315,7 +37331,7 @@ export type UpdateInternalMcpCatalogItemData = {
             required?: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote' | 'builtin';
+        serverType?: 'local' | 'remote' | 'builtin' | 'app';
         dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
@@ -37512,7 +37528,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
@@ -42224,6 +42240,8 @@ export type GetLlmModelsResponses = {
         isBest?: boolean;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
+        requiresUserConnection?: boolean;
+        isConnected?: boolean;
     }>;
 };
 
@@ -45891,7 +45909,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46028,7 +46046,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46229,7 +46247,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46355,7 +46373,7 @@ export type ReauthenticateMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -46753,7 +46771,7 @@ export type ReinstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
-        serverType: 'local' | 'remote' | 'builtin';
+        serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
@@ -53593,7 +53611,22 @@ export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletio
 export type GetProjectsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        scope?: 'personal' | 'team' | 'org';
+        search?: string;
+        /**
+         * Team IDs (comma-separated); only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+    };
     url: '/api/projects';
 };
 
@@ -53671,9 +53704,11 @@ export type GetProjectsResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     }>;
@@ -53766,9 +53801,11 @@ export type CreateProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -53944,9 +53981,11 @@ export type GetProjectResponses = {
         name: string;
         description: string | null;
         icon: string | null;
-        isOwner: boolean;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
         conversationCount: number;
         visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;
@@ -54224,6 +54263,178 @@ export type GetProjectFilesResponses = {
 };
 
 export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
+
+export type GetProjectInstructionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/instructions';
+};
+
+export type GetProjectInstructionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectInstructionsError = GetProjectInstructionsErrors[keyof GetProjectInstructionsErrors];
+
+export type GetProjectInstructionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        content: string;
+    };
+};
+
+export type GetProjectInstructionsResponse = GetProjectInstructionsResponses[keyof GetProjectInstructionsResponses];
+
+export type SetProjectInstructionsData = {
+    body: {
+        content: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/instructions';
+};
+
+export type SetProjectInstructionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetProjectInstructionsError = SetProjectInstructionsErrors[keyof SetProjectInstructionsErrors];
+
+export type SetProjectInstructionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type SetProjectInstructionsResponse = SetProjectInstructionsResponses[keyof SetProjectInstructionsResponses];
 
 export type GetProjectConversationsData = {
     body?: never;

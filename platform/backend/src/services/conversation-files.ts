@@ -1,7 +1,10 @@
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
-import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
+import {
+  type ProjectFileScope,
+  resolveProjectFileScope,
+} from "@/skills-sandbox/project-file-scope";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import type { ConversationFilesResponse } from "@/types/conversation-file";
 
@@ -87,7 +90,7 @@ class ConversationFilesService {
       return { files: [], projectName: null };
     }
 
-    let scope: Awaited<ReturnType<typeof resolveProjectFileScope>>;
+    let scope: ProjectFileScope | null = null;
     try {
       scope = await resolveProjectFileScope({
         conversationId: params.conversationId,
@@ -95,11 +98,9 @@ class ConversationFilesService {
         organizationId: params.organizationId,
       });
     } catch (error) {
-      // Fail-closed scope (e.g. the requester lost project access): list none.
-      if (error instanceof SkillSandboxError) {
-        return { files: [], projectName: null };
-      }
-      throw error;
+      // Fail-closed scope: a member who has since lost share access can't reach
+      // the project's files through a chat they still own.
+      if (!(error instanceof SkillSandboxError)) throw error;
     }
 
     if (!scope) {

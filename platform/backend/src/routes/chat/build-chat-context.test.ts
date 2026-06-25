@@ -41,6 +41,7 @@ describe("buildChatContext enabled-tool selection", () => {
       user: params.user,
       organizationId: params.organizationId,
       hookSessionContext: undefined,
+      projectInstructions: undefined,
       hookRunCollector: [],
       elicitation: {} as never,
       abortSignal: new AbortController().signal,

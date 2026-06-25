@@ -151,6 +151,30 @@ class FileModel {
     return row ? normalizeByteaField(row, "data") : null;
   }
 
+  /**
+   * One project file by exact name. The partial unique index on
+   * `(project_id, filename)` makes the match at most one. Used to resolve a
+   * project's reserved files (e.g. `instructions.md`) by name without going
+   * through the listing path.
+   */
+  static async findByProjectAndName(params: {
+    organizationId: string;
+    projectId: string;
+    filename: string;
+  }): Promise<PersistedFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.projectId, params.projectId),
+          eq(schema.filesTable.filename, params.filename),
+        ),
+      );
+    return row ? normalizeByteaField(row, "data") : null;
+  }
+
   /** Files belonging to one project (newest first), any author; org-scoped. */
   static async listByProject(params: {
     organizationId: string;

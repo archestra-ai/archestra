@@ -131,6 +131,59 @@ describe("resolveInitialModel", () => {
     // uuid-gpt-4o-mini is marked best.
     expect(result?.modelId).toBe("uuid-gpt-4o-mini");
   });
+
+  // A per-user provider (GitHub Copilot) is catalogued org-wide but its key is
+  // the viewer's own, resolved at send time. A member viewing an org/agent
+  // default that points at a Copilot model holds no key for it, so the model
+  // must still be selected (by model alone) with the key dropped.
+  const copilotModels = {
+    ...baseModels,
+    "github-copilot": [{ id: "uuid-copilot-sonnet", isBest: true }],
+  };
+
+  test("resolves an org default pointing at a per-user model, dropping the key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: { modelId: null, llmApiKeyId: null },
+      // The member has no GitHub Copilot key — only openai/anthropic.
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-copilot-sonnet",
+        // The admin's personal Copilot key — not visible/usable by the member.
+        defaultLlmApiKeyId: "key-admin-copilot",
+      },
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-copilot-sonnet", apiKeyId: null });
+  });
+
+  test("resolves an agent default pointing at a per-user model, dropping the key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: {
+        modelId: "uuid-copilot-sonnet",
+        llmApiKeyId: "key-owner-copilot",
+      },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-copilot-sonnet", apiKeyId: null });
+  });
+
+  test("keeps the member's own keyed model over a lower per-user org default", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: { modelId: null, llmApiKeyId: null },
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-copilot-sonnet",
+        defaultLlmApiKeyId: "key-admin-copilot",
+      },
+      memberDefault: { modelId: "uuid-gpt-4o", chatApiKeyId: "key-openai" },
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
+  });
 });
 
 describe("resolveModelForAgent", () => {

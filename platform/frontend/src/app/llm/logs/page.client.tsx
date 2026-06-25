@@ -85,7 +85,14 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  const isClaudeCodeSession = session.sessionSource === "claude_code";
+  // Both Claude clients (Code and Desktop) get a source badge and a labelled
+  // placeholder; other sources fall back to the last user message.
+  const claudeSourceLabel =
+    session.sessionSource === "claude_code"
+      ? "Claude Code"
+      : session.sessionSource === "claude_desktop"
+        ? "Claude Desktop"
+        : null;
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -110,7 +117,7 @@ function getSessionDisplayData(session: SessionData) {
     isSingleInteraction,
     conversationTitle,
     isArchestraChat,
-    isClaudeCodeSession,
+    claudeSourceLabel,
     lastUserMessage,
     displayText,
   };
@@ -266,7 +273,7 @@ function SessionsTable({
             conversationTitle,
             displayText,
             isArchestraChat,
-            isClaudeCodeSession,
+            claudeSourceLabel,
             lastUserMessage,
           } = getSessionDisplayData(session);
 
@@ -293,20 +300,20 @@ function SessionsTable({
                     </Badge>
                   </Link>
                 </>
-              ) : isClaudeCodeSession ? (
+              ) : claudeSourceLabel ? (
                 <>
                   <span className="min-w-0 flex-1 truncate">
                     {displayText
                       ? displayText.length > 80
                         ? `${displayText.slice(0, 80)}...`
                         : displayText
-                      : "Claude Code session"}
+                      : `${claudeSourceLabel} session`}
                   </span>
                   <Badge
                     variant="secondary"
                     className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
                   >
-                    Claude Code
+                    {claudeSourceLabel}
                   </Badge>
                 </>
               ) : lastUserMessage ? (

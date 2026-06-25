@@ -567,7 +567,7 @@ export function McpServerCard({
     (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
 
   const compactInfoRow = hasCompactInfoContent ? (
-    <div className="flex items-center gap-3 text-sm text-muted-foreground border-t pt-3">
+    <div className="flex items-center gap-3 text-sm text-muted-foreground">
       {showAuthorAvatar && (
         <>
           <TooltipProvider>

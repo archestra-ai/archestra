@@ -3,8 +3,14 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
+# Merge-queue / label runs cover chromium only; firefox + webkit run nightly on
+# the schedule trigger to keep the queue fast (those projects only carry the 8
+# @firefox/@webkit-tagged tests).
 on:
   workflow_dispatch:
+  schedule:
+    # Nightly full cross-browser run (includes firefox + webkit).
+    - cron: "0 3 * * *"
   pull_request:
     types:
       - opened
@@ -48,7 +54,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -166,17 +172,19 @@ jobs:
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests-shards:
-    name: Platform E2E Tests Shard (${{ matrix.shard }}/3)
+    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 180
+    # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
+    # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
+    timeout-minutes: 30
     strategy:
       # A failing shard must not cancel its siblings: a cancelled leg would
       # collapse the matrix result to "cancelled" and produce a partial report.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -232,10 +240,13 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s
-          shard: "--shard=${{ matrix.shard }}/3"
+          # Merge queue / on-demand label runs cover chromium only. The nightly
+          # schedule (and manual workflow_dispatch) add firefox + webkit, which
+          # only carry the @firefox/@webkit-tagged tests.
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
+          shard: "--shard=${{ matrix.shard }}/2"
           extra_args: "--grep-invert '@quickstart'"
-          timeout: "120"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -314,7 +325,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run (shard ${SHARD}/3) failed."
+          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
           exit 1
 
   # Fan-in gate that carries the "Platform E2E Tests" required status check.
@@ -325,7 +336,7 @@ jobs:
   platform-e2e-tests:
     name: Platform E2E Tests
     needs: [platform-e2e-tests-shards]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check shard results
@@ -352,9 +363,9 @@ jobs:
   platform-readonly-vault-e2e-tests:
     name: Platform E2E Tests (Readonly Vault)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -407,7 +418,7 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: credentials-with-vault
-          timeout: "90"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -500,8 +511,9 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -738,8 +750,9 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests-shards, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.
       pull-requests: write # Required for playwright-report-summary to comment on PRs.

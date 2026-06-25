@@ -40,11 +40,11 @@ describe("POST /api/projects", () => {
     const body = response.json<{
       id: string;
       name: string;
-      isOwner: boolean;
+      viewerRole: string;
     }>();
     expect(body).toMatchObject({
       name: "research",
-      isOwner: true,
+      viewerRole: "owner",
       conversationCount: 0,
       visibility: null,
     });

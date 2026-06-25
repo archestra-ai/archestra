@@ -366,6 +366,56 @@ describe("McpClient", () => {
     });
   });
 
+  describe("executeToolCallForOwner (app backing launch tool)", () => {
+    test("audits the open launch and still returns the ui:// pointer", async () => {
+      const appCatalog = await InternalMcpCatalogModel.create({
+        name: "Clock App",
+        serverType: "app",
+        scope: "org",
+      });
+      const appServer = await McpServerModel.create({
+        name: "Clock App",
+        catalogId: appCatalog.id,
+        serverType: "app",
+      });
+      const uri = "ui://archestra-app/clock-app";
+      const showApp = await ToolModel.create({
+        name: "clock_app__open",
+        description: "Open the Clock App.",
+        parameters: { type: "object", properties: {} },
+        catalogId: appCatalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await AgentToolModel.create(agentId, showApp.id, {
+        mcpServerId: appServer.id,
+      });
+
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_open", name: showApp.name, arguments: {} },
+        agentOwner(agentId),
+      );
+
+      // The in-process short-circuit still hands the host the ui:// pointer...
+      expect(result.isError).toBe(false);
+      expect(
+        (result._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
+          ?.resourceUri,
+      ).toBe(uri);
+
+      // ...and now records an audit row like any other gateway tool call.
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+      expect(row).toBeDefined();
+      expect(row?.ownerType).toBe("agent");
+      expect(row?.mcpServerName).toBe("Clock App");
+      expect((row?.toolCall as { name?: string } | null)?.name).toBe(
+        showApp.name,
+      );
+    });
+  });
+
   describe("executeToolCallForOwner", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {
@@ -1682,6 +1732,61 @@ describe("McpClient", () => {
         expect(result?.structuredContent).toMatchObject({
           archestraError: {
             type: "auth_required",
+          },
+        });
+      });
+
+      test("shows the catalog name (not the catalog UUID) for an unassigned all-tools tool that needs auth", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({ email: "alltools-auth@example.com" });
+
+        // A catalog the agent was never assigned a tool from. In "All tools"
+        // mode the dispatcher pre-resolves the tool and passes it through as
+        // `availableTool`, so the assignment carries no catalogName.
+        const dynCatalog = await InternalMcpCatalogModel.create({
+          name: "Atlassian Cloud MCP",
+          serverType: "remote",
+          serverUrl: "https://mcp.atlassian.com/v1/mcp",
+        });
+
+        const availableTool = await ToolModel.createToolIfNotExists({
+          name: "atlassian-cloud-mcp__search_issues",
+          description: "Search Jira issues",
+          parameters: {},
+          catalogId: dynCatalog.id,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_alltools_auth",
+            name: availableTool.name,
+            arguments: { query: "test" },
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+          // Dynamic tool access: the tool is not assigned to the agent.
+          { availableTool },
+        );
+
+        expect(result.isError).toBe(true);
+        // The user-facing name must be the catalog's display name, never its UUID.
+        expect(result?.error).toContain(
+          'Authentication required for "Atlassian Cloud MCP"',
+        );
+        expect(result?.error).not.toContain(
+          `Authentication required for "${dynCatalog.id}"`,
+        );
+        expect(result?._meta).toMatchObject({
+          archestraError: {
+            type: "auth_required",
+            catalogId: dynCatalog.id,
+            catalogName: "Atlassian Cloud MCP",
           },
         });
       });

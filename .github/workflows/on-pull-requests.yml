@@ -179,15 +179,12 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read # Required to checkout the repository and diff dependency manifests.
+      contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
+      # No checkout: dependency-review-action reads the PR diff via the GitHub
+      # API and references no local config file, so the (fetch-depth: 0) checkout
+      # was ~74s of the job's ~89s for nothing.
       - name: Dependency review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
@@ -317,6 +314,12 @@ jobs:
 
       - name: Type checking, linting, formatting, unit tests
         run: pnpm check:ci
+
+      # Validates the production build (turbo build: next build + backend build +
+      # Rust NAPI) compiles on every push. This replaces the per-push Docker image
+      # build's only unique signal; turbo remote caching makes it seconds on hit.
+      - name: Production build
+        run: pnpm build
 
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
@@ -459,79 +462,6 @@ jobs:
           name: playwright-integration-traces
           path: platform/frontend/test-results/
           retention-days: "7"
-
-  docker-image-builds:
-    name: Docker Image Builds (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read # Required to checkout the repository and read Docker build inputs.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            local-tag-prefix: archestra-platform
-            use-build-action: true
-          - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            local-tag-prefix: mcp-server-base
-            use-build-action: false
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          load: "true"
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Build rust-napi musl smoke target
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          target: rust-napi-musl-smoke
-          # amd64 only: this is a smoke build, and building arm64 here runs under
-          # QEMU emulation, which makes the Rust release compile 2-3x slower.
-          platforms: linux/amd64
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
-      - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/blacksmith-build-push
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

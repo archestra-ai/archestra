@@ -1,5 +1,6 @@
 import { ChatErrorCode } from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { InsertInteraction } from "@/types";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -7,6 +8,7 @@ import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import EnvironmentModel from "./environment";
 import InteractionModel from "./interaction";
+import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
 import TeamModel from "./team";
 
@@ -3928,6 +3930,292 @@ describe("InteractionModel", () => {
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);
       expect(usage[0].tokensOut).toBe(180);
+    });
+  });
+
+  describe("delta-encoded Claude interactions (read paths)", () => {
+    const ANTHROPIC_RESPONSE = {
+      id: "msg_test",
+      type: "message",
+      role: "assistant",
+      model: "claude-3-5-sonnet",
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+
+    function createClaude(
+      agentId: string,
+      messages: unknown[],
+      opts: { sessionId: string; tools?: unknown[]; createdAt?: Date },
+    ) {
+      return InteractionModel.create({
+        profileId: agentId,
+        sessionId: opts.sessionId,
+        sessionSource: "claude_code",
+        type: "anthropic:messages",
+        request: {
+          model: "claude-3-5-sonnet",
+          max_tokens: 1024,
+          messages,
+          ...(opts.tools ? { tools: opts.tools } : {}),
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+        ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+      });
+    }
+
+    function messagesOf(request: unknown): unknown[] {
+      return (request as { messages: unknown[] }).messages;
+    }
+
+    beforeEach(() => {
+      InteractionDeltaManager.reset();
+    });
+
+    test("findAllPaginated returns full requests and classifies requestType on the reconstructed request", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const tools = [
+        { name: "Task", description: "spawn subagent", input_schema: {} },
+      ];
+
+      const m0 = {
+        role: "user",
+        content: "kick off a long running task please",
+      };
+      await createClaude(agent.id, [m0], {
+        sessionId: "delta-find-all",
+        tools,
+      });
+      // Continuation whose stored delta is a single short utility-looking message
+      // ("count"). On the DELTA alone computeRequestType would say "subagent";
+      // on the reconstructed full request (3 messages + Task tool) it is "main".
+      const full = [
+        m0,
+        { role: "assistant", content: "ok" },
+        { role: "user", content: "count" },
+      ];
+      const tip = await createClaude(agent.id, full, {
+        sessionId: "delta-find-all",
+        tools,
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: "delta-find-all" },
+      );
+
+      const tipRow = result.data.find((i) => i.id === tip.id);
+      expect(messagesOf(tipRow?.request)).toEqual(full);
+      expect(
+        (tipRow as { requestType?: string } | undefined)?.requestType,
+      ).toBe("main");
+    });
+
+    test("findAllPaginated classifies a Claude Desktop web-search request as a subagent", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const sessionId = "desktop-subagent";
+
+      const desktopRequest = (overrides: {
+        system: unknown;
+        tools: unknown[];
+        messages: unknown[];
+      }) =>
+        ({
+          model: "claude-3-5-sonnet",
+          max_tokens: 1024,
+          ...overrides,
+        }) as unknown as InsertInteraction["request"];
+
+      // Main Claude Desktop request: multi-turn, and — unlike Claude Code — its
+      // main agent carries NO Task tool. It must still classify as "main".
+      const main = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+          ],
+          tools: [{ name: "Read", description: "read", input_schema: {} }],
+          messages: [
+            { role: "user", content: "help me research heaters" },
+            { role: "assistant", content: "sure" },
+            { role: "user", content: "find local prices" },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // Web-search sub-agent: a fresh thread (new messages[0]), the Agent SDK
+      // sub-agent system prompt, a single directive, and no Task tool.
+      const sub = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        sessionSource: "claude_desktop",
+        type: "anthropic:messages",
+        request: desktopRequest({
+          system: [
+            {
+              type: "text",
+              text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            },
+            {
+              type: "text",
+              text: "You are an assistant for performing a web search tool use",
+            },
+          ],
+          tools: [
+            { name: "web_search", description: "search", input_schema: {} },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Perform a web search for the query: waste oil heater prices",
+                },
+              ],
+            },
+          ],
+        }),
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      const requestTypeOf = (id: string) =>
+        (
+          result.data.find((i) => i.id === id) as
+            | { requestType?: string }
+            | undefined
+        )?.requestType;
+
+      expect(requestTypeOf(sub.id)).toBe("subagent");
+      expect(requestTypeOf(main.id)).toBe("main");
+    });
+
+    test("getSessions reconstructs the last interaction request, even when the parent is outside the 20-row window", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // 22 consecutive requests so the head/earliest rows fall outside the
+      // 20-row selection window used by getLastInteractionsForSessions.
+      // Use strictly increasing createdAt so the tip is unambiguously the most
+      // recent row (defaultNow() can tie within the same millisecond under load,
+      // which would make the "last main interaction" selection flaky).
+      const baseTime = new Date("2020-01-01T00:00:00.000Z").getTime();
+      const messages: unknown[] = [
+        { role: "user", content: "turn 0 — kick things off with enough text" },
+      ];
+      let tipId = "";
+      for (let i = 0; i < 22; i++) {
+        if (i > 0) {
+          messages.push({ role: "assistant", content: `reply ${i}` });
+          messages.push({ role: "user", content: `turn ${i}` });
+        }
+        const row = await createClaude(agent.id, [...messages], {
+          sessionId: "delta-sessions",
+          createdAt: new Date(baseTime + i * 1000),
+        });
+        tipId = row.id;
+      }
+      const expectedLength = messages.length; // 1 + 21*2 = 43
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "delta-sessions" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(messagesOf(sessions.data[0].lastInteractionRequest)).toHaveLength(
+        expectedLength,
+      );
+      // The reconstructed tip is the most recent interaction.
+      const tip = await InteractionModel.findById(tipId);
+      expect(messagesOf(tip?.request)).toHaveLength(expectedLength);
+    });
+
+    test("search surfaces a session when the term lives only in an early-row delta", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const m0 = {
+        role: "user",
+        content: "please investigate ZEBRAUNICORN now",
+      };
+      await createClaude(agent.id, [m0], { sessionId: "delta-search" });
+      // Later turns never repeat the term; it lives only in the head row's delta.
+      await createClaude(
+        agent.id,
+        [
+          m0,
+          { role: "assistant", content: "sure" },
+          { role: "user", content: "continue" },
+        ],
+        { sessionId: "delta-search" },
+      );
+
+      const found = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "delta-search", search: "ZEBRAUNICORN" },
+      );
+      expect(found.data).toHaveLength(1);
+
+      const missing = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "delta-search", search: "NOSUCHTERM" },
+      );
+      expect(missing.data).toHaveLength(0);
     });
   });
 });

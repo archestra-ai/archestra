@@ -5,7 +5,7 @@ import InteractionModel from "@/models/interaction";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { InsertInteraction, User } from "@/types";
 
 describe("interaction routes", () => {
   let app: FastifyInstanceWithZod;
@@ -193,5 +193,93 @@ describe("interaction routes", () => {
         },
       }),
     ]);
+  });
+
+  test("returns fully reconstructed request for delta-encoded Claude interactions", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+
+    const anthropicResponse = {
+      id: "msg_test",
+      type: "message",
+      container: null,
+      role: "assistant",
+      content: [{ type: "text", text: "ok", citations: [] }],
+      model: "claude-3-5-sonnet",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    };
+    const m0 = { role: "user", content: "first message in the claude session" };
+    const fullMessages = [
+      m0,
+      { role: "assistant", content: "ack" },
+      { role: "user", content: "second message" },
+    ];
+
+    const anthropicReq = (messages: unknown[]) =>
+      ({
+        model: "claude-3-5-sonnet",
+        max_tokens: 1024,
+        messages,
+      }) as unknown as InsertInteraction["request"];
+    const anthropicResp =
+      anthropicResponse as unknown as InsertInteraction["response"];
+
+    await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "route-delta-session",
+      sessionSource: "claude_code",
+      type: "anthropic:messages",
+      request: anthropicReq([m0]),
+      response: anthropicResp,
+    });
+    const tip = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "route-delta-session",
+      sessionSource: "claude_code",
+      type: "anthropic:messages",
+      request: anthropicReq(fullMessages),
+      response: anthropicResp,
+    });
+
+    // Detail endpoint reconstructs the full request and passes response schema.
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${tip.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().request.messages).toEqual(fullMessages);
+
+    // Session-filtered list reconstructs every interaction's request.
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc&sessionId=route-delta-session",
+    });
+    expect(list.statusCode).toBe(200);
+    const tipRow = list
+      .json()
+      .data.find((i: { id: string }) => i.id === tip.id);
+    expect(tipRow.request.messages).toEqual(fullMessages);
+
+    // Sessions endpoint reconstructs the last interaction request.
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().data[0].lastInteractionRequest.messages).toEqual(
+      fullMessages,
+    );
   });
 });

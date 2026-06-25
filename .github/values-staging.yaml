@@ -28,6 +28,7 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
+    ARCHESTRA_BETA: "true"
     ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
     ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED: "true"
     ARCHESTRA_AGENT_HOOKS_ENABLED: "true"

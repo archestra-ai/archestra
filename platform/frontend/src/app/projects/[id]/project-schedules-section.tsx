@@ -51,7 +51,18 @@ import { cn } from "@/lib/utils";
  * the project's session list. Replaces the standalone Scheduled page for
  * project-scoped tasks.
  */
-export function ProjectSchedulesSection({ projectId }: { projectId: string }) {
+export function ProjectSchedulesSection({
+  projectId,
+  /**
+   * Creating a schedule would mint new chats in the project, so an admin
+   * overseeing someone else's project can manage existing schedules but not add
+   * new ones. Defaults to true (owner / shared collaborator).
+   */
+  canCreate = true,
+}: {
+  projectId: string;
+  canCreate?: boolean;
+}) {
   const { data } = useScheduleTriggers({ projectId, refetchInterval: 10000 });
   const [createOpen, setCreateOpen] = useState(false);
   const schedules = data?.data ?? [];
@@ -62,10 +73,16 @@ export function ProjectSchedulesSection({ projectId }: { projectId: string }) {
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Schedules
         </h2>
-        <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          New schedule
-        </Button>
+        {canCreate && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            New schedule
+          </Button>
+        )}
       </div>
 
       {createOpen && (

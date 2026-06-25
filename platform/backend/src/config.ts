@@ -758,12 +758,36 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
 const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
+/**
+ * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
+ * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
+ * always wins (`"true"`/`"false"`); a blank or unset value falls back to
+ * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
+ * ships-dark/preview feature at once while keeping per-feature opt-out intact
+ * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ *
+ * This backs ships-dark *product* features only. It deliberately does NOT touch
+ * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
+ * deployment configuration rather than preview features. Beta only flips the
+ * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
+ * host present to actually run.
+ *
+ * @public — exported for testability
+ */
+export function betaFeatureEnabled(envValue: string | undefined): boolean {
+  if (envValue === undefined || envValue === "") {
+    return process.env.ARCHESTRA_BETA === "true";
+  }
+  return envValue === "true";
+}
+
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
 // off.
-const skillsSandboxRequested =
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
+const skillsSandboxRequested = betaFeatureEnabled(
+  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+);
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
@@ -837,9 +861,12 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
-    environmentsEnabled:
-      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED === "true",
+    skillsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
+    ),
+    environmentsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
+    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -1198,7 +1225,7 @@ const config = {
    */
   hooks: {
     enabled:
-      process.env.ARCHESTRA_AGENT_HOOKS_ENABLED === "true" &&
+      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
       skillsSandboxEnabled,
   },
   /**
@@ -1247,7 +1274,7 @@ const config = {
    * tools. Ships dark: off by default until the feature is ready to surface.
    */
   apps: {
-    enabled: process.env.ARCHESTRA_APPS_ENABLED === "true",
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
   },
   /**
    * Projects + the persistent "My Files" file system on top of the skill
@@ -1257,7 +1284,7 @@ const config = {
    * my_file upload source.
    */
   projects: {
-    enabled: process.env.ARCHESTRA_PROJECTS_ENABLED === "true",
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -1387,6 +1414,12 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
+  /**
+   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
+   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
+   * the new connection page the default Connect destination — can key off it.
+   */
+  beta: process.env.ARCHESTRA_BETA === "true",
   ngrok: {
     // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
     // agent SDK) so the instance is reachable from the Internet for inbound

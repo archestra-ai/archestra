@@ -189,6 +189,7 @@ vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
   useMcpInstallOrchestrator: () => ({
     triggerInstallByCatalogId: vi.fn(),
     triggerReauthByCatalogIdAndServerId: vi.fn(),
+    connectedCatalogIds: new Set<string>(),
   }),
 }));
 

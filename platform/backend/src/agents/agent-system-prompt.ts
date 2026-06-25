@@ -10,6 +10,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamModel, UserModel } from "@/models";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -20,6 +21,11 @@ import type { ToolExposureMode } from "@/types";
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_DENIAL_INSTRUCTION =
   "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
+
+/** @public — canonical preamble for a project's instructions, asserted by the
+ * assembler tests. */
+export const PROJECT_INSTRUCTIONS_PREFIX =
+  "The following are the project's instructions. Treat them as standing guidance for this conversation, second only to the user's direct messages.";
 
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_UI_RESULT_INSTRUCTION =
@@ -48,6 +54,11 @@ export async function buildAgentSystemPrompt(params: {
   user?: { name: string; email: string };
   /** Context injected by SessionStart hooks (chat only), appended last. */
   hookSessionContext?: string;
+  /**
+   * The project's instructions (chat in a project only), injected just after the
+   * agent's own prompt. Empty/absent leaves the prompt unchanged.
+   */
+  projectInstructions?: string;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -57,6 +68,7 @@ export async function buildAgentSystemPrompt(params: {
     agentId,
     user,
     hookSessionContext,
+    projectInstructions,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -87,10 +99,15 @@ export async function buildAgentSystemPrompt(params: {
     ? buildSandboxFallbackInstruction()
     : null;
 
+  const projectInstructionsPrompt = projectInstructions
+    ? `${PROJECT_INSTRUCTIONS_PREFIX}\n\n${projectInstructions}`
+    : null;
+
   return (
     [
       toolLoadingInstructions,
       renderedPrompt,
+      projectInstructionsPrompt,
       skillCatalogPrompt,
       sandboxFallbackInstruction,
       TOOL_DENIAL_INSTRUCTION,
@@ -133,7 +150,7 @@ function buildSandboxFallbackInstruction(): string {
   const runCommand = archestraMcpBranding.getToolName(
     TOOL_RUN_COMMAND_SHORT_NAME,
   );
-  return `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace. When the available tools do not cover a task, you can fall back to it — for example to compute, transform files, or fetch data over the network.`;
+  return `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace. When the available tools do not cover a task, you can fall back to it — for example to compute, transform files, or fetch data over the network. Files the user attaches to the conversation are staged for you under \`${SKILL_SANDBOX_ATTACHMENTS_DIR}/\`; read them from there. Write any files you produce to absolute paths in the workspace.`;
 }
 
 function buildLoadToolsWhenNeededSystemPrompt(): string {

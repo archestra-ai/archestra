@@ -91,6 +91,29 @@ describe("applyPromptCacheBreakpoints", () => {
     ).toBe(messages);
   });
 
+  it("skips breakpoints for an Anthropic-compatible (non-native) endpoint", () => {
+    const messages = [userMessage("a"), userMessage("b")];
+    const result = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages,
+      anthropicNativeEndpoint: false,
+    });
+    expect(result).toBe(messages);
+    expect(anthropicCacheControl(result[0])).toBeUndefined();
+    expect(anthropicCacheControl(result[1])).toBeUndefined();
+  });
+
+  it("still marks breakpoints for native Anthropic (flag true / default)", () => {
+    const messages = [userMessage("a"), userMessage("b")];
+    const marked = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages,
+      anthropicNativeEndpoint: true,
+    });
+    expect(anthropicCacheControl(marked[0])).toEqual(EPHEMERAL);
+    expect(anthropicCacheControl(marked[marked.length - 1])).toEqual(EPHEMERAL);
+  });
+
   it("preserves existing providerOptions while adding cacheControl", () => {
     const message: ModelMessage = {
       role: "user",

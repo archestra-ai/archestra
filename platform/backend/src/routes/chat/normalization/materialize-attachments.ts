@@ -7,6 +7,7 @@ import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
 } from "./extract-inline-attachments";
+import { isInlineableTextDocumentMimeType } from "./prepare-for-provider";
 
 type Attachment = Awaited<
   ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
@@ -31,6 +32,11 @@ export async function materializeAttachments(
   messages: ChatMessage[],
   conversationId: string,
   ingestibleMimeTypes?: Set<string>,
+  // Anthropic `cache_control` is an Anthropic-only request-body feature. Emit it
+  // by default (it is inert metadata for non-Anthropic SDKs), but suppress it
+  // when the call targets an Anthropic-compatible third-party endpoint that
+  // rejects the marker with a turn-0 400. The caller knows the provider/endpoint.
+  applyAnthropicCacheControl = true,
 ): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -57,8 +63,13 @@ export async function materializeAttachments(
     }
     return {
       ...message,
-      parts: message.parts.map((part) =>
-        materializePart(part, byId, ingestibleMimeTypes),
+      parts: message.parts.flatMap((part) =>
+        materializePart(
+          part,
+          byId,
+          ingestibleMimeTypes,
+          applyAnthropicCacheControl,
+        ),
       ),
     };
   });
@@ -81,8 +92,9 @@ function collectRefIds(messages: ChatMessage[]): string[] {
 function materializePart(
   part: ChatMessagePart,
   byId: Map<string, Attachment>,
-  ingestibleMimeTypes?: Set<string>,
-): ChatMessagePart {
+  ingestibleMimeTypes: Set<string> | undefined,
+  applyAnthropicCacheControl: boolean,
+): ChatMessagePart | ChatMessagePart[] {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
   }
@@ -94,7 +106,9 @@ function materializePart(
     // to prompt-cache the file across turns. Without this marker, the same
     // bytes get re-billed at full input price on every turn until reload.
     if (part.url.startsWith("data:")) {
-      return withAnthropicCacheControl(part);
+      return applyAnthropicCacheControl
+        ? withAnthropicCacheControl(part)
+        : { ...part };
     }
     return { ...part };
   }
@@ -126,24 +140,72 @@ function materializePart(
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
   const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
+  // Mark the part for Anthropic ephemeral prompt caching when the endpoint
+  // accepts it. The AI SDK reads this via the file UI part's provider metadata
+  // (`providerMetadata`); convertToModelMessages translates it into the
+  // provider's cache_control directive. Suppressed for Anthropic-compatible
+  // third-party endpoints that reject the marker; the bytes still inline.
+  const filePart: ChatMessagePart = applyAnthropicCacheControl
+    ? {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+        providerMetadata: {
+          ...(typeof part.providerMetadata === "object" &&
+          part.providerMetadata !== null
+            ? (part.providerMetadata as Record<string, unknown>)
+            : {}),
+          anthropic: {
+            cacheControl: { type: "ephemeral" },
+          },
+        },
+      }
+    : {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+      };
+
+  // Dual availability: a text-document that is shown inline is ALSO auto-staged
+  // into the sandbox (same byte limit), so the model can both read it in context
+  // and process it with run_command. Point it there alongside the inline copy.
+  const pointer = dualAvailabilityPointer(attachment);
+  return pointer ? [filePart, pointer] : filePart;
+}
+
+/**
+ * When the skill sandbox is enabled and a text-document attachment is within the
+ * auto-staging size limit, it has been staged under
+ * {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Return a text part telling the model the
+ * inlined file is ALSO available there (distinct from
+ * {@link referenceSandboxFilePart}, which replaces an attachment the model can't
+ * see inline). Returns null when the sandbox is off, the file is over the limit
+ * (not staged), or the mime type is not an inlineable text-document.
+ *
+ * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
+ * filename from breaking out of this platform-generated notice.
+ */
+function dualAvailabilityPointer(
+  attachment: Attachment,
+): ChatMessagePart | null {
+  if (
+    !config.skillsSandbox.enabled ||
+    !isInlineableTextDocumentMimeType(attachment.mimeType)
+  ) {
+    return null;
+  }
+  if (
+    attachment.fileData.byteLength > config.skillsSandbox.artifactBytesLimit
+  ) {
+    return null;
+  }
+
+  const name = JSON.stringify(attachment.originalName ?? "attachment");
   return {
-    ...part,
-    url: dataUrl,
-    mediaType: attachment.mimeType,
-    filename: attachment.originalName,
-    // Mark the part for Anthropic ephemeral prompt caching. The AI SDK reads
-    // this via the file UI part's provider metadata (`providerMetadata`);
-    // convertToModelMessages translates it into the provider's cache_control
-    // directive.
-    providerMetadata: {
-      ...(typeof part.providerMetadata === "object" &&
-      part.providerMetadata !== null
-        ? (part.providerMetadata as Record<string, unknown>)
-        : {}),
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-    },
+    type: "text",
+    text: `[The attached file ${name} is also available in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then process it with run_command.]`,
   };
 }
 

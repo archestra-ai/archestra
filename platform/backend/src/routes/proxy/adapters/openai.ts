@@ -384,7 +384,11 @@ export class OpenAIRequestAdapter
 
   async applyToonCompression(model: string): Promise<ToolCompressionStats> {
     const { messages: compressedMessages, stats } =
-      await convertToolResultsToToon(this.request.messages, model);
+      await convertToolResultsToToon(
+        this.request.messages,
+        model,
+        this.provider,
+      );
     this.request = {
       ...this.request,
       messages: compressedMessages,
@@ -1165,6 +1169,18 @@ export class OpenAIStreamAdapter
         },
       ],
     };
+    // Carry the usage the provider sent in its trailing chunk into the synthesized final chunk;
+    // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
+    // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
+    // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
+    if (this.state.usage !== null) {
+      finalChunk.usage = {
+        prompt_tokens: this.state.usage.inputTokens,
+        completion_tokens: this.state.usage.outputTokens,
+        total_tokens:
+          this.state.usage.inputTokens + this.state.usage.outputTokens,
+      };
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
@@ -1219,11 +1235,12 @@ export class OpenAIStreamAdapter
 export async function convertToolResultsToToon(
   messages: OpenAiMessages,
   model: string,
+  provider: SupportedProvider,
 ): Promise<{
   messages: OpenAiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("openai");
+  const tokenizer = getTokenizer(provider);
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -1234,7 +1251,7 @@ export async function convertToolResultsToToon(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
-          provider: "openai",
+          provider,
         },
         "convertToolResultsToToon: tool message found",
       );
@@ -1270,7 +1287,7 @@ export async function convertToolResultsToToon(
                 tokensBefore,
                 tokensAfter,
                 toonPreview: compressed.substring(0, 150),
-                provider: "openai",
+                provider,
               },
               "convertToolResultsToToon: compressed",
             );
@@ -1279,7 +1296,7 @@ export async function convertToolResultsToToon(
                 toolCallId: message.tool_call_id,
                 before: noncompressed,
                 after: compressed,
-                provider: "openai",
+                provider,
                 supposedToBeJson: parsed,
               },
               "convertToolResultsToToon: before/after",
@@ -1298,7 +1315,7 @@ export async function convertToolResultsToToon(
               toolCallId: message.tool_call_id,
               tokensBefore,
               tokensAfter,
-              provider: "openai",
+              provider,
             },
             "Skipping TOON compression - compressed output has more tokens",
           );
@@ -1334,7 +1351,7 @@ export async function convertToolResultsToToon(
     toonCostSavings = await ModelModel.calculateCostSavings(
       model,
       tokensSaved,
-      "openai",
+      provider,
     );
   }
 

@@ -819,6 +819,10 @@ The following environment variables can be used to configure Archestra Platform.
   - `permissive`: Tools are allowed, unless a specific policy is set for them.
   - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
 
+- **`ARCHESTRA_BETA`** - Master switch for ships-dark preview features. When `true`, every `ARCHESTRA_*_ENABLED` product-feature gate below defaults on at once — Agent Skills, Agent Environments, agent hooks, the code runtime, MCP Apps, and Projects. An explicit per-flag value always wins, so `ARCHESTRA_BETA=true` with `ARCHESTRA_APPS_ENABLED=false` keeps Apps off. Beta only flips intent — the sandbox and agent hooks still need a Dagger runner host to run. Does not touch credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), enterprise-licensed features, or always-on defaults (DCR, chat secret scanning, knowledge-base hybrid search).
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
   - Default: `false`
   - Values: `true`, `false`

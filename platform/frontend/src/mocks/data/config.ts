@@ -17,6 +17,7 @@ export function makeConfig(
       ...overrides.enterpriseFeatures,
     },
     features: {
+      betaEnabled: false,
       orchestratorK8sRuntime: false,
       sandbox: false,
       agentSkillsEnabled: false,

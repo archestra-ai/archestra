@@ -24,6 +24,7 @@ import {
   NoOutputGeneratedError,
   NoSuchToolError,
   RetryError,
+  UnsupportedFunctionalityError,
 } from "ai";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
@@ -1592,6 +1593,28 @@ export function mapProviderError(
       "NoOutputGeneratedError",
       {},
     );
+  }
+
+  // Handle UnsupportedFunctionalityError — a provider SDK rejected an input it
+  // can't represent (e.g. a text-document file part on an OpenAI-compatible
+  // provider). Surface the specific functionality so the user sees what was
+  // unsupported instead of the bare InvalidRequest message; sanitization strips
+  // originalError, so the detail must live in the user-facing message.
+  if (UnsupportedFunctionalityError.isInstance(error)) {
+    const code = ChatErrorCode.InvalidRequest;
+    const message = `This model does not support the attached content: ${error.functionality}`;
+    return {
+      code,
+      message,
+      isRetryable: RetryableErrorCodes.has(code),
+      originalError: {
+        provider,
+        status: undefined,
+        message,
+        type: "UnsupportedFunctionalityError",
+        raw: safeSerialize({ functionality: error.functionality }),
+      },
+    };
   }
 
   // Get provider-specific parser and mapper

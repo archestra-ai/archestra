@@ -56,6 +56,9 @@ pub enum ClientError {
     Api(ArchestraApiError),
     Contract(ContractError),
     Config(String),
+    /// A terminal readiness failure that retrying cannot clear (the sandbox is disabled/unreachable).
+    /// Distinct from `Config` so callers fast-fail instead of polling out the readiness deadline.
+    SandboxFatal(String),
 }
 
 impl std::fmt::Display for ClientError {
@@ -64,6 +67,7 @@ impl std::fmt::Display for ClientError {
             ClientError::Api(e) => write!(f, "{e}"),
             ClientError::Contract(e) => write!(f, "{e}"),
             ClientError::Config(s) => write!(f, "config error: {s}"),
+            ClientError::SandboxFatal(s) => write!(f, "{s}"),
         }
     }
 }
@@ -292,12 +296,27 @@ impl EvalClient {
         loop {
             match self.request(Method::GET, "ready", None, None).await {
                 Ok(body) => {
-                    if let Some(obj) = body.as_object()
-                        && obj.get("database").and_then(|v| v.as_str()) == Some("connected")
-                    {
-                        return Ok(body);
+                    let db_connected =
+                        body.get("database").and_then(|v| v.as_str()) == Some("connected");
+                    if db_connected {
+                        match sandbox_readiness(&body) {
+                            SandboxReadiness::Ready => return Ok(body),
+                            // The sandbox is terminally broken (disabled/unreachable). Nothing runs a
+                            // sandbox command during this poll, so the boot status is frozen and will
+                            // not recover — fail now instead of waiting out the deadline. A dedicated
+                            // variant (not Config) so the caller's retry loop treats this as terminal.
+                            SandboxReadiness::Fatal(reason) => {
+                                return Err(ClientError::SandboxFatal(format!(
+                                    "{reason} — see backend log"
+                                )));
+                            }
+                            SandboxReadiness::Pending => {
+                                last = Some(format!("db connected, sandbox not ready yet: {body}"));
+                            }
+                        }
+                    } else {
+                        last = Some(format!("reachable but not connected: {body}"));
                     }
-                    last = Some(format!("reachable but not connected: {body}"));
                 }
                 Err(e) if (400..500).contains(&e.status) => {
                     return Err(ClientError::Api(e));
@@ -1158,9 +1177,72 @@ fn build_chat_body(
     })
 }
 
+/// What one `/ready` poll says about the code-execution sandbox.
+#[derive(Debug, PartialEq, Eq)]
+enum SandboxReadiness {
+    /// Still warming (or an older backend that predates the field) — keep polling.
+    Pending,
+    /// Usable now.
+    Ready,
+    /// Terminally unusable; the reason is carried for the error message.
+    Fatal(String),
+}
+
+/// Decide sandbox readiness from a `/ready` body. `ready` → Ready; `initializing` or an absent field
+/// → Pending; `disabled`/`unreachable` (or any unknown value) → Fatal, preferring `sandboxReason`.
+fn sandbox_readiness(body: &JsonValue) -> SandboxReadiness {
+    match body.get("sandbox").and_then(|v| v.as_str()) {
+        Some("ready") => SandboxReadiness::Ready,
+        Some("initializing") => SandboxReadiness::Pending,
+        // No field: a backend that predates it — e.g. a deployed image lagging this runner (the bench
+        // image layers a freshly-built runner over the live platform image). A current backend always
+        // emits the field, so absence can only mean "can't report it"; fall back to DB-only readiness
+        // and proceed rather than poll out the deadline.
+        None => SandboxReadiness::Ready,
+        Some(other) => {
+            let reason = body
+                .get("sandboxReason")
+                .and_then(|v| v.as_str())
+                .unwrap_or(other);
+            SandboxReadiness::Fatal(format!("sandbox {reason}"))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_sandbox_readiness_classifies_each_state() {
+        use serde_json::json;
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "ready"})),
+            SandboxReadiness::Ready
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "initializing"})),
+            SandboxReadiness::Pending
+        );
+        // absent field (older/lagging backend) falls back to DB-only readiness: proceed, don't gate.
+        assert_eq!(
+            sandbox_readiness(&json!({"database": "connected"})),
+            SandboxReadiness::Ready
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "disabled", "sandboxReason": "disabled"})),
+            SandboxReadiness::Fatal("sandbox disabled".to_string())
+        );
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "unreachable", "sandboxReason": "error"})),
+            SandboxReadiness::Fatal("sandbox error".to_string())
+        );
+        // unreachable without a reason falls back to the status value itself.
+        assert_eq!(
+            sandbox_readiness(&json!({"sandbox": "unreachable"})),
+            SandboxReadiness::Fatal("sandbox unreachable".to_string())
+        );
+    }
 
     #[test]
     fn test_chat_body_pins_temperature() {

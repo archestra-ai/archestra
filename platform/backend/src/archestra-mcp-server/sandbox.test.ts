@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
   ADMIN_ROLE_NAME,
+  PROJECT_INSTRUCTIONS_FILENAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -1467,6 +1468,33 @@ describe("project file scope (save_result, scoped search/my_file)", () => {
   }
 
   const SAVE_RESULT_FULL_NAME = "archestra__save_result";
+
+  test("delete_file refuses the project instructions file", async () => {
+    const { project, ctx } = await makeProjectChatCtx("instr-del");
+    await fileStore.writeProjectInstructions({
+      organizationId,
+      userId,
+      projectId: project.id,
+      content: "keep me",
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { filename: PROJECT_INSTRUCTIONS_FILENAME },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("can't be deleted");
+
+    // still present
+    expect(
+      await FileModel.findByProjectAndName({
+        organizationId,
+        projectId: project.id,
+        filename: PROJECT_INSTRUCTIONS_FILENAME,
+      }),
+    ).not.toBeNull();
+  });
 
   test("save_result persists inline content to the PFS root without a project", async () => {
     const ctx = await makePlainChatCtx();

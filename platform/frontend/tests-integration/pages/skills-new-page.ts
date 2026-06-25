@@ -19,7 +19,7 @@ export class SkillsNewPage {
   }
 
   async goto() {
-    await this.page.goto("/agents/skills/new");
+    await this.page.goto("/skills/new");
   }
 
   // A catalog search result row — the row is a button whose aria-label is

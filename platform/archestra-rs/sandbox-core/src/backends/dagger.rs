@@ -1061,14 +1061,18 @@ fn from_sdk(err: DaggerError) -> SandboxError {
 }
 
 /// the kernel rejects an overlay mount whose `lowerdir=a:b:c:...` option string
-/// outgrows its single-page limit; dagger reports it as a domain error naming the
-/// failed rootfs overlay mount. recognise that one failure — as narrowly as the
-/// stale-attachables classifier — so the replay backstop can relabel it.
+/// outgrows its single-page limit; dagger reports it as a domain error on the
+/// rootfs mount whose data carries the oversized `lowerdir=` and fails with
+/// `ENOENT`. key on that full signature (not a bare "overlay" mention) so an
+/// unrelated, retryable overlay mount failure is never made terminal — a too-
+/// narrow match just degrades to the previous engine-unreachable behaviour.
 fn is_overlay_mount_overflow(err: &DaggerError) -> bool {
     matches!(
         err,
         DaggerError::Query(GraphQLError::DomainError { message, .. })
-            if message.contains("mount rootfs") && message.contains("overlay")
+            if message.contains("mount rootfs")
+                && message.contains("lowerdir=")
+                && message.contains("no such file or directory")
     )
 }
 
@@ -1738,6 +1742,37 @@ mod tests {
         assert!(matches!(
             from_sdk(err),
             SandboxError::EngineUnreachable { .. }
+        ));
+    }
+
+    #[test]
+    fn from_sdk_does_not_relabel_a_generic_overlay_mount_failure() {
+        // a rootfs overlay mount that fails for a reason other than the oversized
+        // lowerdir (no ENOENT / no lowerdir data) is a different, possibly
+        // retryable failure and must stay engine-unreachable, not history-limit.
+        let err = domain_error(
+            "mount rootfs: mount source: \"overlay\", target: \"/tmp/rootfs9\", \
+             fstype: overlay, err: operation not permitted",
+            None,
+        );
+        assert!(matches!(
+            from_sdk(err),
+            SandboxError::EngineUnreachable { .. }
+        ));
+    }
+
+    #[test]
+    fn from_sdk_still_classifies_stale_attachables_after_the_overlay_check() {
+        let err = domain_error(
+            "waiting for client session attachables: context deadline exceeded",
+            None,
+        );
+        assert!(matches!(
+            from_sdk(err),
+            SandboxError::EngineUnreachable {
+                fault: EngineFault::StaleAttachables,
+                ..
+            }
         ));
     }
 }

@@ -1,4 +1,5 @@
 import ConversationModel from "@/models/conversation";
+import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
@@ -6,8 +7,8 @@ import { projectService } from "@/services/project";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
-  deleteEmptyRunConversation,
   persistRunConversationMessages,
+  recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
 
@@ -255,7 +256,7 @@ test("persistRunConversationMessages writes [user, assistant] from the executor 
   );
 });
 
-test("deleteEmptyRunConversation removes an empty conversation and unlinks the run; keeps a non-empty one", async ({
+test("recordRunConversationError records a failed run's error on its kept conversation", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -279,58 +280,32 @@ test("deleteEmptyRunConversation removes an empty conversation and unlinks the r
     agentId: agent.id,
     projectId: project.id,
   });
-
-  // Empty conversation (a failed run): deleted + run unlinked.
-  const emptyRun = await makeScheduleTriggerRun(trigger.id, {
+  const run = await makeScheduleTriggerRun(trigger.id, {
     organizationId: org.id,
     runKind: "due",
   });
-  const emptyConv = await createAndLinkRunConversation({
-    run: emptyRun,
+  const conversation = await createAndLinkRunConversation({
+    run,
     trigger,
     ownerUserId: actor.id,
     organizationId: org.id,
   });
-  await deleteEmptyRunConversation({
-    conversation: emptyConv,
-    runId: emptyRun.id,
-    organizationId: org.id,
+
+  await recordRunConversationError({
+    conversationId: conversation.id,
+    message: "Connection error.",
   });
+
+  // The conversation is KEPT, with the error recorded as a chat error.
   expect(
     await ConversationModel.findByIdInOrganization({
-      id: emptyConv.id,
+      id: conversation.id,
       organizationId: org.id,
     }),
-  ).toBeNull();
-  expect(
-    (await ScheduleTriggerRunModel.findById(emptyRun.id))?.chatConversationId,
-  ).toBeNull();
-
-  // A conversation with messages is never destroyed.
-  const keptRun = await makeScheduleTriggerRun(trigger.id, {
-    organizationId: org.id,
-    runKind: "due",
-  });
-  const keptConv = await createAndLinkRunConversation({
-    run: keptRun,
-    trigger,
-    ownerUserId: actor.id,
-    organizationId: org.id,
-  });
-  await MessageModel.bulkCreate([
-    {
-      conversationId: keptConv.id,
-      role: "user",
-      content: { role: "user", parts: [{ type: "text", text: "hi" }] },
-    },
-  ]);
-  await deleteEmptyRunConversation({
-    conversation: keptConv,
-    runId: keptRun.id,
-    organizationId: org.id,
-  });
-  expect(await MessageModel.findByConversation(keptConv.id)).toHaveLength(1);
-  expect(
-    (await ScheduleTriggerRunModel.findById(keptRun.id))?.chatConversationId,
-  ).toBe(keptConv.id);
+  ).not.toBeNull();
+  const errors = await ConversationChatErrorModel.findByConversation(
+    conversation.id,
+  );
+  expect(errors).toHaveLength(1);
+  expect(errors[0]?.error.message).toBe("Connection error.");
 });

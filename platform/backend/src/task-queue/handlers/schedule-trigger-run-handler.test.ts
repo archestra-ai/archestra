@@ -55,13 +55,13 @@ const mockCreateAndLinkRunConversation = vi.hoisted(() => vi.fn());
 const mockPersistRunConversationMessages = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
-const mockDeleteEmptyRunConversation = vi.hoisted(() =>
+const mockRecordRunConversationError = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
 vi.mock("@/services/scheduled-run-conversation", () => ({
   createAndLinkRunConversation: mockCreateAndLinkRunConversation,
   persistRunConversationMessages: mockPersistRunConversationMessages,
-  deleteEmptyRunConversation: mockDeleteEmptyRunConversation,
+  recordRunConversationError: mockRecordRunConversationError,
 }));
 
 vi.mock("@/logging", () => ({
@@ -132,8 +132,8 @@ describe("handleScheduleTriggerRunExecution", () => {
     mockCreateAndLinkRunConversation.mockReset();
     mockPersistRunConversationMessages.mockReset();
     mockPersistRunConversationMessages.mockResolvedValue(undefined);
-    mockDeleteEmptyRunConversation.mockReset();
-    mockDeleteEmptyRunConversation.mockResolvedValue(undefined);
+    mockRecordRunConversationError.mockReset();
+    mockRecordRunConversationError.mockResolvedValue(undefined);
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "msg-1",
       text: "done",
@@ -348,12 +348,12 @@ describe("handleScheduleTriggerRunExecution", () => {
       error: "LLM provider down",
     });
     expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
-    // The eagerly-created (now empty) conversation is dropped + the run unlinked.
-    expect(mockDeleteEmptyRunConversation).toHaveBeenCalledWith(
+    // The failed run keeps its conversation; the error is recorded as a chat
+    // error so the run's chat shows an inline error card.
+    expect(mockRecordRunConversationError).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversation: expect.objectContaining({ id: "conv-1" }),
-        runId: "run-1",
-        organizationId: "org-1",
+        conversationId: "conv-1",
+        message: "LLM provider down",
       }),
     );
   });

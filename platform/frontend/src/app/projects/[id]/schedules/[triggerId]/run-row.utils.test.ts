@@ -15,9 +15,9 @@ describe("run-row.utils", () => {
       );
     });
 
-    it('returns "show-error" for a failed run even if a conversation exists', () => {
+    it('returns "open-chat" for a failed run WITH a conversation (opens its chat, which shows the error card)', () => {
       expect(runRowKind({ status: "failed", chatConversationId: "c1" })).toBe(
-        "show-error",
+        "open-chat",
       );
     });
 
@@ -45,7 +45,17 @@ describe("run-row.utils", () => {
       ).toBe("/chat/c1?scheduleTriggerId=t1&scheduleRunId=r1");
     });
 
-    it("returns null for a failed run", () => {
+    it("returns the chat URL for a failed run WITH a conversation", () => {
+      expect(
+        runChatHref({
+          projectId: "p1",
+          triggerId: "t1",
+          run: { id: "r1", status: "failed", chatConversationId: "c1" },
+        }),
+      ).toBe("/chat/c1?scheduleTriggerId=t1&scheduleRunId=r1");
+    });
+
+    it("returns null for a failed run without a conversation", () => {
       expect(
         runChatHref({
           projectId: "p1",

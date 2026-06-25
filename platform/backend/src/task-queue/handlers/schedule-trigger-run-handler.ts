@@ -14,8 +14,8 @@ import {
 import { metrics } from "@/observability";
 import {
   createAndLinkRunConversation,
-  deleteEmptyRunConversation,
   persistRunConversationMessages,
+  recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import type { Conversation } from "@/types";
 
@@ -163,14 +163,13 @@ export async function handleScheduleTriggerRunExecution(
       );
     }
   } else if (status === "failed" && runConversation) {
-    // A failed project-scoped run created its conversation up front but never
-    // got a transcript (persist is success-only), so it's an empty blank chat.
-    // Drop it and unlink the run. Best-effort: cleanup must not fail the run.
+    // A failed project-scoped run keeps its conversation; record the error as a
+    // chat error so the run's chat shows an inline error card (rather than a
+    // blank transcript). Best-effort: this must not fail the already-failed run.
     try {
-      await deleteEmptyRunConversation({
-        conversation: runConversation,
-        runId: run.id,
-        organizationId: trigger.organizationId,
+      await recordRunConversationError({
+        conversationId: runConversation.id,
+        message: errorMessage ?? "The scheduled run failed.",
       });
     } catch (error) {
       logger.warn(
@@ -179,7 +178,7 @@ export async function handleScheduleTriggerRunExecution(
           triggerId: run.triggerId,
           error: error instanceof Error ? error.message : String(error),
         },
-        "Failed to delete empty scheduled run conversation",
+        "Failed to record scheduled run conversation error",
       );
     }
   }

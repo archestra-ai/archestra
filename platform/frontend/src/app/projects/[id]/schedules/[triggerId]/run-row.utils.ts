@@ -1,16 +1,22 @@
 export type RunRowKind = "open-chat" | "show-error" | "running";
 
-// success WITH a conversation → "open-chat"; failed → "show-error";
-// anything else (running, or success without a conversation yet) → "running".
+// A COMPLETED run with a chat conversation → "open-chat": a succeeded run shows
+// its transcript, a failed run shows an inline error card in that same chat
+// (failed runs keep their conversation). A failed run WITHOUT a conversation
+// (e.g. it never executed) → "show-error" (inline in the runs list). Anything
+// in-progress, or a success without a conversation yet → "running".
 export function runRowKind(run: {
   status: string;
   chatConversationId: string | null;
 }): RunRowKind {
+  if (run.status !== "success" && run.status !== "failed") {
+    return "running";
+  }
+  if (run.chatConversationId) {
+    return "open-chat";
+  }
   if (run.status === "failed") {
     return "show-error";
-  }
-  if (run.status === "success" && run.chatConversationId) {
-    return "open-chat";
   }
   return "running";
 }

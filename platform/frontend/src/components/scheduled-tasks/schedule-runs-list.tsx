@@ -20,10 +20,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * A schedule's runs, reused by the project runs page and the chat right-side
- * Runs panel. A succeeded run links to its chat; a failed run expands an inline
- * error (its conversation is deleted on failure, so there is no chat to open); a
- * running run is inert. Polls while any run is active; `currentRunId` highlights
- * the run currently in view.
+ * Runs panel. A completed run (succeeded OR failed) links to its chat — a failed
+ * run's chat shows the error as an inline error card. A failed run that never
+ * produced a conversation expands an inline error here instead; a running run is
+ * inert. Polls while any run is active; `currentRunId` highlights the current run.
  */
 export function ScheduleRunsList({
   triggerId,

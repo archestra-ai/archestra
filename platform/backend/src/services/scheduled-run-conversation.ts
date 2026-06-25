@@ -1,7 +1,12 @@
-import { DynamicInteraction, type PartialUIMessage } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  DynamicInteraction,
+  type PartialUIMessage,
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import {
   AgentModel,
+  ConversationChatErrorModel,
   ConversationModel,
   InteractionModel,
   MessageModel,
@@ -155,31 +160,22 @@ export async function persistRunConversationMessages(params: {
 }
 
 /**
- * Drop a failed run's eagerly-created conversation when it has no messages. A
- * run's transcript is persisted only on success, so a failed run's conversation
- * is always empty — an orphaned blank chat. Delete it and unlink the run so it
- * never dangles at a missing row. Guarded on emptiness so a conversation that
- * somehow has messages is never destroyed.
+ * Record a failed run's error on its (kept) conversation as a chat error, so the
+ * run's chat renders it as an inline error card — a failed run opens a normal
+ * chat showing what went wrong, rather than a blank transcript.
  */
-export async function deleteEmptyRunConversation(params: {
-  conversation: Conversation;
-  runId: string;
-  organizationId: string;
+export async function recordRunConversationError(params: {
+  conversationId: string;
+  message: string;
 }): Promise<void> {
-  const { conversation, runId, organizationId } = params;
-
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
-    return;
-  }
-
-  // Unlink first so the run never points at a row that's about to vanish.
-  await ScheduleTriggerRunModel.clearChatConversationId(runId);
-  await ConversationModel.delete(
-    conversation.id,
-    conversation.userId,
-    organizationId,
-  );
+  await ConversationChatErrorModel.create({
+    conversationId: params.conversationId,
+    error: {
+      code: ChatErrorCode.Unknown,
+      message: params.message,
+      isRetryable: false,
+    },
+  });
 }
 
 /**

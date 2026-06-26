@@ -3,7 +3,6 @@
 import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import {
   CalendarClock,
-  ChevronLeft,
   Download,
   Eye,
   FileText,
@@ -20,6 +19,7 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
+import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
@@ -54,6 +54,7 @@ import {
   useProjectFiles,
 } from "@/lib/projects/projects.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
+import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ProjectDeleteConfirmDialog } from "../project-delete-confirm-dialog";
 
@@ -338,7 +339,8 @@ function ProjectFilesSidebar({
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<"list" | "detail">("list");
+  // Opening a file shows it below the list (split); `expanded` fills the panel.
+  const [expanded, setExpanded] = useState(false);
 
   // The instructions file is surfaced only as the pinned entry, so keep it out
   // of the ordinary list (filtered from `items` below).
@@ -354,15 +356,20 @@ function ProjectFilesSidebar({
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
+  const previewing = selected !== null || instructionsSelected;
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
 
   const openFile = (id: string) => {
     setSelectedId(id);
-    setView("detail");
+    setExpanded(false);
   };
-  const backToList = () => setView("list");
+  const collapse = () => setExpanded(false);
+  const deselect = () => {
+    setSelectedId(null);
+    setExpanded(false);
+  };
 
   // If the open file disappears (e.g. deleted elsewhere), fall back to the list.
   const selectedMissing =
@@ -370,7 +377,7 @@ function ProjectFilesSidebar({
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
-      setView("list");
+      setExpanded(false);
     }
   }, [selectedMissing]);
 
@@ -405,12 +412,18 @@ function ProjectFilesSidebar({
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
-            {/* Kept mounted (hidden in detail) so an in-progress multi-selection
-                survives drilling into a file and coming back. */}
+            {/* The list fills the panel when nothing is open, is capped above
+                the preview in the split, and is hidden when expanded. Kept
+                mounted so an in-progress multi-selection survives previewing. */}
             <div
-              className={
-                view === "list" ? "flex min-h-0 flex-1 flex-col" : "hidden"
-              }
+              className={cn(
+                "flex flex-col",
+                previewing
+                  ? expanded
+                    ? "hidden"
+                    : "max-h-[45%] shrink-0 overflow-hidden border-b"
+                  : "min-h-0 flex-1",
+              )}
             >
               <SelectableFileList<FileListItem>
                 sections={[{ items }]}
@@ -424,67 +437,54 @@ function ProjectFilesSidebar({
                 }
               />
             </div>
-            {view === "detail" && (
-              <>
-                <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
-                    onClick={backToList}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Files
-                  </Button>
-                  <span className="shrink-0 text-muted-foreground">·</span>
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm font-medium"
-                    title={detailName}
-                  >
-                    {detailName}
-                  </span>
-                  {selected && !instructionsSelected && (
-                    <div className="flex shrink-0 items-center">
-                      {selected.contentUrl && (
-                        <a
-                          href={selected.contentUrl}
-                          download={selected.name}
-                          title={`Download ${selected.name}`}
-                          className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          <Download className="h-4 w-4" />
-                          <span className="sr-only">
-                            Download {selected.name}
-                          </span>
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          requestDelete([selected], (failedIds) => {
-                            if (!failedIds.includes(selected.id)) backToList();
-                          })
-                        }
-                        title={`Delete ${selected.name}`}
-                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+            {previewing && (
+              <FileDetailHeader
+                title={detailName}
+                expanded={expanded}
+                onExpand={() => setExpanded(true)}
+                onCollapse={collapse}
+              >
+                {selected && !instructionsSelected && (
+                  <div className="flex shrink-0 items-center">
+                    {selected.contentUrl && (
+                      <a
+                        href={selected.contentUrl}
+                        download={selected.name}
+                        title={`Download ${selected.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Delete {selected.name}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {instructionsSelected ? (
-                  <ProjectInstructionsPanel
-                    projectId={projectId}
-                    isOwner={canManageProject}
-                    onClose={backToList}
-                  />
-                ) : selected ? (
-                  <FilePreview file={selected} onClose={backToList} />
-                ) : null}
-              </>
+                        <Download className="h-4 w-4" />
+                        <span className="sr-only">
+                          Download {selected.name}
+                        </span>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        requestDelete([selected], (failedIds) => {
+                          if (!failedIds.includes(selected.id)) deselect();
+                        })
+                      }
+                      title={`Delete ${selected.name}`}
+                      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Delete {selected.name}</span>
+                    </button>
+                  </div>
+                )}
+              </FileDetailHeader>
             )}
+            {previewing && instructionsSelected ? (
+              <ProjectInstructionsPanel
+                projectId={projectId}
+                isOwner={canManageProject}
+                onClose={deselect}
+              />
+            ) : previewing && selected ? (
+              <FilePreview file={selected} onClose={deselect} />
+            ) : null}
           </div>
         </div>
       </Tabs>

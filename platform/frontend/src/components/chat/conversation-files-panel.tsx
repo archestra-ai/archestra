@@ -1,16 +1,10 @@
 "use client";
 
 import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
-import {
-  Check,
-  ChevronLeft,
-  Copy,
-  Download,
-  File as FileIcon,
-  Trash2,
-} from "lucide-react";
+import { Check, Copy, Download, File as FileIcon, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import { FilePreview } from "@/components/chat/file-preview";
 import {
   INSTRUCTIONS_SELECTION,
@@ -18,7 +12,6 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
-import { Button } from "@/components/ui/button";
 import {
   useBulkDeleteConversationFiles,
   useConversationFiles,
@@ -66,14 +59,12 @@ export function ConversationFilesPanel({
   );
   const hasArtifact = !!artifact && artifact.trim().length > 0;
 
-  // Default to previewing the artifact when one exists as the panel opens, in
-  // the full-height detail view.
+  // Default to previewing the artifact when one exists as the panel opens.
+  // Opening a file shows it below the list (split); `expanded` fills the panel.
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     hasArtifact ? "artifact" : null,
   );
-  const [view, setView] = useState<"list" | "detail">(() =>
-    hasArtifact ? "detail" : "list",
-  );
+  const [expanded, setExpanded] = useState(false);
 
   // This chat's own outputs and the project's files are one group ("Results");
   // only attachments stand apart.
@@ -90,11 +81,19 @@ export function ConversationFilesPanel({
   const instructionsSelectedRef = useRef(false);
   instructionsSelectedRef.current = instructionsSelected;
 
+  // Something is open (file, artifact, or the pinned instructions) → show the
+  // preview. Split by default; `expanded` hides the list and fills the panel.
+  const previewing = selected !== null || instructionsSelected;
+
   const openFile = (id: string) => {
     setSelectedId(id);
-    setView("detail");
+    setExpanded(false);
   };
-  const backToList = () => setView("list");
+  const collapse = () => setExpanded(false);
+  const deselect = () => {
+    setSelectedId(null);
+    setExpanded(false);
+  };
 
   // download_file outputs only (the artifact has its own default handling).
   const generatedFileIds = generated
@@ -112,14 +111,12 @@ export function ConversationFilesPanel({
   useEffect(() => {
     if (selectedMissing) {
       setSelectedId(null);
-      setView("list");
+      setExpanded(false);
     }
   }, [selectedMissing]);
 
   // Keep a valid preview target when nothing is selected (artifact first, then
-  // the newest generated file). This does NOT force the detail view, so going
-  // back to the list — or deleting the open file — doesn't yank the user back
-  // into a preview.
+  // the newest generated file). Opens in the split (never forces `expanded`).
   useEffect(() => {
     if (selectedId !== null) return;
     if (hasArtifact) {
@@ -130,11 +127,10 @@ export function ConversationFilesPanel({
   }, [selectedId, hasArtifact, newestGeneratedId]);
 
   // Follow the latest produced output: when the artifact is (re)written switch
-  // back to it, when a download_file output is created switch to that file —
-  // popping the full-height detail view to the newest result. The first loaded
-  // set is captured as a baseline so existing files don't hijack the view when
-  // the panel opens (the initial artifact is handled by the state initializer;
-  // a no-artifact chat opens its newest file here).
+  // back to it, when a download_file output is created switch to that file. It
+  // previews in the split (collapsing any expanded view) rather than taking
+  // over the panel. The first loaded set is captured as a baseline so existing
+  // files don't hijack the view when the panel opens.
   const prevArtifactRef = useRef<string | null | undefined>(undefined);
   const seenGeneratedRef = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -145,10 +141,7 @@ export function ConversationFilesPanel({
     seenGeneratedRef.current = new Set(ids);
     prevArtifactRef.current = artifact;
     if (prevGenerated === null) {
-      if (!hasArtifact && ids.length > 0) {
-        setSelectedId(ids[ids.length - 1]);
-        setView("detail");
-      }
+      if (!hasArtifact && ids.length > 0) setSelectedId(ids[ids.length - 1]);
       return; // baseline only
     }
     // Don't yank the view away from the instructions editor (and its unsaved
@@ -157,19 +150,19 @@ export function ConversationFilesPanel({
 
     if (hasArtifact && artifact !== prevArtifact) {
       setSelectedId("artifact");
-      setView("detail");
+      setExpanded(false);
       return;
     }
     const fresh = ids.filter((id) => !prevGenerated.has(id));
     if (fresh.length > 0) {
       setSelectedId(fresh[fresh.length - 1]);
-      setView("detail");
+      setExpanded(false);
     }
   }, [filesLoaded, generatedKey, artifact, hasArtifact]);
 
   // The artifact is rendered once and kept mounted whenever it exists, so the
   // row / detail-header "Download as PDF" button has rendered content to print
-  // even when the artifact isn't the open file. It fills the detail body when
+  // even when the artifact isn't the open file. It fills the preview area when
   // selected, and is hidden otherwise.
   const artifactRef = useRef<HTMLDivElement>(null);
   const handleDownloadArtifactPdf = () =>
@@ -226,10 +219,18 @@ export function ConversationFilesPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Kept mounted (hidden in detail) so an in-progress multi-selection
-          survives drilling into a file and coming back. */}
+      {/* The list fills the panel when nothing is open, is capped above the
+          preview in the split, and is hidden when the preview is expanded.
+          Kept mounted so an in-progress multi-selection survives previewing. */}
       <div
-        className={view === "list" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+        className={cn(
+          "flex flex-col",
+          previewing
+            ? expanded
+              ? "hidden"
+              : "max-h-[45%] shrink-0 overflow-hidden border-b"
+            : "min-h-0 flex-1",
+        )}
       >
         <SelectableFileList<ConversationFileItem>
           sections={[
@@ -257,24 +258,13 @@ export function ConversationFilesPanel({
         />
       </div>
 
-      {view === "detail" && (
-        <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={backToList}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Files
-          </Button>
-          <span className="shrink-0 text-muted-foreground">·</span>
-          <span
-            className="min-w-0 flex-1 truncate text-sm font-medium"
-            title={detailName}
-          >
-            {detailName}
-          </span>
+      {previewing && (
+        <FileDetailHeader
+          title={detailName}
+          expanded={expanded}
+          onExpand={() => setExpanded(true)}
+          onCollapse={collapse}
+        >
           {artifactSelected ? (
             <ArtifactRowActions
               content={artifact ?? ""}
@@ -299,7 +289,7 @@ export function ConversationFilesPanel({
                     type="button"
                     onClick={() =>
                       requestDelete([selected], (failedIds) => {
-                        if (!failedIds.includes(selected.id)) backToList();
+                        if (!failedIds.includes(selected.id)) deselect();
                       })
                     }
                     title={`Delete ${selected.name}`}
@@ -312,30 +302,26 @@ export function ConversationFilesPanel({
               </div>
             )
           )}
-        </div>
+        </FileDetailHeader>
       )}
 
-      {view === "detail" &&
-        !artifactSelected &&
-        instructionsSelected &&
-        projectId && (
-          <ProjectInstructionsPanel
-            projectId={projectId}
-            isOwner={isProjectOwner}
-            onClose={backToList}
-          />
-        )}
+      {previewing && !artifactSelected && instructionsSelected && projectId && (
+        <ProjectInstructionsPanel
+          projectId={projectId}
+          isOwner={isProjectOwner}
+          onClose={deselect}
+        />
+      )}
 
-      {view === "detail" &&
-        !artifactSelected &&
-        !instructionsSelected &&
-        selected && <FilePreview file={selected} onClose={backToList} />}
+      {previewing && !artifactSelected && !instructionsSelected && selected && (
+        <FilePreview file={selected} onClose={deselect} />
+      )}
 
       {hasArtifact && (
         <div
           ref={artifactRef}
           className={cn(
-            view === "detail" && artifactSelected
+            previewing && artifactSelected
               ? "min-h-0 flex-1 overflow-auto"
               : "hidden",
           )}

@@ -35,3 +35,7 @@ Archestra is built as a set of composable components. Most organizations already
 **[Security & Guardrails](/docs/platform-lethal-trifecta)** and **[Observability](/docs/platform-observability)** — Deterministic tool invocation policies and trusted data policies that cannot be bypassed by prompt injection. Prometheus metrics, OpenTelemetry tracing, and [per-team cost tracking](/docs/platform-costs-and-limits).
 
 See [Pricing Model](/docs/platform-pricing-model) for licensing details.
+
+## Architecture
+
+:::architecture-diagram:::

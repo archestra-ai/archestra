@@ -1830,7 +1830,6 @@ describe("buildArchestraToolOutput", () => {
   });
 
   test.for([
-    "scaffold_app",
     "edit_app",
     "render_app",
   ] as const)("returns the rich shape for a direct %s result so chat can mount the app runtime", async (shortName, {
@@ -1857,25 +1856,47 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
-  test("returns the rich shape for a run_tool dispatch with a bare scaffold_app target", async ({
+  // scaffold_app only seeds the boilerplate template, which chat never renders —
+  // so its result stays plain text (no structuredContent passthrough).
+  test("returns plain text for a direct scaffold_app result", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [
+          { type: "text" as const, text: `Created app "Todo" (app-1).` },
+        ],
+        structuredContent: { id: "app-1", name: "Todo", latestVersion: 1 },
+        isError: false,
+      },
+      toolName: "archestra__scaffold_app",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe(`Created app "Todo" (app-1).`);
+  });
+
+  test("returns the rich shape for a run_tool dispatch with a bare edit_app target", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
     const appResponse = {
-      content: [{ type: "text" as const, text: `Created app "Todo" (app-1).` }],
-      structuredContent: { id: "app-1", name: "Todo", latestVersion: 1 },
+      content: [{ type: "text" as const, text: `Edited app "Todo" (app-1).` }],
+      structuredContent: { id: "app-1", name: "Todo", latestVersion: 2 },
       isError: false,
     };
 
     const result = await buildArchestraToolOutput({
       response: appResponse,
       toolName: "archestra__run_tool",
-      toolArguments: { tool_name: "scaffold_app", tool_args: {} },
+      toolArguments: { tool_name: "edit_app", tool_args: {} },
       agentId: agent.id,
     });
 
     expect(result).toMatchObject({
-      content: `Created app "Todo" (app-1).`,
+      content: `Edited app "Todo" (app-1).`,
       structuredContent: { id: "app-1" },
     });
   });

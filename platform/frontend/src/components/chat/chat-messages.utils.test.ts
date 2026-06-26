@@ -372,14 +372,14 @@ describe("deriveAppsFromMessages", () => {
     });
   });
 
-  it("returns an app labeled with the app name for an owned-app scaffold_app result", () => {
+  it("returns an app labeled with the app name for an owned-app edit_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_app",
             state: "output-available",
             output: {
@@ -416,7 +416,7 @@ describe("deriveAppsFromMessages", () => {
         metadata: { createdAt: "2026-05-29T18:00:00.000Z" },
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_v1",
             state: "output-available",
             output: {
@@ -470,7 +470,7 @@ describe("deriveAppsFromMessages", () => {
         role: "assistant",
         parts: [
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_a",
             state: "output-available",
             output: {
@@ -482,7 +482,7 @@ describe("deriveAppsFromMessages", () => {
             },
           },
           {
-            type: "tool-archestra__scaffold_app",
+            type: "tool-archestra__edit_app",
             toolCallId: "call_b",
             state: "output-available",
             output: {
@@ -501,14 +501,14 @@ describe("deriveAppsFromMessages", () => {
     expect(apps.map((a) => a.toolCallId)).toEqual(["call_a", "call_b"]);
   });
 
-  it("ignores a foreign server's scaffold_app result", () => {
+  it("ignores a foreign server's edit_app result", () => {
     const messages = [
       {
         id: "assistant-1",
         role: "assistant",
         parts: [
           {
-            type: "tool-other__scaffold_app",
+            type: "tool-other__edit_app",
             toolCallId: "call_foreign",
             state: "output-available",
             output: {
@@ -611,7 +611,6 @@ describe("extractOwnedAppRender", () => {
   };
 
   it.each([
-    "scaffold_app",
     "edit_app",
     "render_app",
   ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
@@ -629,8 +628,8 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    "scaffold_app",
     "edit_app",
+    "render_app",
   ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
     expect(
       extractOwnedAppRender({
@@ -646,17 +645,20 @@ describe("extractOwnedAppRender", () => {
   });
 
   it.each([
-    ["foreign server prefix", "other__scaffold_app", output],
+    ["foreign server prefix", "other__edit_app", output],
+    // scaffold_app seeds the boilerplate template — it is not a rendering tool,
+    // so the chat never mounts a canvas for it (only the first edit_app does).
+    ["non-rendering scaffold tool", "archestra__scaffold_app", output],
     ["non-rendering app tool", "archestra__list_apps", output],
     ["non-rendering delete tool", "archestra__delete_app", output],
     ["non-rendering read tool", "archestra__read_app", output],
     [
       "non-UUID id",
-      "archestra__scaffold_app",
+      "archestra__edit_app",
       { structuredContent: { id: "not-a-uuid" } },
     ],
-    ["missing structuredContent", "archestra__scaffold_app", { content: "ok" }],
-    ["plain string output", "archestra__scaffold_app", "Created app"],
+    ["missing structuredContent", "archestra__edit_app", { content: "ok" }],
+    ["plain string output", "archestra__edit_app", "Created app"],
   ])("returns null for %s", (_label, toolName, toolOutput) => {
     expect(
       extractOwnedAppRender({

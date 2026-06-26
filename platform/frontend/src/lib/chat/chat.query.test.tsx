@@ -10,7 +10,10 @@ import {
   useConversationEnabledTools,
   useConversationFiles,
   useConversations,
+  useCreateConversation,
+  useDeleteConversation,
   useMemberDefaultModel,
+  useUpdateConversation,
 } from "./chat.query";
 
 vi.mock("@archestra/shared", () => ({
@@ -20,6 +23,9 @@ vi.mock("@archestra/shared", () => ({
     getChatConversationFiles: vi.fn(),
     getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
+    deleteChatConversation: vi.fn(),
+    createChatConversation: vi.fn(),
+    updateChatConversation: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -286,6 +292,140 @@ describe("mergeUpdatedConversationIntoCache", () => {
     expect(merged.agentId).toBe("agent-a");
     expect(merged.chatApiKeyId).toBe("key-openai");
     expect(merged.modelId).toBe("model-gpt41");
+  });
+});
+
+describe("useDeleteConversation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.deleteChatConversation).mockResolvedValue({
+      data: { success: true },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.deleteChatConversation>>);
+  });
+
+  // A deleted conversation can belong to a project, and the project views read
+  // from a separate `["projects", id, "conversations"]` cache. Deleting must
+  // invalidate the `["projects"]` family too, or the project page keeps showing
+  // the chat until a manual refresh.
+  it("invalidates both the conversations and projects caches on settle", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useDeleteConversation(), { wrapper });
+
+    result.current.mutate("conversation-1");
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversations"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+  });
+});
+
+describe("useCreateConversation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.createChatConversation).mockResolvedValue({
+      data: makeConversation(),
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.createChatConversation>>);
+  });
+
+  // A chat created inside a project must surface in that project's chat list
+  // (a separate `["projects", …]` cache), so the projects family is invalidated.
+  it("invalidates the projects cache when created inside a project", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    result.current.mutate({ agentId: "agent-a", projectId: "project-1" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+  });
+
+  // A standalone chat (no project) should not trigger a project refetch.
+  it("does not invalidate the projects cache without a project", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    result.current.mutate({ agentId: "agent-a" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["projects"] });
+  });
+});
+
+describe("useUpdateConversation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.updateChatConversation).mockResolvedValue({
+      data: makeConversation(),
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
+  });
+
+  // Renaming a chat must update its title on the project page too, which reads
+  // from a separate `["projects", …]` cache the optimistic title patch misses.
+  it("invalidates the projects cache when the title changes", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useUpdateConversation(), { wrapper });
+
+    result.current.mutate({ id: "conversation-1", title: "Renamed" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["projects"] });
+  });
+
+  // A model/key-only update is not project-relevant and must not refetch projects
+  // (preserving the existing "avoid cascading re-renders" behavior).
+  it("does not invalidate the projects cache for a model-only update", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useUpdateConversation(), { wrapper });
+
+    result.current.mutate({ id: "conversation-1", modelId: "model-gpt41" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["projects"] });
   });
 });
 

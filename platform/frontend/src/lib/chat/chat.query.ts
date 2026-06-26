@@ -251,7 +251,7 @@ export function useCreateConversation() {
           }),
         null,
       ),
-    onSuccess: (newConversation) => {
+    onSuccess: (newConversation, variables) => {
       if (!newConversation) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
@@ -259,6 +259,12 @@ export function useCreateConversation() {
         ["conversation", newConversation.id],
         newConversation,
       );
+      // A chat created inside a project must appear in that project's chat list,
+      // which reads from a separate `["projects", id, "conversations"]` cache.
+      // Only invalidate when there's a project to avoid needless refetches.
+      if (variables.projectId) {
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
+      }
     },
   });
 }
@@ -302,6 +308,11 @@ export function useUpdateConversation() {
             c.id === variables.id ? { ...c, title: data.title } : c,
           ),
         );
+        // The renamed conversation may belong to a project, whose chat list
+        // reads from a separate `["projects", id, "conversations"]` cache that
+        // the optimistic patch above doesn't reach. Invalidate the `["projects"]`
+        // family so the project view shows the new title without a refresh.
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
       }
       // Only invalidate the conversations list for sidebar-relevant changes
       // (pin status, agent). Model/key updates don't affect the sidebar
@@ -492,6 +503,11 @@ export function useDeleteConversation() {
     onSettled: () => {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // A deleted conversation may belong to a project; the project views read
+      // from a separate `["projects", id, "conversations"]` cache, so invalidate
+      // the whole `["projects"]` family to keep the project page in sync without
+      // needing the (here unknown) project id.
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

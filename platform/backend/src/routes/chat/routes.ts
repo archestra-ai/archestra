@@ -1232,7 +1232,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             const [responseStream, persistenceStream] = uiMessageStream.tee();
-            activeChatRunService.drainStreamToEvents({
+            const { terminalReady } = activeChatRunService.drainStreamToEvents({
               runId: activeRun.id,
               conversationId,
               stream: persistenceStream as ReadableStream<UIMessageChunk>,
@@ -1278,12 +1278,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               reply.header(key, value);
             }
 
-            // Send the Response body stream directly
+            // Send the Response body stream directly, but hold its CLOSE (not
+            // its bytes — they stream through unchanged) until the active-run row
+            // is marked terminal. Without this, a client that fires its next
+            // message the instant this response ends races the async drain and
+            // 409s against a row still flagged running.
             if (!response.body) {
               throw new ApiError(400, "No response body");
             }
+            const gatedBody = (
+              response.body as ReadableStream<Uint8Array>
+            ).pipeThrough(
+              new TransformStream<Uint8Array, Uint8Array>({
+                async flush() {
+                  await terminalReady;
+                },
+              }),
+            );
             // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-            return reply.send(response.body as any);
+            return reply.send(gatedBody as any);
           },
         });
       } catch (error) {

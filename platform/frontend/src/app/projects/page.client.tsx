@@ -25,6 +25,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
+import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,6 @@ import {
   useDeleteProject,
   usePinProject,
   useProjects,
-  useUpdateProject,
 } from "@/lib/projects/projects.query";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
 
@@ -133,9 +133,9 @@ function ProjectsList() {
     >
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
       {editingProject && (
-        <EditProjectDetailsDialog
-          project={editingProject}
-          open={!!editingProject}
+        <EditProjectDialog
+          projectId={editingProject.id}
+          open
           onOpenChange={(open) => {
             if (!open) setEditingProject(null);
           }}
@@ -252,18 +252,21 @@ function ProjectCard({
 }) {
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   return (
-    <div className="rounded-lg border p-4 transition-colors hover:bg-muted/50">
+    // `relative` + the title link's stretched `::after` (after:inset-0) makes the
+    // whole card a single click target for the project. Interactive children
+    // (the actions menu) sit above it via `relative z-10`.
+    <div className="relative rounded-lg border p-4 transition-colors hover:bg-muted/50">
       <div className="flex items-center justify-between gap-2">
         <Link
           href={`/projects/${project.id}`}
-          className="flex min-w-0 items-center gap-2"
+          className="flex min-w-0 items-center gap-2 after:absolute after:inset-0"
         >
           <span className="shrink-0">
             <AgentIcon icon={project.icon} fallbackType="project" size={18} />
           </span>
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="relative z-10 flex shrink-0 items-center gap-1">
           {project.viewerRole === "admin" && (
             <Badge variant="secondary">
               {project.ownerName
@@ -294,14 +297,11 @@ function ProjectCard({
           />
         </span>
       </div>
-      {project.description && (
-        <Link
-          href={`/projects/${project.id}`}
-          className="mt-1 block line-clamp-2 text-sm text-muted-foreground"
-        >
-          {project.description}
-        </Link>
-      )}
+      {/* Always reserve two lines so cards keep a uniform height regardless of
+          description length (or absence). */}
+      <p className="mt-1 line-clamp-2 h-10 text-sm text-muted-foreground">
+        {project.description}
+      </p>
     </div>
   );
 }
@@ -362,8 +362,6 @@ type CreateProjectForm = {
   icon: string | null;
 };
 
-type EditProjectDetailsForm = CreateProjectForm;
-
 function CreateProjectDialog({
   open,
   onOpenChange,
@@ -421,118 +419,6 @@ function CreateProjectDialog({
             }
           >
             Create
-          </Button>
-        </>
-      }
-    >
-      <div className="flex items-start gap-3">
-        <AgentIconPicker
-          value={icon}
-          onChange={(next) => form.setValue("icon", next)}
-          fallbackType="project"
-        />
-        <div className="flex-1 space-y-3 min-w-0">
-          <Input
-            autoFocus
-            placeholder="Project name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-          <Textarea
-            placeholder="Description (optional)"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
-        </div>
-      </div>
-    </StandardFormDialog>
-  );
-}
-
-function EditProjectDetailsDialog({
-  project,
-  open,
-  onOpenChange,
-}: {
-  project: ProjectListItem;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const updateProject = useUpdateProject();
-  const form = useForm<EditProjectDetailsForm>({
-    defaultValues: {
-      name: project.name,
-      description: project.description ?? "",
-      icon: project.icon,
-    },
-    mode: "onChange",
-  });
-  const icon = form.watch("icon");
-  const name = form.watch("name");
-  const description = form.watch("description");
-  const hasLengthError =
-    name.length > PROJECT_NAME_MAX_LENGTH ||
-    description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
-
-  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
-    const ok = await updateProject.mutateAsync({
-      id: project.id,
-      name: name.trim(),
-      description: description.trim() || null,
-      icon,
-    });
-    if (ok) onOpenChange(false);
-  });
-
-  return (
-    <StandardFormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Edit project"
-      description="Update this project's name, emoji, and description."
-      size="small"
-      onSubmit={onSubmit}
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={updateProject.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={
-              updateProject.isPending || !name.trim().length || hasLengthError
-            }
-          >
-            Save
           </Button>
         </>
       }

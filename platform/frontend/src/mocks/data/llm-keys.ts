@@ -44,6 +44,7 @@ export function makeVirtualKey(
     id: "test-virtual-key",
     organizationId: "test-org",
     name: "test-virtual-key",
+    keyType: "standard",
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",
     scope: "personal",
@@ -54,6 +55,7 @@ export function makeVirtualKey(
     teams: [],
     authorName: "Test Admin",
     providerApiKeys: [],
+    allowedLlmProxies: [],
     ...overrides,
   };
 }

@@ -378,6 +378,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: virtual key × team; parent audited",
   },
+  virtualApiKeyLlmProxiesTable: {
+    audited: false,
+    reason: "join: virtual key × LLM proxy; parent audited",
+  },
 
   // =========================================================================
   // Children of audited parents

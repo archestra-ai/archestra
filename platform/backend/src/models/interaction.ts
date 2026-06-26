@@ -871,6 +871,20 @@ class InteractionModel {
         );
       }
 
+      // A passthrough virtual key accrues usage independently from the standard
+      // virtual key (distinct limit entities), so record against both when present.
+      if (interaction.passthroughVirtualKeyId) {
+        updatePromises.push(
+          LimitModel.updateTokenLimitUsage(
+            "virtual_key",
+            interaction.passthroughVirtualKeyId,
+            model,
+            inputTokens,
+            outputTokens,
+          ),
+        );
+      }
+
       // Update environment-level token cost limits using the environment
       // snapshotted on the interaction at creation time.
       if (interaction.environmentId) {

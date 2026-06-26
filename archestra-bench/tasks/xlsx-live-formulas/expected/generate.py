@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["openpyxl==3.1.5"]
+# ///
 """Regenerate the xlsx-live-formulas fixtures from one canonical dataset:
 
 - `skills/sales-ledger/assets/ledger.xlsx` -- the source ledger bundled in the seeded `sales-ledger`
@@ -9,7 +13,7 @@
 Both are written from CANONICAL below, so they cannot drift; the script reads ledger.xlsx back and
 asserts it matches sales.json. Deterministic: no RNG, no clock (workbook timestamps are pinned).
 
-Run: `uv run --with openpyxl==3.1.5 archestra-bench/tasks/xlsx-live-formulas/expected/build_fixture.py`
+Run: `uv run archestra-bench/tasks/xlsx-live-formulas/expected/generate.py`
 """
 
 import json

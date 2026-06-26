@@ -1,6 +1,6 @@
 """Deterministically (re)generate inputs/materials.json and expected/takeoff.json.
 
-Run with `uv run gen_fixtures.py`. Re-running produces byte-identical output: all randomness is
+Run with `uv run generate.py`. Re-running produces byte-identical output: all randomness is
 seeded with a fixed constant and no wall-clock time is read. The expected takeoff is computed by the
 same DETERMINISTIC RULES the verifier recomputes from, so expected/ is a cross-check, not the source
 of truth.

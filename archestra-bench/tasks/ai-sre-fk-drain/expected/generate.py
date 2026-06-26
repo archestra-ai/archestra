@@ -26,7 +26,7 @@ only by correlating the process exit back to the failing flush.
 Fully deterministic (fixed seed, no wall-clock, sorted JSON keys, fixed zip metadata) so the
 committed zip is byte-reproducible.
 
-Run:  uv run tasks/ai-sre-fk-drain/expected/build_fixture.py
+Run:  uv run tasks/ai-sre-fk-drain/expected/generate.py
 """
 
 from __future__ import annotations

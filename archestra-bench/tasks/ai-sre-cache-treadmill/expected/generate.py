@@ -14,7 +14,7 @@ almost immediately.
 The refresh-on-read bug is provable from the logs alone, not just the configured TTL: every cached
 null carries an `expiresAt` that advances by exactly the read cadence (it is always readTime +
 TTL), so the entry's expiry visibly marches forward on each hit -- a fixed TTL would log a constant
-expiry. Recovery lands at last-retry (+3000ms) + TTL (5000ms) = +8000ms, far past a single 5s TTL
+expiry. Recovery lands at last-retry (+4000ms) + TTL (5000ms) = +9000ms, far past a single 5s TTL
 measured from the +50ms binding, so the outage outlived the upstream fault: the cache, not the
 credential, kept the 401s alive.
 
@@ -23,8 +23,10 @@ filler lines. The red herrings are designed to defeat shortcuts:
   - A genuinely EXPIRED token for a *different* profile -- a single failure that never self-heals.
   - A DECOY profile with the identical "authorization denied" symptom, but whose
     expiresAt is FIXED (counts down): it recovers one TTL after its first miss (~5s), a
-    shorter outage than the treadmill. Telling them apart needs comparing the expiry trajectories
-    (sliding vs constant) / recovery latency, not just spotting "cached null then recovery".
+    shorter outage than the treadmill. The decoy is logged MORE times than the stuck profile, so
+    "pick the most-frequent profileId" lands on the decoy, not the answer -- the stuck profile is the
+    one with the LONGEST outage, not the most hits. Telling them apart needs comparing the expiry
+    trajectories (sliding vs constant) / recovery latency, not counting 401s.
   - rate-limit warnings and a flood of normal positive cache hits for unrelated profiles.
 The graded `evidence_id` is the profileId stuck in the treadmill -- the one whose 401s persist the
 LONGEST before recovering, whose binding was already committed, and whose cached-null expiry kept
@@ -33,7 +35,7 @@ getting pushed forward.
 Fully deterministic (fixed seed, no wall-clock, sorted JSON keys, fixed zip metadata) so the
 committed zip is byte-reproducible.
 
-Run:  uv run tasks/ai-sre-cache-treadmill/expected/build_fixture.py
+Run:  uv run tasks/ai-sre-cache-treadmill/expected/generate.py
 """
 
 from __future__ import annotations
@@ -53,11 +55,11 @@ STUCK_TOKEN_HASH = "th_19b2e6c0"
 EXPIRED_PROFILE = "prof_b22d04"  # red herring: a real expiry that never recovers
 DECOY_PROFILE = "prof_4d12e9"  # red herring: same symptom, but a CORRECTLY-expiring fixed TTL
 DECOY_TOKEN_HASH = "th_55c1a233"
-TREADMILL_STEP_MS = 200
-TREADMILL_COUNT = 15  # retries over ~3s before the client backs off
-DECOY_FIRST_MS = 400
-DECOY_STEP_MS = 400
-DECOY_COUNT = 5
+TREADMILL_STEP_MS = 500
+TREADMILL_COUNT = 8  # few, widely-spaced retries over ~4s -> long outage, but FEW log lines
+DECOY_FIRST_MS = 300
+DECOY_STEP_MS = 150
+DECOY_COUNT = 12  # many, tightly-packed retries -> MORE log lines than the stuck profile, short outage
 CACHE_TTL_MS = 5_000
 BASE_MS = int(BASE.timestamp() * 1000)
 
@@ -94,7 +96,7 @@ def line(level: int, msg: str, offset_ms: int, **fields: object) -> dict[str, ob
 
 NOISE_SERVERS = ("deepwiki", "context7", "microsoft-learn")
 NOISE_TOOLS = ("search", "read", "list", "fetch", "lookup")
-NOISE_WINDOW_MS = 8_200
+NOISE_WINDOW_MS = 9_200
 
 
 def noise(stream: str, count: int) -> list[dict[str, object]]:
@@ -255,7 +257,27 @@ def serialize(records: list[dict[str, object]]) -> str:
     return "".join(json.dumps(r, sort_keys=True) + "\n" for r in shuffled)
 
 
+def _assert_anti_shortcut() -> None:
+    """Two naive shortcuts must NOT select the graded profile, or the task is leaking:
+    (1) "pick the most-frequent profileId" -- the decoy must out-number the stuck profile;
+    (2) the stuck profile must still be the one with the LONGEST self-recovering outage (the prompt's
+        definition), so a correct outage-duration analysis still lands on it.
+    """
+    mentions: dict[str, int] = {}
+    for rec in (*gateway, *backend, *worker, *pod_events):
+        pid = rec.get("profileId")
+        if isinstance(pid, str):
+            mentions[pid] = mentions.get(pid, 0) + 1
+    stuck, decoy = mentions[STUCK_PROFILE], mentions[DECOY_PROFILE]
+    assert decoy > stuck, f"frequency shortcut not defused: decoy {decoy} <= stuck {stuck}"
+
+    stuck_outage = TREADMILL_STEP_MS * TREADMILL_COUNT + CACHE_TTL_MS - TREADMILL_STEP_MS
+    decoy_outage = CACHE_TTL_MS  # fixed TTL from the first miss
+    assert stuck_outage > decoy_outage, f"stuck outage {stuck_outage} not the longest vs decoy {decoy_outage}"
+
+
 def main() -> None:
+    _assert_anti_shortcut()
     files = {
         "backend.log": serialize(backend),
         "worker.log": serialize(worker),

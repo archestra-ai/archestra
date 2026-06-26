@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Regenerate fixtures for the aec-normalizer task. Deterministic: re-running produces byte-identical
-files. Run with `uv run gen_fixtures.py` from the task root.
+files. Run with `uv run generate.py` from the task root.
 
 Two vendor exports with different shapes, plus the verifier-only expected normalization of vendor_v2.
 The canonical "upload CSV" row has columns in this order: material_name, quantity, unit_cost_cents,

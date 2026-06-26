@@ -17,10 +17,14 @@ case of each behaviour plus a benign-but-noisy distractor and normal background 
                 per (src, dst) pair) -- trips a naive per-src port count, but NOT the per-pair rule.
   - background: ordinary flows that trip nothing.
 
-The detector rules live verbatim in task.toml and verifier.py; this script plants data well clear
-of every threshold so exactly one answer is defensible.
+The exact detector thresholds live in verifier.py (the oracle); task.toml describes the patterns only
+qualitatively (no numbers), so the agent must judge "wide spread / extreme rate / steady interval"
+itself. That is only fair if every flow sits well clear of every threshold -- so this script plants
+data in comfortable margins (port spread 25 vs <=4; rate 10000 vs <=240 pkt/s; the beacon at 6 steady
+~60s flows vs every other multi-flow pair either <5 flows or visibly irregular). verifier.py's
+test_no_borderline_cases enforces those margins so a future edit can't reintroduce an ambiguous case.
 
-Run:  uv run gen_fixtures.py
+Run:  uv run generate.py
 """
 
 from __future__ import annotations
@@ -46,9 +50,10 @@ SPREAD_SRC = "10.0.0.9"
 def _build_rows() -> list[list[str | int]]:
     rows: list[list[str | int]] = []
 
-    # port_scan: 25 distinct dst_port flows from one src to one dst (> 20 threshold).
-    # Irregular first_ts gaps (rapid sweep) so this pair does NOT also trip the beaconing rule.
-    scan_offsets = [0, 1, 1, 2, 1, 9, 1, 1, 4, 2, 1, 1, 5, 1, 2, 1, 1, 3, 1, 12, 1, 1, 2, 1, 1]
+    # port_scan: 25 distinct dst_port flows from one src to one dst -- far above any sane "wide spread"
+    # bar. Bursty, irregular first_ts gaps (min 1s, max 23s -> span 22s) so the pair reads as a rapid
+    # sweep, never a steady beacon, under both the exact rule and a threshold-free human reading.
+    scan_offsets = [0, 1, 1, 2, 1, 9, 1, 1, 4, 2, 1, 1, 5, 1, 2, 1, 1, 3, 1, 23, 1, 1, 2, 1, 1]
     ts = _BASE_TS
     for i, off in enumerate(scan_offsets):
         ts += off
@@ -66,8 +71,9 @@ def _build_rows() -> list[list[str | int]]:
         rows.append([BEACON_SRC, BEACON_DST, 443, "tcp", 12, 1_400, ts, ts + 3])
 
     # distractor: high bytes/packets, only 3 distinct dst_ports, irregular gaps, no high-rate flow.
+    # Top rate ~240 pkt/s -- well under the flood band and ~40x below the real flood (10000 pkt/s).
     distractor_flows = [
-        (80, 90_000, 130_000_000, _BASE_TS + 1000, _BASE_TS + 1300),   # 300pkt/s
+        (80, 60_000, 130_000_000, _BASE_TS + 1000, _BASE_TS + 1300),   # 200pkt/s
         (443, 120_000, 170_000_000, _BASE_TS + 1700, _BASE_TS + 2200),  # 240pkt/s
         (8080, 70_000, 95_000_000, _BASE_TS + 4000, _BASE_TS + 4500),  # 140pkt/s
         (80, 55_000, 80_000_000, _BASE_TS + 9000, _BASE_TS + 9400),    # ~137pkt/s
@@ -77,14 +83,19 @@ def _build_rows() -> list[list[str | int]]:
 
     # spread distractor: one src touches 6 dsts with 4 distinct dst_ports each -- 24 distinct ports
     # for the src overall, but only 4 per (src, dst) pair. A naive "distinct ports per src" solver
-    # flags it as scanning; the per-pair rule (> 20 ports to one dst) does not. 4 flows per pair stays
-    # below the 5-flow beaconing floor, and the rate is low, so it trips nothing.
+    # flags it as scanning; scoped to the pair it is not a wide spread. The 4 flows per pair are spaced
+    # at deliberately irregular gaps (3s, 35s, 8s -> span 32s) so the pair never reads as a steady
+    # beacon under a threshold-free reading -- the only safe-margin concern once the rules are de-clued.
+    spread_intra_gaps = [3, 35, 8]
     spread_ts = _BASE_TS + 1500
     for d in range(6):
         spread_dst = f"10.0.0.{120 + d}"
+        t = spread_ts
         for p in range(4):
-            spread_ts += 7
-            rows.append([SPREAD_SRC, spread_dst, 2000 + d * 4 + p, "tcp", 20, 3_000, spread_ts, spread_ts + 2])
+            rows.append([SPREAD_SRC, spread_dst, 2000 + d * 4 + p, "tcp", 20, 3_000, t, t + 2])
+            if p < len(spread_intra_gaps):
+                t += spread_intra_gaps[p]
+        spread_ts += 90
 
     # background: ordinary low-volume flows across tcp/udp/icmp that trip nothing.
     background = [
@@ -106,6 +117,18 @@ def _build_rows() -> list[list[str | int]]:
         ("10.0.0.26", "203.0.113.22", 80, "tcp", 33, 4_400, _BASE_TS + 440, _BASE_TS + 470),
         ("10.0.0.27", "8.8.4.4", 53, "udp", 5, 450, _BASE_TS + 460, _BASE_TS + 461),
         ("10.0.0.28", "10.0.0.97", 0, "icmp", 6, 600, _BASE_TS + 480, _BASE_TS + 486),
+        ("10.0.0.29", "10.0.0.98", 443, "tcp", 44, 5_600, _BASE_TS + 150, _BASE_TS + 300),
+        ("10.0.0.30", "10.0.0.98", 80, "tcp", 27, 3_300, _BASE_TS + 175, _BASE_TS + 240),
+        ("10.0.0.31", "203.0.113.23", 443, "tcp", 80, 110_000, _BASE_TS + 220, _BASE_TS + 500),
+        ("10.0.0.32", "8.8.8.8", 53, "udp", 3, 270, _BASE_TS + 240, _BASE_TS + 241),
+        ("10.0.0.33", "10.0.0.99", 5432, "tcp", 38, 5_200, _BASE_TS + 280, _BASE_TS + 330),
+        ("10.0.0.34", "10.0.0.99", 6379, "tcp", 22, 2_600, _BASE_TS + 300, _BASE_TS + 332),
+        ("10.0.0.35", "203.0.113.24", 80, "tcp", 51, 66_000, _BASE_TS + 330, _BASE_TS + 470),
+        ("10.0.0.36", "10.0.0.100", 22, "tcp", 140, 24_000, _BASE_TS + 360, _BASE_TS + 700),
+        ("10.0.0.37", "8.8.4.4", 123, "udp", 2, 180, _BASE_TS + 400, _BASE_TS + 401),
+        ("10.0.0.38", "10.0.0.101", 0, "icmp", 5, 500, _BASE_TS + 430, _BASE_TS + 436),
+        ("10.0.0.39", "10.0.0.102", 8443, "tcp", 64, 88_000, _BASE_TS + 455, _BASE_TS + 640),
+        ("10.0.0.40", "10.0.0.103", 3389, "tcp", 35, 4_600, _BASE_TS + 470, _BASE_TS + 520),
     ]
     for row in background:
         rows.append(list(row))

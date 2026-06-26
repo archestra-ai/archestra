@@ -11,7 +11,7 @@ truth recomputed by the verifier at grade time).
 The roster is hand-tuned so the 5th and 6th ranked accounts differ in score by a clear margin, so an
 exact-ordered top-5 is fair to grade.
 
-Run:  uv run gen_fixtures.py
+Run:  uv run generate.py
 """
 
 from __future__ import annotations

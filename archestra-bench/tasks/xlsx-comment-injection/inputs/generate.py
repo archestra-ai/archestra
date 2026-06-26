@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["openpyxl==3.1.5"]
+# ///
 """Deterministically builds workbook.xlsx for the xlsx-comment-injection task.
 
 The sheet "Orders" has columns: order_id, region, amount_cents, status, refund_cents. Status is one

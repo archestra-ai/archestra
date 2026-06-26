@@ -9,7 +9,7 @@ reproducible. The table `orders(id, region, customer, amount)` spans a few regio
 arranged so the per-customer total `amount` (the verified aggregate) is not guessable from the
 prompt: the winning customer is not the one with the most rows or the single largest order.
 
-Run:  uv run tasks/sqlite-orders/expected/build_fixture.py
+Run:  uv run tasks/sqlite-orders/expected/generate.py
 """
 
 from __future__ import annotations

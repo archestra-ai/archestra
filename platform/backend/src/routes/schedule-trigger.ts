@@ -23,6 +23,7 @@ import { projectService } from "@/services/project";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
+  ensureFailedRunErrorVisible,
 } from "@/services/scheduled-run-conversation";
 import { taskQueueService } from "@/task-queue";
 import {
@@ -820,6 +821,11 @@ async function ensureRunConversation(params: {
     run,
     ownerUserId: conversation.userId,
   });
+
+  // A failed run that never executed (a skip, or a pre-execution failure) has no
+  // transcript to backfill — surface its error as a chat error so the chat shows
+  // the prompt + an error card instead of a blank thread.
+  await ensureFailedRunErrorVisible({ conversation, run, trigger });
 
   const refreshedConversation = await ConversationModel.findById({
     id: conversation.id,

@@ -1,4 +1,5 @@
 import {
+  ChatErrorCode,
   type ChatErrorResponse,
   DynamicInteraction,
   type PartialUIMessage,
@@ -201,6 +202,53 @@ export async function recordRunConversationError(params: {
   await ConversationChatErrorModel.create({
     conversationId: params.conversationId,
     error: params.error,
+  });
+}
+
+/**
+ * Make a FAILED run's conversation show what went wrong even when the run never
+ * reached the execute path that records a chat error — a skip ("previous run
+ * still in progress") or a pre-execution failure (e.g. lost agent access) is
+ * marked failed before any conversation, transcript, or error exists. Without
+ * this, opening such a run lazily-creates a blank chat. Persist the prompt as the
+ * user message and record the run's `error` as a chat error, so the chat shows
+ * the prompt + an inline error card (and the scheduled-run "Try again").
+ *
+ * Idempotent and non-destructive: a no-op once the conversation has any message
+ * or chat error, so it never overwrites a real transcript or a richer structured
+ * error already recorded by the run handler on an execution failure.
+ */
+export async function ensureFailedRunErrorVisible(params: {
+  conversation: Conversation;
+  run: ScheduleTriggerRun;
+  trigger: ScheduleTrigger;
+}): Promise<void> {
+  const { conversation, run, trigger } = params;
+  if (run.status !== "failed") {
+    return;
+  }
+
+  const [messages, errors] = await Promise.all([
+    MessageModel.findByConversation(conversation.id),
+    ConversationChatErrorModel.findByConversation(conversation.id),
+  ]);
+  if (messages.length > 0 || errors.length > 0) {
+    return;
+  }
+
+  await persistRunUserMessage({
+    conversation,
+    userText: trigger.messageTemplate,
+  });
+  await recordRunConversationError({
+    conversationId: conversation.id,
+    error: {
+      code: ChatErrorCode.Unknown,
+      message:
+        run.error ??
+        "This scheduled run failed before it could produce a response.",
+      isRetryable: false,
+    },
   });
 }
 

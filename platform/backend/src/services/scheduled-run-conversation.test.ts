@@ -8,6 +8,7 @@ import { projectService } from "@/services/project";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
+  ensureFailedRunErrorVisible,
   persistRunConversationMessages,
   persistRunUserMessage,
   recordRunConversationError,
@@ -374,4 +375,130 @@ test("persistRunUserMessage writes the prompt as a user message, once", async ({
   expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
     1,
   );
+});
+
+test("ensureFailedRunErrorVisible surfaces a failed run's error on an empty conversation, once", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  // A skip / pre-execution failure: the run is failed with an error but never
+  // executed, so it has no transcript.
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: run.id,
+    status: "failed",
+    error: "Skipped: previous run was still in progress",
+  });
+  const failedRun = await ScheduleTriggerRunModel.findById(run.id);
+  if (!failedRun) throw new Error("run not found");
+  const conversation = await createAndLinkRunConversation({
+    run: failedRun,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+
+  await ensureFailedRunErrorVisible({ conversation, run: failedRun, trigger });
+
+  // The chat now carries the prompt + the run's error as a chat error, so it
+  // renders the prompt + an inline error card rather than a blank thread.
+  const messages = await MessageModel.findByConversation(conversation.id);
+  expect(messages.map((m) => m.role)).toEqual(["user"]);
+  const userContent = messages[0].content as {
+    parts: Array<{ text?: string }>;
+  };
+  expect(userContent.parts[0].text).toBe("write a joke");
+  const errors = await ConversationChatErrorModel.findByConversation(
+    conversation.id,
+  );
+  expect(errors).toHaveLength(1);
+  expect(errors[0]?.error.message).toBe(
+    "Skipped: previous run was still in progress",
+  );
+
+  // Idempotent: a second call does not duplicate the prompt or the error.
+  await ensureFailedRunErrorVisible({ conversation, run: failedRun, trigger });
+  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+    1,
+  );
+  expect(
+    await ConversationChatErrorModel.findByConversation(conversation.id),
+  ).toHaveLength(1);
+});
+
+test("ensureFailedRunErrorVisible leaves a run that already has a transcript untouched", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  await ScheduleTriggerRunModel.markCompleted({
+    runId: run.id,
+    status: "failed",
+    error: "some error",
+  });
+  const failedRun = await ScheduleTriggerRunModel.findById(run.id);
+  if (!failedRun) throw new Error("run not found");
+  const conversation = await createAndLinkRunConversation({
+    run: failedRun,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  // A transcript already exists (e.g. backfilled from interactions) — the helper
+  // must not graft an error card on top of it.
+  await persistRunUserMessage({ conversation, userText: "write a joke" });
+
+  await ensureFailedRunErrorVisible({ conversation, run: failedRun, trigger });
+
+  expect(
+    await ConversationChatErrorModel.findByConversation(conversation.id),
+  ).toHaveLength(0);
 });

@@ -273,7 +273,7 @@ claude`,
         },
         {
           title: 'Open "Configure Third-Party Inference"',
-          body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+          body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
         },
         {
           title: "Add a Managed MCP server",
@@ -302,7 +302,7 @@ claude`,
           },
           {
             title: 'Open "Configure Third-Party Inference"',
-            body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+            body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
           },
           {
             title: "Fill in the credential",

@@ -134,7 +134,9 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 
 `ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
 
-Claude Desktop is configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add a custom header named `X-Archestra-Virtual-Key` with the passthrough key as its value.
+Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add a custom header named `X-Archestra-Virtual-Key` with the passthrough key as its value.
+
+The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it.
 
 ## LLM OAuth Clients
 

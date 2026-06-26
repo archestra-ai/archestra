@@ -279,7 +279,7 @@ claude`,
         },
         {
           title: 'Open "Configure Third-Party Inference"',
-          body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+          body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
         },
         {
           title: "Add a Managed MCP server",
@@ -292,7 +292,7 @@ claude`,
         },
         {
           title: "Finish the OAuth flow",
-          body: "Claude Desktop opens your browser. Sign in and approve the gateway; the connector's tools then appear in chat.",
+          body: 'Click "Sign in & test" — Claude Desktop opens your browser. Sign in and approve the gateway; the gateway tools then appear in chat.',
         },
       ],
     },
@@ -308,7 +308,7 @@ claude`,
           },
           {
             title: 'Open "Configure Third-Party Inference"',
-            body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+            body: "From the Claude menu choose Developer → Configure Third-Party Inference….",
           },
           {
             title: "Fill in the credential",

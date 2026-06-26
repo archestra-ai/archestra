@@ -887,6 +887,120 @@ describe("OAuth routes", () => {
     updateSpy.mockRestore();
   });
 
+  test("a 400 invalid_grant is a terminal failure and persists no token", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Invalid Grant MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Invalid Grant MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "invalid-grant-token",
+      true,
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "Token expired or revoked",
+        }),
+    }) as Mock;
+    const updateSpy = vi.spyOn(secretManager(), "updateSecret");
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: "invalid_grant",
+    });
+    // A rejected grant must not write a token; re-authentication is required.
+    expect(updateSpy).not.toHaveBeenCalled();
+
+    updateSpy.mockRestore();
+  });
+
+  test("returns a terminal no_refresh_token failure when the secret has no refresh token", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "No Refresh Token MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "No Refresh Token MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "only-access-token" },
+      "no-refresh-token-secret",
+      true,
+    );
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "no_refresh_token",
+      message: "no_refresh_token",
+    });
+  });
+
+  test("returns a terminal refresh_failed when the secret cannot be found", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Missing Secret MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Missing Secret MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        token_endpoint: "https://login.example.com/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+
+    await expect(
+      refreshOAuthToken("00000000-0000-0000-0000-000000000000", catalog.id),
+    ).resolves.toEqual({
+      ok: false,
+      kind: "terminal",
+      category: "refresh_failed",
+      message: "refresh_failed",
+    });
+  });
+
   test("does not send the MCP endpoint URL as a token resource during refresh", async ({
     makeInternalMcpCatalog,
   }) => {

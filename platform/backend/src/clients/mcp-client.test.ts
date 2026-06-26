@@ -4007,6 +4007,81 @@ describe("McpClient", () => {
         });
       });
 
+      test("records a no_refresh_token state when an OAuth tool call throws UnauthorizedError and no refresh token is stored", async ({
+        makeUser,
+      }) => {
+        const testUser = await makeUser({
+          email: "oauth-no-refresh-record@example.com",
+        });
+
+        const oauthCatalog = await InternalMcpCatalogModel.create({
+          name: "github-no-refresh-server",
+          serverType: "remote",
+          serverUrl: "https://api.githubcopilot.com/mcp/",
+          oauthConfig: {
+            name: "GitHub",
+            server_url: "https://api.githubcopilot.com/mcp/",
+            client_id: "test-client-id",
+            redirect_uris: ["http://localhost:3000/callback"],
+            scopes: ["repo"],
+            default_scopes: ["repo"],
+            supports_resource_metadata: false,
+          },
+        });
+
+        // Secret WITHOUT a refresh token — refresh is impossible, so an auth
+        // error must record the terminal no_refresh_token state on the row.
+        const secret = await secretManager().createSecret(
+          { access_token: "expired-token" },
+          "no-refresh-record-secret",
+        );
+
+        const mcpServer = await McpServerModel.create({
+          name: "github-no-refresh-server",
+          catalogId: oauthCatalog.id,
+          secretId: secret.id,
+          serverType: "remote",
+          ownerId: testUser.id,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-no-refresh-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId: oauthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: mcpServer.id,
+        });
+
+        const { UnauthorizedError } = await import(
+          "@modelcontextprotocol/sdk/client/auth.js"
+        );
+        mockCallTool.mockRejectedValueOnce(new UnauthorizedError());
+        mockConnect.mockResolvedValue(undefined);
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_no_refresh_record",
+            name: "github-no-refresh-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
+
+        const row = await McpServerModel.findById(mcpServer.id);
+        expect(row?.oauthRefreshError).toBe("no_refresh_token");
+        expect(row?.oauthRefreshErrorMessage).toBe("no_refresh_token");
+        expect(row?.oauthRefreshFailedAt).toBeInstanceOf(Date);
+      });
+
       test("returns expired-auth message with manage URL when tool call throws StreamableHTTPError 401 on OAuth server", async ({
         makeUser,
       }) => {

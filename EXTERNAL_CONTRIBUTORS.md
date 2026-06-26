@@ -652,3 +652,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Poom5741
 - @Kubostrel
 - @victor-akua
+- @vitaliyfedotovpro-art

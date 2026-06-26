@@ -470,6 +470,9 @@ describe("McpClient", () => {
         (result._meta as { archestraError?: { type?: string } } | undefined)
           ?.archestraError?.type,
       ).toBe("auth_required");
+      // Reconnect-framed wording (not the "no credentials" auth message).
+      expect(result.error).toContain("reconnect");
+      expect(result.error).toContain("is not connected");
       // The call is refused before any dispatch is attempted.
       expect(mockCallTool).not.toHaveBeenCalled();
     });

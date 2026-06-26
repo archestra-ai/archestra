@@ -1480,10 +1480,9 @@ class McpClient {
             mcpServerName: resolved.name,
           };
         }
-        const reconnectError = this.buildAuthRequiredMessage(
+        const reconnectError = this.buildReconnectRequiredMessage(
           tool.catalogName || catalogItem.name,
           catalogItem.id,
-          tokenAuth,
         );
         return {
           error: await this.createErrorResult(
@@ -2498,6 +2497,34 @@ class McpClient {
         url: installUrl,
         postAction:
           "Once you have completed authentication, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
+    };
+  }
+
+  /**
+   * Like buildAuthRequiredMessage but worded for a retained tool whose MCP
+   * connection was uninstalled (no install remains for its catalog). Same typed
+   * shape/action so clients handle it identically; only the human-readable
+   * message is reconnect-framed, matching the search_tools "not installed —
+   * reconnect" wording rather than "no credentials".
+   */
+  private buildReconnectRequiredMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `"${catalogDisplayName}" is not connected`,
+        detail: `This tool's MCP connection has been uninstalled. Reconnect "${catalogDisplayName}" to use it.`,
+        actionLabel: "reconnect the connection",
+        url: installUrl,
+        postAction: "Once reconnected, retry this tool call.",
       }),
       catalogId,
       catalogName: catalogDisplayName,

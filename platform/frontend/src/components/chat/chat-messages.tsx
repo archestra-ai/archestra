@@ -1067,8 +1067,13 @@ export function ChatMessages({
                           canReadToolPolicy: !!canReadToolPolicy,
                           claimUnsafeContextDivider,
                           renderedPart: (
+                            // Shallow-copy so MessageTool's by-value memo
+                            // comparator sees a distinct object: the AI SDK
+                            // mutates a tool part in place (same reference) when
+                            // its result lands, which otherwise hides the
+                            // input-available -> output-available transition.
                             <MessageTool
-                              part={part}
+                              part={{ ...part }}
                               key={partKey}
                               toolResultPart={toolResultPart}
                               toolName={toolName}
@@ -1246,8 +1251,13 @@ export function ChatMessages({
                             canReadToolPolicy: !!canReadToolPolicy,
                             claimUnsafeContextDivider,
                             renderedPart: (
+                              // Shallow-copy so MessageTool's by-value memo
+                              // comparator sees a distinct object: the AI SDK
+                              // mutates a tool part in place (same reference)
+                              // when its result lands, which otherwise hides the
+                              // input-available -> output-available transition.
                               <MessageTool
-                                part={part}
+                                part={{ ...part }}
                                 key={partKey}
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
@@ -1933,8 +1943,10 @@ const MessageTool = memo(
   },
   (prev, next) =>
     // Skip re-render unless identity, state, or UI-relevant data actually changed.
-    // AI SDK recreates part/toolResultPart objects every streaming tick — compare
-    // by value, not reference. During input-streaming, also re-render on input growth.
+    // Compare by value, not reference: the AI SDK sometimes mutates a tool part
+    // in place when its result lands, so render sites pass a shallow copy (see
+    // MessageTool usages) to keep these by-value checks meaningful. During
+    // input-streaming, also re-render on input growth.
     prev.toolName === next.toolName &&
     prev.agentId === next.agentId &&
     prev.part.toolCallId === next.part.toolCallId &&

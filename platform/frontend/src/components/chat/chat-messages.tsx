@@ -80,6 +80,7 @@ import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
+  isInstallAuthResolved,
   parsePolicyDenied,
   resolveAssistantTextAuthState,
   resolveToolAuthState,
@@ -148,6 +149,11 @@ interface ChatMessagesProps {
   }) => Promise<void>;
   /** Re-run the original prompt after the user connects a per-user provider. */
   onProviderConnected?: () => void;
+  /**
+   * Scheduled-run only: clear a persisted chat error and resend the prompt.
+   * When set, the inline error card shows a "Try again" button.
+   */
+  onChatErrorRetry?: () => void | Promise<void>;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -211,6 +217,7 @@ export function ChatMessages({
   onMessagesUpdate,
   onRegenerateUserMessage,
   onProviderConnected,
+  onChatErrorRetry,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -500,6 +507,7 @@ export function ChatMessages({
                   selectedModel={selectedModel}
                   modelSource={modelSource}
                   onProviderConnected={onProviderConnected}
+                  onRetry={onChatErrorRetry}
                 />
               );
             }
@@ -679,6 +687,8 @@ export function ChatMessages({
                           const authToolPart = renderAssistantAuthPart({
                             toolName: "authentication",
                             authState: assistantAuthState,
+                            connectedCatalogIds:
+                              orchestrator.connectedCatalogIds,
                             onInstallMcp:
                               orchestrator.triggerInstallByCatalogId,
                             onReauthMcp:
@@ -1064,8 +1074,13 @@ export function ChatMessages({
                           canReadToolPolicy: !!canReadToolPolicy,
                           claimUnsafeContextDivider,
                           renderedPart: (
+                            // Shallow-copy so MessageTool's by-value memo
+                            // comparator sees a distinct object: the AI SDK
+                            // mutates a tool part in place (same reference) when
+                            // its result lands, which otherwise hides the
+                            // input-available -> output-available transition.
                             <MessageTool
-                              part={part}
+                              part={{ ...part }}
                               key={partKey}
                               toolResultPart={toolResultPart}
                               toolName={toolName}
@@ -1078,6 +1093,9 @@ export function ChatMessages({
                               }
                               onReauthMcp={
                                 orchestrator.triggerReauthByCatalogIdAndServerId
+                              }
+                              connectedCatalogIds={
+                                orchestrator.connectedCatalogIds
                               }
                               getToolShortName={getToolShortName}
                               toolIconMap={toolIconMap}
@@ -1179,6 +1197,9 @@ export function ChatMessages({
                                 onReauthMcp={
                                   orchestrator.triggerReauthByCatalogIdAndServerId
                                 }
+                                connectedCatalogIds={
+                                  orchestrator.connectedCatalogIds
+                                }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 onSendMessage={(text) =>
@@ -1237,8 +1258,13 @@ export function ChatMessages({
                             canReadToolPolicy: !!canReadToolPolicy,
                             claimUnsafeContextDivider,
                             renderedPart: (
+                              // Shallow-copy so MessageTool's by-value memo
+                              // comparator sees a distinct object: the AI SDK
+                              // mutates a tool part in place (same reference)
+                              // when its result lands, which otherwise hides the
+                              // input-available -> output-available transition.
                               <MessageTool
-                                part={part}
+                                part={{ ...part }}
                                 key={partKey}
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
@@ -1251,6 +1277,9 @@ export function ChatMessages({
                                 }
                                 onReauthMcp={
                                   orchestrator.triggerReauthByCatalogIdAndServerId
+                                }
+                                connectedCatalogIds={
+                                  orchestrator.connectedCatalogIds
                                 }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
@@ -1319,6 +1348,7 @@ export function ChatMessages({
               onToolApprovalResponse={onToolApprovalResponse}
               onInstallMcp={orchestrator.triggerInstallByCatalogId}
               onReauthMcp={orchestrator.triggerReauthByCatalogIdAndServerId}
+              connectedCatalogIds={orchestrator.connectedCatalogIds}
               getToolShortName={getToolShortName}
               toolIconMap={toolIconMap}
             />
@@ -1468,6 +1498,7 @@ const MessageTool = memo(
     onToolApprovalResponse,
     onInstallMcp,
     onReauthMcp,
+    connectedCatalogIds,
     getToolShortName,
     onSendMessage,
     earlyToolUiData,
@@ -1486,6 +1517,7 @@ const MessageTool = memo(
     }) => void;
     onInstallMcp?: (catalogId: string) => void;
     onReauthMcp?: (catalogId: string, serverId: string) => void;
+    connectedCatalogIds: ReadonlySet<string>;
     getToolShortName: (toolName: string) => ArchestraToolShortName | null;
     onSendMessage?: (text: string) => void;
     toolIconMap?: ToolIconMap;
@@ -1605,6 +1637,7 @@ const MessageTool = memo(
     const authToolBody = renderToolAuthPart({
       toolName,
       authState: toolAuthState,
+      connectedCatalogIds,
       onInstallMcp,
       onReauthMcp,
     });
@@ -1917,8 +1950,10 @@ const MessageTool = memo(
   },
   (prev, next) =>
     // Skip re-render unless identity, state, or UI-relevant data actually changed.
-    // AI SDK recreates part/toolResultPart objects every streaming tick — compare
-    // by value, not reference. During input-streaming, also re-render on input growth.
+    // Compare by value, not reference: the AI SDK sometimes mutates a tool part
+    // in place when its result lands, so render sites pass a shallow copy (see
+    // MessageTool usages) to keep these by-value checks meaningful. During
+    // input-streaming, also re-render on input growth.
     prev.toolName === next.toolName &&
     prev.agentId === next.agentId &&
     prev.part.toolCallId === next.part.toolCallId &&
@@ -2439,10 +2474,25 @@ function isMessagePositionBefore(params: {
 function authCardProps(params: {
   toolName: string;
   authState: ToolAuthState | null;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstall?: () => void;
   onReauth?: () => void;
 }): AuthErrorToolProps | null {
-  const { authState, toolName, onInstall, onReauth } = params;
+  const { authState, toolName, connectedCatalogIds, onInstall, onReauth } =
+    params;
+
+  // Once the user connects a server for this catalog, the install prompt is
+  // resolved — flip it to a connected state instead of an outstanding error.
+  if (
+    authState?.kind === "auth-required" &&
+    isInstallAuthResolved({ authState, connectedCatalogIds })
+  ) {
+    return {
+      title: "Authentication successful",
+      description: <>Connected to &ldquo;{authState.catalogName}&rdquo;.</>,
+      variant: "success",
+    };
+  }
 
   switch (authState?.kind) {
     case "auth-expired": {
@@ -2536,18 +2586,31 @@ function resolveAuthActions(params: {
 function renderToolAuthPart(params: {
   toolName: string;
   authState: ReturnType<typeof resolveToolAuthState>;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
-  const { authState, toolName, onInstallMcp, onReauthMcp } = params;
+  const {
+    authState,
+    toolName,
+    connectedCatalogIds,
+    onInstallMcp,
+    onReauthMcp,
+  } = params;
   const actions = resolveAuthActions({ authState, onInstallMcp, onReauthMcp });
-  const props = authCardProps({ toolName, authState, ...actions });
+  const props = authCardProps({
+    toolName,
+    authState,
+    connectedCatalogIds,
+    ...actions,
+  });
   return props ? <AuthErrorTool {...props} /> : null;
 }
 
 function renderAssistantAuthPart(params: {
   toolName: string;
   authState: ReturnType<typeof resolveAssistantTextAuthState>;
+  connectedCatalogIds: ReadonlySet<string>;
   onInstallMcp?: (catalogId: string) => void;
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {

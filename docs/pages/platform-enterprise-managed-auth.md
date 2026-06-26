@@ -23,6 +23,8 @@ on their own pages.
 
 SSO gets the user signed in. **Enterprise-Managed Auth** is what happens after — when an agent or MCP server needs to call a downstream API and the call should carry the *user's* identity, not a shared service-account credential.
 
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
+
 ## Why this matters
 
 When Alice asks an agent to *"summarize my unread emails"*, the agent has to call Microsoft Graph somewhere. The naive way is to give the MCP server a single shared secret. Every user's request hits Graph as the same robot account — audit logs show "the Archestra service account" read the email, not Alice. If Alice doesn't have access to a particular mailbox, the tool reads it anyway because it's running as the robot.

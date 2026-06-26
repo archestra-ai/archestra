@@ -47,6 +47,36 @@ provider = "openrouter"
 model = "minimax/minimax-m2.7"
 
 [[lane]]
+name = "gpt-54-nano"
+provider = "openrouter"
+model = "openai/gpt-5.4-nano"
+
+[[lane]]
+name = "gpt-54-mini"
+provider = "openrouter"
+model = "openai/gpt-5.4-mini"
+
+[[lane]]
+name = "claude-haiku-45"
+provider = "openrouter"
+model = "anthropic/claude-haiku-4.5"
+
+[[lane]]
+name = "mimo-25"
+provider = "openrouter"
+model = "xiaomi/mimo-v2.5"
+
+[[lane]]
+name = "qwen36-35b-a3b"
+provider = "openrouter"
+model = "qwen/qwen3.6-35b-a3b"
+
+[[lane]]
+name = "gpt-oss-120b"
+provider = "openrouter"
+model = "openai/gpt-oss-120b"
+
+[[lane]]
 name = "kimi"
 provider = "anthropic"
 model = "kimi-for-coding"

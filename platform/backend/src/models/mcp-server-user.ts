@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 
 class McpServerUserModel {
   /**
@@ -67,8 +67,9 @@ class McpServerUserModel {
   static async assignUserToMcpServer(
     mcpServerId: string,
     userId: string,
+    tx?: Transaction,
   ): Promise<void> {
-    await db
+    await (tx ?? db)
       .insert(schema.mcpServerUsersTable)
       .values({
         mcpServerId,

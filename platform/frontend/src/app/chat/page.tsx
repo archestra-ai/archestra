@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -88,6 +89,7 @@ import {
 } from "@/lib/chat/app-diagnostics-store";
 import {
   fetchConversationEnabledTools,
+  useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
@@ -145,7 +147,18 @@ import ArchestraPromptInput, {
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
-const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
+const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
+  "runs",
+  "files",
+  "browser",
+  "apps",
+];
+
+function parseRightPanelTab(value: string | null): RightPanelTab | null {
+  return RIGHT_PANEL_TABS.includes(value as RightPanelTab)
+    ? (value as RightPanelTab)
+    : null;
+}
 
 export function ChatPageContent({
   routeConversationId,
@@ -255,13 +268,9 @@ export function ChatPageContent({
 
   const _isMobile = useIsMobile();
 
-  // State for browser panel - initialize from localStorage
-  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(BROWSER_OPEN_KEY) === "true";
-    }
-    return false;
-  });
+  // State for browser panel. Restored per-conversation by the conversation-load
+  // effect below (a fresh /chat with no conversation has no saved state).
+  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
   // Tracks which tab the right-side panel last showed; restored when the panel
   // is re-opened via the header toggle.
@@ -269,6 +278,12 @@ export function ChatPageContent({
 
   // Independent of artifact/browser open state — toggled when the Apps tab is selected.
   const [isAppsTabOpen, setIsAppsTabOpen] = useState(false);
+  // The Runs tab, shown only for scheduled-run chats (a `?scheduleTriggerId=` URL).
+  const [isRunsTabOpen, setIsRunsTabOpen] = useState(false);
+  // Scheduled-run context from the chat URL the runs view links with; non-null
+  // enables the right-side Runs tab.
+  const scheduledRun = scheduledRunContext(searchParams);
+  const scheduledRunTriggerId = scheduledRun?.triggerId ?? null;
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
@@ -432,30 +447,49 @@ export function ChatPageContent({
   // Conversations whose title should play the typing animation (shared via chat context)
   const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
 
-  // Initialize artifact panel state when conversation loads or changes
+  // Restore the right-side panel (open state + selected tab) when a conversation
+  // loads. Both are remembered per-conversation in localStorage.
   useEffect(() => {
-    // If no conversation (new chat), close the artifact panel
+    // If no conversation (new chat), close the panel.
     if (!conversationId) {
       setIsArtifactOpen(false);
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
       return;
     }
 
     if (isLoadingConversation) return;
 
-    // Check for conversation-specific preference
-    const { artifactOpen: artifactOpenKey } =
-      conversationStorageKeys(conversationId);
-    const storedState = localStorage.getItem(artifactOpenKey);
-    if (storedState !== null) {
-      // User has explicitly set a preference for this conversation
-      setIsArtifactOpen(storedState === "true");
+    const keys = conversationStorageKeys(conversationId);
+    const openState = localStorage.getItem(keys.rightPanelOpen);
+
+    if (openState !== null) {
+      // User has an explicit preference for this conversation. Default a
+      // missing/invalid saved tab to "files" (the default tab).
+      const tab =
+        parseRightPanelTab(localStorage.getItem(keys.rightPanelTab)) ?? "files";
+      const isOpen = openState === "true";
+      setIsArtifactOpen(isOpen && tab === "files");
+      setIsBrowserPanelOpen(isOpen && tab === "browser");
+      setIsAppsTabOpen(isOpen && tab === "apps");
+      setIsRunsTabOpen(isOpen && tab === "runs");
+      setActiveRightTab(tab);
     } else if (conversation?.artifact) {
-      // First time viewing this conversation with an artifact - auto-open
+      // First time viewing this conversation with an artifact - auto-open Files.
       setIsArtifactOpen(true);
-      localStorage.setItem(artifactOpenKey, "true");
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
+      setActiveRightTab("files");
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     } else {
-      // No artifact or no stored preference - keep closed
+      // No artifact or no stored preference - keep closed.
       setIsArtifactOpen(false);
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
@@ -699,11 +733,11 @@ export function ChatPageContent({
       !isArtifactOpen
     ) {
       setIsArtifactOpen(true);
+      setActiveRightTab("files");
       // Save the preference for this conversation
-      localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
-        "true",
-      );
+      const keys = conversationStorageKeys(conversationId);
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     }
 
     // Update the ref for next comparison
@@ -726,10 +760,9 @@ export function ChatPageContent({
     ) {
       setActiveRightTab("files");
       setIsArtifactOpen(true);
-      localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
-        "true",
-      );
+      const keys = conversationStorageKeys(conversationId);
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     }
     previousGeneratedCountRef.current = generatedCount;
   }, [generatedCount, conversation?.artifact, isArtifactOpen, conversationId]);
@@ -768,25 +801,42 @@ export function ChatPageContent({
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
 
-  // After the user connects a per-user provider (e.g. GitHub Copilot) via the
-  // inline auth card, re-run their original prompt automatically. The connect
-  // mutation already invalidated the model/key caches; find the last user
-  // message and regenerate its turn. A no-op while a turn is in flight so a
-  // connect can't double-send.
-  const handleProviderConnected = useCallback(() => {
-    if (status === "submitted" || status === "streaming") return;
-    if (!regenerateUserMessage) return;
+  // Re-send the most recent user message by regenerating its turn. Shared by the
+  // provider-connect auto-rerun and the scheduled-run "Try again". Returns whether
+  // a resend was actually started (false while a turn is in flight or there's no
+  // user message), so callers can skip side effects when nothing is resent.
+  const resendLastUserMessage = useCallback((): boolean => {
+    if (status === "submitted" || status === "streaming") return false;
+    if (!regenerateUserMessage) return false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role !== "user") continue;
       const partIndex = message.parts.findIndex((part) => part.type === "text");
-      if (partIndex < 0) return;
+      if (partIndex < 0) return false;
       const part = message.parts[partIndex];
       const text = "text" in part ? part.text : "";
       void regenerateUserMessage({ messageId: message.id, partIndex, text });
-      return;
+      return true;
     }
+    return false;
   }, [messages, regenerateUserMessage, status]);
+
+  // After the user connects a per-user provider (e.g. GitHub Copilot) via the
+  // inline auth card, re-run their original prompt automatically. The connect
+  // mutation already invalidated the model/key caches.
+  const handleProviderConnected = resendLastUserMessage;
+
+  // Scheduled-run "Try again": resend the scheduled prompt, and only once that's
+  // underway clear the persisted error so the card disappears. Ordering matters —
+  // clearing first would wipe the error card even if the resend couldn't start.
+  // Only wired for scheduled-run chats (and the chat is owner-editable here, since
+  // read-only viewers render MessageThread instead of this).
+  const clearChatErrors = useClearChatErrors();
+  const handleScheduledRunRetry = useCallback(async () => {
+    if (!conversationId) return;
+    if (!resendLastUserMessage()) return;
+    await clearChatErrors.mutateAsync({ id: conversationId });
+  }, [conversationId, clearChatErrors, resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as
@@ -1294,57 +1344,34 @@ export function ChatPageContent({
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
-    isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen;
+    isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
   useEffect(() => {
-    if (isAppsTabOpen) {
+    if (isRunsTabOpen) {
+      setActiveRightTab("runs");
+    } else if (isAppsTabOpen) {
       setActiveRightTab("apps");
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
       setActiveRightTab("files");
     }
-  }, [isArtifactOpen, isBrowserPanelVisible, isAppsTabOpen]);
+  }, [isArtifactOpen, isBrowserPanelVisible, isAppsTabOpen, isRunsTabOpen]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
+      // Each tab owns its open flag; selecting one clears the others.
       setActiveRightTab(tab);
-      if (tab === "files") {
-        setIsArtifactOpen(true);
-        setIsBrowserPanelOpen(false);
-        setIsAppsTabOpen(false);
-        if (conversationId) {
-          localStorage.setItem(
-            conversationStorageKeys(conversationId).artifactOpen,
-            "true",
-          );
-        }
-        localStorage.setItem(BROWSER_OPEN_KEY, "false");
-      } else if (tab === "browser") {
-        setIsBrowserPanelOpen(true);
-        setIsArtifactOpen(false);
-        setIsAppsTabOpen(false);
-        if (conversationId) {
-          localStorage.setItem(
-            conversationStorageKeys(conversationId).artifactOpen,
-            "false",
-          );
-        }
-        localStorage.setItem(BROWSER_OPEN_KEY, "true");
-      } else {
-        // apps tab — doesn't own artifact/browser visibility
-        setIsAppsTabOpen(true);
-        setIsArtifactOpen(false);
-        setIsBrowserPanelOpen(false);
-        if (conversationId) {
-          localStorage.setItem(
-            conversationStorageKeys(conversationId).artifactOpen,
-            "false",
-          );
-        }
-        localStorage.setItem(BROWSER_OPEN_KEY, "false");
+      setIsArtifactOpen(tab === "files");
+      setIsBrowserPanelOpen(tab === "browser");
+      setIsAppsTabOpen(tab === "apps");
+      setIsRunsTabOpen(tab === "runs");
+      if (conversationId) {
+        const keys = conversationStorageKeys(conversationId);
+        localStorage.setItem(keys.rightPanelOpen, "true");
+        localStorage.setItem(keys.rightPanelTab, tab);
       }
     },
     [conversationId],
@@ -1354,14 +1381,25 @@ export function ChatPageContent({
     setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
     setIsAppsTabOpen(false);
+    setIsRunsTabOpen(false);
     if (conversationId) {
+      // Leave the saved tab so reopening restores the last view.
       localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
+        conversationStorageKeys(conversationId).rightPanelOpen,
         "false",
       );
     }
-    localStorage.setItem(BROWSER_OPEN_KEY, "false");
   }, [conversationId]);
+
+  // When you land on a scheduled-run chat, open the Runs tab once per
+  // conversation (re-closing then sticks for that conversation).
+  const autoOpenedRunsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!scheduledRunTriggerId || !conversationId) return;
+    if (autoOpenedRunsRef.current === conversationId) return;
+    autoOpenedRunsRef.current = conversationId;
+    openRightPanelTab("runs");
+  }, [scheduledRunTriggerId, conversationId, openRightPanelTab]);
 
   const toggleRightPanel = useCallback(() => {
     if (isRightPanelOpen) {
@@ -1659,10 +1697,9 @@ export function ChatPageContent({
       // the init effect on the /chat/<id> mount reads this preference and
       // opens the Files panel (the default tab) for the fresh project chat.
       if (projectHasFilesRef.current) {
-        localStorage.setItem(
-          conversationStorageKeys(newConversation.id).artifactOpen,
-          "true",
-        );
+        const keys = conversationStorageKeys(newConversation.id);
+        localStorage.setItem(keys.rightPanelOpen, "true");
+        localStorage.setItem(keys.rightPanelTab, "files");
       }
       selectConversation(newConversation.id);
     });
@@ -1880,6 +1917,7 @@ export function ChatPageContent({
                 {activeRightTab === "files" && (
                   <div className="flex-1 min-h-0 overflow-auto">
                     <ConversationFilesPanel
+                      key={conversationId ?? "none"}
                       conversationId={conversationId}
                       artifact={conversation?.artifact}
                       projectId={conversation?.projectId}
@@ -1955,6 +1993,9 @@ export function ChatPageContent({
                       compactions={conversation?.compactions ?? []}
                       onRegenerateUserMessage={regenerateUserMessage}
                       onProviderConnected={handleProviderConnected}
+                      onChatErrorRetry={
+                        scheduledRun ? handleScheduledRunRetry : undefined
+                      }
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse
@@ -2221,6 +2262,7 @@ export function ChatPageContent({
             onTabChange={openRightPanelTab}
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+            scheduledRun={scheduledRun}
             artifact={conversation?.artifact}
             projectId={conversation?.projectId}
             conversationId={conversationId}

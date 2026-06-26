@@ -171,6 +171,44 @@ describe("validateAppHtmlStatic", () => {
     );
     expect(findings).toEqual([]);
   });
+
+  test.each([
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+  ])("browser storage (%s) in a script is a warning naming the api and archestra.storage", async (api) => {
+    const findings = await validateAppHtmlStatic(
+      `<html><head><script>window.${api}.getItem("k");</script></head><body/></html>`,
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining(`Uses browser storage (${api})`),
+    });
+    expect(findings.at(-1)?.message).toContain("archestra.storage");
+  });
+
+  test("an api named only in prose or a comment does not warn", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><!-- avoid localStorage --></head><body><p>This app does not use localStorage.</p></body></html>",
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("multiple browser storage APIs are reported once, deduplicated", async () => {
+    const findings = await validateAppHtmlStatic(
+      "<html><head><script>localStorage.x; localStorage.y; sessionStorage.z;</script></head><body/></html>",
+    );
+    const storageWarnings = findings.filter((f) =>
+      f.message.includes("Uses browser storage"),
+    );
+    expect(storageWarnings).toHaveLength(1);
+    expect(storageWarnings[0].message).toContain(
+      "localStorage, sessionStorage",
+    );
+    expect(storageWarnings[0].message).not.toMatch(
+      /localStorage,.*localStorage/,
+    );
+  });
 });
 
 describe("starter templates pass the save gate", () => {

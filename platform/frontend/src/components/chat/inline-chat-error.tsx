@@ -38,6 +38,12 @@ interface InlineChatErrorProps {
   modelSource?: ModelSource | null;
   /** Re-run the original prompt after the user connects a per-user provider. */
   onProviderConnected?: () => void;
+  /**
+   * When set, render a "Try again" button that clears this error and resends the
+   * prompt. Wired only for scheduled-run chats — other chats omit it and keep
+   * their existing edit-the-message retry flow.
+   */
+  onRetry?: () => void | Promise<void>;
 }
 
 export function InlineChatError({
@@ -49,6 +55,7 @@ export function InlineChatError({
   selectedModel,
   modelSource,
   onProviderConnected,
+  onRetry,
 }: InlineChatErrorProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { data: isAdmin } = useHasPermissions({
@@ -129,6 +136,20 @@ export function InlineChatError({
     );
   };
 
+  const retryButton = onRetry ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 gap-1.5"
+      onClick={() => {
+        void onRetry();
+      }}
+    >
+      <RefreshCw className="h-3.5 w-3.5" />
+      Try again
+    </Button>
+  ) : null;
+
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
@@ -168,6 +189,7 @@ export function InlineChatError({
                   {usageLimitMessage}
                 </p>
               )}
+              {retryButton}
             </div>
           </div>
         </MessageContent>
@@ -237,6 +259,8 @@ export function InlineChatError({
                 {usageLimitMessage}
               </p>
             )}
+
+            {retryButton}
 
             {isAdmin && (
               <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

@@ -1,5 +1,7 @@
+import { ChatErrorCode } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -976,5 +978,76 @@ describe("conversation list projectName", () => {
     const byTitle = Object.fromEntries(body.map((c) => [c.title, c]));
     expect(byTitle["in project"].projectName).toBe("chip-source");
     expect(byTitle.plain.projectName).toBeNull();
+  });
+
+  test("clears a conversation's recorded chat errors", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.ServerError,
+        message: "boom",
+        isRetryable: true,
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}/chat-errors`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(
+      await ConversationChatErrorModel.findByConversation(conversation.id),
+    ).toHaveLength(0);
+  });
+
+  test("returns 404 when clearing chat errors on another user's conversation", async ({
+    makeUser,
+    makeAgent,
+  }) => {
+    const otherUser = await makeUser();
+    const agent = await makeAgent({
+      organizationId,
+      authorId: otherUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: otherUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    await ConversationChatErrorModel.create({
+      conversationId: conversation.id,
+      error: {
+        code: ChatErrorCode.ServerError,
+        message: "boom",
+        isRetryable: true,
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}/chat-errors`,
+    });
+
+    // Owner-scoped lookup: the current user doesn't own it, so it's 404 and the
+    // other user's error is left intact.
+    expect(response.statusCode).toBe(404);
+    expect(
+      await ConversationChatErrorModel.findByConversation(conversation.id),
+    ).toHaveLength(1);
   });
 });

@@ -14,6 +14,8 @@ import {
   AgentModel,
   AgentTeamModel,
   ConversationModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
@@ -21,6 +23,7 @@ import { projectService } from "@/services/project";
 import {
   backfillRunConversationMessages,
   createAndLinkRunConversation,
+  ensureFailedRunErrorVisible,
 } from "@/services/scheduled-run-conversation";
 import { taskQueueService } from "@/task-queue";
 import {
@@ -713,6 +716,23 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
+  // Project members may read the runs of a schedule that belongs to a project
+  // they can access. Reuses the same ProjectShareModel.userCanAccessProject
+  // check that backs GET /api/projects/:id (via projectService.requireViewable).
+  if (trigger.projectId) {
+    const project = await ProjectModel.findById(trigger.projectId);
+    if (
+      project &&
+      (await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      return trigger;
+    }
+  }
+
   throw new ApiError(403, "You do not have access to this scheduled task");
 }
 
@@ -801,6 +821,11 @@ async function ensureRunConversation(params: {
     run,
     ownerUserId: conversation.userId,
   });
+
+  // A failed run that never executed (a skip, or a pre-execution failure) has no
+  // transcript to backfill — surface its error as a chat error so the chat shows
+  // the prompt + an error card instead of a blank thread.
+  await ensureFailedRunErrorVisible({ conversation, run, trigger });
 
   const refreshedConversation = await ConversationModel.findById({
     id: conversation.id,

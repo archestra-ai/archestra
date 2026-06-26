@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { afterEach, beforeEach, describe, expect, it } from "@/test";
 import { ApiError } from "@/types";
 import {
@@ -47,6 +48,10 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
       writable: true,
       configurable: true,
     });
+    // Park the user count well above the small-team threshold whenever the env
+    // flag is "off"; otherwise the small-team free tier would keep the gate
+    // open and break the "NOT activated" cases.
+    enterpriseTier.setUserCountForTesting(value ? 0 : 9999);
   };
 
   afterEach(async () => {

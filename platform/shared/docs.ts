@@ -45,6 +45,7 @@ export const DocsPage = {
   PlatformOrchestrator: "platform-orchestrator",
   PlatformOverview: "platform-overview",
   PlatformPerformanceBenchmarks: "platform-performance-benchmarks",
+  PlatformPricingModel: "platform-pricing-model",
   PlatformPrivateRegistry: "platform-private-registry",
   PlatformProjects: "platform-projects",
   PlatformPydanticExample: "platform-pydantic-example",

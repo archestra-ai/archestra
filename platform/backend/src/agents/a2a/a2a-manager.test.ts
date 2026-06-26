@@ -987,3 +987,78 @@ describe("A2AManager.sendMessage", () => {
     });
   });
 });
+
+describe("A2AManager.sendMessage malformed tool input", () => {
+  test("coerces a poisoned tool input from context history before replay", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "a2a-coerce", teams: [] });
+    const manager = new A2AManager();
+
+    // Turn 1: the agent persists an assistant turn whose tool call carries a
+    // malformed (non-object) input, poisoning the context history.
+    executeA2AMessage.mockReturnValueOnce({
+      messageId: crypto.randomUUID(),
+      text: "built",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [
+          { type: "text", text: "built" },
+          {
+            type: "dynamic-tool",
+            toolName: "edit_app",
+            toolCallId: "call_poison",
+            state: "output-available",
+            output: "ok",
+            input: '{"old_str">x',
+          },
+        ],
+      },
+    });
+    const first = await sendTextMessage(manager, agent.id, "build it");
+    const contextId = first.message?.contextId;
+    if (!contextId) {
+      throw new Error("contextId should be defined");
+    }
+
+    // Turn 2: replays the poisoned history. Capture what the executor receives.
+    executeA2AMessage.mockReturnValueOnce({
+      messageId: crypto.randomUUID(),
+      text: "ok",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "ok" }],
+      },
+    });
+    await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          contextId,
+          parts: [{ text: "change it" }],
+        },
+      },
+    });
+
+    const lastParams = executeA2AMessage.mock.calls.at(-1)?.[0] as {
+      originalUiMessages: {
+        parts?: { toolCallId?: string; input?: unknown }[];
+      }[];
+    };
+    const replayed = lastParams.originalUiMessages
+      .flatMap((m) => m.parts ?? [])
+      .find((p) => p.toolCallId === "call_poison");
+
+    expect(replayed).toBeDefined();
+    expect(typeof replayed?.input).toBe("object");
+    expect(replayed?.input).not.toBeNull();
+    expect(Array.isArray(replayed?.input)).toBe(false);
+  });
+});

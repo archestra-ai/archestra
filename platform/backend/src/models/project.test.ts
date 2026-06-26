@@ -140,6 +140,8 @@ describe("ProjectModel", () => {
     makeOrganization,
     makeAgent,
     makeConversation,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -169,6 +171,40 @@ describe("ProjectModel", () => {
     const listed = await ProjectModel.listConversations(project.id);
     expect(listed).toHaveLength(2);
     expect(listed[0].authorUserId).toBe(user.id);
+    // User chats carry no schedule context.
+    expect(listed.every((c) => c.scheduleTriggerId === null)).toBe(true);
+
+    // A scheduled-run conversation exposes its trigger + run (so the chat list
+    // can collapse a schedule's runs into one row).
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      actorUserId: user.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id, {
+      organizationId: org.id,
+      runKind: "due",
+    });
+    const scheduledConv = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+      title: "scheduled",
+    });
+    await db
+      .update(schema.conversationsTable)
+      .set({ projectId: project.id, origin: "schedule_trigger" })
+      .where(eq(schema.conversationsTable.id, scheduledConv.id));
+    await db
+      .update(schema.scheduleTriggerRunsTable)
+      .set({ chatConversationId: scheduledConv.id })
+      .where(eq(schema.scheduleTriggerRunsTable.id, run.id));
+
+    const withScheduled = await ProjectModel.listConversations(project.id);
+    const scheduledRow = withScheduled.find((c) => c.id === scheduledConv.id);
+    expect(scheduledRow?.scheduleTriggerId).toBe(trigger.id);
+    expect(scheduledRow?.scheduleRunId).toBe(run.id);
+    expect(scheduledRow?.scheduleName).toBe(trigger.name);
   });
 });
 

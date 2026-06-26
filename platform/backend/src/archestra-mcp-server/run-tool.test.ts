@@ -530,6 +530,7 @@ describe("run_tool", () => {
 
     test("executes an accessible-but-unassigned tool dynamically without assigning it", async ({
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog({
@@ -539,6 +540,7 @@ describe("run_tool", () => {
         name: "github__search_repositories",
         catalogId: catalog.id,
       });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
         content: [{ type: "text", text: "Dynamic response" }],
         isError: false,
@@ -579,6 +581,7 @@ describe("run_tool", () => {
 
     test("executes for a user who cannot modify the agent (no agent mutation involved)", async ({
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeMember,
       makeTool,
       makeUser,
@@ -594,6 +597,7 @@ describe("run_tool", () => {
         name: "github__search_repositories",
         catalogId: catalog.id,
       });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
         content: [{ type: "text", text: "Dynamic response" }],
         isError: false,
@@ -645,6 +649,7 @@ describe("run_tool", () => {
     test("does not run when the conversation's custom tool selection blocks the tool", async ({
       makeAgentTool,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
       const catalog = await makeInternalMcpCatalog({
@@ -663,6 +668,7 @@ describe("run_tool", () => {
         name: "giphy__image_search",
         catalogId: catalog.id,
       });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
       const result = await executeArchestraTool(
         TOOL_RUN_TOOL_FULL_NAME,
@@ -740,6 +746,7 @@ describe("run_tool", () => {
     test("evaluates invocation policies for dynamically resolved tools", async ({
       makeAgent,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeMember,
       makeOrganization,
       makeTool,
@@ -760,6 +767,7 @@ describe("run_tool", () => {
         name: "workspace__export_data",
         catalogId: catalog.id,
       });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       await makeToolPolicy(tool.id, {
         action: "block_always",
         reason: "External export blocked",
@@ -1711,6 +1719,7 @@ describe("run_tool", () => {
     test("returns the full schema for a dynamically-resolved invalid call (no dispatch)", async ({
       makeAgent,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
       const dynamicAgent = await makeAgent({
@@ -1726,6 +1735,7 @@ describe("run_tool", () => {
         catalogId: catalog.id,
         parameters: submitResultSchema,
       });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
       const result = await executeArchestraTool(
         TOOL_RUN_TOOL_FULL_NAME,

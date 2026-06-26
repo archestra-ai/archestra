@@ -303,6 +303,7 @@ export const RouteId = {
   UpdateChatConversation: "updateChatConversation",
   SetConversationHooksDebug: "setConversationHooksDebug",
   DeleteChatConversation: "deleteChatConversation",
+  ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
@@ -316,6 +317,7 @@ export const RouteId = {
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
   GetChatAttachmentContent: "getChatAttachmentContent",
+  DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 

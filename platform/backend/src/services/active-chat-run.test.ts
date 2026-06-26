@@ -71,6 +71,102 @@ test("drainStreamToEvents compacts adjacent text and reasoning deltas before mar
   expect(terminalRun?.status).toBe("completed");
 });
 
+test("terminalReady resolves only once the run is terminal, so an immediate next send is no longer 409-blocked", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // While the run is `running`, a second send is rejected — this is the window
+  // a client used to hit when it sent the next message the instant the stream
+  // ended but the async drain hadn't flipped the row terminal yet.
+  const blocked = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(blocked).toBeNull();
+
+  const { terminalReady } = activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    stream: createChunkStream([
+      { type: "start" },
+      { type: "text-delta", id: "text-1", delta: "hi" },
+      { type: "finish", finishReason: "stop" },
+    ]),
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  // The route releases the client stream's close only after this resolves.
+  await terminalReady;
+
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("completed");
+  // The same send that was blocked above now succeeds — no 409.
+  const next = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(next).not.toBeNull();
+});
+
+test("terminalReady resolves on the error path too, so a next send after a failed run isn't 409-blocked", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  const { terminalReady } = activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    // An error chunk, then the stream closes (the common provider-error case).
+    stream: createChunkStream([
+      { type: "start" },
+      { type: "error", errorText: "provider exploded" },
+    ]),
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  await terminalReady;
+
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("failed");
+  const next = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(next).not.toBeNull();
+});
+
 test("drainStreamToEvents fails the run as soon as an error chunk arrives, even if the stream never closes", async ({
   makeAgent,
   makeConversation,

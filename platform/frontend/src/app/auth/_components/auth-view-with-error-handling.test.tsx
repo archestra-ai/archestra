@@ -39,6 +39,7 @@ vi.mock("@/lib/config/config", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   usePublicConfig: vi.fn(),
+  usePublicEnterpriseCoreActive: () => false,
 }));
 
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({

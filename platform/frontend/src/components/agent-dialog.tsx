@@ -7,6 +7,7 @@ import {
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
+  DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
   E2eTestId,
   getDocsUrl,
@@ -795,7 +796,9 @@ export function AgentDialog({
         setName("");
         setIcon(null);
         setDescription("");
-        setSystemPrompt("");
+        // Prefill a starter persona for new agents so the default is visible and
+        // editable in the UI; other agent types don't surface the instruction.
+        setSystemPrompt(isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "");
         setSuggestedPrompts([]);
         setSuggestedPromptsOpen(false);
         setLlmApiKeyId(null);
@@ -821,7 +824,7 @@ export function AgentDialog({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [open, agent, freshAgent, refetchAgent]);
+  }, [open, agent, freshAgent, refetchAgent, isInternalAgent]);
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping
@@ -1637,6 +1640,7 @@ export function AgentDialog({
                           agentEnvironmentName={agentEnvironmentName}
                           onConflictsChange={setMcpEnvConflicts}
                           openComboboxOnMount={openToolsCombobox}
+                          includeAppCatalogs={agentType === "mcp_gateway"}
                         />
                       </div>
                       <div className="space-y-2">

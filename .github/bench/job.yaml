@@ -62,7 +62,7 @@ spec:
             - name: BENCH_ENVS
               value: "basic"
             - name: BENCH_LANES
-              value: "glm"
+              value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-54-nano,gpt-54-mini,claude-haiku-45,mimo-25,qwen36-35b-a3b,gpt-oss-120b"
             # Dagger runner host is resolved from the live staging Deployment by CI.
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
               value: "${DAGGER_RUNNER_HOST}"
@@ -77,6 +77,12 @@ spec:
                 secretKeyRef:
                   name: archestra-bench-secrets
                   key: ZAI_API_KEY
+            # OpenRouter-served lanes (everything except glm) resolve their key from here.
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: archestra-bench-secrets
+                  key: OPENROUTER_API_KEY
             # Reporting: the pod exports TensorBoard scalars, uploads artifacts to GCS (auth via the
             # platform SA's Workload Identity), and posts the Slack summary itself.
             - name: GCS_BUCKET

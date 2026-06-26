@@ -50,6 +50,7 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { useDefaultEnvironment } from "@/lib/organization.query";
+import { AppBackingCard } from "./app-backing-card";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import {
@@ -95,7 +96,12 @@ export function InternalMCPCatalog({
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
 
-  const { data: catalogItems } = useInternalMcpCatalog({ initialData });
+  // includeApps surfaces owned-app backings so the registry can manage them;
+  // the SSR fetch in page.tsx seeds the matching ("with-apps") query key.
+  const { data: catalogItems } = useInternalMcpCatalog({
+    initialData,
+    includeApps: true,
+  });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
@@ -916,6 +922,9 @@ export function InternalMCPCatalog({
             </h3>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {personalItems.map((item) => {
+                if (item.serverType === "app") {
+                  return <AppBackingCard key={item.id} item={item} />;
+                }
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard
@@ -962,6 +971,9 @@ export function InternalMCPCatalog({
             )}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {sharedItems.map((item) => {
+                if (item.serverType === "app") {
+                  return <AppBackingCard key={item.id} item={item} />;
+                }
                 const serverInfo = getInstalledServerInfo(item);
                 return (
                   <McpServerCard

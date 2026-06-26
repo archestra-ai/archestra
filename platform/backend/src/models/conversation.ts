@@ -359,6 +359,30 @@ class ConversationModel {
     };
   }
 
+  /**
+   * Cheap ownership check for mutating-route gates (e.g. deleting a chat's
+   * attachment): true only when `userId` owns the conversation in this org.
+   * Unlike `findById` it joins nothing and loads no messages.
+   */
+  static async isOwnedBy(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   static async findAccessibleById(params: {
     id: string;
     userId: string;

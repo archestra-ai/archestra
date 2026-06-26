@@ -309,6 +309,13 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // A local .env may set ARCHESTRA_NGROK_DOMAIN (a tunnel domain), which
+    // getConfiguredOrigins folds into the trusted/CORS origins. Pin it empty so
+    // these tests are independent of the developer's .env. Set to "" rather than
+    // deleted: the re-import tests below reload config (and thus dotenv, which
+    // defaults to override:false), so a deleted var would be repopulated from
+    // .env while an already-set empty value is left untouched.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
     vi.clearAllMocks();
   });
 
@@ -351,6 +358,9 @@ describe("getTrustedOrigins", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // See note in getConfiguredOrigins: keep these origin tests independent of
+    // a local .env that sets a tunnel domain.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
   });
 
   afterEach(() => {
@@ -1050,6 +1060,9 @@ describe("getCorsOrigins", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // See note in getConfiguredOrigins: keep these origin tests independent of
+    // a local .env that sets a tunnel domain.
+    process.env.ARCHESTRA_NGROK_DOMAIN = "";
   });
 
   afterEach(() => {

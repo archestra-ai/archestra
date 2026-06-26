@@ -518,29 +518,28 @@ export async function openManageCredentialsDialog(
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );
-  // Credentials now live on the routed detail page's Credentials tab, not in a
-  // settings dialog. The heading renders once the tab is active.
-  const connectionsHeading = page.getByRole("heading", {
-    name: "Credentials",
-    exact: true,
-  });
+  // Credentials live on the routed detail page's Credentials tab (no dialog).
+  // The tab trigger and its content carry stable test ids.
   const connectionsTab = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
+  const connectionsContent = page.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsContent,
+  );
 
-  if (await connectionsHeading.isVisible().catch(() => false)) {
+  if (await connectionsContent.isVisible().catch(() => false)) {
     return;
   }
 
   await expect(async () => {
-    if (await connectionsHeading.isVisible().catch(() => false)) {
+    if (await connectionsContent.isVisible().catch(() => false)) {
       return;
     }
 
     // Already on the detail page — just switch to the Credentials tab.
     if (await connectionsTab.isVisible().catch(() => false)) {
       await connectionsTab.click();
-      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -563,16 +562,16 @@ export async function openManageCredentialsDialog(
 
     await expect(connectionsTab).toBeVisible({ timeout: 5_000 });
     await connectionsTab.click();
-    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+    await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
   // Credentials render on the detail page's Credentials tab (no dialog). The
   // tab trigger carries the connection-count badge.
-  const connectionsTab = page.getByRole("tab", {
-    name: /^Credentials\b/,
-  });
+  const connectionsTab = page.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
   const badgeText = (await connectionsTab.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(
     badgeText.match(/\d+/)?.[0] ?? "0",

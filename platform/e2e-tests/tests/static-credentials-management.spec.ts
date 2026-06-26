@@ -165,9 +165,9 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
               server.teamDetails?.name ?? server.ownerEmail ?? "Deleted user",
           ) ?? [];
       await openManageCredentialsDialog(page, catalogItemName);
-      const connectionsButton = page.getByRole("tab", {
-        name: /^Credentials\b/,
-      });
+      const connectionsButton = page.getByTestId(
+        E2eTestId.McpServerSettingsConnectionsNavButton,
+      );
       await expect(connectionsButton).toBeVisible();
 
       if (user !== "Member") {
@@ -333,9 +333,9 @@ test("Verify Manage Credentials dialog shows correct other users credentials", a
   const checkCredentialsCount = async (page: Page) => {
     await goToPage(page, "/mcp/registry");
     await openManageCredentialsDialog(page, catalogItemName);
-    const connectionsButton = page.getByRole("tab", {
-      name: /^Credentials\b/,
-    });
+    const connectionsButton = page.getByTestId(
+      E2eTestId.McpServerSettingsConnectionsNavButton,
+    );
     await expect(connectionsButton).toBeVisible();
   };
   for (const { page } of MATRIX) {

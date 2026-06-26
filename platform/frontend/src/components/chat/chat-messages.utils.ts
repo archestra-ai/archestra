@@ -139,24 +139,28 @@ export function extractOwnedAppRender(params: {
 
 /**
  * Whether a render has been superseded by a newer render of the same app in the
- * conversation. The app registry (see {@link deriveAppsFromMessages}) dedupes
- * apps by `uiResourceUri` to their latest render, so a render is superseded when
- * the registry holds an entry for its `uiResourceUri` whose `toolCallId` differs.
- * Applies to both owned apps and external MCP-UI tool calls.
+ * conversation. Only **owned** apps can be superseded: they dedup by `appId`
+ * (see {@link deriveAppsFromMessages}), always showing the latest version, so a
+ * render is superseded when the registry's entry for its `appId` is a newer
+ * render. **External** MCP-UI renders never supersede one another — each tool
+ * call is its own live entry, so this always returns `false` for them (no `appId`).
  *
  * Returns `false` when the registry has no entry for the app yet (e.g. mid-stream
  * before the result is derived) so a freshly arriving render is never wrongly
  * collapsed. Superseded renders show a static changelog pill instead of a live
- * iframe; only the latest render of each app stays live.
+ * iframe; only the latest render of an owned app stays live.
  */
 export function isSupersededRender(params: {
   apps: PanelApp[];
-  uiResourceUri: string;
   toolCallId: string | undefined;
+  appId: string | null | undefined;
 }): boolean {
-  const latest = params.apps.find(
-    (a) => a.uiResourceUri === params.uiResourceUri,
-  )?.toolCallId;
+  if (!params.appId) {
+    return false;
+  }
+
+  const latest = params.apps.find((a) => a.appId === params.appId)?.toolCallId;
+
   return latest !== undefined && latest !== params.toolCallId;
 }
 
@@ -192,12 +196,13 @@ export function getAppRenderVerb(toolName: string): string | null {
  * refresh reconstructs and never empties because a single section briefly
  * unmounts.
  *
- * Apps are deduped by `uiResourceUri`: repeated renders of the same app collapse
- * to a single entry that tracks the latest render (its toolCallId and version),
- * so the panel defaults to the newest version. Owned (Archestra-authored) apps
- * use the synthetic `ui://archestra-app/<appId>` URI (version-independent, so
- * every version collapses together); external MCP-UI tool calls use the URI from
- * their result.
+ * Only owned (Archestra-authored) apps are deduped: they use the synthetic
+ * `ui://archestra-app/<appId>` URI (version-independent), so every version
+ * collapses to a single entry tracking the latest render (its toolCallId and
+ * version) and the panel defaults to the newest version. External MCP-UI tool
+ * calls never dedup — their result URI can represent entirely different content
+ * across calls (e.g. Excalidraw drawing different pictures), so each call is its
+ * own entry keyed by its unique toolCallId.
  */
 
 /**
@@ -221,58 +226,75 @@ export function deriveAppsFromMessages(
 ): PanelApp[] {
   const apps: PanelApp[] = [];
   const seen = new Set<string>();
-  // Maps an app's `uiResourceUri` to its index in `apps`, so a later render of
-  // the same app replaces the earlier entry instead of appending a duplicate.
+  // Maps an owned app's `appId` to its index in `apps`, so a later render of the
+  // same owned app replaces the earlier entry instead of appending a duplicate.
+  // External renders are never deduped.
   const appIndex = new Map<string, number>();
 
   for (const message of messages) {
     const createdAt = getMessageCreatedAt(message);
+
     for (const part of message.parts ?? []) {
-      if (!isToolPart(part)) continue;
-      const toolCallId = part.toolCallId;
-      if (!toolCallId || seen.has(toolCallId)) continue;
+      if (!isToolPart(part) || !part.toolCallId || seen.has(part.toolCallId)) {
+        continue;
+      }
 
-      const early = earlyToolUiStarts[toolCallId];
-      const outputUri =
-        // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
-        ((part.output as any)?._meta?.ui?.resourceUri as string | undefined) ??
-        early?.uiResourceUri ??
-        null;
-      const hasUiResource = Boolean(outputUri);
-      const fullToolName = getToolName(part) ?? early?.toolName ?? "";
-      const ownedApp = hasUiResource
-        ? null
-        : extractOwnedAppRender({
-            toolName: resolveRunToolTargetName(part, fullToolName, {
-              getToolShortName,
-            }),
-            output: part.output,
-            getToolShortName,
-          });
-      // Owned apps drive the app-bound endpoint via a synthetic, version-stable
-      // URI; external MCP-UI calls carry their own URI in the result.
-      const uiResourceUri = ownedApp
-        ? getArchestraAppResourceUri(ownedApp.appId)
-        : outputUri;
-      if (!uiResourceUri) continue;
+      const { outputUri, fullToolName } = parseToolAppRender(
+        part,
+        earlyToolUiStarts[part.toolCallId],
+      );
 
-      seen.add(toolCallId);
+      // An external MCP-UI render carries its own URI in the result. It never
+      // dedups: the same URI can represent entirely different content across
+      // calls (e.g. Excalidraw drawing different pictures), so each tool call is
+      // its own entry keyed by its unique toolCallId.
+      if (outputUri) {
+        seen.add(part.toolCallId);
+        apps.push({
+          toolCallId: part.toolCallId,
+          label: humanizeToolLabel(fullToolName),
+          uiResourceUri: outputUri,
+          appId: null,
+          version: null,
+          createdAt: createdAt ?? 0,
+        });
+
+        continue;
+      }
+
+      // Otherwise it may be an owned-app management result. Owned apps dedup by
+      // `appId` via a synthetic, version-stable URI, so every version collapses
+      // to the latest render.
+      const ownedApp = extractOwnedAppRender({
+        toolName: resolveRunToolTargetName(part, fullToolName, {
+          getToolShortName,
+        }),
+        output: part.output,
+        getToolShortName,
+      });
+
+      if (!ownedApp) {
+        continue;
+      }
+
+      seen.add(part.toolCallId);
+
       const entry: PanelApp = {
-        toolCallId,
-        label: ownedApp?.appName ?? humanizeToolLabel(fullToolName),
-        uiResourceUri,
-        appId: ownedApp?.appId ?? null,
-        version: ownedApp?.latestVersion ?? null,
+        toolCallId: part.toolCallId,
+        label: ownedApp.appName ?? humanizeToolLabel(fullToolName),
+        uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
+        appId: ownedApp.appId,
+        version: ownedApp.latestVersion,
         createdAt: createdAt ?? 0,
       };
 
-      const existing = appIndex.get(uiResourceUri);
+      const existing = appIndex.get(ownedApp.appId);
       if (existing !== undefined) {
         apps[existing] = entry;
-        continue;
+      } else {
+        appIndex.set(ownedApp.appId, apps.length);
+        apps.push(entry);
       }
-      appIndex.set(uiResourceUri, apps.length);
-      apps.push(entry);
     }
   }
 
@@ -540,6 +562,24 @@ function getToolName(part: DynamicToolUIPart | ToolUIPart): string | null {
   }
 
   return null;
+}
+
+/**
+ * Read an app render's UI-resource URI and full tool name from a tool part,
+ * falling back to the early `data-tool-ui-start` data when the tool result
+ * hasn't arrived yet (mid-stream). `outputUri` is the external MCP-UI URI, if any.
+ */
+function parseToolAppRender(
+  part: DynamicToolUIPart | ToolUIPart,
+  early: { uiResourceUri?: string; toolName?: string } | undefined,
+): { outputUri: string | null; fullToolName: string } {
+  const outputUri =
+    // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
+    ((part.output as any)?._meta?.ui?.resourceUri as string | undefined) ??
+    early?.uiResourceUri ??
+    null;
+  const fullToolName = getToolName(part) ?? early?.toolName ?? "";
+  return { outputUri, fullToolName };
 }
 
 function finalizeCurrentGroup(params: {

@@ -1,15 +1,23 @@
 "use client";
 
-import { AppWindow, FileText, Globe, PanelRightClose } from "lucide-react";
-import { useEffect, useRef } from "react";
+import {
+  AppWindow,
+  CalendarClock,
+  FileText,
+  Globe,
+  PanelRightClose,
+} from "lucide-react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
+import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 
-export type RightPanelTab = "files" | "browser" | "apps";
+export type RightPanelTab = "runs" | "files" | "browser" | "apps";
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -17,6 +25,12 @@ interface RightSidePanelProps {
   onTabChange: (tab: RightPanelTab) => void;
   onClose: () => void;
   canShowBrowser: boolean;
+
+  /**
+   * Set when the open chat is a scheduled run — enables the Runs tab, which
+   * lists the schedule's runs and marks `runId` as current.
+   */
+  scheduledRun?: { triggerId: string; runId: string | null } | null;
 
   // Artifact props
   artifact?: string | null;
@@ -44,6 +58,7 @@ export function RightSidePanel({
   onTabChange,
   onClose,
   canShowBrowser,
+  scheduledRun,
   artifact,
   projectId,
   conversationId,
@@ -58,6 +73,8 @@ export function RightSidePanel({
 
   let resolvedTab: RightPanelTab = activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
+  // The Runs tab only exists for scheduled-run chats; fall back otherwise.
+  if (resolvedTab === "runs" && !scheduledRun) resolvedTab = "files";
 
   // Activate the portal target only while the Apps tab is showing — when the
   // user switches to artifact/browser or closes the panel, the app falls back
@@ -87,6 +104,12 @@ export function RightSidePanel({
               clipped. */}
           <div className="min-w-0 flex-1 overflow-x-auto">
             <TabsList className="h-8 w-max">
+              {scheduledRun && (
+                <TabsTrigger value="runs" className="text-xs px-3">
+                  <CalendarClock className="h-3 w-3" />
+                  Runs
+                </TabsTrigger>
+              )}
               <TabsTrigger value="files" className="text-xs px-3">
                 <FileText className="h-3 w-3" />
                 Files
@@ -118,8 +141,16 @@ export function RightSidePanel({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
+          {resolvedTab === "runs" && scheduledRun && (
+            <RunsPanel
+              triggerId={scheduledRun.triggerId}
+              currentRunId={scheduledRun.runId}
+              projectId={projectId ?? null}
+            />
+          )}
           {resolvedTab === "files" && (
             <ConversationFilesPanel
+              key={conversationId ?? "none"}
               conversationId={conversationId}
               artifact={artifact}
               projectId={projectId}
@@ -161,5 +192,69 @@ export function RightSidePanel({
         </div>
       </Tabs>
     </ResizableRightPanel>
+  );
+}
+
+// Per-schedule runs-list scroll position. Selecting a run swaps the chat to the
+// run's conversation; the page re-renders (and the panel can remount), which
+// resets the list to the top. Remembering scrollTop here (module scope survives
+// both) lets us restore it so the list stays where you left it after picking a run.
+const runsScrollTopByTrigger = new Map<string, number>();
+
+/** The Runs tab content: the schedule's runs, with the current run highlighted. */
+function RunsPanel({
+  triggerId,
+  currentRunId,
+  projectId,
+}: {
+  triggerId: string;
+  currentRunId: string | null;
+  projectId: string | null;
+}) {
+  const { data: trigger } = useScheduleTrigger(triggerId);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Restore the saved scroll position whenever the panel (re)mounts OR the
+  // selected run changes — selecting a run re-renders without remounting, so a
+  // mount-only effect would miss it. Restore before paint, then re-assert next
+  // frame in case the reset lands a frame late (content relayout).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentRunId is a deliberate re-run trigger (restore on run selection), not read in the body.
+  useLayoutEffect(() => {
+    const saved = runsScrollTopByTrigger.get(triggerId);
+    if (saved == null) {
+      return;
+    }
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = saved;
+    }
+    const raf = requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = saved;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [triggerId, currentRunId]);
+
+  if (!projectId) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground">
+        Runs are available for project schedules.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={scrollRef}
+      onScroll={(e) => {
+        runsScrollTopByTrigger.set(triggerId, e.currentTarget.scrollTop);
+      }}
+      className="flex h-full flex-col overflow-y-auto p-3"
+    >
+      <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Runs · {trigger?.name ?? "Schedule"}
+      </div>
+      <ScheduleRunsList triggerId={triggerId} currentRunId={currentRunId} />
+    </div>
   );
 }

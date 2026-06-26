@@ -12,7 +12,7 @@ use archestra_bench::lifecycle::shutdown_all;
 use archestra_bench::results::Outcome;
 use archestra_bench::run::{RunError, RunOutcome, run};
 use clap::{Args, Parser, Subcommand};
-use tracing::info;
+use tracing::{info, warn};
 use trajectory_analyzer::{AnalyzeConfig, analyze, prepare_run_dir};
 
 #[derive(Parser, Debug)]
@@ -307,7 +307,21 @@ async fn guarded_run(
         ) => Some(result),
     };
     if result.is_none() {
-        shutdown_all().await;
+        // run() was dropped mid-flight, so live instances are still registered; shutdown_all tears
+        // them down now. Race it against a second signal so the user can force-exit immediately —
+        // that may leave still-draining process groups / benchmark DBs un-cleaned, acceptable as an
+        // explicit user-requested abort.
+        tokio::select! {
+            _ = shutdown_all() => {}
+            _ = tokio::signal::ctrl_c() => {
+                warn!("second interrupt — exiting now, teardown may be incomplete");
+                std::process::exit(130);
+            }
+            _ = sigterm() => {
+                warn!("SIGTERM during teardown — exiting now, teardown may be incomplete");
+                std::process::exit(143);
+            }
+        }
     }
     result
 }

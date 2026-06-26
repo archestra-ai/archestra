@@ -18,6 +18,10 @@ export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
   "remote",
   "builtin",
+  // Platform-authored MCP App: in-process, HTML-backed, viewer-scoped. Backs a
+  // real mcp_server exposing an `open` launch tool, but opts out of K8s deploy /
+  // install / cascade / discovery. Served in-process via the owned-app builder.
+  "app",
 ]);
 
 // Define Zod schemas for complex JSONB fields
@@ -132,6 +136,16 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
 export const ListInternalMcpCatalogSchema =
   SelectInternalMcpCatalogSchema.extend({
     toolCount: z.number().int().default(0),
+    // True when the catalog exposes a tool with a `ui://` MCP App resource —
+    // an external UI-providing server or an owned-app backing. Derived from the
+    // catalog's tools (see InternalMcpCatalogModel.getToolStats). Optional so
+    // callers constructing catalog items (e.g. the legacy registry) need not set
+    // it; the model always populates it on list reads.
+    providesUi: z.boolean().optional(),
+    // For `serverType:"app"` backings only, the id of the app they back, so the
+    // registry can link to / manage the app. Populated only on the includeApps
+    // path; null for everything else.
+    appId: z.string().nullable().optional(),
   });
 
 const InsertInternalMcpCatalogSchemaBase = createInsertSchema(

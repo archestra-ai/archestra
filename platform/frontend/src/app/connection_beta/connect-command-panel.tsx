@@ -205,6 +205,18 @@ export function ConnectCommandPanel({
   const proxyActive = !!(proxy && provider);
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
 
+  // Claude Code's Anthropic subscription passthrough also gets a personal
+  // passthrough key wired into the command (best-effort: only when the user can
+  // mint one). Used purely to tailor the passthrough description copy — the
+  // backend provisions it automatically; there is no separate UI choice.
+  const { data: canAttribute } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+  const passthroughAttributes =
+    client.id === "claude-code" &&
+    provider === "anthropic" &&
+    canAttribute === true;
+
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
   // user connects, `configuredProviders` updates and the command auto-generates.
@@ -407,7 +419,11 @@ export function ConnectCommandPanel({
               </Tabs>
               <p className="text-xs text-muted-foreground">
                 {proxyAuth === "provider-key" ? (
-                  "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                  passthroughAttributes ? (
+                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
+                  ) : (
+                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                  )
                 ) : providers.length === 0 ? (
                   canCreateProviderKey ? (
                     <>

@@ -1,6 +1,7 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { VirtualApiKeyModel } from "@/models";
 import {
+  ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
@@ -342,5 +343,106 @@ describe("readVirtualKeyValue", () => {
 
     await VirtualApiKeyModel.delete(id);
     expect(await readVirtualKeyValue(id)).toBeNull();
+  });
+});
+
+describe("ensureConnectionPassthroughKey", () => {
+  test("creates a personal passthrough key scoped to the proxy, then reuses it and accumulates proxies", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const proxyA = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      llmProxyId: proxyA.id,
+    });
+
+    const created = await VirtualApiKeyModel.findById(firstId);
+    expect(created?.keyType).toBe("passthrough");
+    expect(created?.scope).toBe("personal");
+    expect(created?.authorId).toBe(user.id);
+    expect(created?.name).toBe(`Connection passthrough — ${user.email}`);
+    // No provider credential — passthrough keys only attribute the user.
+    expect(await VirtualApiKeyModel.getProviderApiKeys(firstId)).toEqual([]);
+    expect(
+      await VirtualApiKeyModel.getLlmProxyIdsForVirtualApiKey(firstId),
+    ).toEqual([proxyA.id]);
+    expect(
+      (await readVirtualKeyValue(firstId))?.startsWith(ARCHESTRA_TOKEN_PREFIX),
+    ).toBe(true);
+
+    // Reuse for a second proxy: same key, allowed list grows (idempotent add).
+    const proxyB = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      llmProxyId: proxyB.id,
+    });
+    expect(secondId).toBe(firstId);
+    expect(
+      (
+        await VirtualApiKeyModel.getLlmProxyIdsForVirtualApiKey(secondId)
+      ).sort(),
+    ).toEqual([proxyA.id, proxyB.id].sort());
+
+    // Re-running for proxyA again does not duplicate the mapping.
+    await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      llmProxyId: proxyA.id,
+    });
+    expect(
+      await VirtualApiKeyModel.getLlmProxyIdsForVirtualApiKey(firstId),
+    ).toHaveLength(2);
+  });
+
+  test("recreates the key when the prior one was deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+
+    const firstId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      llmProxyId: proxy.id,
+    });
+    await VirtualApiKeyModel.delete(firstId);
+
+    const secondId = await ensureConnectionPassthroughKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      llmProxyId: proxy.id,
+    });
+    expect(secondId).not.toBe(firstId);
+    expect((await VirtualApiKeyModel.findById(secondId))?.keyType).toBe(
+      "passthrough",
+    );
   });
 });

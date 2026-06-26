@@ -119,6 +119,23 @@ curl -X POST "https://archestra.example.com/v1/anthropic/{proxyId}/v1/messages" 
 
 The interaction is attributed to the key's owner. A valid passthrough key authorizes the request at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential. If the key does not grant access to the target proxy, the request is rejected with `403`.
 
+### Configuring Claude Code and Claude Desktop
+
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code's subscription passthrough, the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://archestra.example.com/v1/anthropic/{proxyId}",
+    "ANTHROPIC_CUSTOM_HEADERS": "X-Archestra-Virtual-Key: arch_abc123def456..."
+  }
+}
+```
+
+`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
+
+Claude Desktop is configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add a custom header named `X-Archestra-Virtual-Key` with the passthrough key as its value.
+
 ## LLM OAuth Clients
 
 LLM OAuth clients are clients you register to call LLM proxy endpoints. They support two grants: **client credentials** (an application acting as itself, covered here) and **authorization code** (a pre-registered app acting on behalf of a signed-in user — see [On Behalf of Users](#on-behalf-of-users-authorization-code)).

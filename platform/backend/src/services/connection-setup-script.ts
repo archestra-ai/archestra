@@ -1,4 +1,8 @@
-import { DEFAULT_APP_NAME, type SupportedProvider } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  type SupportedProvider,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
@@ -46,6 +50,14 @@ export interface SetupScriptProxySection {
   virtualKey: string | null;
   /** Display name of the virtual key, for revocation guidance. */
   virtualKeyName: string | null;
+  /**
+   * Raw passthrough virtual key value injected at render time, sent as the
+   * X-Archestra-Virtual-Key header so the proxy attributes the request to the
+   * user. Set only in passthrough (provider-key) mode for the Anthropic
+   * provider (Claude Code subscription passthrough); null otherwise. Orthogonal
+   * to `virtualKey` — it carries no provider credential.
+   */
+  passthroughVirtualKey: string | null;
   /**
    * GitHub OAuth endpoints for the in-script device flow. Required when
    * provider is "github-copilot" in passthrough mode: Copilot has no static
@@ -461,6 +473,19 @@ env = settings.setdefault("env", {})
 for key in os.environ:
     if key.startswith("ARCHESTRA_SET_ENV_"):
         env[key.removeprefix("ARCHESTRA_SET_ENV_")] = os.environ[key]
+# Append-merge a single custom header into ANTHROPIC_CUSTOM_HEADERS: keep the
+# user's other headers, replace only our line (matched case-insensitively by
+# header name) so re-runs and key rotation never duplicate or leave a stale one.
+append_header = os.environ.get("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS")
+if append_header:
+    name = append_header.split(":", 1)[0].strip().lower()
+    existing = env.get("ANTHROPIC_CUSTOM_HEADERS", "") or ""
+    lines = [
+        ln for ln in existing.splitlines()
+        if ln.strip() and ln.split(":", 1)[0].strip().lower() != name
+    ]
+    lines.append(append_header)
+    env["ANTHROPIC_CUSTOM_HEADERS"] = "\\n".join(lines)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
@@ -472,6 +497,14 @@ function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   if (proxy.virtualKey) {
     env.ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
     manualEnv.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
+  }
+  // Passthrough attribution: add the X-Archestra-Virtual-Key header so the
+  // proxy attributes the request to the user, without clobbering any custom
+  // headers they already set (the merge appends/replaces only our line).
+  if (proxy.passthroughVirtualKey) {
+    const headerLine = `${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`;
+    env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = headerLine;
+    manualEnv.ANTHROPIC_CUSTOM_HEADERS = headerLine;
   }
   const passthroughNote = proxy.virtualKey
     ? ""

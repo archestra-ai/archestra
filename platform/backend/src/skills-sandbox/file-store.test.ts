@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach } from "vitest";
 import config from "@/config";
 import { ProjectModel } from "@/models";
@@ -9,6 +10,8 @@ import ConversationModel from "@/models/conversation";
 import FileModel, { FileNameExistsError } from "@/models/file";
 import { projectService } from "@/services/project";
 import { describe, expect, test } from "@/test";
+import { FakeS3Client } from "@/test/fake-s3-client";
+import { __setS3ClientForTests } from "./file-storage";
 import { FileNotDeletableError, fileStore } from "./file-store";
 
 async function seed(params: {
@@ -1093,6 +1096,91 @@ describe("fileStore disk overlay (filesystem provider)", () => {
         projectId: project.id,
       }),
     ).toBe("keep me");
+  });
+});
+
+describe("fileStore s3 overlay (s3 provider)", () => {
+  let fake: FakeS3Client;
+  let savedProvider: typeof config.fileStorage.provider;
+  let savedS3: typeof config.fileStorage.s3;
+
+  beforeEach(() => {
+    fake = new FakeS3Client();
+    savedProvider = config.fileStorage.provider;
+    savedS3 = config.fileStorage.s3;
+    config.fileStorage.provider = "s3";
+    config.fileStorage.s3 = {
+      bucket: "test-bucket",
+      region: "us-east-1",
+      endpoint: undefined,
+      forcePathStyle: false,
+      accessKeyId: undefined,
+      secretAccessKey: undefined,
+      keyPrefix: "",
+    };
+    __setS3ClientForTests(fake as unknown as S3Client);
+  });
+  afterEach(() => {
+    config.fileStorage.provider = savedProvider;
+    config.fileStorage.s3 = savedS3;
+    __setS3ClientForTests(null);
+  });
+
+  test("put stamps storageProvider=s3 + objectKey and get reads the bytes back", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const conv = await newConversation({ org, user, makeAgent });
+    const file = await seed({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conv,
+      filename: "note.txt",
+      data: Buffer.from("hello s3"),
+    });
+    expect(file.storageProvider).toBe("s3");
+    expect(file.objectKey).toBe(`${user.email}/${conv}/note.txt`);
+    expect(file.data).toBeNull();
+
+    const got = await fileStore.get({
+      ref: file.id,
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(got?.data.toString()).toBe("hello s3");
+  });
+
+  test("search surfaces a file hand-dropped into the project's S3 folder", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const project = await projectService.create({
+      organizationId: org.id,
+      userId: user.id,
+      name: "Acme Reports",
+      description: null,
+    });
+    // Drop bytes straight into the bucket at <slug>/report.csv (no files row).
+    fake.putRaw(`${project.slug}/report.csv`, "a,b,c");
+
+    const items = await fileStore.search({
+      organizationId: org.id,
+      userId: user.id,
+      scope: {
+        kind: "project",
+        projectId: project.id,
+        projectName: project.name,
+      },
+    });
+    const dropped = items.find((i) => i.filename === "report.csv");
+    expect(dropped).toBeDefined();
+    expect(dropped?.id).toBeNull(); // untracked — no row
+    expect(dropped?.downloadRef.startsWith("obj_")).toBe(true);
   });
 });
 

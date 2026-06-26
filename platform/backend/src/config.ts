@@ -23,7 +23,21 @@ import {
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
-type FileStorageProviderType = "db" | "filesystem";
+type FileStorageProviderType = "db" | "filesystem" | "s3";
+
+/**
+ * Resolved S3 byte-store config (validated only when provider === "s3").
+ * @public — consumed by the S3 file-storage provider in a later task
+ */
+export type FileStorageS3Config = {
+  bucket: string;
+  region: string;
+  endpoint: string | undefined;
+  forcePathStyle: boolean;
+  accessKeyId: string | undefined;
+  secretAccessKey: string | undefined;
+  keyPrefix: string;
+};
 
 /**
  * Load .env from platform root
@@ -639,7 +653,9 @@ export function parseFileStorageProvider(
   value: string | undefined,
 ): FileStorageProviderType {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "filesystem" ? "filesystem" : "db";
+  if (normalized === "filesystem") return "filesystem";
+  if (normalized === "s3") return "s3";
+  return "db";
 }
 
 /** @public — exported for testability */
@@ -660,6 +676,50 @@ export function parseFileStorageFilesystemRoot(params: {
     );
   }
   return root;
+}
+
+/** @public — exported for testability */
+export function parseFileStorageS3Config(params: {
+  provider: FileStorageProviderType;
+  env: {
+    bucket: string | undefined;
+    region: string | undefined;
+    endpoint: string | undefined;
+    forcePathStyle: string | undefined;
+    accessKeyId: string | undefined;
+    secretAccessKey: string | undefined;
+    keyPrefix: string | undefined;
+  };
+}): FileStorageS3Config {
+  const { env } = params;
+  const bucket = env.bucket?.trim() ?? "";
+  if (params.provider === "s3" && !bucket) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_S3_BUCKET is required when ARCHESTRA_FILE_STORAGE_PROVIDER=s3",
+    );
+  }
+  const accessKeyId = env.accessKeyId?.trim() || undefined;
+  const secretAccessKey = env.secretAccessKey?.trim() || undefined;
+  // Static credentials are all-or-nothing: a half-set pair would silently fall
+  // back to the AWS default credential chain (a different identity), so reject it
+  // loudly rather than resolve an unintended identity against the bucket.
+  if (
+    params.provider === "s3" &&
+    Boolean(accessKeyId) !== Boolean(secretAccessKey)
+  ) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID and ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY must be set together, or both omitted to use the AWS default credential chain",
+    );
+  }
+  return {
+    bucket,
+    region: env.region?.trim() || "us-east-1",
+    endpoint: env.endpoint?.trim() || undefined,
+    forcePathStyle: env.forcePathStyle?.trim().toLowerCase() === "true",
+    accessKeyId,
+    secretAccessKey,
+    keyPrefix: env.keyPrefix?.trim().replace(/^\/+|\/+$/g, "") ?? "",
+  };
 }
 
 /** @public — exported for testability */
@@ -815,6 +875,18 @@ const fileStorageProvider = parseFileStorageProvider(
 const fileStorageFilesystemRoot = parseFileStorageFilesystemRoot({
   provider: fileStorageProvider,
   value: process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT,
+});
+const fileStorageS3Config = parseFileStorageS3Config({
+  provider: fileStorageProvider,
+  env: {
+    bucket: process.env.ARCHESTRA_FILE_STORAGE_S3_BUCKET,
+    region: process.env.ARCHESTRA_FILE_STORAGE_S3_REGION,
+    endpoint: process.env.ARCHESTRA_FILE_STORAGE_S3_ENDPOINT,
+    forcePathStyle: process.env.ARCHESTRA_FILE_STORAGE_S3_FORCE_PATH_STYLE,
+    accessKeyId: process.env.ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY,
+    keyPrefix: process.env.ARCHESTRA_FILE_STORAGE_S3_KEY_PREFIX,
+  },
 });
 
 const config = {
@@ -1301,6 +1373,7 @@ const config = {
   fileStorage: {
     provider: fileStorageProvider,
     filesystemRoot: fileStorageFilesystemRoot,
+    s3: fileStorageS3Config,
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

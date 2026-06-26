@@ -468,6 +468,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // llmVirtualKey:create check is enforced in the handler (mirrors the
   // virtual-key branch of CreateConnectionSetup).
   [RouteId.CreateConnectionVirtualKey]: {},
+  // Provisions a personal passthrough key for the manual /connection flow
+  // (X-Archestra-Virtual-Key attribution). llmVirtualKey:create + llmProxy read
+  // access are enforced in the handler.
+  [RouteId.CreateConnectionPassthroughKey]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)

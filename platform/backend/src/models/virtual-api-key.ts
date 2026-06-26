@@ -296,6 +296,25 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Add one LLM proxy to a passthrough key's allowed list, idempotently (the
+   * composite PK makes a re-add a no-op). Unlike update(), whose
+   * syncVirtualApiKeyLlmProxies replaces the whole list, this only adds — so a
+   * reused per-user connection key accumulates the proxies it's connected to.
+   */
+  static async ensureLlmProxyMapping(params: {
+    virtualApiKeyId: string;
+    llmProxyId: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.virtualApiKeyLlmProxiesTable)
+      .values({
+        virtualApiKeyId: params.virtualApiKeyId,
+        llmProxyId: params.llmProxyId,
+      })
+      .onConflictDoNothing();
+  }
+
+  /**
    * List visible virtual keys for a provider API key.
    */
   static async findByProviderApiKeyId(

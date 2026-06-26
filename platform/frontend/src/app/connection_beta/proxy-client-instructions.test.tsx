@@ -4,17 +4,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 
-const { provisionMock, hasPermissionsMock, availableKeysMock } = vi.hoisted(
-  () => ({
-    provisionMock: vi.fn(),
-    hasPermissionsMock: vi.fn(),
-    availableKeysMock: vi.fn(),
-  }),
-);
+const {
+  provisionMock,
+  passthroughProvisionMock,
+  hasPermissionsMock,
+  availableKeysMock,
+} = vi.hoisted(() => ({
+  provisionMock: vi.fn(),
+  passthroughProvisionMock: vi.fn(),
+  hasPermissionsMock: vi.fn(),
+  availableKeysMock: vi.fn(),
+}));
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionVirtualKey: () => ({
     mutateAsync: provisionMock,
+    isPending: false,
+  }),
+  useCreateConnectionPassthroughKey: () => ({
+    mutateAsync: passthroughProvisionMock,
     isPending: false,
   }),
 }));
@@ -134,5 +142,79 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     await user.click(screen.getByRole("button", { name: /add one/i }));
 
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+});
+
+describe("ProxyClientInstructions — Claude Desktop attribution header", () => {
+  function renderClaudeDesktop() {
+    const client = CONNECT_CLIENTS.find((c) => c.id === "claude-desktop");
+    if (!client) throw new Error("Missing claude-desktop client fixture");
+    return render(
+      <ProxyClientInstructions
+        client={client}
+        profileId="profile-123"
+        profileName="Main Proxy"
+        baseUrl="http://localhost:9000/v1"
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    passthroughProvisionMock.mockReset();
+    hasPermissionsMock.mockReset();
+    hasPermissionsMock.mockReturnValue({ data: true });
+    availableKeysMock.mockReset();
+    availableKeysMock.mockReturnValue({ data: [] });
+  });
+
+  it("reveals the header name but never the secret key in plaintext", async () => {
+    passthroughProvisionMock.mockResolvedValue({
+      value: "arch_passthroughtoken",
+      name: "Connection passthrough — me@example.com",
+    });
+    renderClaudeDesktop();
+
+    expect(
+      screen.getByText("Add your personal auth key header"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(passthroughProvisionMock).toHaveBeenCalledWith({
+        llmProxyId: "profile-123",
+      }),
+    );
+    // the header name is shown (it isn't secret)
+    expect(
+      (await screen.findAllByText("X-Archestra-Virtual-Key")).length,
+    ).toBeGreaterThan(0);
+    // the key is a secret — it must never be rendered in plaintext…
+    expect(screen.queryByText(/arch_passthroughtoken/)).not.toBeInTheDocument();
+    // …but it stays copyable
+    expect(
+      screen.getAllByRole("button", { name: /copy to clipboard/i }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("points to the Virtual API Keys page when the user can't mint a key", () => {
+    hasPermissionsMock.mockReturnValue({ data: false });
+    renderClaudeDesktop();
+
+    expect(passthroughProvisionMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("link", { name: /Virtual API Keys/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a retry instead of spinning forever when provisioning fails", async () => {
+    // handleApiError swallows the failure and the mutation resolves null.
+    passthroughProvisionMock.mockResolvedValue(null);
+    renderClaudeDesktop();
+
+    await waitFor(() => expect(passthroughProvisionMock).toHaveBeenCalled());
+    expect(
+      await screen.findByRole("button", { name: /Retry/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Creating your passthrough key/i),
+    ).not.toBeInTheDocument();
   });
 });

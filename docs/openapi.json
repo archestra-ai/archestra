@@ -122522,6 +122522,19 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "claude_code",
+                "claude_desktop"
+              ]
+            },
+            "in": "query",
+            "name": "sessionSource",
+            "required": false,
+            "description": "Filter by client/session source (e.g. claude_code, claude_desktop)"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",

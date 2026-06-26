@@ -1453,7 +1453,7 @@ describe("search_tools", () => {
       expect(structured.hint).toContain("GitHub MCP");
     });
 
-    test("a partial match reports the query terms that hit no tool text", async ({
+    test("a successful search does not flag extra query terms that hit no tool text", async ({
       makeAgent,
       makeAgentTool,
       makeInternalMcpCatalog,
@@ -1494,13 +1494,13 @@ describe("search_tools", () => {
       );
       const structured =
         result.structuredContent as SearchToolsStructuredContent;
+      // 'message' matches slack__post_message; 'gif' matches nothing. The search still
+      // succeeded, so the unmatched 'gif' is suppressed rather than surfaced as noise.
       expect(structured.matchCount).toBe(1);
-      expect(structured.hint).toContain("No tool text matches");
-      expect(structured.hint).toContain("gif");
-      expect(structured.hint).not.toContain("message");
+      expect(structured.hint).toBeNull();
     });
 
-    test("composes the truncation and unmatched-terms clauses", async ({
+    test("a truncated search omits the unmatched-terms clause", async ({
       makeAgent,
       makeAgentTool,
       makeInternalMcpCatalog,
@@ -1538,7 +1538,8 @@ describe("search_tools", () => {
         userId: user.id,
       };
       // 'search' matches all three (-> truncated at limit 1); 'zzznope' matches
-      // nothing -> both clauses must appear.
+      // nothing. The search succeeded, so only the truncation clause appears -- the
+      // unmatched 'zzznope' is suppressed.
       const result = await executeArchestraTool(
         TOOL_SEARCH_TOOLS_FULL_NAME,
         { query: "search zzznope", limit: 1 },
@@ -1548,8 +1549,8 @@ describe("search_tools", () => {
         result.structuredContent as SearchToolsStructuredContent;
       expect(structured.truncated).toBe(true);
       expect(structured.hint).toContain("top 1 of 3");
-      expect(structured.hint).toContain("No tool text matches");
-      expect(structured.hint).toContain("zzznope");
+      expect(structured.hint).not.toContain("No tool text matches");
+      expect(structured.hint).not.toContain("zzznope");
     });
 
     test("regex mode never appends an unmatched-terms clause", async ({

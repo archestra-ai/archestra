@@ -570,38 +570,20 @@ class McpServerModel {
 
   /**
    * Catalog ids the caller has an accessible install of (own personal + team +
-   * org), fenced to the caller's organization. Distinct from catalog
-   * *visibility* (McpCatalogTeamModel): an org-scoped catalog is visible to
-   * every member, but if its only install is another user's personal server it
-   * is absent here. The org fence matters because org-scoped installs are not
-   * organization-filtered on their own — an install's tenant is its catalog's
-   * organization, so we join through the catalog and keep only this org's
-   * catalogs (plus global, organization-less ones). Scopes the search_tools /
-   * run_tool dynamic-discovery space so it cannot reach another user's servers
-   * or another tenant's installs.
+   * org). Distinct from catalog *visibility* (McpCatalogTeamModel): an
+   * org-scoped catalog is visible to every member, but if its only install is
+   * another user's personal server it is absent here. Scopes the search_tools /
+   * run_tool dynamic-discovery space so it cannot reach another user's servers.
    */
   static async getAccessibleInstallCatalogIds(
     userId: string,
-    organizationId: string,
   ): Promise<Set<string>> {
     const installIds = await McpServerModel.getAccessibleInstallIds(userId);
     if (installIds.length === 0) return new Set();
     const rows = await db
       .select({ catalogId: schema.mcpServersTable.catalogId })
       .from(schema.mcpServersTable)
-      .innerJoin(
-        schema.internalMcpCatalogTable,
-        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
-      )
-      .where(
-        and(
-          inArray(schema.mcpServersTable.id, installIds),
-          or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-            isNull(schema.internalMcpCatalogTable.organizationId),
-          ),
-        ),
-      );
+      .where(inArray(schema.mcpServersTable.id, installIds));
     const catalogIds = new Set<string>();
     for (const row of rows) {
       if (row.catalogId) catalogIds.add(row.catalogId);

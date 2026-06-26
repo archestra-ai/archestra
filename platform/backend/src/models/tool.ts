@@ -633,10 +633,7 @@ class ToolModel {
     // run_tool cannot reach another user's personal server. The built-in
     // Archestra catalog runs in-process with no install row, so it stays in.
     const installedCatalogIds =
-      await McpServerModel.getAccessibleInstallCatalogIds(
-        params.userId,
-        params.organizationId,
-      );
+      await McpServerModel.getAccessibleInstallCatalogIds(params.userId);
     const scopedCatalogIds = catalogIds.filter(
       (id) => id === ARCHESTRA_MCP_CATALOG_ID || installedCatalogIds.has(id),
     );

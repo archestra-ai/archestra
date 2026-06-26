@@ -190353,6 +190353,43 @@
         }
       }
     },
+    "/api/openapi-compact": {
+      "get": {
+        "operationId": "getCompactOpenApi",
+        "tags": [
+          "OpenAPI"
+        ],
+        "description": "Compact, request-focused OpenAPI index for route discovery. Optional `path` narrows to one group, e.g. /api/agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "path",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/v1/openrouter/chat/completions": {
       "post": {
         "operationId": "openrouterChatCompletionsWithDefaultAgent",

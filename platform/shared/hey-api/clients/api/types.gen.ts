@@ -50005,6 +50005,26 @@ export type OpenAiListModelsWithAgentResponses = {
 
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
+export type GetCompactOpenApiData = {
+    body?: never;
+    path?: never;
+    query?: {
+        path?: string;
+    };
+    url: '/api/openapi-compact';
+};
+
+export type GetCompactOpenApiResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetCompactOpenApiResponse = GetCompactOpenApiResponses[keyof GetCompactOpenApiResponses];
+
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {

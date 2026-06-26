@@ -151,7 +151,7 @@ environments).
 ## How to drive the API
 
 1. **Discover the route.** Call \`archestra__api\` with
-   \`{ method: "GET", path: "/openapi.json", query: { compact: "1", path: "/api/agents" } }\`.
+   \`{ method: "GET", path: "/api/openapi-compact", query: { path: "/api/agents" } }\`.
    This returns a compact index of each operation under that prefix: its method,
    request body shape, and \`x-required-permissions\`. Omit \`path\` to list every
    route group. Always look the shape up here rather than guessing field names.
@@ -207,7 +207,7 @@ over this same API — prefer \`archestra__api\`. The one exception is
 const PLATFORM_API_REFERENCE = `# Driving the platform API
 
 All routes are called through \`archestra__api\`. Discover exact shapes with
-\`GET /openapi.json?compact=1&path=/api/<group>\` (see SKILL.md); this file covers
+\`GET /api/openapi-compact?path=/api/<group>\` (see SKILL.md); this file covers
 the conventions that are easy to get wrong.
 
 ## Conventions
@@ -245,7 +245,7 @@ call. Both are scoped to a specific \`toolId\` and match on \`conditions\`, an
 array of \`{ key, operator, value }\`. GET \`/api/autonomy-policies/operators\` for
 the supported condition operators and their labels. Discover the exact request
 body for each route with
-\`GET /openapi.json?compact=1&path=/api/autonomy-policies\`.
+\`GET /api/openapi-compact?path=/api/autonomy-policies\`.
 
 ## Tool invocation policies — *when* a tool may run
 Managed under \`/api/autonomy-policies/tool-invocation\` (GET to list, POST to

@@ -758,17 +758,17 @@ Required RBAC permission: `llmLimit:read`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.j... | `toolPolicy:read` |
-| `get_tool_invocation_policies` | Get all tool invocation policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:read` |
-| `create_tool_invocation_policy` | Create a new tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:create` |
-| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:read` |
-| `update_tool_invocation_policy` | Update a tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:update` |
-| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:delete` |
-| `get_trusted_data_policies` | Get all trusted data policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:read` |
-| `create_trusted_data_policy` | Create a new trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:create` |
-| `get_trusted_data_policy` | Get a specific trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:read` |
-| `update_trusted_data_policy` | Update a trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:update` |
-| `delete_trusted_data_policy` | Delete a trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1). | `toolPolicy:delete` |
+| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/opena... | `toolPolicy:read` |
+| `get_tool_invocation_policies` | Get all tool invocation policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:read` |
+| `create_tool_invocation_policy` | Create a new tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:create` |
+| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:read` |
+| `update_tool_invocation_policy` | Update a tool invocation policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:update` |
+| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:delete` |
+| `get_trusted_data_policies` | Get all trusted data policies Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:read` |
+| `create_trusted_data_policy` | Create a new trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:create` |
+| `get_trusted_data_policy` | Get a specific trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:read` |
+| `update_trusted_data_policy` | Update a trusted data policy Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:update` |
+| `delete_trusted_data_policy` | Delete a trusted data policy by ID Deprecated: prefer the archestra__api tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact). | `toolPolicy:delete` |
 
 #### get_autonomy_policy_operators
 

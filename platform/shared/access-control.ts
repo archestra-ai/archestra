@@ -1385,6 +1385,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
+  // Compact OpenAPI discovery (read-only route index) - any authenticated user
+  [RouteId.GetCompactOpenApi]: {},
+
   // Site Notification Routes
   [RouteId.GetSiteNotification]: { siteNotification: ["read"] },
   [RouteId.GetSiteNotificationSettings]: { siteNotification: ["read"] },

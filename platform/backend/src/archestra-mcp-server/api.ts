@@ -35,7 +35,7 @@ const ApiToolArgsSchema = z
 
 const DESCRIPTION = `Call the Archestra platform's own REST API — the same API the web UI uses.
 
-Drive any platform operation (agents, MCP servers, tools, policies, knowledge, limits, members, …) by issuing the underlying HTTP request instead of a bespoke tool. To discover routes, GET /openapi.json?compact=1 for a request-focused index of every operation with its required permissions, or narrow to one group with &path=/api/agents — prefer this over the full /openapi.json, which is large.
+Drive any platform operation (agents, MCP servers, tools, policies, knowledge, limits, members, …) by issuing the underlying HTTP request instead of a bespoke tool. To discover routes, GET /api/openapi-compact for a request-focused index of every operation with its required permissions, or narrow to one group with ?path=/api/agents.
 
 The call runs with your own permissions: if you can do it in the UI, you can do it here; otherwise it returns 403. Reads (GET) run directly; writes may require human approval per policy.`;
 

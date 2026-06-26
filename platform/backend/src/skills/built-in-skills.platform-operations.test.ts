@@ -55,7 +55,7 @@ describe("Archestra Platform Operations skill", () => {
   });
 
   test("teaches discovery via the compact archestra__api path", () => {
-    expect(skillText).toContain("/openapi.json?compact=1");
+    expect(skillText).toContain("/api/openapi-compact");
     expect(skillText).toContain("archestra__api");
   });
 

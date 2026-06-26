@@ -49,6 +49,9 @@ export const RouteId = {
   GetConfig: "getConfig",
   GetPublicConfig: "getPublicConfig",
 
+  // OpenAPI Routes
+  GetCompactOpenApi: "getCompactOpenApi",
+
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
 

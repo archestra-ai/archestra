@@ -137,9 +137,9 @@ export class Authnz {
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
       isLlmProxyRoute ||
       isModelRouterRoute ||
-      // Bare spec or the ?compact=1 discovery variant (url carries the query).
+      // Full OpenAPI spec is public (hey-api codegen fetches it unauthenticated).
+      // The compact projection lives at the authenticated /api/openapi-compact.
       url === "/openapi.json" ||
-      url.startsWith("/openapi.json?") ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
       url === METRICS_PATH ||

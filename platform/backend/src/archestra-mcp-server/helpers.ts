@@ -252,7 +252,7 @@ export function structuredToolErrorResult(params: {
  * description and responses, pointing callers at the {@link TOOL_API_FULL_NAME}
  * tool that supersedes the whole group.
  */
-export const ARCHESTRA_API_DEPRECATION_NOTE = `Deprecated: prefer the ${TOOL_API_FULL_NAME} tool, which drives the same platform REST API directly (discover routes via GET /openapi.json?compact=1).`;
+export const ARCHESTRA_API_DEPRECATION_NOTE = `Deprecated: prefer the ${TOOL_API_FULL_NAME} tool, which drives the same platform REST API directly (discover routes via GET /api/openapi-compact).`;
 
 /** Append the deprecation note as a trailing text block on a tool result. */
 export function withDeprecationNote(result: CallToolResult): CallToolResult {

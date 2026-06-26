@@ -67,7 +67,6 @@ import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
-import { projectCompactOpenApi } from "@/openapi/project-compact-openapi";
 import { activeChatRunService } from "@/services/active-chat-run";
 import {
   APP_BASE_CSS_PATH,
@@ -1136,18 +1135,11 @@ const startWebServer = async () => {
      */
     await registerSwaggerPlugin(fastify);
 
-    // Register routes. `?compact=1` returns a request-focused projection
-    // (drops the inlined response schemas that bloat the full spec to ~9MB);
-    // `&path=/api/agents` narrows to one route group. The archestra__api tool
-    // and the Platform Operations skill use this for cheap route discovery.
-    fastify.get("/openapi.json", async (request) => {
-      const enriched = enrichOpenApiWithRbac(fastify.swagger());
-      const query = request.query as Record<string, unknown>;
-      // Repeated params arrive as arrays; only honor single string values.
-      if (typeof query.compact !== "string") return enriched;
-      const pathPrefix =
-        typeof query.path === "string" ? query.path : undefined;
-      return projectCompactOpenApi(enriched, { pathPrefix });
+    // Full OpenAPI spec (public, unauthenticated — consumed by hey-api client
+    // codegen). Agents use the compact `GET /api/openapi-compact` projection
+    // instead of this ~9MB doc for cheap route discovery.
+    fastify.get("/openapi.json", async () => {
+      return enrichOpenApiWithRbac(fastify.swagger());
     });
 
     if (enableE2eTestEndpoints) {

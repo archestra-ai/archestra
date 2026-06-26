@@ -864,4 +864,52 @@ describe("McpServerModel", () => {
       expect(cleared?.oauthRefreshFailedAt).toBeNull();
     });
   });
+
+  describe("getAccessibleInstallCatalogIds", () => {
+    test("returns catalogs the user has an own personal install of", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const install = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: user.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(install.id, user.id);
+
+      const ids = await McpServerModel.getAccessibleInstallCatalogIds(
+        user.id,
+        org.id,
+      );
+      expect(ids.has(catalog.id)).toBe(true);
+    });
+
+    test("excludes another org's org-scoped install (org-scoped installs are not organization-filtered on their own)", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+    }) => {
+      // org-scoped installs of org A's catalog must not count as installed for
+      // a user in org B, even though getOrgScopedMcpServerIds is org-blind.
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const userB = await makeUser();
+      const catalogA = await makeInternalMcpCatalog({
+        organizationId: orgA.id,
+      });
+      await makeMcpServer({ catalogId: catalogA.id, scope: "org" });
+
+      const ids = await McpServerModel.getAccessibleInstallCatalogIds(
+        userB.id,
+        orgB.id,
+      );
+      expect(ids.has(catalogA.id)).toBe(false);
+    });
+  });
 });

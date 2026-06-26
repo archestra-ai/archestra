@@ -1323,6 +1323,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
   [RouteId.CreateProject]: { project: ["create"] },
+  [RouteId.CreateProjectFromConversation]: {
+    project: ["create"],
+    chat: ["read"],
+  },
   [RouteId.GetProjects]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },

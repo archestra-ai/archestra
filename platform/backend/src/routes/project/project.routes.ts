@@ -78,6 +78,55 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/projects/from-conversation",
+    {
+      schema: {
+        operationId: RouteId.CreateProjectFromConversation,
+        description:
+          "Turn an existing chat into a project: create the project, move the " +
+          "chat into it, and re-point the chat's files to the project. Only the " +
+          "chat's owner may do this, and only for a user chat not already in a " +
+          "project. `name` defaults to the chat title.",
+        tags: ["Projects"],
+        body: z.object({
+          conversationId: z.string().uuid(),
+          name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH).optional(),
+          description: z
+            .string()
+            .max(PROJECT_DESCRIPTION_MAX_LENGTH)
+            .nullable()
+            .optional(),
+          icon: z.string().max(1_000_000).nullable().optional(),
+        }),
+        response: constructResponseSchema(ProjectListItemSchema),
+      },
+    },
+    async ({ body, organizationId, user }) => {
+      const { project } = await projectService.createProjectFromConversation({
+        organizationId,
+        userId: user.id,
+        conversationId: body.conversationId,
+        name: body.name ?? null,
+        description: body.description ?? null,
+        icon: body.icon ?? null,
+      });
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        icon: project.icon,
+        viewerRole: "owner" as const,
+        ownerName: user.name ?? null,
+        conversationCount: 1,
+        visibility: null,
+        shareTeamNames: null,
+        pinnedAt: null,
+        createdAt: project.createdAt,
+      };
+    },
+  );
+
   fastify.get(
     "/api/projects",
     {

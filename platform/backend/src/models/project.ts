@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { urlSlugify } from "@archestra/shared";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 
@@ -28,6 +28,115 @@ class ProjectModel {
       }
       throw error;
     }
+  }
+
+  /**
+   * Turn an existing chat into a project, atomically: create the project, move
+   * the chat into it (`conversations.project_id`), and re-point the chat's
+   * no-project files to the project (`files.project_id`). All in one
+   * transaction so a failure leaves no orphaned project or half-moved files.
+   *
+   * The conversation row is locked `FOR UPDATE` so two concurrent conversions
+   * of the same chat can't both create a project (the loser sees `project_id`
+   * already set). The caller (service) owns eligibility/validation; this method
+   * re-checks ownership and the not-already-assigned invariant under the lock.
+   */
+  static async createFromConversation(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+    name: string;
+    description: string | null;
+    icon: string | null;
+  }): Promise<{ project: Project; filesMoved: number }> {
+    // Computed outside the tx: `generateUniqueSlug` reads the module-level `db`,
+    // and the partial unique index is the real guard against a slug race.
+    const slug = await ProjectModel.generateUniqueSlug({
+      name: params.name,
+      organizationId: params.organizationId,
+    });
+
+    return db.transaction(async (tx) => {
+      const [conversation] = await tx
+        .select({
+          id: schema.conversationsTable.id,
+          projectId: schema.conversationsTable.projectId,
+        })
+        .from(schema.conversationsTable)
+        .where(
+          and(
+            eq(schema.conversationsTable.id, params.conversationId),
+            eq(schema.conversationsTable.userId, params.userId),
+            eq(schema.conversationsTable.organizationId, params.organizationId),
+          ),
+        )
+        .for("update");
+      if (!conversation) throw new ConversationNotOwnedError();
+      if (conversation.projectId) throw new ProjectAlreadyAssignedError();
+
+      // A brand-new project is empty, so the only filename clash the re-point
+      // can hit is two same-named no-project files in this chat (e.g. distinct
+      // authors). Detect it up front for a clear error instead of an opaque
+      // unique-violation rollback.
+      const movable = await tx
+        .select({ filename: schema.filesTable.filename })
+        .from(schema.filesTable)
+        .where(
+          and(
+            eq(schema.filesTable.organizationId, params.organizationId),
+            eq(schema.filesTable.conversationId, params.conversationId),
+            isNull(schema.filesTable.projectId),
+          ),
+        );
+      const seen = new Set<string>();
+      for (const { filename } of movable) {
+        if (seen.has(filename)) {
+          throw new ProjectFileNameConflictError(filename);
+        }
+        seen.add(filename);
+      }
+
+      let project: Project;
+      try {
+        const [row] = await tx
+          .insert(schema.projectsTable)
+          .values({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            name: params.name,
+            description: params.description,
+            icon: params.icon,
+            slug,
+          })
+          .returning();
+        if (!row) throw new Error("failed to insert project");
+        project = row;
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ProjectNameExistsError(params.name);
+        }
+        throw error;
+      }
+
+      await tx
+        .update(schema.conversationsTable)
+        .set({ projectId: project.id })
+        .where(eq(schema.conversationsTable.id, params.conversationId));
+
+      const moved = await tx
+        .update(schema.filesTable)
+        .set({ projectId: project.id })
+        .where(
+          and(
+            eq(schema.filesTable.organizationId, params.organizationId),
+            eq(schema.filesTable.conversationId, params.conversationId),
+            isNull(schema.filesTable.projectId),
+          ),
+        )
+        .returning({ id: schema.filesTable.id });
+
+      return { project, filesMoved: moved.length };
+    });
   }
 
   static async findById(id: string): Promise<Project | null> {
@@ -201,6 +310,30 @@ export class ProjectNameExistsError extends Error {
   constructor(name: string) {
     super(`a project named "${name}" already exists`);
     this.name = "ProjectNameExistsError";
+  }
+}
+
+/** The conversation does not exist or is not owned by the caller. */
+export class ConversationNotOwnedError extends Error {
+  constructor() {
+    super("conversation not found");
+    this.name = "ConversationNotOwnedError";
+  }
+}
+
+/** The conversation is already part of a project, so it can't seed a new one. */
+export class ProjectAlreadyAssignedError extends Error {
+  constructor() {
+    super("conversation already belongs to a project");
+    this.name = "ProjectAlreadyAssignedError";
+  }
+}
+
+/** Two files being moved into the new project share a name. */
+export class ProjectFileNameConflictError extends Error {
+  constructor(filename: string) {
+    super(`two files named "${filename}" can't move into the same project`);
+    this.name = "ProjectFileNameConflictError";
   }
 }
 

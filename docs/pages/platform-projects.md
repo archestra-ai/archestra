@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: Named collections of chats that share files and scheduled runs
-lastUpdated: 2026-06-23
+lastUpdated: 2026-06-26
 ---
 
 <!--
@@ -11,6 +11,10 @@ Check ../docs_writer_prompt.md before changing this file.
 -->
 
 A project is a named collection of chats that own a shared set of result files. Chats started in a project belong to it for their lifetime, files the agent saves are owned by the project rather than the individual author, and the project's page lists every chat and file in one place. Use a project to keep a body of work — its conversations, its outputs, and its recurring tasks — together and optionally shared with teammates.
+
+## Creating a project from a chat
+
+An existing chat can become a project. From the chat's menu in the sidebar choose **Create project**, or ask the agent in the chat (for example, "create a project out of this chat") when it has the `create_project_from_conversation` tool assigned. The new project is named after the chat by default and is private to you; the chat moves into it and the chat's saved files become project files. Only the owner of a user chat that is not already in a project can do this. The chat's attachments stay on the chat, which now lives in the project.
 
 ## Sharing
 

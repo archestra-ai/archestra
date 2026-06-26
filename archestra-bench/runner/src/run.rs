@@ -1662,7 +1662,12 @@ async fn grade_rollout(
             files: Vec::new(),
             new_conversation: false,
         };
-        stage_error = drive_stage_with_retry(
+        // The pre-nudge turn already terminated cleanly (the gate requires `stage_error.is_none()`);
+        // the nudge is a best-effort extra turn to recover a missing submission. Keep its error out of
+        // `stage_error` so a failed nudge -- most likely for the truncated/stuck population whose
+        // resent history can provoke a provider error -- doesn't mask the rollout's clean
+        // `NoSubmission` as an agent error. Record it as an artifact for triage instead.
+        if let Some(nudge_error) = drive_stage_with_retry(
             &client,
             &conversation_id,
             &nudge,
@@ -1673,7 +1678,15 @@ async fn grade_rollout(
             true,
             true,
         )
-        .await?;
+        .await?
+        {
+            artifacts
+                .append(
+                    "submit_nudge_error",
+                    serde_json::json!({"error": nudge_error}),
+                )
+                .await;
+        }
     }
 
     // Source the rollout's billable usage from the persisted LLM-proxy interaction rows, summed across

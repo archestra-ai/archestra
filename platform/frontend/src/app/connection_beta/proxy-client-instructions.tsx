@@ -4,8 +4,10 @@ import {
   isSupportedProvider,
   providerDisplayNames,
   type SupportedProvider,
+  VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
@@ -14,7 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useCreateConnectionVirtualKey } from "@/lib/connection-setup.query";
+import {
+  useCreateConnectionPassthroughKey,
+  useCreateConnectionVirtualKey,
+} from "@/lib/connection-setup.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
@@ -228,7 +233,7 @@ export function ProxyClientInstructions({
         ) : instruction.kind === "steps" ? (
           <div className="space-y-3">
             {instruction.note && <ProxyNote note={instruction.note} />}
-            <StepList steps={instruction.steps} />
+            <StepList steps={instruction.steps} llmProxyId={profileId} />
           </div>
         ) : (
           <div className="space-y-6">
@@ -244,7 +249,7 @@ export function ProxyClientInstructions({
                     </div>
                   )}
                 </div>
-                <StepList steps={sec.steps} />
+                <StepList steps={sec.steps} llmProxyId={profileId} />
               </div>
             ))}
             {instruction.note && <ProxyNote note={instruction.note} />}
@@ -616,7 +621,14 @@ function NoProvidersPanel({
   );
 }
 
-function StepList({ steps }: { steps: ProxyStep[] }) {
+function StepList({
+  steps,
+  llmProxyId,
+}: {
+  steps: ProxyStep[];
+  /** LLM proxy the setup targets — needed to provision a passthrough key. */
+  llmProxyId: string;
+}) {
   return (
     <ol className="grid gap-5">
       {steps.map((s, i) => (
@@ -650,11 +662,182 @@ function StepList({ steps }: { steps: ProxyStep[] }) {
                 ))}
               </div>
             )}
+            {s.showPassthroughKey && (
+              <PassthroughKeyField
+                llmProxyId={llmProxyId}
+                variant={s.passthroughKeyVariant ?? "header"}
+              />
+            )}
             {s.code && <TerminalBlock code={s.code} />}
           </div>
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * Inline reveal for the manual attribution step: auto-provisions the caller's
+ * personal passthrough virtual key (scoped to this proxy) and shows the header
+ * name + copyable value to paste into the client's custom-headers field. Gated
+ * on llmVirtualKey:create; otherwise points to the Virtual API Keys page.
+ */
+type PassthroughKeyState =
+  | { status: "loading" }
+  | { status: "done"; key: { value: string; name: string } }
+  | { status: "error" };
+
+function PassthroughKeyField({
+  llmProxyId,
+  variant,
+}: {
+  llmProxyId: string;
+  variant: "header" | "env";
+}) {
+  const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
+  const { mutateAsync } = useCreateConnectionPassthroughKey();
+  const [state, setState] = useState<PassthroughKeyState>({
+    status: "loading",
+  });
+
+  // ensureConnectionPassthroughKey is idempotent server-side, so a single fire
+  // is enough; always settle into done/error (never leave a dangling spinner —
+  // an earlier cancelled-flag version could strand the UI on success).
+  const runProvision = useCallback(() => {
+    setState({ status: "loading" });
+    mutateAsync({ llmProxyId })
+      .then((result) =>
+        setState(
+          result ? { status: "done", key: result } : { status: "error" },
+        ),
+      )
+      .catch(() => setState({ status: "error" }));
+  }, [mutateAsync, llmProxyId]);
+
+  // Auto-provision once the permission resolves. The ref fires exactly once and
+  // survives React strict-mode's double-invoke.
+  const firedRef = useRef(false);
+  useEffect(() => {
+    if (canCreate !== true || firedRef.current) return;
+    firedRef.current = true;
+    runProvision();
+  }, [canCreate, runProvision]);
+
+  if (canCreate === false) {
+    return (
+      <p className="text-[12.5px] leading-snug text-muted-foreground">
+        Create a passthrough virtual key on the{" "}
+        <Link
+          href="/llm/credentials/virtual-keys"
+          className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+        >
+          Virtual API Keys
+        </Link>{" "}
+        page, then add a header named{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+          {VIRTUAL_KEY_HEADER}
+        </code>{" "}
+        with the key as its value.
+      </p>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <p className="text-[12.5px] leading-snug text-muted-foreground">
+        Couldn&apos;t create a passthrough key.{" "}
+        <button
+          type="button"
+          onClick={runProvision}
+          className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+        >
+          Retry
+        </button>{" "}
+        or create one on the{" "}
+        <Link
+          href="/llm/credentials/virtual-keys"
+          className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+        >
+          Virtual API Keys
+        </Link>{" "}
+        page.
+      </p>
+    );
+  }
+
+  if (state.status !== "done") {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        Creating your passthrough key…
+      </div>
+    );
+  }
+
+  const { key } = state;
+  return (
+    <div className="grid gap-2">
+      {variant === "env" ? (
+        // Paste as the ANTHROPIC_CUSTOM_HEADERS value. The key is a secret, so
+        // it is masked on screen and copied in full.
+        <StackedCopyField
+          label="ANTHROPIC_CUSTOM_HEADERS"
+          display={`${VIRTUAL_KEY_HEADER}: ${SECRET_MASK}`}
+          copyValue={`${VIRTUAL_KEY_HEADER}: ${key.value}`}
+        />
+      ) : (
+        <>
+          <StackedCopyField
+            label="Header"
+            display={VIRTUAL_KEY_HEADER}
+            copyValue={VIRTUAL_KEY_HEADER}
+          />
+          <StackedCopyField
+            label="Value"
+            display={SECRET_MASK}
+            copyValue={key.value}
+          />
+        </>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        Revoke any time by deleting the &quot;{key.name}&quot; key on the
+        Virtual API Keys page.
+      </p>
+    </div>
+  );
+}
+
+/** Mask shown in place of a secret value (the real value is only copied). */
+const SECRET_MASK = "•".repeat(20);
+
+/**
+ * Stacked label + value with a copy button. `display` is what's shown on screen
+ * (a mask for secrets); `copyValue` is what's written to the clipboard. The
+ * stacked layout avoids the cramped fixed-width FieldRow label column.
+ */
+function StackedCopyField({
+  label,
+  display,
+  copyValue,
+}: {
+  label: string;
+  display: string;
+  copyValue: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-[#9ca3af]">
+            {label}
+          </div>
+          <code className="block truncate font-mono text-[13px] text-[#e5e7eb]">
+            {display}
+          </code>
+        </div>
+        <FieldCopyButton value={copyValue} />
+      </div>
+    </div>
   );
 }
 

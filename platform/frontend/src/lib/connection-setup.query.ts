@@ -2,7 +2,11 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
-const { createConnectionSetup, createConnectionVirtualKey } = archestraApiSdk;
+const {
+  createConnectionSetup,
+  createConnectionVirtualKey,
+  createConnectionPassthroughKey,
+} = archestraApiSdk;
 
 export type CreateConnectionSetupBody =
   archestraApiTypes.CreateConnectionSetupData["body"];
@@ -10,6 +14,8 @@ export type CreateConnectionSetupResult =
   archestraApiTypes.CreateConnectionSetupResponses["200"];
 type CreateConnectionVirtualKeyBody =
   archestraApiTypes.CreateConnectionVirtualKeyData["body"];
+type CreateConnectionPassthroughKeyBody =
+  archestraApiTypes.CreateConnectionPassthroughKeyData["body"];
 
 export function useCreateConnectionSetup() {
   const queryClient = useQueryClient();
@@ -42,6 +48,29 @@ export function useCreateConnectionVirtualKey() {
   return useMutation({
     mutationFn: async (body: CreateConnectionVirtualKeyBody) => {
       const { data, error } = await createConnectionVirtualKey({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+    },
+  });
+}
+
+/**
+ * Provisions (or reuses) the caller's personal passthrough virtual key scoped
+ * to an LLM proxy and returns its value once — backs the manual /connection
+ * flow's X-Archestra-Virtual-Key attribution step (Claude Code, Claude Desktop).
+ */
+export function useCreateConnectionPassthroughKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: CreateConnectionPassthroughKeyBody) => {
+      const { data, error } = await createConnectionPassthroughKey({ body });
       if (error) {
         handleApiError(error);
         return null;

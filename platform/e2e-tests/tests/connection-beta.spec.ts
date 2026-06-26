@@ -106,6 +106,31 @@ test.describe("connection_beta wizard", () => {
     expect(script).not.toContain("#!/usr/bin/env bash");
   });
 
+  test("claude-code passthrough injects the X-Archestra-Virtual-Key attribution header", async ({
+    page,
+    goToPage,
+  }) => {
+    // passthrough (provider key) is the default for claude-code + Anthropic; the
+    // admin fixture user can mint a passthrough key, so attribution is on.
+    await goToPage(page, "/connection_beta?clientId=claude-code");
+
+    const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
+    await expect(command).toBeVisible();
+
+    const commandText = (await command.textContent()) ?? "";
+    const url = commandText.match(/curl -fsSL '([^']+)'/)?.[1];
+    expect(url).toBeTruthy();
+    const scriptUrl = (url as string).replace(
+      /^https?:\/\/[^/]+/,
+      API_BASE_URL,
+    );
+    const script = await (await page.request.get(scriptUrl)).text();
+    expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
+    // subscription passes through — no auth-token override
+    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+
   test("admins configure the page from a dialog on the page itself", async ({
     page,
     goToPage,

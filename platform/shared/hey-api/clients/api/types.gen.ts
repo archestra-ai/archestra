@@ -25768,6 +25768,7 @@ export type CreateConnectionSetupData = {
         llmProxyId?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
         proxyAuth?: 'provider-key' | 'virtual-key';
+        attributePassthrough?: boolean;
         skills?: {
             skillIds: Array<string>;
             ttlDays: number | null;
@@ -25942,6 +25943,92 @@ export type CreateConnectionVirtualKeyResponses = {
 };
 
 export type CreateConnectionVirtualKeyResponse = CreateConnectionVirtualKeyResponses[keyof CreateConnectionVirtualKeyResponses];
+
+export type CreateConnectionPassthroughKeyData = {
+    body: {
+        llmProxyId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups/passthrough-key';
+};
+
+export type CreateConnectionPassthroughKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateConnectionPassthroughKeyError = CreateConnectionPassthroughKeyErrors[keyof CreateConnectionPassthroughKeyErrors];
+
+export type CreateConnectionPassthroughKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+        name: string;
+    };
+};
+
+export type CreateConnectionPassthroughKeyResponse = CreateConnectionPassthroughKeyResponses[keyof CreateConnectionPassthroughKeyResponses];
 
 export type GetConnectionSetupScriptData = {
     body?: never;

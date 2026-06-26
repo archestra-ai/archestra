@@ -3,7 +3,6 @@ import {
   ConversationModel,
   ConversationNotOwnedError,
   ProjectAlreadyAssignedError,
-  ProjectFileNameConflictError,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -119,9 +118,6 @@ class ProjectService {
           409,
           `a project named "${name}" already exists in this organization`,
         );
-      }
-      if (error instanceof ProjectFileNameConflictError) {
-        throw new ApiError(409, error.message);
       }
       throw error;
     }

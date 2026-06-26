@@ -371,7 +371,7 @@ test("converting a shared chat keeps the share and moves its files", async ({
   expect(projectFiles).toHaveLength(1);
 });
 
-test("rejects when two files moving into the project share a name", async ({
+test("moves only the converter's own files, leaving a collaborator's behind", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -385,39 +385,33 @@ test("rejects when two files moving into the project share a name", async ({
     userId: user.id,
     organizationId: org.id,
   });
-  // Same filename, different authors — allowed as no-project files (unique per
-  // author+conversation), but they would collide in the single new project.
-  await putFile({
+  // In a shared chat a collaborator can author no-project files in the owner's
+  // conversation. Converting must not sweep those into the owner's private
+  // project (which would strip the author's access).
+  const mine = await putFile({
     organizationId: org.id,
     userId: user.id,
     conversationId: conv.id,
-    filename: "dup.txt",
+    filename: "mine.md",
   });
-  await putFile({
+  const theirs = await putFile({
     organizationId: org.id,
     userId: collaborator.id,
     conversationId: conv.id,
-    filename: "dup.txt",
+    filename: "theirs.md",
   });
 
-  await expect(
-    projectService.createProjectFromConversation({
+  const { project, filesMoved } =
+    await projectService.createProjectFromConversation({
       organizationId: org.id,
       userId: user.id,
       conversationId: conv.id,
-    }),
-  ).rejects.toMatchObject({ statusCode: 409 });
+    });
 
-  // Atomic: the failed conversion left no project and no moved files.
-  expect(
-    (
-      await ConversationModel.getOwnedMeta({
-        id: conv.id,
-        userId: user.id,
-        organizationId: org.id,
-      })
-    )?.projectId,
-  ).toBeNull();
+  expect(filesMoved).toBe(1);
+  expect((await FileModel.findById(mine.id))?.projectId).toBe(project.id);
+  // The collaborator's file stays a no-project file they still own.
+  expect((await FileModel.findById(theirs.id))?.projectId).toBeNull();
 });
 
 // Exercise ApiError so the import is used even if assertions above use toMatchObject.

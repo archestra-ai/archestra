@@ -70,7 +70,6 @@ export {
   ConversationNotOwnedError,
   default as ProjectModel,
   ProjectAlreadyAssignedError,
-  ProjectFileNameConflictError,
   ProjectNameExistsError,
 } from "./project";
 export { default as ProjectPinModel } from "./project-pin";

@@ -74,28 +74,6 @@ class ProjectModel {
       if (!conversation) throw new ConversationNotOwnedError();
       if (conversation.projectId) throw new ProjectAlreadyAssignedError();
 
-      // A brand-new project is empty, so the only filename clash the re-point
-      // can hit is two same-named no-project files in this chat (e.g. distinct
-      // authors). Detect it up front for a clear error instead of an opaque
-      // unique-violation rollback.
-      const movable = await tx
-        .select({ filename: schema.filesTable.filename })
-        .from(schema.filesTable)
-        .where(
-          and(
-            eq(schema.filesTable.organizationId, params.organizationId),
-            eq(schema.filesTable.conversationId, params.conversationId),
-            isNull(schema.filesTable.projectId),
-          ),
-        );
-      const seen = new Set<string>();
-      for (const { filename } of movable) {
-        if (seen.has(filename)) {
-          throw new ProjectFileNameConflictError(filename);
-        }
-        seen.add(filename);
-      }
-
       let project: Project;
       try {
         const [row] = await tx
@@ -123,6 +101,23 @@ class ProjectModel {
         .set({ projectId: project.id })
         .where(eq(schema.conversationsTable.id, params.conversationId));
 
+      // Re-point only the caller's OWN no-project files. In a shared chat a
+      // collaborator may have authored no-project files (stamped with their
+      // user id); moving those into the converter's private project would strip
+      // the author's access, so they stay with their author. This also makes a
+      // filename clash in the brand-new project impossible: the caller's files
+      // are already unique per (user, conversation, filename).
+      //
+      // Re-pointing leaves each row's `object_key` in place; that is correct
+      // for every storage provider because reads and byte-purge address files
+      // by `object_key` / row, never by folder path (so no copy, no orphaned
+      // bytes). For an external store the bytes simply keep their original
+      // conversation-folder layout rather than moving under the project slug.
+      //
+      // A file write whose scope was resolved as no-project just before this
+      // runs but inserts just after stays a no-project row (still reachable in
+      // the chat's own Files panel); the conversation lock does not serialize
+      // file inserts. Narrow and non-destructive.
       const moved = await tx
         .update(schema.filesTable)
         .set({ projectId: project.id })
@@ -130,6 +125,7 @@ class ProjectModel {
           and(
             eq(schema.filesTable.organizationId, params.organizationId),
             eq(schema.filesTable.conversationId, params.conversationId),
+            eq(schema.filesTable.userId, params.userId),
             isNull(schema.filesTable.projectId),
           ),
         )
@@ -326,14 +322,6 @@ export class ProjectAlreadyAssignedError extends Error {
   constructor() {
     super("conversation already belongs to a project");
     this.name = "ProjectAlreadyAssignedError";
-  }
-}
-
-/** Two files being moved into the new project share a name. */
-export class ProjectFileNameConflictError extends Error {
-  constructor(filename: string) {
-    super(`two files named "${filename}" can't move into the same project`);
-    this.name = "ProjectFileNameConflictError";
   }
 }
 

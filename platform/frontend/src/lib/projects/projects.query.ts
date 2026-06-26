@@ -16,6 +16,7 @@ function isProjectNotFound(error: unknown): boolean {
 const {
   createProject,
   deleteProject,
+  deleteSkillSandboxArtifact,
   getProject,
   getProjectConversations,
   getProjectFiles,
@@ -288,6 +289,48 @@ export function useDeleteProject() {
       // queries (`["projects", id, …]`), which are still mounted for the instant
       // before we navigate away and would 404 on the now-gone id.
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+    },
+  });
+}
+
+/**
+ * Delete one or more project files (persisted skill-sandbox artifacts). Runs the
+ * deletes concurrently and reports a single summary toast and the ids that
+ * failed. Deleting a project file removes it project-wide, so it also refreshes
+ * any chat Files panels (`["conversation-files", …]`) that list project files.
+ */
+export function useDeleteProjectFiles(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: Array<{ id: string }>) => {
+      const results = await Promise.allSettled(
+        items.map((item) =>
+          deleteSkillSandboxArtifact({ path: { artifactId: item.id } }),
+        ),
+      );
+      const failedIds = items
+        .filter((_, i) => {
+          const r = results[i];
+          return r.status === "rejected" || r.value.error != null;
+        })
+        .map((item) => item.id);
+      return { total: items.length, failedIds };
+    },
+    onSuccess: ({ total, failedIds }) => {
+      const deleted = total - failedIds.length;
+      if (failedIds.length === 0) {
+        toast.success(total === 1 ? "File deleted" : `Deleted ${total} files`);
+      } else {
+        toast.error(
+          `Deleted ${deleted} of ${total}; ${failedIds.length} failed`,
+        );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "files"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversation-files"] });
     },
   });
 }

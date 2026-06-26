@@ -20,10 +20,7 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { AgentIcon } from "@/components/agent-icon";
-import {
-  type FileListItem,
-  FileSection,
-} from "@/components/chat/file-list-section";
+import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import {
@@ -32,6 +29,7 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
+import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -44,10 +42,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
+  useDeleteProjectFiles,
   usePinProject,
   useProject,
   useProjectConversations,
@@ -223,7 +223,7 @@ function ProjectDetail() {
         <ProjectFilesSidebar
           projectId={project.id}
           projectName={project.name}
-          isOwner={canManage}
+          canManageProject={canManage}
         />
       </div>
     </div>
@@ -329,11 +329,12 @@ function ChatsList({
 function ProjectFilesSidebar({
   projectId,
   projectName,
-  isOwner,
+  canManageProject,
 }: {
   projectId: string;
   projectName: string;
-  isOwner: boolean;
+  /** Owner / project-admin — gates editing the pinned instructions. */
+  canManageProject: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -373,6 +374,18 @@ function ProjectFilesSidebar({
     }
   }, [selectedMissing]);
 
+  // Every viewer of a project has project access, which the backend's artifact
+  // delete authorizes — so file select/delete is available to anyone here (the
+  // chat panel gates on conversation ownership; the project surface on access).
+  const deleteProjectFiles = useDeleteProjectFiles(projectId);
+  const { requestDelete, dialog: deleteDialog } = useFileDeletion<FileListItem>(
+    {
+      deleteItems: (toDelete) => deleteProjectFiles.mutateAsync(toDelete),
+      describe: () =>
+        "This file is part of the project and will be removed for everyone with access to it. This can't be undone.",
+    },
+  );
+
   return (
     <ResizableRightPanel>
       <Tabs value="files" className="flex-1 min-h-0 flex flex-col gap-0">
@@ -393,23 +406,17 @@ function ProjectFilesSidebar({
         <div className="flex-1 min-h-0 overflow-hidden relative">
           <div className="flex h-full flex-col">
             {view === "list" ? (
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-                <FileSection
-                  items={items}
-                  selectedId={null}
-                  onSelect={openFile}
-                  leading={
-                    <InstructionsRow
-                      onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
-                    />
-                  }
-                />
-                {items.length === 0 && (
-                  <p className="px-1 pt-3 text-xs text-muted-foreground">
-                    Results the agent saves in this project will appear here.
-                  </p>
-                )}
-              </div>
+              <SelectableFileList<FileListItem>
+                sections={[{ items }]}
+                canManage
+                onOpen={openFile}
+                onRequestDelete={requestDelete}
+                leading={
+                  <InstructionsRow
+                    onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
+                  />
+                }
+              />
             ) : (
               <>
                 <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
@@ -429,22 +436,41 @@ function ProjectFilesSidebar({
                   >
                     {detailName}
                   </span>
-                  {selected && !instructionsSelected && selected.contentUrl && (
-                    <a
-                      href={selected.contentUrl}
-                      download={selected.name}
-                      title={`Download ${selected.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only">Download {selected.name}</span>
-                    </a>
+                  {selected && !instructionsSelected && (
+                    <div className="flex shrink-0 items-center">
+                      {selected.contentUrl && (
+                        <a
+                          href={selected.contentUrl}
+                          download={selected.name}
+                          title={`Download ${selected.name}`}
+                          className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span className="sr-only">
+                            Download {selected.name}
+                          </span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          requestDelete([selected], (failedIds) => {
+                            if (!failedIds.includes(selected.id)) backToList();
+                          })
+                        }
+                        title={`Delete ${selected.name}`}
+                        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete {selected.name}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
                 {instructionsSelected ? (
                   <ProjectInstructionsPanel
                     projectId={projectId}
-                    isOwner={isOwner}
+                    isOwner={canManageProject}
                     onClose={backToList}
                   />
                 ) : selected ? (
@@ -455,6 +481,7 @@ function ProjectFilesSidebar({
           </div>
         </div>
       </Tabs>
+      {deleteDialog}
     </ResizableRightPanel>
   );
 }

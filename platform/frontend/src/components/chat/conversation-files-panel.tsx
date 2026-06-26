@@ -99,7 +99,6 @@ export function ConversationFilesPanel({
   const generatedFileIds = generated
     .filter((f) => f.source === "generated")
     .map((f) => f.id);
-  const newestGeneratedId = generatedFileIds.at(-1);
   const generatedKey = generatedFileIds.join("|");
   const filesLoaded = files !== undefined;
 
@@ -114,17 +113,6 @@ export function ConversationFilesPanel({
       setExpanded(false);
     }
   }, [selectedMissing]);
-
-  // Keep a valid preview target when nothing is selected (artifact first, then
-  // the newest generated file). Opens in the split (never forces `expanded`).
-  useEffect(() => {
-    if (selectedId !== null) return;
-    if (hasArtifact) {
-      setSelectedId("artifact");
-    } else if (newestGeneratedId) {
-      setSelectedId(newestGeneratedId);
-    }
-  }, [selectedId, hasArtifact, newestGeneratedId]);
 
   // Follow the latest produced output: when the artifact is (re)written switch
   // back to it, when a download_file output is created switch to that file. It
@@ -214,7 +202,7 @@ export function ConversationFilesPanel({
   }
 
   const detailName = instructionsSelected
-    ? "Instructions"
+    ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
 
   return (

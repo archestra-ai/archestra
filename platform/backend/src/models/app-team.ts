@@ -4,16 +4,18 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
- * Team assignments + scope-based accessibility for apps. Mirrors
- * `SkillTeamModel`/`AgentTeamModel`. Writing assignments is done inside
- * `AppModel`'s transactions; this model owns the reads (accessibility queries
- * and the batch team loaders that avoid N+1 when listing apps).
+ * Read-side accessibility + team loaders for apps. An app's visibility (scope +
+ * teams) lives on its backing catalog (serverType "app"), so these resolve
+ * through `apps → mcp_server → internal_mcp_catalog` and the `mcp_catalog_team`
+ * junction — the same model the MCP server registry uses — rather than a
+ * per-app scope column or `app_team`.
  */
 class AppTeamModel {
   /**
-   * IDs of (non-deleted) apps a user can see, by scope: every `org` app, their
-   * own `personal` apps, and `team` apps assigned to a team they belong to.
-   * Pass `userId: undefined` for an org-context principal (org apps only).
+   * IDs of (non-deleted) apps a user can see, by the backing catalog's scope:
+   * every `org` app, their own `personal` apps, and `team` apps whose backing
+   * catalog is assigned to a team they belong to. `userId: undefined` → an
+   * org-context principal (org apps only).
    */
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
@@ -23,14 +25,28 @@ class AppTeamModel {
     const rows = await db
       .selectDistinct({ id: schema.appsTable.id })
       .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
       .leftJoin(
-        schema.appTeamTable,
-        eq(schema.appsTable.id, schema.appTeamTable.appId),
+        schema.mcpCatalogTeamsTable,
+        eq(
+          schema.internalMcpCatalogTable.id,
+          schema.mcpCatalogTeamsTable.catalogId,
+        ),
       )
       .leftJoin(
         schema.teamMembersTable,
         and(
-          eq(schema.appTeamTable.teamId, schema.teamMembersTable.teamId),
+          eq(
+            schema.mcpCatalogTeamsTable.teamId,
+            schema.teamMembersTable.teamId,
+          ),
           userId === undefined
             ? undefined
             : eq(schema.teamMembersTable.userId, userId),
@@ -41,15 +57,15 @@ class AppTeamModel {
           eq(schema.appsTable.organizationId, organizationId),
           notDeleted(schema.appsTable),
           userId === undefined
-            ? eq(schema.appsTable.scope, "org")
+            ? eq(schema.internalMcpCatalogTable.scope, "org")
             : or(
-                eq(schema.appsTable.scope, "org"),
+                eq(schema.internalMcpCatalogTable.scope, "org"),
                 and(
-                  eq(schema.appsTable.scope, "personal"),
+                  eq(schema.internalMcpCatalogTable.scope, "personal"),
                   eq(schema.appsTable.authorId, userId),
                 ),
                 and(
-                  eq(schema.appsTable.scope, "team"),
+                  eq(schema.internalMcpCatalogTable.scope, "team"),
                   eq(schema.teamMembersTable.userId, userId),
                 ),
               ),
@@ -59,9 +75,9 @@ class AppTeamModel {
   }
 
   /**
-   * Whether a user may view a specific app. Org apps are visible to everyone in
-   * the org; personal to the author; team to members of an assigned team. App
-   * admins bypass scope. Fails closed for an out-of-union scope.
+   * Whether a user may view a specific app, by its backing catalog's scope. Org
+   * apps are visible org-wide; personal to the author; team to members of a team
+   * the backing catalog is assigned to. App admins bypass scope.
    */
   static async userHasAppAccess(params: {
     organizationId: string;
@@ -86,15 +102,29 @@ class AppTeamModel {
       case "team": {
         if (userId === undefined) return false;
         const [match] = await db
-          .select({ teamId: schema.appTeamTable.teamId })
-          .from(schema.appTeamTable)
+          .select({ teamId: schema.mcpCatalogTeamsTable.teamId })
+          .from(schema.appsTable)
+          .innerJoin(
+            schema.mcpServersTable,
+            eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+          )
+          .innerJoin(
+            schema.mcpCatalogTeamsTable,
+            eq(
+              schema.mcpServersTable.catalogId,
+              schema.mcpCatalogTeamsTable.catalogId,
+            ),
+          )
           .innerJoin(
             schema.teamMembersTable,
-            eq(schema.appTeamTable.teamId, schema.teamMembersTable.teamId),
+            eq(
+              schema.mcpCatalogTeamsTable.teamId,
+              schema.teamMembersTable.teamId,
+            ),
           )
           .where(
             and(
-              eq(schema.appTeamTable.appId, app.id),
+              eq(schema.appsTable.id, app.id),
               eq(schema.teamMembersTable.userId, userId),
             ),
           )
@@ -106,12 +136,23 @@ class AppTeamModel {
     }
   }
 
-  /** Team IDs assigned to one app. */
+  /** Team IDs assigned to one app (via its backing catalog). */
   static async getTeamsForApp(appId: string): Promise<string[]> {
     const rows = await db
-      .select({ teamId: schema.appTeamTable.teamId })
-      .from(schema.appTeamTable)
-      .where(eq(schema.appTeamTable.appId, appId));
+      .select({ teamId: schema.mcpCatalogTeamsTable.teamId })
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .innerJoin(
+        schema.mcpCatalogTeamsTable,
+        eq(
+          schema.mcpServersTable.catalogId,
+          schema.mcpCatalogTeamsTable.catalogId,
+        ),
+      )
+      .where(eq(schema.appsTable.id, appId));
     return rows.map((r) => r.teamId);
   }
 
@@ -125,16 +166,27 @@ class AppTeamModel {
 
     const rows = await db
       .select({
-        appId: schema.appTeamTable.appId,
-        teamId: schema.appTeamTable.teamId,
+        appId: schema.appsTable.id,
+        teamId: schema.mcpCatalogTeamsTable.teamId,
         teamName: schema.teamsTable.name,
       })
-      .from(schema.appTeamTable)
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .innerJoin(
+        schema.mcpCatalogTeamsTable,
+        eq(
+          schema.mcpServersTable.catalogId,
+          schema.mcpCatalogTeamsTable.catalogId,
+        ),
+      )
       .innerJoin(
         schema.teamsTable,
-        eq(schema.appTeamTable.teamId, schema.teamsTable.id),
+        eq(schema.mcpCatalogTeamsTable.teamId, schema.teamsTable.id),
       )
-      .where(inArray(schema.appTeamTable.appId, appIds));
+      .where(inArray(schema.appsTable.id, appIds));
 
     for (const { appId, teamId, teamName } of rows) {
       map.get(appId)?.push({ id: teamId, name: teamName });

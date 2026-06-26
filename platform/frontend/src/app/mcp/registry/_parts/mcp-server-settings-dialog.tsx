@@ -437,6 +437,7 @@ export function McpServerSettingsDialog({
                   onAddOrgConnection={onAddOrgConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
+                  bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
                   onOpenPodLogs={
                     showDebug
                       ? (podServerId: string) => {

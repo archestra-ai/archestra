@@ -147,7 +147,18 @@ import ArchestraPromptInput, {
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
-const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
+const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
+  "runs",
+  "files",
+  "browser",
+  "apps",
+];
+
+function parseRightPanelTab(value: string | null): RightPanelTab | null {
+  return RIGHT_PANEL_TABS.includes(value as RightPanelTab)
+    ? (value as RightPanelTab)
+    : null;
+}
 
 export function ChatPageContent({
   routeConversationId,
@@ -257,13 +268,9 @@ export function ChatPageContent({
 
   const _isMobile = useIsMobile();
 
-  // State for browser panel - initialize from localStorage
-  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(BROWSER_OPEN_KEY) === "true";
-    }
-    return false;
-  });
+  // State for browser panel. Restored per-conversation by the conversation-load
+  // effect below (a fresh /chat with no conversation has no saved state).
+  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
 
   // Tracks which tab the right-side panel last showed; restored when the panel
   // is re-opened via the header toggle.
@@ -440,30 +447,49 @@ export function ChatPageContent({
   // Conversations whose title should play the typing animation (shared via chat context)
   const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
 
-  // Initialize artifact panel state when conversation loads or changes
+  // Restore the right-side panel (open state + selected tab) when a conversation
+  // loads. Both are remembered per-conversation in localStorage.
   useEffect(() => {
-    // If no conversation (new chat), close the artifact panel
+    // If no conversation (new chat), close the panel.
     if (!conversationId) {
       setIsArtifactOpen(false);
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
       return;
     }
 
     if (isLoadingConversation) return;
 
-    // Check for conversation-specific preference
-    const { artifactOpen: artifactOpenKey } =
-      conversationStorageKeys(conversationId);
-    const storedState = localStorage.getItem(artifactOpenKey);
-    if (storedState !== null) {
-      // User has explicitly set a preference for this conversation
-      setIsArtifactOpen(storedState === "true");
+    const keys = conversationStorageKeys(conversationId);
+    const openState = localStorage.getItem(keys.rightPanelOpen);
+
+    if (openState !== null) {
+      // User has an explicit preference for this conversation. Default a
+      // missing/invalid saved tab to "files" (the default tab).
+      const tab =
+        parseRightPanelTab(localStorage.getItem(keys.rightPanelTab)) ?? "files";
+      const isOpen = openState === "true";
+      setIsArtifactOpen(isOpen && tab === "files");
+      setIsBrowserPanelOpen(isOpen && tab === "browser");
+      setIsAppsTabOpen(isOpen && tab === "apps");
+      setIsRunsTabOpen(isOpen && tab === "runs");
+      setActiveRightTab(tab);
     } else if (conversation?.artifact) {
-      // First time viewing this conversation with an artifact - auto-open
+      // First time viewing this conversation with an artifact - auto-open Files.
       setIsArtifactOpen(true);
-      localStorage.setItem(artifactOpenKey, "true");
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
+      setActiveRightTab("files");
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     } else {
-      // No artifact or no stored preference - keep closed
+      // No artifact or no stored preference - keep closed.
       setIsArtifactOpen(false);
+      setIsBrowserPanelOpen(false);
+      setIsAppsTabOpen(false);
+      setIsRunsTabOpen(false);
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
@@ -707,11 +733,11 @@ export function ChatPageContent({
       !isArtifactOpen
     ) {
       setIsArtifactOpen(true);
+      setActiveRightTab("files");
       // Save the preference for this conversation
-      localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
-        "true",
-      );
+      const keys = conversationStorageKeys(conversationId);
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     }
 
     // Update the ref for next comparison
@@ -734,10 +760,9 @@ export function ChatPageContent({
     ) {
       setActiveRightTab("files");
       setIsArtifactOpen(true);
-      localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
-        "true",
-      );
+      const keys = conversationStorageKeys(conversationId);
+      localStorage.setItem(keys.rightPanelOpen, "true");
+      localStorage.setItem(keys.rightPanelTab, "files");
     }
     previousGeneratedCountRef.current = generatedCount;
   }, [generatedCount, conversation?.artifact, isArtifactOpen, conversationId]);
@@ -1344,15 +1369,10 @@ export function ChatPageContent({
       setIsAppsTabOpen(tab === "apps");
       setIsRunsTabOpen(tab === "runs");
       if (conversationId) {
-        localStorage.setItem(
-          conversationStorageKeys(conversationId).artifactOpen,
-          tab === "files" ? "true" : "false",
-        );
+        const keys = conversationStorageKeys(conversationId);
+        localStorage.setItem(keys.rightPanelOpen, "true");
+        localStorage.setItem(keys.rightPanelTab, tab);
       }
-      localStorage.setItem(
-        BROWSER_OPEN_KEY,
-        tab === "browser" ? "true" : "false",
-      );
     },
     [conversationId],
   );
@@ -1363,12 +1383,12 @@ export function ChatPageContent({
     setIsAppsTabOpen(false);
     setIsRunsTabOpen(false);
     if (conversationId) {
+      // Leave the saved tab so reopening restores the last view.
       localStorage.setItem(
-        conversationStorageKeys(conversationId).artifactOpen,
+        conversationStorageKeys(conversationId).rightPanelOpen,
         "false",
       );
     }
-    localStorage.setItem(BROWSER_OPEN_KEY, "false");
   }, [conversationId]);
 
   // When you land on a scheduled-run chat, open the Runs tab once per
@@ -1677,10 +1697,9 @@ export function ChatPageContent({
       // the init effect on the /chat/<id> mount reads this preference and
       // opens the Files panel (the default tab) for the fresh project chat.
       if (projectHasFilesRef.current) {
-        localStorage.setItem(
-          conversationStorageKeys(newConversation.id).artifactOpen,
-          "true",
-        );
+        const keys = conversationStorageKeys(newConversation.id);
+        localStorage.setItem(keys.rightPanelOpen, "true");
+        localStorage.setItem(keys.rightPanelTab, "files");
       }
       selectConversation(newConversation.id);
     });
@@ -1898,6 +1917,7 @@ export function ChatPageContent({
                 {activeRightTab === "files" && (
                   <div className="flex-1 min-h-0 overflow-auto">
                     <ConversationFilesPanel
+                      key={conversationId ?? "none"}
                       conversationId={conversationId}
                       artifact={conversation?.artifact}
                       projectId={conversation?.projectId}

@@ -615,6 +615,42 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
     expect(bytes.statusCode).toBe(404);
   });
 
+  test("the producer can delete even when Projects is disabled (route is ungated)", async () => {
+    const original = config.projects.enabled;
+    config.projects.enabled = false;
+    const localApp = createFastifyInstance();
+    localApp.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    try {
+      const { default: routes } = await import("./skill-sandbox-artifact");
+      await localApp.register(routes);
+      await localApp.ready();
+
+      const sandbox = await seedSandbox({ organizationId, userId: user.id });
+      const artifact = await seedArtifact({
+        sandboxId: sandbox.id,
+        userId: user.id,
+        organizationId,
+        mimeType: "text/plain",
+        data: Buffer.from("bye"),
+        path: "/sandbox/no-projects.txt",
+      });
+
+      const del = await localApp.inject({
+        method: "DELETE",
+        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      });
+      expect(del.statusCode).toBe(200);
+      expect(await FileModel.findById(artifact.id)).toBeNull();
+    } finally {
+      await localApp.close();
+      config.projects.enabled = original;
+    }
+  });
+
   test("a project member can delete a member-produced file; non-members cannot", async ({
     makeUser,
   }) => {

@@ -186,6 +186,68 @@ describe("OAuthClientModel", () => {
     });
   });
 
+  describe("ensureOfflineAccessScope", () => {
+    test("adds offline_access to a refresh-capable client missing it", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "needs-offline",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+    });
+
+    test("is idempotent when the client already has offline_access", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "already-offline",
+        scopes: ["mcp", "offline_access"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+    });
+
+    test("does nothing for a client without the refresh_token grant", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "no-refresh",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp"]);
+    });
+
+    test("seeds offline_access when the client has no stored scopes", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "null-scopes",
+        scopes: null,
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await OAuthClientModel.ensureOfflineAccessScope(client.clientId);
+
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["offline_access"]);
+    });
+  });
+
   describe("addRedirectUri", () => {
     test("should add a new redirect URI to existing client", async () => {
       const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;

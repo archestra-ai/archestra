@@ -3,6 +3,7 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 
 // The logger is a Proxy at runtime — vi.spyOn can't intercept its properties.
 // Replace the module with a plain mock object so individual tests can assert on it.
@@ -1004,13 +1005,16 @@ describe("handleAfterHook", () => {
   describe("SSO team sync", () => {
     const originalEnterpriseValue = config.enterpriseFeatures.core;
 
-    // Helper to set enterprise license config
+    // Helper to set enterprise license config plus the user-count side of the
+    // tier service so the effective gate matches the env-only intent of these
+    // tests (small-team auto-enable would otherwise keep SSO on at userCount 0).
     function setEnterpriseLicense(value: boolean) {
       Object.defineProperty(config.enterpriseFeatures, "core", {
         value,
         writable: true,
         configurable: true,
       });
+      enterpriseTier.setUserCountForTesting(value ? 0 : 9999);
     }
 
     test("should sync teams when SSO callback path with SSO account", async ({

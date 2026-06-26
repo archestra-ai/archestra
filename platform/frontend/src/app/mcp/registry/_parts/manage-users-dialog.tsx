@@ -84,6 +84,8 @@ import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
+import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
+import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -146,6 +148,7 @@ interface ManageUsersContentProps {
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
+  bodyTestId?: string;
 }
 
 export function ManageUsersContent({
@@ -159,6 +162,7 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
+  bodyTestId,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
@@ -198,34 +202,7 @@ export function ManageUsersContent({
     return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
   };
 
-  // Check if user can re-authenticate a credential
-  // WHY: Permission requirements match team installation rules for consistency:
-  // - Personal: mcpServer:create AND owner
-  // - Team: team admin role OR (mcpServer:update AND team membership)
-  // - Org: mcpServerInstallation:admin
-  // Members cannot re-authenticate team credentials, only editors and admins can.
-  const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
-    // Must have mcpServer create permission
-    if (!hasMcpServerCreatePermission) return false;
-    const scope = getServerScope(mcpServer);
-
-    if (scope === "org") {
-      return !!hasMcpServerAdminPermission;
-    }
-
-    // For personal credentials, only owner can re-authenticate
-    if (scope === "personal") {
-      return mcpServer.ownerId === currentUserId;
-    }
-
-    if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
-
-    // WHY: Editors have mcpServer:update, members don't
-    // This ensures only editors and admins can manage team credentials
-    if (!hasMcpServerUpdatePermission) return false;
-
-    return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
-  };
+  const canReauthenticate = useCanReauthenticate();
 
   // Get tooltip message for disabled re-authenticate button
   const getReauthTooltip = (mcpServer: (typeof allServers)[number]): string => {
@@ -393,7 +370,10 @@ export function ManageUsersContent({
         </DialogHeader>
       )}
 
-      <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
+      <div
+        className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}
+        data-testid={bodyTestId}
+      >
         {catalogItem && (
           <AgentConnectionsSection
             item={catalogItem}
@@ -816,8 +796,8 @@ function UnifiedConnectionsTable({
                       <TooltipTrigger>
                         <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                       </TooltipTrigger>
-                      <TooltipContent>
-                        Authentication failed. Please re-authenticate.
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium">Needs re-authentication</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -916,6 +896,17 @@ function UnifiedConnectionsTable({
                       )}
                     </Tooltip>
                   </TooltipProvider>
+                )}
+                {isOAuthServer && server.oauthRefreshError && (
+                  <p
+                    className="mb-2 break-words text-[11px] leading-tight text-destructive"
+                    data-testid="oauth-reauth-detail"
+                  >
+                    {formatOAuthFailureDetail(
+                      server.oauthRefreshErrorMessage,
+                      server.oauthRefreshFailedAt,
+                    )}
+                  </p>
                 )}
                 <TooltipProvider>
                   <Tooltip>

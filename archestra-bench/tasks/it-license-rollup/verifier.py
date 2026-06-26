@@ -1,6 +1,6 @@
 """Grades the contract-billed rollup: the agent must pull both the seat inventory and the contract terms
 from the acme_it MCP, then report the real billed monthly total -- not the per-seat list-price sum. The
-billed total (per-active-seat vs flat-commit vs amortized-annual) is unforgeable without joining the two
+billed total (per-seat vs flat-commit vs amortized-annual) is unforgeable without joining the two
 tool outputs, so answer-match plus the presence of both tool calls proves the work was done."""
 
 from bench_verifier import read_fixture_json, result, state

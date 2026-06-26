@@ -150,6 +150,7 @@ export function RightSidePanel({
           )}
           {resolvedTab === "files" && (
             <ConversationFilesPanel
+              key={conversationId ?? "none"}
               conversationId={conversationId}
               artifact={artifact}
               projectId={projectId}

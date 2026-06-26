@@ -388,6 +388,56 @@ describe("InternalMcpCatalogModel", () => {
       expect(found?.toolCount).toBe(2);
     });
 
+    test("findAll derives providesUi from a tool's ui:// resource", async ({
+      makeTool,
+    }) => {
+      const uiCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-provides-ui",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: uiCatalog.id,
+        name: "open-ui-tool",
+        meta: { _meta: { ui: { resourceUri: "ui://some-app" } } },
+      });
+
+      const legacyCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-provides-ui-legacy",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: legacyCatalog.id,
+        name: "legacy-ui-tool",
+        meta: { _meta: { "ui/resourceUri": "ui://legacy-app" } },
+      });
+
+      const nonUiCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-non-ui-resource",
+        serverType: "remote",
+      });
+      await makeTool({
+        catalogId: nonUiCatalog.id,
+        name: "https-resource-tool",
+        meta: { _meta: { ui: { resourceUri: "https://example.com" } } },
+      });
+
+      const plainCatalog = await InternalMcpCatalogModel.create({
+        name: "catalog-no-ui",
+        serverType: "remote",
+      });
+      await makeTool({ catalogId: plainCatalog.id, name: "plain-tool" });
+
+      const all = await InternalMcpCatalogModel.findAll({
+        expandSecrets: false,
+      });
+      const byId = (id: string) => all.find((item) => item.id === id);
+
+      expect(byId(uiCatalog.id)?.providesUi).toBe(true);
+      expect(byId(legacyCatalog.id)?.providesUi).toBe(true);
+      expect(byId(nonUiCatalog.id)?.providesUi).toBe(false);
+      expect(byId(plainCatalog.id)?.providesUi).toBe(false);
+    });
+
     test("findById omits list-only tool count metadata", async ({
       makeTool,
     }) => {
@@ -773,6 +823,57 @@ describe("InternalMcpCatalogModel", () => {
         .where(eq(schema.toolsTable.catalogId, clone.id));
       expect(clonedTools).toHaveLength(1);
       expect(clonedTools[0].clonedPendingDiscovery).toBe(true);
+    });
+  });
+
+  describe("excludes app backing catalogs from registry surfaces", () => {
+    test("findAll and searchByQuery omit serverType:'app' catalogs", async () => {
+      const remote = await InternalMcpCatalogModel.create({
+        name: "Visible Remote XYZ",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const app = await InternalMcpCatalogModel.create({
+        name: "Hidden App XYZ",
+        serverType: "app",
+        scope: "org",
+      });
+
+      const allIds = (await InternalMcpCatalogModel.findAll()).map((c) => c.id);
+      expect(allIds).toContain(remote.id);
+      expect(allIds).not.toContain(app.id);
+
+      const searchedIds = (
+        await InternalMcpCatalogModel.searchByQuery("XYZ")
+      ).map((c) => c.id);
+      expect(searchedIds).toContain(remote.id);
+      expect(searchedIds).not.toContain(app.id);
+    });
+
+    test("findAllWithApps includes serverType:'app' catalogs alongside the rest", async () => {
+      const remote = await InternalMcpCatalogModel.create({
+        name: "Visible Remote ABC",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      });
+      const app = await InternalMcpCatalogModel.create({
+        name: "Assignable App ABC",
+        serverType: "app",
+        scope: "org",
+      });
+
+      const withAppIds = (await InternalMcpCatalogModel.findAllWithApps()).map(
+        (c) => c.id,
+      );
+      expect(withAppIds).toContain(remote.id);
+      expect(withAppIds).toContain(app.id);
+
+      // The registry list still omits the app — only the picker opts in.
+      const registryIds = (await InternalMcpCatalogModel.findAll()).map(
+        (c) => c.id,
+      );
+      expect(registryIds).toContain(remote.id);
+      expect(registryIds).not.toContain(app.id);
     });
   });
 });

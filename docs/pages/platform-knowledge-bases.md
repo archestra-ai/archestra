@@ -15,6 +15,8 @@ Plug your agents straight into your company's knowledge across Jira, Confluence,
 
 The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.
 
+> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
+
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
 
 ## Configuration

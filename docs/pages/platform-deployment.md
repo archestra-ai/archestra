@@ -1382,15 +1382,5 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
 
 ### Enterprise Licensing
 
-To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).
+To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).
 
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Set to `true` to enable the enterprise license
-  - Required as a prerequisite for all other enterprise feature flags
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, Knowledge Base connectors are limited to org-wide visibility.
-  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
-  - Set to `true` to enable
-  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)

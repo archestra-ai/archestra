@@ -117,4 +117,88 @@ describe("GET /api/internal_mcp_catalog", () => {
     const ids = response.json().map((item: { id: string }) => item.id);
     expect(ids).not.toContain(personal.id);
   });
+
+  test("app backing catalogs are excluded by default but returned with includeApps", async () => {
+    const appCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "assignable-app-server",
+        serverType: "app",
+        scope: "org",
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const registry = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog",
+    });
+    expect(registry.statusCode).toBe(200);
+    expect(
+      registry.json().map((item: { id: string }) => item.id),
+    ).not.toContain(appCatalog.id);
+
+    const picker = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+    expect(picker.statusCode).toBe(200);
+    expect(picker.json().map((item: { id: string }) => item.id)).toContain(
+      appCatalog.id,
+    );
+  });
+
+  test("includeApps enriches an app backing with its appId and providesUi", async ({
+    makeApp,
+  }) => {
+    const ownedApp = await makeApp({
+      organizationId,
+      authorId: user.id,
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const backing = response
+      .json()
+      .find(
+        (item: { serverType: string; appId?: string | null }) =>
+          item.serverType === "app" && item.appId === ownedApp.id,
+      );
+    expect(backing).toBeDefined();
+    // The backing's `open` launch tool exposes a ui:// resource.
+    expect(backing.providesUi).toBe(true);
+  });
+
+  test("includeApps is ignored for a caller without app:read", async () => {
+    // Grant the route's own mcpRegistry probe but deny the app:read gate.
+    mockHasPermission.mockImplementation(
+      async (permissions: Record<string, unknown>) => ({
+        success: !("app" in permissions),
+        error: null,
+      }),
+    );
+
+    const appCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "gated-app-server",
+        serverType: "app",
+        scope: "org",
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response.json().map((item: { id: string }) => item.id),
+    ).not.toContain(appCatalog.id);
+  });
 });

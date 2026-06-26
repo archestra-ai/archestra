@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { hasSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config/config";
+import { usePublicEnterpriseCoreActive } from "@/lib/config/config.query";
 import { IdentityProviderSelector } from "./identity-provider-selector.ee";
 
 // Mock next/navigation
@@ -27,11 +27,9 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   usePublicIdentityProviders: vi.fn(),
 }));
 
-// Mock config
-vi.mock("@/lib/config/config", () => ({
-  default: {
-    enterpriseFeatures: { core: true },
-  },
+// Mock the runtime public-config hook the selector now reads from.
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicEnterpriseCoreActive: vi.fn(() => true),
 }));
 
 // Mock identity provider icons to avoid Next.js Image issues
@@ -61,6 +59,7 @@ describe("IdentityProviderSelector", () => {
       data: [{ id: "1", providerId: "google" }],
       isLoading: false,
     } as ReturnType<typeof usePublicIdentityProviders>);
+    vi.mocked(usePublicEnterpriseCoreActive).mockReturnValue(true);
   });
 
   describe("callbackURL handling", () => {
@@ -272,14 +271,11 @@ describe("IdentityProviderSelector", () => {
 
   describe("rendering conditions", () => {
     it("should not render when enterprise license is not activated", () => {
-      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = false;
+      vi.mocked(usePublicEnterpriseCoreActive).mockReturnValue(false);
 
       const { container } = render(<IdentityProviderSelector />);
 
       expect(container.firstChild).toBeNull();
-
-      // Reset for other tests
-      (vi.mocked(config).enterpriseFeatures as { core: boolean }).core = true;
     });
 
     it("should not render when loading", () => {

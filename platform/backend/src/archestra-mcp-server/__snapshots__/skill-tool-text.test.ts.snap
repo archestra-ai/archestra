@@ -83,7 +83,7 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file out of the conversation's sandbox into its persistent files, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
+  "description": "Copy a file out of the conversation's sandbox into the conversation's persistent files, where it shows up in the chat's Files panel. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

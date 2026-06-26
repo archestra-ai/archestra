@@ -631,7 +631,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_DOWNLOAD_FILE_SHORT_NAME,
     title: "Download File",
     description:
-      "Copy a file out of the conversation's sandbox into its persistent files, where " +
+      "Copy a file out of the conversation's sandbox into the conversation's persistent files, where " +
       "it shows up in the chat's Files panel. Use this for any binary or " +
       "generated output — run_command only returns text. To read a skill's own " +
       "source files, use load_skill with a path instead. Requires `sandbox:execute`.",

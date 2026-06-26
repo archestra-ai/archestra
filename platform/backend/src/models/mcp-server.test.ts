@@ -908,5 +908,53 @@ describe("McpServerModel", () => {
       );
       expect(ids.has(catalog.id)).toBe(false);
     });
+
+    test("returns a catalog backed by an install for a team the user belongs to", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      });
+
+      const ids = await McpServerModel.getAccessibleInstallCatalogIds(user.id);
+      expect(ids.has(catalog.id)).toBe(true);
+    });
+
+    test("excludes a team install for a user who is not a member of that team", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeTeam,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const teamOwner = await makeUser();
+      const outsider = await makeUser();
+      // makeTeam does not enroll the creator; nobody is a member of this team.
+      const team = await makeTeam(org.id, teamOwner.id);
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      });
+
+      const ids = await McpServerModel.getAccessibleInstallCatalogIds(
+        outsider.id,
+      );
+      expect(ids.has(catalog.id)).toBe(false);
+    });
   });
 });

@@ -702,4 +702,67 @@ describe("dynamic discovery is scoped to the caller's own installs", () => {
       "github__search_repositories",
     );
   });
+
+  test("includes a tool backed by an install for a team the caller belongs to", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+  }) => {
+    const team = await makeTeam(organizationId, userId);
+    await makeTeamMember(team.id, userId);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+    });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("excludes a visible catalog that has no install at all, even for an admin caller", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    // The caller is an org admin (see beforeEach): catalog visibility is broad,
+    // but admins do not bypass the install requirement. With no install of the
+    // catalog, its tools must not enter the discovery space.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).not.toContain(
+      "github__search_repositories",
+    );
+  });
 });

@@ -16,7 +16,7 @@ metadata:
     run: "${RUN_NUMBER}"
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 7200
+  activeDeadlineSeconds: 21600
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
@@ -24,8 +24,9 @@ spec:
         app: archestra-bench
         run: "${RUN_NUMBER}"
       annotations:
-        # The bench runs ~30 min; without this the cluster autoscaler evicts it on node scale-down
-        # mid-run (the pod has no controller to reschedule it, so the run is just lost).
+        # The bench can run for hours (slow reasoning lanes dominate wall-clock); without this the
+        # cluster autoscaler evicts it on node scale-down mid-run (the pod has no controller to
+        # reschedule it, so the run is just lost).
         cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     spec:
       restartPolicy: Never
@@ -62,7 +63,7 @@ spec:
             - name: BENCH_ENVS
               value: "basic"
             - name: BENCH_LANES
-              value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-54-nano,gpt-54-mini,claude-haiku-45,mimo-25,qwen36-35b-a3b,gpt-oss-120b"
+              value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-54-nano,gpt-54-mini,claude-haiku-45,mimo-25,qwen36-35b-a3b,qwen36-27b"
             # Dagger runner host is resolved from the live staging Deployment by CI.
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
               value: "${DAGGER_RUNNER_HOST}"

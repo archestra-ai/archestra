@@ -72,6 +72,11 @@ provider = "openrouter"
 model = "qwen/qwen3.6-35b-a3b"
 
 [[lane]]
+name = "qwen36-27b"
+provider = "openrouter"
+model = "qwen/qwen3.6-27b"
+
+[[lane]]
 name = "gpt-oss-120b"
 provider = "openrouter"
 model = "openai/gpt-oss-120b"

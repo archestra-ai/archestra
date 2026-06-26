@@ -1,89 +1,131 @@
-# Archestra.AI Open Source AI Platform
-
 <div align="center">
 
-<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
-<img alt="Github Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
-[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+<img src="logo.svg" alt="Archestra" width="520" />
 
-<p align="center">
-  <a href="https://www.archestra.ai/docs/platform-quickstart">Getting Started</a>
-  - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
-  - <a href="https://archestra.ai/join-slack">Slack Community</a>
-</p>
+**The all-in-one open-source enterprise AI platform.**
+
+*Built on a strong security and observability foundation: SSO and RBAC,
+sandboxed code execution, Dual-LLM and Lethal-Trifecta guardrails,
+OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
+
+[![License](https://img.shields.io/badge/License-AGPL%203.0%20%2F%20Enterprise-blue.svg)](LICENSE.md)
+[![Release](https://img.shields.io/github/v/release/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/releases)
+[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/pulse)
+
+[Quickstart](https://archestra.ai/docs/platform-quickstart) &nbsp;·&nbsp;
+[Docs](https://archestra.ai/docs/platform-overview) &nbsp;·&nbsp;
+[Releases](https://github.com/archestra-ai/archestra/releases) &nbsp;·&nbsp;
+[Slack](https://archestra.ai/join-slack)
+
+<br />
+
+<video src="https://storage.googleapis.com/archestra-readme-assets/area.mp4" controls playsinline width="800"></video>
+
 </div>
 
-All-in-one enterprise AI platform for those who are tired of wiring up kagent, kMCP, OpenWebUI, and LiteLLM — and still being frustrated by **reliability**, **governance**, **security**, **observability**, **cost tracking**, and **the general complexity of building a mature enterprise AI platform**.
+---
 
-- 💬 [Internal chat UI for non-technical users](https://archestra.ai/docs/platform-chat)
-  - 👥 [Projects for collaboration](https://archestra.ai/docs/platform-projects)
-  - 📱 [MCP Apps](https://archestra.ai/docs/platform-apps)
-  - 💼 [Slack](https://archestra.ai/docs/platform-slack), [MS Teams](https://archestra.ai/docs/platform-ms-teams), and [Email](https://archestra.ai/docs/platform-agent-triggers-email) UIs
-- 🛠️ [Developer LLM & MCP access portal](https://archestra.ai/docs/platform-llm-proxy) (Claude, Codex, etc.)
-- 🚪 [LLM Gateway](https://archestra.ai/docs/platform-llm-proxy)
-  - 🌐 [Any provider](https://archestra.ai/docs/platform-supported-llm-providers) (Anthropic, OpenAI, Azure, Bedrock, DeepSeek, and more)
-  - 💰 [Cost management](https://archestra.ai/docs/platform-costs-and-limits)
-  - 🔑 [Virtual API Keys](https://archestra.ai/docs/platform-llm-proxy-authentication)
-  - 🎯 [Dynamic model optimization](https://archestra.ai/docs/platform-model-router-client-credentials-example)
-- 🔌 [MCP Gateway](https://archestra.ai/docs/platform-mcp-gateway)
-  - 🪪 [OAuth & On-Behalf-Of (OBO) for user-delegated MCP access](https://archestra.ai/docs/mcp-authentication)
-- 🤝 [A2A Gateway](https://archestra.ai/docs/platform-agent-triggers-webhook-a2a)
-- 📦 [Private MCP Registry](https://archestra.ai/docs/platform-private-registry)
-- 🎼 [MCP Orchestrator](https://archestra.ai/docs/platform-orchestrator)
-  - ☸️ [Kubernetes operator](https://archestra.ai/docs/platform-orchestrator)
-  - 🚀 [Self-serve promotion mechanism and governance](https://archestra.ai/docs/platform-environments)
-- 🤖 [Agent Runtime](https://archestra.ai/docs/platform-agents)
-  - ⏰ Scheduled, [Email](https://archestra.ai/docs/platform-agent-triggers-email), and [Webhook (A2A)](https://archestra.ai/docs/platform-agent-triggers-webhook-a2a) triggers
-  - 🧬 [Sub-agent delegation](https://archestra.ai/docs/platform-agents)
-  - 🧠 [Reusable Agent Skills](https://archestra.ai/docs/platform-agent-skills-sharing)
-  - ⚡ Sandboxed, blazing-fast code execution
-  - 📁 K8S-native filesystem
-- 📚 [RAG Knowledge Base](https://archestra.ai/docs/platform-knowledge-bases)
-  - 🔗 [Knowledge Connectors for external sources](https://archestra.ai/docs/platform-knowledge-connectors)
-- 🧩 [Mini app builder](https://archestra.ai/docs/platform-apps)
-- 🛡️ [Deterministic Guardrails](https://archestra.ai/docs/platform-ai-tool-guardrails)
-  - 🧪 [Dual LLM](https://archestra.ai/docs/platform-dual-llm) and [Lethal Trifecta](https://archestra.ai/docs/platform-lethal-trifecta) protections
-- 🪪 [Identity & Access](https://archestra.ai/docs/platform-access-control)
-  - 🔐 [SSO](https://archestra.ai/docs/platform-sso) (OIDC, SAML, Okta, and Microsoft Entra)
-  - 👮 [RBAC with role mapping and team sync](https://archestra.ai/docs/platform-access-control)
-  - 🗝️ [Secrets management](https://archestra.ai/docs/platform-secrets-management)
-- 🌎 [Environments](https://archestra.ai/docs/platform-environments)
-  - 🔒 [Per-environment network egress policies](https://archestra.ai/docs/platform-environments)
-  - 💸 [Per-environment cost limits](https://archestra.ai/docs/platform-costs-and-limits)
-- 🔭 [Observability](https://archestra.ai/docs/platform-observability)
-  - 🪵 OpenTelemetry traces
-  - 📊 Prometheus metrics
-  - 📝 Logs
-  - 💵 [Per-team cost tracking](https://archestra.ai/docs/platform-costs-and-limits)
+## What it does
 
-Already running dangerous single-tenant agents like Claude Cowork, OpenClaw, or Hermes in your enterprise? [Migration Kit →](migration-kit/README.md)
+Point your users — or your agents, or `claude` / `codex` / Cursor — at one URL. Archestra handles the rest:
+
+- 💬 **Chat for non-technical users.** Internal AI assistant with
+  [projects](https://archestra.ai/docs/platform-projects),
+  [MCP apps](https://archestra.ai/docs/platform-apps), and
+  [Slack](https://archestra.ai/docs/platform-slack),
+  [MS Teams](https://archestra.ai/docs/platform-ms-teams), and
+  [email](https://archestra.ai/docs/platform-agent-triggers-email)
+  front-ends.
+- 🛠️ **Developer LLM & MCP portal.** One token for Claude Code, Codex,
+  Cursor — see the [proxy](https://archestra.ai/docs/platform-llm-proxy).
+- 🚪 **LLM gateway** for [any provider](https://archestra.ai/docs/platform-supported-llm-providers)
+  (Anthropic, OpenAI, Azure, Bedrock, DeepSeek, …) with
+  [cost limits](https://archestra.ai/docs/platform-costs-and-limits),
+  [virtual API keys](https://archestra.ai/docs/platform-llm-proxy-authentication),
+  and [dynamic model routing](https://archestra.ai/docs/platform-model-router-client-credentials-example).
+- 🔌 **MCP gateway** with [OAuth + On-Behalf-Of](https://archestra.ai/docs/mcp-authentication)
+  so tools run as the user, not a shared service account.
+- 🤝 **A2A gateway** for [agent-to-agent triggers](https://archestra.ai/docs/platform-agent-triggers-webhook-a2a).
+- 📦 **Private MCP registry** so teams ship their own tools — see
+  [registry docs](https://archestra.ai/docs/platform-private-registry).
+- 🎼 **MCP orchestrator** with a
+  [Kubernetes operator](https://archestra.ai/docs/platform-orchestrator) and
+  [self-serve promotion](https://archestra.ai/docs/platform-environments).
+- 🤖 **Agent runtime** with [scheduled / email / webhook triggers](https://archestra.ai/docs/platform-agents),
+  [sub-agent delegation](https://archestra.ai/docs/platform-agents),
+  [reusable skills](https://archestra.ai/docs/platform-agent-skills-sharing),
+  sandboxed code execution, and a K8s-native filesystem.
+- 📚 **RAG knowledge base** plumbed via
+  [connectors](https://archestra.ai/docs/platform-knowledge-connectors) to
+  your existing stack.
+- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/platform-apps).
+- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/platform-ai-tool-guardrails),
+  [Dual-LLM](https://archestra.ai/docs/platform-dual-llm) verification, and
+  [Lethal Trifecta](https://archestra.ai/docs/platform-lethal-trifecta) protections.
+- 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/platform-sso)
+  (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/platform-access-control),
+  and [secrets management](https://archestra.ai/docs/platform-secrets-management).
+- 🌎 **Environments** with [per-env egress policies](https://archestra.ai/docs/platform-environments)
+  and [per-env cost limits](https://archestra.ai/docs/platform-costs-and-limits).
+- 🔭 **Observability** out of the box: OpenTelemetry traces, Prometheus
+  metrics, logs, [per-team cost tracking](https://archestra.ai/docs/platform-costs-and-limits).
+
+> Already running dangerous single-tenant agents like Claude Cowork,
+> OpenClaw, or Hermes in your enterprise? **[Migration Kit →](migration-kit/README.md)**
 
 ## Quickstart
 
+```bash
+docker pull archestra/platform:latest
+
+docker run \
+  -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
+  -e ARCHESTRA_QUICKSTART=true \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v archestra-postgres-data:/var/lib/postgresql/data \
+  -v archestra-app-data:/app/data \
+  archestra/platform
 ```
-Run docker quickstart from https://archestra.ai/docs/platform-quickstart
-```
 
-## 👍 Ready for production
+Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
+live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 
-1. ✅ $13.5M total funding
-2. ✅ Three Fortune-50 deployments
-3. ✅ Lightning fast, 31ms at 95p: [Performance & Latency benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
-4. ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
-5. ✅ [Helm Chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
+## Ready for production
 
-## 🤝 Contributing
+- ✅ $13.5M total funding
+- ✅ Three Fortune-50 deployments
+- ✅ 31 ms at p95 — [performance benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
+- ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
+- ✅ [Helm chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
 
-We welcome contributions from the community!
+## Deeper docs
 
-- [Contribution Guidelines →](https://archestra.ai/docs/contributing)
-- [Developer Quickstart →](https://archestra.ai/docs/platform-developer-quickstart)
-- [Security & Bug Bounty →](https://archestra.ai/docs/security)
+- 📖 [**Platform overview**](https://archestra.ai/docs/platform-overview) —
+  what's in the box, how the pieces fit together.
+- 📐 [**Deployment**](https://archestra.ai/docs/platform-deployment) —
+  Docker, Helm, Kubernetes, every env var, secrets management.
+- 💰 [**Pricing model**](https://archestra.ai/docs/platform-pricing-model) —
+  Open Core, free for teams under 30 users, enterprise licensing.
+- 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
+- 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
+  set up the dev env, run e2e tests, open a PR.
 
-Thank you for contributing and continuously making <b>Archestra</b> better, <b>you're awesome</b> 🫶
+Thank you for continuously making **Archestra** better — you're awesome 🫶
 
 <a href="https://github.com/archestra-ai/archestra/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" alt="Contributors" />
+</a>
+
+## Star history
+
+<a href="https://star-history.com/#archestra-ai/archestra&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
+  </picture>
 </a>
 
 ---

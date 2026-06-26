@@ -21,7 +21,7 @@ OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
 
 <br />
 
-<video src="https://storage.googleapis.com/archestra-readme-assets/area.mp4" controls playsinline width="800"></video>
+<video src="https://github.com/user-attachments/assets/5d0b5675-95f0-4177-92aa-6f6048c16eaa" controls playsinline width="800"></video>
 
 </div>
 
@@ -29,7 +29,7 @@ OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
 
 ## What it does
 
-Point your users — or your agents, or `claude` / `codex` / Cursor — at one URL. Archestra handles the rest:
+Point your users — or your agents, or Claude / Codex / Cursor — at one URL. Archestra handles the rest:
 
 - 💬 **Chat for non-technical users.** Internal AI assistant with
   [projects](https://archestra.ai/docs/platform-projects),

@@ -14,12 +14,12 @@ import type {
 } from "@/types";
 import { UnsafePathError } from "./file-path";
 import { deleteRowBytes, getObjectStore, readRowBytes } from "./file-storage";
+import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
 import {
   FileBytesMissingError,
   FilePathConflictError,
   type OwnerScope,
 } from "./object-store";
-import { mimeFromExtension, resolveArtifactMime } from "./mime-sniff";
 import { SkillSandboxError } from "./types";
 
 /** MIME type the project instructions file is stored as. */

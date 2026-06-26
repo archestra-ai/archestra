@@ -23,7 +23,8 @@ export class FakeS3Client {
     if (command instanceof PutObjectCommand) return this.put(command.input);
     if (command instanceof GetObjectCommand) return this.get(command.input);
     if (command instanceof DeleteObjectCommand) return this.del(command.input);
-    if (command instanceof ListObjectsV2Command) return this.list(command.input);
+    if (command instanceof ListObjectsV2Command)
+      return this.list(command.input);
     throw new Error(
       `FakeS3Client: unsupported command ${(command as object)?.constructor?.name}`,
     );
@@ -31,7 +32,10 @@ export class FakeS3Client {
 
   /** Place an object directly (a "hand-dropped" file), bypassing exclusive create. */
   putRaw(key: string, body: string | Buffer): void {
-    this.objects.set(key, { body: Buffer.from(body), lastModified: new Date() });
+    this.objects.set(key, {
+      body: Buffer.from(body),
+      lastModified: new Date(),
+    });
   }
 
   // === internal ===
@@ -96,7 +100,11 @@ export class FakeS3Client {
     return {
       Contents: page.map((key) => {
         const e = this.objects.get(key) as Entry;
-        return { Key: key, Size: e.body.byteLength, LastModified: e.lastModified };
+        return {
+          Key: key,
+          Size: e.body.byteLength,
+          LastModified: e.lastModified,
+        };
       }),
       CommonPrefixes: [...commonPrefixes].map((Prefix) => ({ Prefix })),
       IsTruncated: truncated,

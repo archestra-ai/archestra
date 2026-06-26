@@ -1,18 +1,18 @@
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { S3Client } from "@aws-sdk/client-s3";
 import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { afterEach, beforeEach } from "vitest";
 import config from "@/config";
 import { ProjectModel } from "@/models";
 import ConversationModel from "@/models/conversation";
 import FileModel, { FileNameExistsError } from "@/models/file";
 import { projectService } from "@/services/project";
-import { FakeS3Client } from "@/test/fake-s3-client";
 import { describe, expect, test } from "@/test";
-import { FileNotDeletableError, fileStore } from "./file-store";
+import { FakeS3Client } from "@/test/fake-s3-client";
 import { __setS3ClientForTests } from "./file-storage";
+import { FileNotDeletableError, fileStore } from "./file-store";
 
 async function seed(params: {
   organizationId: string;
@@ -1171,7 +1171,11 @@ describe("fileStore s3 overlay (s3 provider)", () => {
     const items = await fileStore.search({
       organizationId: org.id,
       userId: user.id,
-      scope: { kind: "project", projectId: project.id, projectName: project.name },
+      scope: {
+        kind: "project",
+        projectId: project.id,
+        projectName: project.name,
+      },
     });
     const dropped = items.find((i) => i.filename === "report.csv");
     expect(dropped).toBeDefined();

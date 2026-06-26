@@ -12,8 +12,8 @@ import {
   FileBytesMissingError,
   FilePathConflictError,
   type OwnerScope,
-  scopeFolder,
   type StoredObject,
+  scopeFolder,
 } from "./object-store";
 
 /**
@@ -78,7 +78,10 @@ export class S3ObjectStore implements EnumerableObjectStore {
   async read(key: string): Promise<Buffer> {
     try {
       const res = await this.deps.getClient().send(
-        new GetObjectCommand({ Bucket: this.deps.getBucket(), Key: this.prefixed(key) }),
+        new GetObjectCommand({
+          Bucket: this.deps.getBucket(),
+          Key: this.prefixed(key),
+        }),
       );
       const bytes = await res.Body?.transformToByteArray();
       if (!bytes) throw new FileBytesMissingError(key);
@@ -92,7 +95,10 @@ export class S3ObjectStore implements EnumerableObjectStore {
 
   async remove(key: string): Promise<void> {
     await this.deps.getClient().send(
-      new DeleteObjectCommand({ Bucket: this.deps.getBucket(), Key: this.prefixed(key) }),
+      new DeleteObjectCommand({
+        Bucket: this.deps.getBucket(),
+        Key: this.prefixed(key),
+      }),
     );
   }
 
@@ -148,7 +154,9 @@ export class S3ObjectStore implements EnumerableObjectStore {
 
 function isPreconditionFailed(error: unknown): boolean {
   const e = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-  return e?.name === "PreconditionFailed" || e?.$metadata?.httpStatusCode === 412;
+  return (
+    e?.name === "PreconditionFailed" || e?.$metadata?.httpStatusCode === 412
+  );
 }
 
 function isNotFound(error: unknown): boolean {

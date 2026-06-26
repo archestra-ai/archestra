@@ -1261,7 +1261,12 @@ describe("parseFileStorageS3Config", () => {
   test("defaults region, forcePathStyle, and keyPrefix", () => {
     const cfg = parseFileStorageS3Config({
       provider: "s3",
-      env: { ...env, region: undefined, forcePathStyle: undefined, keyPrefix: undefined },
+      env: {
+        ...env,
+        region: undefined,
+        forcePathStyle: undefined,
+        keyPrefix: undefined,
+      },
     });
     expect(cfg.region).toBe("us-east-1");
     expect(cfg.forcePathStyle).toBe(false);
@@ -1269,25 +1274,40 @@ describe("parseFileStorageS3Config", () => {
   });
   test("throws when bucket is missing under the s3 provider", () => {
     expect(() =>
-      parseFileStorageS3Config({ provider: "s3", env: { ...env, bucket: undefined } }),
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, bucket: undefined },
+      }),
     ).toThrow(/ARCHESTRA_FILE_STORAGE_S3_BUCKET/);
   });
   test("does not validate when the provider is not s3", () => {
     expect(
-      parseFileStorageS3Config({ provider: "db", env: { ...env, bucket: undefined } }).bucket,
+      parseFileStorageS3Config({
+        provider: "db",
+        env: { ...env, bucket: undefined },
+      }).bucket,
     ).toBe("");
   });
   test("throws when only one of the credential pair is set under s3", () => {
     expect(() =>
-      parseFileStorageS3Config({ provider: "s3", env: { ...env, secretAccessKey: undefined } }),
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: undefined },
+      }),
     ).toThrow(/must be set together/);
     expect(() =>
-      parseFileStorageS3Config({ provider: "s3", env: { ...env, accessKeyId: undefined } }),
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, accessKeyId: undefined },
+      }),
     ).toThrow(/must be set together/);
   });
   test("treats a whitespace-only credential as unset under s3", () => {
     expect(() =>
-      parseFileStorageS3Config({ provider: "s3", env: { ...env, secretAccessKey: "   " } }),
+      parseFileStorageS3Config({
+        provider: "s3",
+        env: { ...env, secretAccessKey: "   " },
+      }),
     ).toThrow(/must be set together/);
   });
   test("allows both credentials omitted under s3 (AWS default chain)", () => {

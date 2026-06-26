@@ -11,8 +11,8 @@ import {
   FileBytesMissingError,
   FilePathConflictError,
   type OwnerScope,
-  scopeFolder,
   type StoredObject,
+  scopeFolder,
 } from "./object-store";
 import { buildS3Client, S3ObjectStore } from "./s3-storage";
 
@@ -252,8 +252,11 @@ export function __setS3ClientForTests(client: S3Client | null): void {
 }
 
 const s3Store = new S3ObjectStore({
-  getClient: () =>
-    s3ClientOverride ?? (cachedS3Client ??= buildS3Client(config.fileStorage.s3)),
+  getClient: () => {
+    if (s3ClientOverride) return s3ClientOverride;
+    if (!cachedS3Client) cachedS3Client = buildS3Client(config.fileStorage.s3);
+    return cachedS3Client;
+  },
   getBucket: () => config.fileStorage.s3.bucket,
   getKeyPrefix: () => config.fileStorage.s3.keyPrefix,
 });

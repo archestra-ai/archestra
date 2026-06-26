@@ -43,7 +43,8 @@ async function s3Harness(): Promise<Harness> {
       getBucket: () => "test-bucket",
       getKeyPrefix: () => "",
     }),
-    dropRaw: async (folder, name, content) => fake.putRaw(`${folder}/${name}`, content),
+    dropRaw: async (folder, name, content) =>
+      fake.putRaw(`${folder}/${name}`, content),
     cleanup: async () => {},
   };
 }
@@ -53,36 +54,65 @@ describe.each([
   ["s3", s3Harness],
 ])("EnumerableObjectStore contract: %s", (_name, makeHarness) => {
   let h: Harness;
-  beforeEach(async () => { h = await makeHarness(); });
-  afterEach(async () => { await h.cleanup(); });
+  beforeEach(async () => {
+    h = await makeHarness();
+  });
+  afterEach(async () => {
+    await h.cleanup();
+  });
 
   test("write then read round-trips by key", async () => {
-    const { key } = await h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("hello") });
+    const { key } = await h.store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("hello"),
+    });
     expect(key).toBe("acme/a.txt");
     expect((await h.store.read(key)).toString()).toBe("hello");
   });
 
   test("exclusive create conflicts on an existing name", async () => {
-    await h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("v1") });
+    await h.store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("v1"),
+    });
     await expect(
       h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("v2") }),
     ).rejects.toBeInstanceOf(FilePathConflictError);
   });
 
   test("overwrite replaces bytes without conflict", async () => {
-    const { key } = await h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("v1") });
-    await h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("v2"), overwrite: true });
+    const { key } = await h.store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("v1"),
+    });
+    await h.store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("v2"),
+      overwrite: true,
+    });
     expect((await h.store.read(key)).toString()).toBe("v2");
   });
 
   test("read of a missing key throws FileBytesMissingError", async () => {
-    await expect(h.store.read("acme/missing.txt")).rejects.toBeInstanceOf(FileBytesMissingError);
+    await expect(h.store.read("acme/missing.txt")).rejects.toBeInstanceOf(
+      FileBytesMissingError,
+    );
   });
 
   test("remove deletes the bytes", async () => {
-    const { key } = await h.store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("x") });
+    const { key } = await h.store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("x"),
+    });
     await h.store.remove(key);
-    await expect(h.store.read(key)).rejects.toBeInstanceOf(FileBytesMissingError);
+    await expect(h.store.read(key)).rejects.toBeInstanceOf(
+      FileBytesMissingError,
+    );
   });
 
   test("remove of an absent key does not throw", async () => {
@@ -101,13 +131,17 @@ describe.each([
   test("enumerate skips nested (subfolder) objects", async () => {
     await h.dropRaw("acme", "top.txt", "x");
     await h.dropRaw("acme/sub", "deep.txt", "y");
-    expect((await h.store.enumerate(SCOPE)).map((o) => o.name)).toEqual(["top.txt"]);
+    expect((await h.store.enumerate(SCOPE)).map((o) => o.name)).toEqual([
+      "top.txt",
+    ]);
   });
 
   test("enumerate skips un-addressable names", async () => {
     await h.dropRaw("acme", ".hidden", "x");
     await h.dropRaw("acme", "ok.txt", "y");
-    expect((await h.store.enumerate(SCOPE)).map((o) => o.name)).toEqual(["ok.txt"]);
+    expect((await h.store.enumerate(SCOPE)).map((o) => o.name)).toEqual([
+      "ok.txt",
+    ]);
   });
 
   test("enumerate of an empty scope returns []", async () => {
@@ -127,7 +161,11 @@ describe("S3ObjectStore keyPrefix", () => {
       getKeyPrefix: () => "tenant1",
     });
 
-    const { key } = await store.write({ scope: SCOPE, name: "a.txt", data: Buffer.from("hello") });
+    const { key } = await store.write({
+      scope: SCOPE,
+      name: "a.txt",
+      data: Buffer.from("hello"),
+    });
     expect(key).toBe("acme/a.txt"); // keyPrefix-free
     expect((await store.read("acme/a.txt")).toString()).toBe("hello");
 
@@ -138,7 +176,9 @@ describe("S3ObjectStore keyPrefix", () => {
       getBucket: () => "test-bucket",
       getKeyPrefix: () => "",
     });
-    await expect(noPrefix.read("acme/a.txt")).rejects.toBeInstanceOf(FileBytesMissingError);
+    await expect(noPrefix.read("acme/a.txt")).rejects.toBeInstanceOf(
+      FileBytesMissingError,
+    );
   });
 
   test("enumerate strips the keyPrefix from key and name", async () => {

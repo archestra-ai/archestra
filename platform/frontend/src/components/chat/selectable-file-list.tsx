@@ -38,6 +38,7 @@ export function SelectableFileList<T extends FileListItem>({
   sections,
   leading,
   canManage,
+  selectedId,
   onOpen,
   onRequestDelete,
   renderItemActions,
@@ -45,6 +46,8 @@ export function SelectableFileList<T extends FileListItem>({
   sections: { title?: string; items: T[] }[];
   leading?: ReactNode;
   canManage: boolean;
+  /** The open file's id, highlighted in the list while it previews beside it. */
+  selectedId?: string | null;
   onOpen: (id: string) => void;
   /** `onComplete` receives the ids that failed, so the caller can reconcile. */
   onRequestDelete: (
@@ -159,16 +162,15 @@ export function SelectableFileList<T extends FileListItem>({
         )}
       </div>
 
-      {/* The list never highlights a "current" row: opening a file drills into
-          the full-height detail view, so there's no list-beside-preview for a
-          selection marker to point at. */}
+      {/* The open file's row stays highlighted while it previews beside the
+          list (split view); harmless when expanded (list hidden) or idle. */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {sections.map((section, i) => (
           <FileSection
             key={section.title ?? `section-${i}`}
             title={showHeaders ? section.title : undefined}
             items={section.items}
-            selectedId={null}
+            selectedId={selectedId ?? null}
             onSelect={onOpen}
             selection={selection}
             leading={i === 0 && !selectionMode ? leading : undefined}

@@ -25,12 +25,23 @@ import { cn } from "@/lib/utils";
 export const INSTRUCTIONS_SELECTION = "__project_instructions__";
 
 /** The always-present, pinned instructions entry at the top of the file list. */
-export function InstructionsRow({ onSelect }: { onSelect: () => void }) {
+export function InstructionsRow({
+  selected = false,
+  onSelect,
+}: {
+  selected?: boolean;
+  onSelect: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+        selected
+          ? "bg-accent font-medium text-accent-foreground"
+          : "hover:bg-muted/50",
+      )}
     >
       {/* Single line, same muted-icon treatment as a regular .md file row — the
           instructions entry looks like the rest of the list, only pinned and

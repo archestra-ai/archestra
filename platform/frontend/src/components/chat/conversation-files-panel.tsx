@@ -226,11 +226,13 @@ export function ConversationFilesPanel({
             { title: "Attachments", items: attachments },
           ]}
           canManage={canManageFiles}
+          selectedId={selectedId}
           onOpen={openFile}
           onRequestDelete={requestDelete}
           leading={
             showInstructions ? (
               <InstructionsRow
+                selected={instructionsSelected}
                 onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
               />
             ) : undefined

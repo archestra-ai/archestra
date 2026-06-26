@@ -428,10 +428,12 @@ function ProjectFilesSidebar({
               <SelectableFileList<FileListItem>
                 sections={[{ items }]}
                 canManage
+                selectedId={selectedId}
                 onOpen={openFile}
                 onRequestDelete={requestDelete}
                 leading={
                   <InstructionsRow
+                    selected={instructionsSelected}
                     onSelect={() => openFile(INSTRUCTIONS_SELECTION)}
                   />
                 }

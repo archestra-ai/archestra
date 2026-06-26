@@ -16,11 +16,7 @@ import {
   isSupersededRender,
 } from "@/components/chat/chat-messages.utils";
 import { AppEditModelContextDialog } from "@/components/mcp-app/app-edit-model-context-dialog.lazy";
-import {
-  clampInlineHeight,
-  INITIAL_INLINE_HEIGHT,
-  useInlineCeiling,
-} from "@/components/mcp-app/app-height";
+import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
   McpAppAddressPill,
@@ -32,8 +28,8 @@ import {
   McpAppStandaloneButton,
   McpAppSwitcher,
   McpAppTopBar,
-  McpAppVersionBar,
 } from "@/components/mcp-app/mcp-app-chrome";
+import { McpAppMetaBar } from "@/components/mcp-app/mcp-app-meta-bar";
 import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
@@ -136,7 +132,6 @@ export function McpAppSection({
   onSendMessage?: (text: string) => void;
 }) {
   const resourceKey = `${agentId}:${uiResourceUri}`;
-  const inlineCeiling = useInlineCeiling();
   const { displayMode, setDisplayMode, toggleFullscreen, reloadNonce, reload } =
     useAppRuntimeControls();
   const [size, setSize] = useState<{ width: number; height: number } | null>(
@@ -179,10 +174,7 @@ export function McpAppSection({
   // footprint and messages below it don't reflow.
   const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
   if (!renderInPanel) {
-    lastInlineHeightRef.current = clampInlineHeight(
-      size?.height ?? INITIAL_INLINE_HEIGHT,
-      inlineCeiling,
-    );
+    lastInlineHeightRef.current = size?.height ?? INITIAL_INLINE_HEIGHT;
   }
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
@@ -232,7 +224,7 @@ export function McpAppSection({
   // pill instead of mounting the live runtime, so only the latest render of each
   // app stays live. Applies to both owned apps and external MCP-UI calls; the
   // pill degrades to just the label for non-owned renders (no version/verb).
-  if (isSupersededRender({ apps, uiResourceUri, toolCallId })) {
+  if (isSupersededRender({ apps, toolCallId, appId })) {
     return (
       <McpAppChangelogPill
         appName={appName ?? humanizeToolLabel(toolName)}
@@ -277,9 +269,8 @@ export function McpAppSection({
         displayMode={displayMode}
         onToggleFullscreen={toggleFullscreen}
         diagnostics={diagnosticsBadge}
-        size={size}
-        inlineCeiling={inlineCeiling}
         fillContainer={renderInPanel}
+        capInlineHeight
         topBar={
           <McpAppTopBar
             left={<McpAppRefreshButton onClick={reload} />}
@@ -315,8 +306,8 @@ export function McpAppSection({
           </McpAppTopBar>
         }
         bottomBar={
-          appId && appVersion != null ? (
-            <McpAppVersionBar appId={appId} version={appVersion} />
+          appId && ownedApp ? (
+            <McpAppMetaBar app={ownedApp} version={appVersion ?? null} />
           ) : undefined
         }
       >
@@ -338,14 +329,9 @@ export function McpAppSection({
           // would overwrite the last inline size and make the card return at the
           // panel's height when the panel closes.
           onSizeChange={renderInPanel ? noopSizeChange : setSize}
-          containerDimensions={
-            renderInPanel ? undefined : { maxHeight: inlineCeiling }
-          }
           // Seed the iframe + loading box at the last measured inline height so a
           // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
-          inlineInitialHeight={
-            size ? clampInlineHeight(size.height, inlineCeiling) : undefined
-          }
+          inlineInitialHeight={size?.height ?? INITIAL_INLINE_HEIGHT}
           toolInput={appId ? undefined : toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
@@ -363,9 +349,8 @@ export function McpAppSection({
       <McpAppCard
         displayMode="inline"
         onToggleFullscreen={toggleFullscreen}
-        size={size}
-        inlineCeiling={inlineCeiling}
         frozenHeight={lastInlineHeightRef.current}
+        capInlineHeight
         topBar={
           <McpAppTopBar>
             <McpAppAddressPill label={headerName} />

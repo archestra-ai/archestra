@@ -197,6 +197,22 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   usePinProject: () => ({ mutate: mockPinMutate }),
+  // The edit dialog fetches the project detail by id; return a minimal one.
+  useProject: () => ({
+    data: {
+      id: "owner",
+      name: "Owner project",
+      description: null,
+      icon: null,
+      visibility: null,
+      shareTeamIds: null,
+    },
+  }),
+  useSetProjectShare: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/schedule-trigger.query", () => ({

@@ -70,10 +70,12 @@ import {
   DeploymentStatusDot,
 } from "../../_parts/deployment-status";
 import { InstallationProgress } from "../../_parts/installation-progress";
+import { OAuthReauthIndicator } from "../../_parts/oauth-reauth-indicator";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
 } from "../../_parts/uninstall-server-dialog";
+import { useCanReauthenticate } from "../../_parts/use-can-reauthenticate";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 
 export type CatalogItem =
@@ -372,9 +374,26 @@ export function McpServerCard({
   // Check for OAuth refresh errors on any credential the user can see
   // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
   const isOAuthServer = !!item.oauthConfig;
-  const hasOAuthRefreshError =
-    isOAuthServer &&
-    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
+  // Re-auth entry point gated by per-connection permission, not catalog-edit
+  // access; the detailed reason lives on the credentials tab. When several
+  // connections have failed, prefer one the caller can re-authenticate so the
+  // marker stays actionable regardless of row order.
+  const canReauthenticate = useCanReauthenticate();
+  const oauthFailedServers = isOAuthServer
+    ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
+    : [];
+  const oauthFailedServer =
+    oauthFailedServers.find((s) => canReauthenticate(s)) ??
+    oauthFailedServers[0];
+  const oauthReauthIndicator = oauthFailedServer ? (
+    <OAuthReauthIndicator
+      onActivate={
+        canReauthenticate(oauthFailedServer)
+          ? () => goToItemPage("credentials")
+          : undefined
+      }
+    />
+  ) : null;
 
   const isInstalling = Boolean(
     !isDeploymentFailed &&
@@ -565,7 +584,10 @@ export function McpServerCard({
     showAuthorAvatar ||
     toolsCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
-    (!isBuiltinVariant && (connectionAvatars.length > 0 || hasOrgConnection));
+    (!isBuiltinVariant &&
+      (connectionAvatars.length > 0 ||
+        hasOrgConnection ||
+        Boolean(oauthReauthIndicator)));
 
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -707,23 +729,9 @@ export function McpServerCard({
               </Tooltip>
             </TooltipProvider>
           </AvatarGroup>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
         </div>
       )}
+      {!isBuiltinVariant && oauthReauthIndicator}
     </div>
   ) : null;
 

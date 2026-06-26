@@ -156,6 +156,11 @@ const getConfiguredOrigins = (): string[] => {
     origins.push(frontendUrl);
   }
 
+  const ngrokDomain = process.env.ARCHESTRA_NGROK_DOMAIN?.trim();
+  if (ngrokDomain) {
+    origins.push(ngrokDomain);
+  }
+
   const additional =
     process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS?.trim();
   if (additional) {

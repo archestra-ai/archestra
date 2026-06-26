@@ -1,6 +1,13 @@
-import { DynamicInteraction, type PartialUIMessage } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  type ChatErrorResponse,
+  DynamicInteraction,
+  type PartialUIMessage,
+} from "@archestra/shared";
+import type { UIMessage } from "ai";
 import {
   AgentModel,
+  ConversationChatErrorModel,
   ConversationModel,
   InteractionModel,
   MessageModel,
@@ -23,10 +30,18 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  *   - the run-view route, AFTER execution, to show the run as a chat.
  *
  * Creation is centralized here and linked with a compare-and-swap so the two
- * paths can never create two conversations for one run. Messages are
- * reconstructed from the run's interactions (the A2A executor persists
- * interactions, not chat messages), so backfilling is done by the view path
- * once interactions exist — never at creation time.
+ * paths can never create two conversations for one run.
+ *
+ * Messages are written by one of two paths, both idempotent (no-op once the
+ * conversation has messages):
+ *   - PRIMARY (`persistRunConversationMessages`): the run handler, at completion,
+ *     stores `[user, responseUiMessage]` from the executor's in-memory result —
+ *     race-free, since it never reads the run's `interactions` rows.
+ *   - FALLBACK (`backfillRunConversationMessages`): the view path reconstructs
+ *     the transcript from the run's interactions. Used for unscoped runs (no
+ *     up-front conversation) and as a safety net; safe by view time because all
+ *     interactions have committed. Must NOT run at creation time (no interactions
+ *     yet) — only once they exist.
  */
 
 /** A short title seeded from the trigger's message template. */
@@ -101,6 +116,140 @@ export async function createAndLinkRunConversation(params: {
     throw new Error("Failed to resolve the run conversation");
   }
   return existing;
+}
+
+/**
+ * Persist a scheduled run's chat transcript from the executor's own result —
+ * the user prompt plus the complete assistant turn (`responseUiMessage`, which
+ * already holds every tool-call, tool-result, and the final answer text). This
+ * is race-free: it does not read the `interactions` rows, which the LLM proxy
+ * commits in a `finally` after the stream is flushed and so are not reliably
+ * visible at run completion. Idempotent — a no-op once the conversation has any
+ * messages, so the lazy view-path stays a safe fallback.
+ */
+export async function persistRunConversationMessages(params: {
+  conversation: Conversation;
+  userText: string;
+  assistantMessage: UIMessage;
+}): Promise<void> {
+  const { conversation, userText, assistantMessage } = params;
+
+  const existing = await MessageModel.findByConversation(conversation.id);
+  if (existing.length > 0) {
+    return;
+  }
+
+  // Distinct timestamps so the transcript renders user-before-assistant
+  // (messages are ordered by createdAt). Built as a variable, not an inline
+  // literal, so the createdAt passthrough type-checks (matches backfill below).
+  const createdAt = Date.now();
+  const rows = [
+    {
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: userText }] },
+      createdAt: new Date(createdAt),
+    },
+    {
+      conversationId: conversation.id,
+      role: assistantMessage.role,
+      content: assistantMessage,
+      createdAt: new Date(createdAt + 1),
+    },
+  ];
+  await MessageModel.bulkCreate(rows);
+}
+
+/**
+ * Persist the scheduled prompt as the run conversation's user message so a failed
+ * run's chat carries it: the inline error card renders beneath the prompt and the
+ * scheduled-run "Try again" can resend it. Idempotent — a no-op once the
+ * conversation has any message, so it never duplicates the prompt the success
+ * path (`persistRunConversationMessages`) writes, nor double-seeds on a retry.
+ */
+export async function persistRunUserMessage(params: {
+  conversation: Conversation;
+  userText: string;
+}): Promise<void> {
+  const { conversation, userText } = params;
+
+  const existing = await MessageModel.findByConversation(conversation.id);
+  if (existing.length > 0) {
+    return;
+  }
+
+  // Single message, so no createdAt ordering to control (defaults at insert).
+  await MessageModel.bulkCreate([
+    {
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: userText }] },
+    },
+  ]);
+}
+
+/**
+ * Record a failed run's error on its (kept) conversation as a chat error, so the
+ * run's chat renders it as an inline error card — a failed run opens a normal
+ * chat showing what went wrong, rather than a blank transcript. The error is the
+ * provider's structured `ChatErrorResponse` (same one the interactive chat uses),
+ * so the card keeps its proper code and retry affordances.
+ */
+export async function recordRunConversationError(params: {
+  conversationId: string;
+  error: ChatErrorResponse;
+}): Promise<void> {
+  await ConversationChatErrorModel.create({
+    conversationId: params.conversationId,
+    error: params.error,
+  });
+}
+
+/**
+ * Make a FAILED run's conversation show what went wrong even when the run never
+ * reached the execute path that records a chat error — a skip ("previous run
+ * still in progress") or a pre-execution failure (e.g. lost agent access) is
+ * marked failed before any conversation, transcript, or error exists. Without
+ * this, opening such a run lazily-creates a blank chat. Persist the prompt as the
+ * user message and record the run's `error` as a chat error, so the chat shows
+ * the prompt + an inline error card (and the scheduled-run "Try again").
+ *
+ * Idempotent and non-destructive: a no-op once the conversation has any message
+ * or chat error, so it never overwrites a real transcript or a richer structured
+ * error already recorded by the run handler on an execution failure.
+ */
+export async function ensureFailedRunErrorVisible(params: {
+  conversation: Conversation;
+  run: ScheduleTriggerRun;
+  trigger: ScheduleTrigger;
+}): Promise<void> {
+  const { conversation, run, trigger } = params;
+  if (run.status !== "failed") {
+    return;
+  }
+
+  const [messages, errors] = await Promise.all([
+    MessageModel.findByConversation(conversation.id),
+    ConversationChatErrorModel.findByConversation(conversation.id),
+  ]);
+  if (messages.length > 0 || errors.length > 0) {
+    return;
+  }
+
+  await persistRunUserMessage({
+    conversation,
+    userText: trigger.messageTemplate,
+  });
+  await recordRunConversationError({
+    conversationId: conversation.id,
+    error: {
+      code: ChatErrorCode.Unknown,
+      message:
+        run.error ??
+        "This scheduled run failed before it could produce a response.",
+      isRetryable: false,
+    },
+  });
 }
 
 /**

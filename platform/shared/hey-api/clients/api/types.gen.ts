@@ -22335,6 +22335,7 @@ export type GetChatConversationFilesResponses = {
             createdAt: string;
         }>;
         projectName: string | null;
+        canManageFiles: boolean;
     };
 };
 
@@ -22413,6 +22414,91 @@ export type GetChatAttachmentContentErrors = {
 };
 
 export type GetChatAttachmentContentError = GetChatAttachmentContentErrors[keyof GetChatAttachmentContentErrors];
+
+export type DeleteChatAttachmentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/attachments/{id}';
+};
+
+export type DeleteChatAttachmentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteChatAttachmentError = DeleteChatAttachmentErrors[keyof DeleteChatAttachmentErrors];
+
+export type DeleteChatAttachmentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type DeleteChatAttachmentResponse = DeleteChatAttachmentResponses[keyof DeleteChatAttachmentResponses];
 
 export type ForkChatConversationData = {
     body: {
@@ -22662,6 +22748,91 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type ClearChatConversationErrorsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/chat-errors';
+};
+
+export type ClearChatConversationErrorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ClearChatConversationErrorsError = ClearChatConversationErrorsErrors[keyof ClearChatConversationErrorsErrors];
+
+export type ClearChatConversationErrorsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ClearChatConversationErrorsResponse = ClearChatConversationErrorsResponses[keyof ClearChatConversationErrorsResponses];
 
 export type CompactChatConversationData = {
     body?: never;
@@ -30048,11 +30219,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -30127,11 +30299,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             /**
@@ -30322,11 +30495,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: {
@@ -30421,11 +30595,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: GeminiGenerateContentRequest;
@@ -30500,11 +30675,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: AnthropicMessagesRequest;
@@ -30579,11 +30755,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: {
@@ -31056,11 +31233,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31135,11 +31313,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31214,11 +31393,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31293,11 +31473,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31372,11 +31553,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31451,11 +31633,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -31530,11 +31713,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: VllmChatCompletionRequest;
@@ -31607,11 +31791,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: OllamaChatCompletionRequest;
@@ -31684,11 +31869,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: CohereChatRequest;
@@ -31763,11 +31949,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: ZhipuaiChatCompletionRequest;
@@ -31842,11 +32029,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: DeepSeekChatCompletionRequest;
@@ -31921,11 +32109,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: {
@@ -32641,11 +32830,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: MinimaxChatCompletionRequest;
@@ -32720,11 +32910,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: XaiChatCompletionRequest;
@@ -32866,11 +33057,12 @@ export type GetInteractionsResponses = {
             executionId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-            authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             /**
@@ -33204,7 +33396,7 @@ export type GetInteractionSessionsResponses = {
             profileName: string | null;
             externalAgentIds: Array<string>;
             externalAgentIdLabels: Array<string | null>;
-            authMethods: Array<'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
+            authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
             lastInteractionRequest: unknown;
@@ -33478,11 +33670,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -33557,11 +33750,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         /**
@@ -33752,11 +33946,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: {
@@ -33851,11 +34046,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: GeminiGenerateContentRequest;
@@ -33930,11 +34126,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: AnthropicMessagesRequest;
@@ -34009,11 +34206,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: {
@@ -34486,11 +34684,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34565,11 +34764,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34644,11 +34844,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34723,11 +34924,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34802,11 +35004,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34881,11 +35084,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -34960,11 +35164,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: VllmChatCompletionRequest;
@@ -35037,11 +35242,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: OllamaChatCompletionRequest;
@@ -35114,11 +35320,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: CohereChatRequest;
@@ -35193,11 +35400,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: ZhipuaiChatCompletionRequest;
@@ -35272,11 +35480,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: DeepSeekChatCompletionRequest;
@@ -35351,11 +35560,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: {
@@ -36071,11 +36281,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: MinimaxChatCompletionRequest;
@@ -36150,11 +36361,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: XaiChatCompletionRequest;
@@ -36296,11 +36508,12 @@ export type GetInteractionResponses = {
         executionId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
-        authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         /**
@@ -45931,6 +46144,7 @@ export type GetMcpServersResponses = {
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -45968,6 +46182,7 @@ export type InstallMcpServerData = {
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
         oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage?: string | null;
         oauthRefreshFailedAt?: unknown;
         userId?: string;
         userConfigValues?: {
@@ -46068,6 +46283,7 @@ export type InstallMcpServerResponses = {
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -46269,6 +46485,7 @@ export type GetMcpServerResponses = {
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -46395,6 +46612,7 @@ export type ReauthenticateMcpServerResponses = {
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -46793,6 +47011,7 @@ export type ReinstallMcpServerResponses = {
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+        oauthRefreshErrorMessage: string | null;
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
@@ -53823,6 +54042,104 @@ export type CreateProjectResponses = {
 
 export type CreateProjectResponse = CreateProjectResponses[keyof CreateProjectResponses];
 
+export type CreateProjectFromConversationData = {
+    body: {
+        conversationId: string;
+        name?: string;
+        description?: string | null;
+        icon?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects/from-conversation';
+};
+
+export type CreateProjectFromConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateProjectFromConversationError = CreateProjectFromConversationErrors[keyof CreateProjectFromConversationErrors];
+
+export type CreateProjectFromConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        icon: string | null;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
+        conversationCount: number;
+        visibility: 'organization' | 'team';
+        shareTeamNames: Array<string> | null;
+        pinnedAt: string | null;
+        createdAt: string;
+    };
+};
+
+export type CreateProjectFromConversationResponse = CreateProjectFromConversationResponses[keyof CreateProjectFromConversationResponses];
+
 export type DeleteProjectData = {
     body?: never;
     path: {
@@ -54533,6 +54850,9 @@ export type GetProjectConversationsResponses = {
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
+        scheduleTriggerId: string | null;
+        scheduleRunId: string | null;
+        scheduleName: string | null;
     }>;
 };
 
@@ -62392,6 +62712,7 @@ export type GetAllVirtualApiKeysData = {
         offset?: number;
         search?: string;
         providerApiKeyId?: string;
+        keyType?: 'standard' | 'passthrough';
     };
     url: '/api/llm-virtual-keys';
 };
@@ -62470,6 +62791,7 @@ export type GetAllVirtualApiKeysResponses = {
             id: string;
             organizationId: string;
             name: string;
+            keyType: 'standard' | 'passthrough';
             secretId: string;
             tokenStart: string;
             scope: 'personal' | 'team' | 'org';
@@ -62486,6 +62808,10 @@ export type GetAllVirtualApiKeysResponses = {
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
+            }>;
+            allowedLlmProxies: Array<{
+                id: string;
+                name: string;
             }>;
         }>;
         pagination: {
@@ -62504,13 +62830,15 @@ export type GetAllVirtualApiKeysResponse = GetAllVirtualApiKeysResponses[keyof G
 export type CreateVirtualApiKeyData = {
     body: {
         name: string;
+        keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        providerApiKeys: Array<{
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        allowedLlmProxyIds?: Array<string>;
         ownerId?: string;
     };
     path?: never;
@@ -62591,6 +62919,7 @@ export type CreateVirtualApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
+        keyType: 'standard' | 'passthrough';
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -62608,6 +62937,10 @@ export type CreateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
+        }>;
+        allowedLlmProxies: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -62702,13 +63035,15 @@ export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof Del
 export type UpdateVirtualApiKeyData = {
     body: {
         name: string;
+        keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
-        providerApiKeys: Array<{
+        providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
         }>;
+        allowedLlmProxyIds?: Array<string>;
     };
     path: {
         id: string;
@@ -62790,6 +63125,7 @@ export type UpdateVirtualApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
+        keyType: 'standard' | 'passthrough';
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -62806,6 +63142,10 @@ export type UpdateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
             providerApiKeyId: string;
             providerApiKeyName: string;
+        }>;
+        allowedLlmProxies: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };

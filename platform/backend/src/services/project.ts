@@ -1,5 +1,8 @@
 import { userHasPermission } from "@/auth";
 import {
+  ConversationModel,
+  ConversationNotOwnedError,
+  ProjectAlreadyAssignedError,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -47,6 +50,69 @@ class ProjectService {
         icon: params.icon ?? null,
       });
     } catch (error) {
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(
+          409,
+          `a project named "${name}" already exists in this organization`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Turn one of the caller's chats into a project: create the project, move the
+   * chat into it, and re-point the chat's files to the project (see
+   * {@link ProjectModel.createFromConversation}). Owner-only; only `user`
+   * chats are eligible (scheduled-run conversations are rejected) and a chat
+   * already in a project can't seed another. `name` defaults to the chat title.
+   */
+  async createProjectFromConversation(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+    name?: string | null;
+    description?: string | null;
+    icon?: string | null;
+  }): Promise<{ project: Project; filesMoved: number }> {
+    const meta = await ConversationModel.getOwnedMeta({
+      id: params.conversationId,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    if (!meta) {
+      throw new ApiError(404, "Conversation not found");
+    }
+    if (meta.origin !== "user") {
+      throw new ApiError(409, "Only user chats can be turned into a project");
+    }
+    if (meta.projectId) {
+      throw new ApiError(409, "This chat already belongs to a project");
+    }
+
+    const name =
+      params.name?.trim() || meta.title?.trim() || "Untitled project";
+    const invalid = validateProjectName(name);
+    if (invalid) {
+      throw new ApiError(400, `project name is invalid: ${invalid}`);
+    }
+
+    try {
+      return await ProjectModel.createFromConversation({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        name,
+        description: params.description ?? null,
+        icon: params.icon ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ConversationNotOwnedError) {
+        throw new ApiError(404, "Conversation not found");
+      }
+      if (error instanceof ProjectAlreadyAssignedError) {
+        throw new ApiError(409, "This chat already belongs to a project");
+      }
       if (error instanceof ProjectNameExistsError) {
         throw new ApiError(
           409,

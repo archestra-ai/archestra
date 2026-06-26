@@ -149,6 +149,11 @@ interface ChatMessagesProps {
   }) => Promise<void>;
   /** Re-run the original prompt after the user connects a per-user provider. */
   onProviderConnected?: () => void;
+  /**
+   * Scheduled-run only: clear a persisted chat error and resend the prompt.
+   * When set, the inline error card shows a "Try again" button.
+   */
+  onChatErrorRetry?: () => void | Promise<void>;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -212,6 +217,7 @@ export function ChatMessages({
   onMessagesUpdate,
   onRegenerateUserMessage,
   onProviderConnected,
+  onChatErrorRetry,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -501,6 +507,7 @@ export function ChatMessages({
                   selectedModel={selectedModel}
                   modelSource={modelSource}
                   onProviderConnected={onProviderConnected}
+                  onRetry={onChatErrorRetry}
                 />
               );
             }
@@ -1067,8 +1074,13 @@ export function ChatMessages({
                           canReadToolPolicy: !!canReadToolPolicy,
                           claimUnsafeContextDivider,
                           renderedPart: (
+                            // Shallow-copy so MessageTool's by-value memo
+                            // comparator sees a distinct object: the AI SDK
+                            // mutates a tool part in place (same reference) when
+                            // its result lands, which otherwise hides the
+                            // input-available -> output-available transition.
                             <MessageTool
-                              part={part}
+                              part={{ ...part }}
                               key={partKey}
                               toolResultPart={toolResultPart}
                               toolName={toolName}
@@ -1246,8 +1258,13 @@ export function ChatMessages({
                             canReadToolPolicy: !!canReadToolPolicy,
                             claimUnsafeContextDivider,
                             renderedPart: (
+                              // Shallow-copy so MessageTool's by-value memo
+                              // comparator sees a distinct object: the AI SDK
+                              // mutates a tool part in place (same reference)
+                              // when its result lands, which otherwise hides the
+                              // input-available -> output-available transition.
                               <MessageTool
-                                part={part}
+                                part={{ ...part }}
                                 key={partKey}
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
@@ -1933,8 +1950,10 @@ const MessageTool = memo(
   },
   (prev, next) =>
     // Skip re-render unless identity, state, or UI-relevant data actually changed.
-    // AI SDK recreates part/toolResultPart objects every streaming tick — compare
-    // by value, not reference. During input-streaming, also re-render on input growth.
+    // Compare by value, not reference: the AI SDK sometimes mutates a tool part
+    // in place when its result lands, so render sites pass a shallow copy (see
+    // MessageTool usages) to keep these by-value checks meaningful. During
+    // input-streaming, also re-render on input growth.
     prev.toolName === next.toolName &&
     prev.agentId === next.agentId &&
     prev.part.toolCallId === next.part.toolCallId &&

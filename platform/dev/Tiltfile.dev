@@ -65,7 +65,11 @@ code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 apps_enabled = os.getenv('ARCHESTRA_APPS_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
-  backend_resource_deps.append('dagger-runtime-port-forward')
+  # Skip the local port-forward dep when pointing at an external engine — that
+  # resource isn't created (see Tiltfile.coderuntime), so depending on it would
+  # wedge the backend waiting on a resource that never appears.
+  if not os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST'):
+    backend_resource_deps.append('dagger-runtime-port-forward')
   # build the napi addon before the backend boots, so it never loads a stale .node
   backend_resource_deps.append('sandbox-rs-build')
 if apps_enabled:

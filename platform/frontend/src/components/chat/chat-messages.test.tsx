@@ -1447,7 +1447,7 @@ describe("owned-app inline rendering", () => {
         role: "assistant",
         parts: [
           {
-            type: "tool-sparky__scaffold_app",
+            type: "tool-sparky__edit_app",
             toolCallId: "call-app-1",
             state: "output-available",
             input: { name: "To Do App", html: "<h1>hi</h1>" },
@@ -1469,7 +1469,6 @@ describe("owned-app inline rendering", () => {
   }
 
   it.each([
-    "scaffold_app",
     "edit_app",
     "render_app",
   ])("mounts the app-bound runtime for a branded %s result", (shortName) => {
@@ -1480,9 +1479,16 @@ describe("owned-app inline rendering", () => {
     expect(section).toHaveAttribute("data-uri", `ui://archestra-app/${APP_ID}`);
   });
 
+  // scaffold_app only seeds the boilerplate template — it must not mount a
+  // canvas (the template flash is noise); the first edit_app is what renders.
+  it("does not mount for a branded scaffold_app result", () => {
+    renderAppToolPart({ type: "tool-sparky__scaffold_app" });
+    expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
   it.each([
-    "sparky__scaffold_app",
-    "scaffold_app",
+    "sparky__edit_app",
+    "edit_app",
   ])("mounts the app-bound runtime for a run_tool dispatch targeting %s", (targetName) => {
     renderAppToolPart({
       type: "tool-sparky__run_tool",
@@ -1498,8 +1504,8 @@ describe("owned-app inline rendering", () => {
     );
   });
 
-  it("does not mount for a foreign-prefix scaffold_app result", () => {
-    renderAppToolPart({ type: "tool-other__scaffold_app" });
+  it("does not mount for a foreign-prefix edit_app result", () => {
+    renderAppToolPart({ type: "tool-other__edit_app" });
     expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
   });
 
@@ -1563,7 +1569,7 @@ describe("owned-app inline rendering", () => {
             output: { content: "results" },
           },
           {
-            type: "tool-sparky__scaffold_app",
+            type: "tool-sparky__edit_app",
             toolCallId: "call-app-1",
             state: "output-available",
             input: { name: "To Do App", html: "<h1>hi</h1>" },

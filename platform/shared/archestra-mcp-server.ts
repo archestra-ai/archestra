@@ -107,6 +107,9 @@ export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_SWAP_AGENT_SHORT_NAME = "swap_agent";
 export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
 export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
+// Turn the current chat into a project (moves the chat + its files into a new project).
+export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
+  "create_project_from_conversation";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -205,6 +208,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
+  TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -549,9 +553,12 @@ export function isAlwaysExposedArchestraToolShortName(
  * these, so their results must keep `structuredContent` through the chat
  * serialization path. `list_apps`/`delete_app`/`read_app` deliberately excluded
  * — they render nothing (`read_app` returns source, not a new head to show).
+ *
+ * `scaffold_app` is excluded too: it only seeds the boilerplate starter
+ * template, which is noise inline — the first `edit_app` (the first real build)
+ * is the earliest render worth showing.
  */
 export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

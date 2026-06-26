@@ -234,6 +234,13 @@ function buildStreamErrorPayload(params: {
   return serialized;
 }
 
+// Upper bound on how long the response body's close waits for the active-run row
+// to be marked terminal. Terminalization is normally tens of milliseconds; this
+// cap keeps a wedged DB or notifier after stream-end from hanging the client EOF
+// indefinitely. Past it we release EOF and fall back to the pre-existing 409
+// window (which the stale reaper still cleans up).
+const TERMINAL_CLOSE_GATE_TIMEOUT_MS = 10_000;
+
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
@@ -1232,7 +1239,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             const [responseStream, persistenceStream] = uiMessageStream.tee();
-            activeChatRunService.drainStreamToEvents({
+            const { terminalReady } = activeChatRunService.drainStreamToEvents({
               runId: activeRun.id,
               conversationId,
               stream: persistenceStream as ReadableStream<UIMessageChunk>,
@@ -1278,12 +1285,40 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               reply.header(key, value);
             }
 
-            // Send the Response body stream directly
+            // Send the Response body stream directly, but hold its CLOSE (not
+            // its bytes — they stream through unchanged) until the active-run row
+            // is marked terminal. Without this, a client that fires its next
+            // message the instant this response ends races the async drain and
+            // 409s against a row still flagged running.
             if (!response.body) {
               throw new ApiError(400, "No response body");
             }
+            const gatedBody = (
+              response.body as ReadableStream<Uint8Array>
+            ).pipeThrough(
+              new TransformStream<Uint8Array, Uint8Array>({
+                async flush() {
+                  let timer: ReturnType<typeof setTimeout> | undefined;
+                  try {
+                    await Promise.race([
+                      terminalReady,
+                      new Promise<void>((resolve) => {
+                        timer = setTimeout(
+                          resolve,
+                          TERMINAL_CLOSE_GATE_TIMEOUT_MS,
+                        );
+                      }),
+                    ]);
+                  } finally {
+                    if (timer) {
+                      clearTimeout(timer);
+                    }
+                  }
+                },
+              }),
+            );
             // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-            return reply.send(response.body as any);
+            return reply.send(gatedBody as any);
           },
         });
       } catch (error) {
@@ -1645,6 +1680,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/chat/attachments/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteChatAttachment,
+        description:
+          "Soft-delete a chat attachment by id. Owner-gated: only the " +
+          "conversation owner may remove its attachments.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }) => {
+      await conversationFilesService.deleteAttachment({
+        attachmentId: id,
+        userId: user.id,
+        organizationId,
+      });
+      return { ok: true as const };
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations/:id/fork",
     {
@@ -1795,8 +1853,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      // Validate that the agent exists and the user has access to it. Only the
+      // LLM-selection fields are read below, so skip findById's full hydration.
+      const agent = await AgentModel.findLlmSelectionFieldsById(
+        agentId,
+        user.id,
+        isAgentAdmin,
+      );
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
@@ -2032,6 +2095,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/chat/conversations/:id/chat-errors",
+    {
+      schema: {
+        operationId: RouteId.ClearChatConversationErrors,
+        description: "Clear a conversation's recorded chat errors",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Owner+org-scoped lookup (matches the other conversation mutations) so a
+      // caller can only clear errors on a conversation they own.
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await ConversationChatErrorModel.deleteByConversation(id);
 
       return reply.send({ success: true });
     },

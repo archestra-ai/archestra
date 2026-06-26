@@ -155,7 +155,15 @@ export class ActiveChatRunService {
       error?: string | null;
     }>;
     abortController?: AbortController;
-  }): void {
+  }): { terminalReady: Promise<void> } {
+    // Resolves once the drain has attempted the terminal write on every path
+    // below (or found the run gone). The route awaits this before closing the
+    // client stream, so a client that sends its next message the instant the
+    // response ends doesn't race a row still flagged `running` into a 409.
+    let resolveTerminalReady!: () => void;
+    const terminalReady = new Promise<void>((resolve) => {
+      resolveTerminalReady = resolve;
+    });
     void (async () => {
       const reader = params.stream.getReader();
       // A timer-triggered flush can fail (or observe the run as gone) while the
@@ -251,12 +259,21 @@ export class ActiveChatRunService {
         });
         await this.notifyEvent(params.runId);
       }
-    })().catch((error) => {
-      logger.error(
-        { error, runId: params.runId, conversationId: params.conversationId },
-        "Unexpected active chat run drain failure",
-      );
-    });
+    })()
+      .catch((error) => {
+        logger.error(
+          { error, runId: params.runId, conversationId: params.conversationId },
+          "Unexpected active chat run drain failure",
+        );
+      })
+      // Resolves even on an unexpected failure so a waiting client EOF can never
+      // hang; markTerminal's running-only guard already makes a double write a
+      // no-op, and a genuinely stuck `running` row is backstopped by the reaper.
+      .finally(() => {
+        resolveTerminalReady();
+      });
+
+    return { terminalReady };
   }
 
   createReplayStream(runId: string): ReadableStream<UIMessageChunk> {

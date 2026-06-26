@@ -53,6 +53,36 @@ export const OAUTH_ENDPOINTS = {
 } as const;
 
 /**
+ * Issuer-root aliases for the OAuth 2.1 endpoints.
+ *
+ * RFC 8414 (OAuth 2.0 Authorization Server Metadata) lets a client discover the
+ * real endpoint locations from `/.well-known/oauth-authorization-server`, so a
+ * client that performs discovery always uses the canonical {@link OAUTH_ENDPOINTS}
+ * paths advertised in that metadata. A client that *skips* discovery — e.g. one
+ * configured manually with "bring your own credentials", given only an issuer or
+ * token URL — instead falls back to the conventional issuer-relative paths that
+ * RFC 6749 uses throughout its examples: the authorization endpoint at
+ * `/authorize` (RFC 6749 Section 3.1) and the token endpoint at `/token`
+ * (RFC 6749 Section 3.2), plus `/register` for Dynamic Client Registration
+ * (RFC 7591 Section 3). Because our authorization server (better-auth) mounts
+ * those endpoints under `/api/auth/oauth2/*`, we alias each conventional root
+ * path onto its canonical endpoint so non-discovering clients reach the right
+ * handler instead of a 404.
+ *
+ * `jwks` is intentionally omitted: it is never guessed at a conventional path,
+ * only ever dereferenced via the `jwks_uri` value published in the metadata
+ * (RFC 8414 Section 2), so there is no root path for a client to fall back to.
+ */
+export const OAUTH_ISSUER_ROOT_ALIASES: ReadonlyArray<{
+  root: string;
+  canonical: string;
+}> = [
+  { root: "/authorize", canonical: OAUTH_ENDPOINTS.authorize },
+  { root: "/token", canonical: OAUTH_ENDPOINTS.token },
+  { root: "/register", canonical: OAUTH_ENDPOINTS.register },
+];
+
+/**
  * OAuth 2.1 page paths (frontend routes).
  */
 export const OAUTH_PAGES = {

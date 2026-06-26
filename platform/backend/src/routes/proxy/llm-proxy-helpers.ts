@@ -152,6 +152,7 @@ export function buildInteractionRecord(params: {
   executionId?: string;
   userId?: string;
   virtualKeyId?: string;
+  passthroughVirtualKeyId?: string;
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source?: InteractionSource | null;
@@ -182,6 +183,7 @@ export function buildInteractionRecord(params: {
     executionId: params.executionId,
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,
+    passthroughVirtualKeyId: params.passthroughVirtualKeyId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,
     source: params.source,

@@ -235,6 +235,76 @@ claude`,
     },
   },
   {
+    id: "claude-desktop",
+    label: "Claude Desktop",
+    sub: "Anthropic desktop app",
+    svg: CLAUDE_PATH,
+    iconColor: "#D97757",
+    tileBg: "#fff1ea",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "Custom connector",
+      language: "json",
+      steps: [
+        {
+          title: "Enable developer mode",
+          body: "From the Claude menu choose Help → Troubleshooting → Enable Developer Mode.",
+        },
+        {
+          title: 'Open "Configure Third-Party Inference"',
+          body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+        },
+        {
+          title: "Add a Managed MCP server",
+          body: 'Go to "Connectors & extensions". Click "Add server" and select "Blank".',
+        },
+        {
+          title: "Paste the gateway URL",
+          terminalTitle: "Remote MCP server URL",
+          buildCommand: ({ url }) => url,
+        },
+        {
+          title: "Finish the OAuth flow",
+          body: "Claude Desktop opens your browser. Sign in and approve the gateway; the connector's tools then appear in chat.",
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: ["anthropic"],
+      build: ({ url }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Enable developer mode",
+            body: "From the Claude menu choose Help → Troubleshooting → Enable Developer Mode.",
+          },
+          {
+            title: 'Open "Configure Third-Party Inference"',
+            body: 'From the Claude menu choose Developer → "Configure Third-Party Inference…".',
+          },
+          {
+            title: "Fill in the credential",
+            body: 'Paste the values below into the "API Key" and "Base URL" fields, then click "Save".',
+            fields: [
+              { label: "Gateway URL", value: url },
+              {
+                label: "API Key",
+                value: "<your-anthropic-api-key-or-virtual-key>",
+                copyable: false,
+              },
+            ],
+          },
+          {
+            title: "Restart and verify",
+            body: "Restart Claude Desktop and send a message in a new conversation. Requests appear in the Archestra LLM proxy logs.",
+          },
+        ],
+      }),
+    },
+  },
+  {
     id: "cursor",
     label: "Cursor",
     sub: "AI code editor",

@@ -38,19 +38,18 @@ ref = "a8924c2a35cfa290458852c4fad17c9133054c2e"
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/cipher-decoder"
-ref = "5ae74172add0f2e3beb0d783dc132e1d8803b6e2"
+ref = "981571f262a68965152f24f1fa7e28f042774e9e"
 
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/sales-ledger"
 ref = "08f9b3033d20597fb3ea85d35223772300bb90dc"
 
-# Drives the access-request-intake elicitation flow. Pinned to a pushed SHA so the GitHub import
-# resolves; retarget to the merge SHA after this lands.
+# Drives the access-request-intake elicitation flow. Pinned to its latest change on main.
 [[skills]]
 repo = "github.com/archestra-ai/archestra"
 path = "archestra-bench/skills/access-request-intake"
-ref = "506e9d1108afd8b241eba37a8bf692e816164ef6"
+ref = "6fab157c0716377d4df459bb7ba959918277ac94"
 
 # Three public, no-auth remote MCP servers, registered as part of the surface (distractors; no task
 # requires them). Each must list tools without auth or env setup hard-fails naming it.

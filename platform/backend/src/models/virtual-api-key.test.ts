@@ -592,6 +592,7 @@ describe("VirtualApiKeyModel", () => {
       providerApiKeys: [
         { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
       ],
+      allowedLlmProxyIds: [],
     });
 
     expect(updated?.name).toBe("After");

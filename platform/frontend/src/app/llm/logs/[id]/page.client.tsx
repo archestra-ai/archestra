@@ -354,6 +354,8 @@ function formatAuthMethod(authMethod: InteractionAuthMethod) {
       return "OAuth User";
     case "virtual_key":
       return "Virtual Key";
+    case "passthrough_virtual_key":
+      return "Passthrough Virtual Key";
     case "provider_key":
       return "Provider Key";
     case "jwks":

@@ -1,13 +1,28 @@
 "use client";
 
-import { AppWindow, ExternalLink, MessageSquare, Pencil } from "lucide-react";
+import {
+  AppWindow,
+  ExternalLink,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { AppDeleteDialog } from "@/app/apps/_parts/app-delete-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { buildAppChatHandoffUrl } from "@/lib/apps/app-chat-handoff";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -25,6 +40,7 @@ import type { CatalogItem } from "./mcp-server-card";
  */
 export function AppBackingCard({ item }: { item: CatalogItem }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -32,8 +48,8 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
   const { data: canAdmin } = useHasPermissions({ app: ["admin"] });
   const { data: canTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
-  const canManage =
-    !!item.appId && (canUpdate || canAdmin || canTeamAdmin || canDelete);
+  const canEdit = canUpdate || canAdmin || canTeamAdmin;
+  const canManage = !!item.appId && (canEdit || canDelete);
 
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
@@ -78,16 +94,39 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
             )}
           </div>
           {canManage && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid={`app-backing-card-settings-${item.name}`}
-              aria-label={`Edit ${item.name}`}
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  data-testid={`app-backing-card-actions-${item.name}`}
+                  aria-label={`${item.name} actions`}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEdit && (
+                  <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <>
+                    {canEdit && <DropdownMenuSeparator />}
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setDeleteOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </CardHeader>
@@ -122,7 +161,7 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
                   rel="noreferrer"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Open standalone
+                  Open in new tab
                 </Link>
               </Button>
             </div>
@@ -130,12 +169,19 @@ export function AppBackingCard({ item }: { item: CatalogItem }) {
         </div>
       </CardContent>
       {canManage && item.appId && (
-        <AppSettingsDialog
-          appId={item.appId}
-          item={item}
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-        />
+        <>
+          <AppSettingsDialog
+            appId={item.appId}
+            item={item}
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+          />
+          <AppDeleteDialog
+            app={{ id: item.appId, name: item.name }}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+          />
+        </>
       )}
     </Card>
   );

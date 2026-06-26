@@ -801,6 +801,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
+  [RouteId.DeleteChatAttachment]: {
+    chat: ["update"],
+  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },
@@ -820,6 +823,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
+  },
+  // Clearing a conversation's recorded chat errors is a chat-content edit, not a
+  // conversation deletion — same gate as compact / message edit.
+  [RouteId.ClearChatConversationErrors]: {
+    chat: ["update"],
   },
   [RouteId.CompactChatConversation]: {
     chat: ["update"],
@@ -1315,6 +1323,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
   [RouteId.CreateProject]: { project: ["create"] },
+  // Owner-scoped: a caller may only convert their own chat, so `project:create`
+  // is the capability gate (matching the create_project_from_conversation MCP
+  // tool's RBAC). The owner can always read their own chat.
+  [RouteId.CreateProjectFromConversation]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },

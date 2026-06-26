@@ -427,6 +427,83 @@ describe("AgentModel", () => {
       expect(foundAgent).toBeNull();
     });
 
+    test("findLlmSelectionFieldsById returns selection fields for an admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        admin.id,
+        true,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toEqual({ llmApiKeyId: null, modelId: null });
+    });
+
+    test("findLlmSelectionFieldsById returns selection fields for a user in an assigned team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user.id,
+        false,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toHaveProperty("llmApiKeyId");
+      expect(fields).toHaveProperty("modelId");
+    });
+
+    test("findLlmSelectionFieldsById returns null for a user not in assigned teams", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user1.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      // The access gate must hold for the narrow fetch exactly as for findById.
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user2.id,
+        false,
+      );
+      expect(fields).toBeNull();
+    });
+
     test("update syncs team assignments correctly", async ({
       makeAdmin,
       makeOrganization,

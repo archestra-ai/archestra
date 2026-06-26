@@ -67,7 +67,9 @@ export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
 export {
+  ConversationNotOwnedError,
   default as ProjectModel,
+  ProjectAlreadyAssignedError,
   ProjectNameExistsError,
 } from "./project";
 export { default as ProjectPinModel } from "./project-pin";

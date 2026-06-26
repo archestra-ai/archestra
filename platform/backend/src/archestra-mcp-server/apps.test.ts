@@ -116,8 +116,9 @@ describe("app tool execution", () => {
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
     expect(structured(created).latestVersion).toBe(1);
-    // The model hands this link to the user; the chat UI renders inline from
-    // structuredContent.id (scaffold is in the rendering set).
+    // The model hands this link to the user. The scaffolded template is not
+    // rendered inline (only the first edit_app is); the standalone page stays
+    // reachable via the returned /a/<id> link.
     expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
     expect((created.content[0] as any).text).toContain(`/a/${appId}`);
 

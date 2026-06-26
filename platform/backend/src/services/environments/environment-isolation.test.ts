@@ -182,6 +182,7 @@ test("getMcpToolsAccessibleToUser: dynamic discovery is scoped to the agent's en
   makeOrganization,
   makeUser,
   makeInternalMcpCatalog,
+  makeMcpServer,
   makeTool,
 }) => {
   const org = await makeOrganization();
@@ -200,6 +201,8 @@ test("getMcpToolsAccessibleToUser: dynamic discovery is scoped to the agent's en
   });
   const prodTool = await makeTool({ catalogId: prodCatalog.id });
   const defaultTool = await makeTool({ catalogId: defaultCatalog.id });
+  await makeMcpServer({ catalogId: prodCatalog.id, scope: "org" });
+  await makeMcpServer({ catalogId: defaultCatalog.id, scope: "org" });
 
   const prodNames = (
     await ToolModel.getMcpToolsAccessibleToUser({

@@ -75,3 +75,16 @@ export function assembleFileSections(params: {
 
   return { generated, attachments, projectFiles };
 }
+
+/**
+ * Which delete endpoint removes a given file. Attachments have their own chat
+ * route; generated and project files are both persisted artifacts behind the
+ * skill-sandbox artifact route.
+ */
+export function deleteTargetFor(
+  item: ConversationFileItem,
+): { kind: "artifact" } | { kind: "attachment" } {
+  return item.source === "attachment"
+    ? { kind: "attachment" }
+    : { kind: "artifact" };
+}

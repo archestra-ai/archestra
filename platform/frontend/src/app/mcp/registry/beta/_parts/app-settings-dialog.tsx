@@ -2,7 +2,6 @@
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -15,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +21,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useDeleteApp, useUpdateApp } from "@/lib/app.query";
+import { useUpdateApp } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import type { CatalogItem } from "./mcp-server-card";
@@ -51,22 +49,18 @@ export function AppSettingsDialog({
         <DialogHeader>
           <DialogTitle>{item.name}</DialogTitle>
           <DialogDescription>
-            Manage who can use this app, its environment, the MCP tools it can
-            call, and deletion.
+            Manage who can use this app, its environment, and the MCP tools it
+            can call.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="min-h-[596px]">
+        <DialogBody>
           <Tabs defaultValue="settings">
             <TabsList>
               <TabsTrigger value="settings">Settings</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
             </TabsList>
             <TabsContent value="settings" className="pt-2">
-              <SettingsTab
-                appId={appId}
-                item={item}
-                onDeleted={() => onOpenChange(false)}
-              />
+              <SettingsTab appId={appId} item={item} />
             </TabsContent>
             <TabsContent value="tools" className="pt-2">
               <AppToolsEditor appId={appId} />
@@ -79,18 +73,10 @@ export function AppSettingsDialog({
 }
 
 // Everything that isn't tool selection: visibility (scope + teams) and
-// environment share a single Save, with the confirm-by-name delete kept as a
-// danger zone at the bottom. Visibility/environment edits (and deletion) write
-// through to the app's backing catalog, so the registry card reflects them.
-function SettingsTab({
-  appId,
-  item,
-  onDeleted,
-}: {
-  appId: string;
-  item: CatalogItem;
-  onDeleted: () => void;
-}) {
+// environment share a single Save. These edits write through to the app's
+// backing catalog, so the registry card reflects them. Deletion lives in its
+// own modal, opened from the card's actions menu.
+function SettingsTab({ appId, item }: { appId: string; item: CatalogItem }) {
   const updateApp = useUpdateApp();
   const { data: isAppAdmin } = useHasPermissions({ app: ["admin"] });
   const { data: isAppTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
@@ -198,64 +184,6 @@ function SettingsTab({
             {updateApp.isPending ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-      <DeleteSection appId={appId} name={item.name} onDeleted={onDeleted} />
-    </div>
-  );
-}
-
-// Confirm-by-name delete, lifted from AppDeleteSection. Deleting the app tears
-// down its backing catalog/server, so the registry card disappears on success.
-function DeleteSection({
-  appId,
-  name,
-  onDeleted,
-}: {
-  appId: string;
-  name: string;
-  onDeleted: () => void;
-}) {
-  const router = useRouter();
-  const deleteApp = useDeleteApp();
-  const [confirmName, setConfirmName] = useState("");
-  const canDelete = confirmName === name && !deleteApp.isPending;
-
-  const handleConfirm = () => {
-    if (!canDelete) return;
-    deleteApp.mutate(appId, {
-      onSuccess: (data) => {
-        if (!data) return;
-        onDeleted();
-        router.refresh();
-      },
-    });
-  };
-
-  return (
-    <div className="space-y-3 rounded-md border border-destructive/30 p-4">
-      <p className="text-sm font-medium text-destructive">Danger zone</p>
-      <p className="text-sm text-muted-foreground">
-        Permanently delete this app and its version history. This cannot be
-        undone.
-      </p>
-      <Label htmlFor="confirm-app-name" className="block">
-        Type <span className="font-bold text-foreground">{name}</span> to
-        confirm
-      </Label>
-      <Input
-        id="confirm-app-name"
-        value={confirmName}
-        onChange={(e) => setConfirmName(e.target.value)}
-        autoComplete="off"
-      />
-      <div className="flex justify-end">
-        <Button
-          variant="destructive"
-          disabled={!canDelete}
-          onClick={handleConfirm}
-        >
-          {deleteApp.isPending ? "Deleting…" : "Delete app"}
-        </Button>
       </div>
     </div>
   );

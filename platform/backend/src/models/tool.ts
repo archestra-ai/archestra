@@ -626,6 +626,21 @@ class ToolModel {
       return [];
     }
 
+    // Catalog visibility is broader than install access: an org-scoped catalog
+    // is visible to every member, but its only installs may be other users'
+    // personal servers. Narrow the discovery space to catalogs the caller has
+    // an accessible install of (own personal + team + org) so search_tools /
+    // run_tool cannot reach another user's personal server. The built-in
+    // Archestra catalog runs in-process with no install row, so it stays in.
+    const installedCatalogIds =
+      await McpServerModel.getAccessibleInstallCatalogIds(params.userId);
+    const scopedCatalogIds = catalogIds.filter(
+      (id) => id === ARCHESTRA_MCP_CATALOG_ID || installedCatalogIds.has(id),
+    );
+    if (scopedCatalogIds.length === 0) {
+      return [];
+    }
+
     // Secondary sort on id keeps the ordering deterministic when createdAt
     // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
     // run_tool auto-assignment resolve a duplicate name to the same row.
@@ -634,7 +649,7 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(
         and(
-          inArray(schema.toolsTable.catalogId, catalogIds),
+          inArray(schema.toolsTable.catalogId, scopedCatalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined

@@ -35,9 +35,11 @@ type StatusValue = "active" | "deleted";
 export function AgentScopeFilter({
   showBuiltIn = false,
   ownerLabelPlural = "agents",
+  adminPermission,
 }: {
   showBuiltIn?: boolean;
   ownerLabelPlural?: string;
+  adminPermission: Permissions;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -61,7 +63,7 @@ export function AgentScopeFilter({
   );
 
   const { data: labelKeys } = useLabelKeys();
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
@@ -281,7 +283,11 @@ export function AgentDeletedStatusFilter({
   );
 }
 
-export function ActiveFilterBadges() {
+export function ActiveFilterBadges({
+  adminPermission,
+}: {
+  adminPermission: Permissions;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -294,7 +300,7 @@ export function ActiveFilterBadges() {
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
 
   // Users badge only shows when the author filter names specific other users,
   // not when it's just the implicit "mine" selection.

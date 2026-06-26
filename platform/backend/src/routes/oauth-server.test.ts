@@ -125,10 +125,17 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
 
-      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
-      expect(body.issuer).toBe("http://localhost:3000/");
+      // issuer and authorization_endpoint use the frontend base URL
+      // (browser-facing). Derive the expected values from config so the test
+      // is independent of a local .env that points the frontend origin at a
+      // tunnel domain.
+      const browserBaseUrl = config.frontendBaseUrl;
+      const expectedIssuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
+      expect(body.issuer).toBe(expectedIssuer);
       expect(body.authorization_endpoint).toBe(
-        "http://localhost:3000/api/auth/oauth2/authorize",
+        `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );
       // token, registration, and jwks use the request Host (server-to-server)
       expect(body.token_endpoint).toBe(
@@ -184,11 +191,17 @@ describe("OAuth Server - Well-Known Endpoints", () => {
 
       const body = response.json();
 
-      // issuer and authorization_endpoint use the frontend base URL (browser-facing)
-      // regardless of the Host header
-      expect(body.issuer).toBe("http://localhost:3000/");
+      // issuer and authorization_endpoint use the frontend base URL
+      // (browser-facing) regardless of the Host header. Derive from config so
+      // the test is independent of a local .env that points the frontend origin
+      // at a tunnel domain.
+      const browserBaseUrl = config.frontendBaseUrl;
+      const expectedIssuer = browserBaseUrl.endsWith("/")
+        ? browserBaseUrl
+        : `${browserBaseUrl}/`;
+      expect(body.issuer).toBe(expectedIssuer);
       expect(body.authorization_endpoint).toBe(
-        "http://localhost:3000/api/auth/oauth2/authorize",
+        `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );
       // token endpoint uses the request Host (server-to-server)
       expect(body.token_endpoint).toBe(

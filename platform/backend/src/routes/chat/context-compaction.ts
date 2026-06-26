@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import {
@@ -657,6 +658,11 @@ async function tryCreateInContextCompaction(params: {
     });
     const apiKey = fallbackLlm?.apiKey;
     const baseUrl = fallbackLlm?.baseUrl ?? null;
+    const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
+      provider: params.provider,
+      model: params.selectedModel,
+      baseUrl,
+    });
 
     if (isApiKeyRequired(params.provider, apiKey)) {
       return null;
@@ -686,6 +692,7 @@ async function tryCreateInContextCompaction(params: {
       params.compactableMessages,
       params.conversationId,
       getModelReadableMimeTypes(compactionModelRow?.inputModalities ?? null),
+      params.provider !== "anthropic" || anthropicNativeEndpoint,
     );
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,
@@ -697,6 +704,7 @@ async function tryCreateInContextCompaction(params: {
     const providerPreparedCompaction = prepareMessagesForProvider({
       messages: compactionMessages,
       provider: params.provider,
+      anthropicNativeEndpoint,
     });
     const modelMessages = await convertToModelMessages(
       providerPreparedCompaction as unknown as Omit<UIMessage, "id">[],

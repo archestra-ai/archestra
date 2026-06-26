@@ -32,6 +32,11 @@ export async function materializeAttachments(
   messages: ChatMessage[],
   conversationId: string,
   ingestibleMimeTypes?: Set<string>,
+  // Anthropic `cache_control` is an Anthropic-only request-body feature. Emit it
+  // by default (it is inert metadata for non-Anthropic SDKs), but suppress it
+  // when the call targets an Anthropic-compatible third-party endpoint that
+  // rejects the marker with a turn-0 400. The caller knows the provider/endpoint.
+  applyAnthropicCacheControl = true,
 ): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -59,7 +64,12 @@ export async function materializeAttachments(
     return {
       ...message,
       parts: message.parts.flatMap((part) =>
-        materializePart(part, byId, ingestibleMimeTypes),
+        materializePart(
+          part,
+          byId,
+          ingestibleMimeTypes,
+          applyAnthropicCacheControl,
+        ),
       ),
     };
   });
@@ -82,7 +92,8 @@ function collectRefIds(messages: ChatMessage[]): string[] {
 function materializePart(
   part: ChatMessagePart,
   byId: Map<string, Attachment>,
-  ingestibleMimeTypes?: Set<string>,
+  ingestibleMimeTypes: Set<string> | undefined,
+  applyAnthropicCacheControl: boolean,
 ): ChatMessagePart | ChatMessagePart[] {
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
@@ -95,7 +106,9 @@ function materializePart(
     // to prompt-cache the file across turns. Without this marker, the same
     // bytes get re-billed at full input price on every turn until reload.
     if (part.url.startsWith("data:")) {
-      return withAnthropicCacheControl(part);
+      return applyAnthropicCacheControl
+        ? withAnthropicCacheControl(part)
+        : { ...part };
     }
     return { ...part };
   }
@@ -127,25 +140,33 @@ function materializePart(
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
   const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
-  const filePart: ChatMessagePart = {
-    ...part,
-    url: dataUrl,
-    mediaType: attachment.mimeType,
-    filename: attachment.originalName,
-    // Mark the part for Anthropic ephemeral prompt caching. The AI SDK reads
-    // this via the file UI part's provider metadata (`providerMetadata`);
-    // convertToModelMessages translates it into the provider's cache_control
-    // directive.
-    providerMetadata: {
-      ...(typeof part.providerMetadata === "object" &&
-      part.providerMetadata !== null
-        ? (part.providerMetadata as Record<string, unknown>)
-        : {}),
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-    },
-  };
+  // Mark the part for Anthropic ephemeral prompt caching when the endpoint
+  // accepts it. The AI SDK reads this via the file UI part's provider metadata
+  // (`providerMetadata`); convertToModelMessages translates it into the
+  // provider's cache_control directive. Suppressed for Anthropic-compatible
+  // third-party endpoints that reject the marker; the bytes still inline.
+  const filePart: ChatMessagePart = applyAnthropicCacheControl
+    ? {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+        providerMetadata: {
+          ...(typeof part.providerMetadata === "object" &&
+          part.providerMetadata !== null
+            ? (part.providerMetadata as Record<string, unknown>)
+            : {}),
+          anthropic: {
+            cacheControl: { type: "ephemeral" },
+          },
+        },
+      }
+    : {
+        ...part,
+        url: dataUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.originalName,
+      };
 
   // Dual availability: a text-document that is shown inline is ALSO auto-staged
   // into the sandbox (same byte limit), so the model can both read it in context

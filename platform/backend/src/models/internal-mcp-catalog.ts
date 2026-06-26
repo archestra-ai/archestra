@@ -8,6 +8,7 @@ import {
   isNull,
   ne,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
@@ -23,7 +24,7 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
-import ToolModel from "./tool";
+import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
@@ -912,23 +913,30 @@ class InternalMcpCatalogModel {
     }
 
     const ids = dbItems.map((item) => item.id);
-    const [labelsMap, teamsMap, toolCountMap] = await Promise.all([
+    const [labelsMap, teamsMap, toolStatsMap] = await Promise.all([
       McpCatalogLabelModel.getLabelsForCatalogItems(ids),
       McpCatalogTeamModel.getTeamDetailsForCatalogs(ids),
-      InternalMcpCatalogModel.getToolCounts(ids),
+      InternalMcpCatalogModel.getToolStats(ids),
     ]);
 
     return dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
       teams: teamsMap.get(item.id) || [],
-      toolCount: toolCountMap.get(item.id) ?? 0,
+      toolCount: toolStatsMap.get(item.id)?.toolCount ?? 0,
+      providesUi: toolStatsMap.get(item.id)?.providesUi ?? false,
     }));
   }
 
-  private static async getToolCounts(
+  /**
+   * Per-catalog tool stats in a single grouped scan: the tool count and whether
+   * any tool exposes a `ui://` MCP App resource (`providesUi`). Runs on every
+   * catalog list load via {@link attachListMetadata}, so `providesUi` is folded
+   * into this existing scan rather than added as a separate query.
+   */
+  private static async getToolStats(
     catalogIds: string[],
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, { toolCount: number; providesUi: boolean }>> {
     if (catalogIds.length === 0) {
       return new Map();
     }
@@ -937,6 +945,7 @@ class InternalMcpCatalogModel {
       .select({
         catalogId: schema.toolsTable.catalogId,
         toolCount: count(schema.toolsTable.id),
+        providesUi: sql<boolean>`bool_or(${toolUiResourceUriSql()} is not null)`,
       })
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.catalogId, catalogIds))
@@ -945,10 +954,18 @@ class InternalMcpCatalogModel {
     return new Map(
       rows
         .filter(
-          (row): row is { catalogId: string; toolCount: number } =>
-            row.catalogId !== null,
+          (
+            row,
+          ): row is {
+            catalogId: string;
+            toolCount: number;
+            providesUi: boolean;
+          } => row.catalogId !== null,
         )
-        .map((row) => [row.catalogId, row.toolCount]),
+        .map((row) => [
+          row.catalogId,
+          { toolCount: row.toolCount, providesUi: row.providesUi ?? false },
+        ]),
     );
   }
 
@@ -1006,7 +1023,8 @@ class InternalMcpCatalogModel {
     if (!row) return null;
 
     const toolCount =
-      (await InternalMcpCatalogModel.getToolCounts([id])).get(id) ?? 0;
+      (await InternalMcpCatalogModel.getToolStats([id])).get(id)?.toolCount ??
+      0;
 
     const transportType = row.localConfig?.transportType ?? "stdio";
     const envKeys = Array.isArray(row.localConfig?.environment)

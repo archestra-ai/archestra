@@ -1,9 +1,8 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { EnvironmentSelector } from "@/components/environment-selector";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +17,8 @@ type EditFormValues = {
   description: string;
 };
 
-// Visibility is intentionally absent here — it lives in the Publish dropdown.
+// Visibility and environment are managed from the app's MCP registry card; this
+// dialog edits only the app's own identity (name + description).
 export function AppEditConfigDialog({
   app,
   open,
@@ -29,9 +29,6 @@ export function AppEditConfigDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateApp = useUpdateApp();
-  const [environmentId, setEnvironmentId] = useState<string | null>(
-    app.environmentId ?? null,
-  );
   const form = useForm<EditFormValues>({
     defaultValues: { name: app.name, description: app.description ?? "" },
   });
@@ -40,9 +37,8 @@ export function AppEditConfigDialog({
   useEffect(() => {
     if (open) {
       form.reset({ name: app.name, description: app.description ?? "" });
-      setEnvironmentId(app.environmentId ?? null);
     }
-  }, [open, app.name, app.description, app.environmentId, form]);
+  }, [open, app.name, app.description, form]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     const result = await updateApp.mutateAsync({
@@ -50,7 +46,6 @@ export function AppEditConfigDialog({
       body: {
         name: values.name.trim(),
         description: values.description.trim() || null,
-        environmentId,
       },
     });
     if (result) onOpenChange(false);
@@ -61,7 +56,7 @@ export function AppEditConfigDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Edit"
-      description="Update what the model reads and which environment the app runs in."
+      description="Update the app's name and description."
       size="medium"
       onSubmit={onSubmit}
       footer={
@@ -95,12 +90,6 @@ export function AppEditConfigDialog({
             {...form.register("description", { maxLength: 500 })}
           />
         </div>
-
-        <EnvironmentSelector
-          value={environmentId}
-          onChange={setEnvironmentId}
-          helpText="The app can only be assigned and call MCP tools in this environment."
-        />
       </div>
     </StandardFormDialog>
   );

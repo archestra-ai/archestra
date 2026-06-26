@@ -7,11 +7,8 @@ import { useApp } from "@/lib/app.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppChatButton } from "../_parts/app-chat-button";
 import { AppConnectButton } from "../_parts/app-connect-button";
-import { AppDeleteSection } from "../_parts/app-delete-section";
-import { AppEnabledTools } from "../_parts/app-enabled-tools";
 import { AppMeta, AppTitle } from "../_parts/app-header";
 import { AppModelPanel } from "../_parts/app-model-panel";
-import { AppPublishDropdown } from "../_parts/app-publish-dropdown";
 import { AppVersionHistory } from "../_parts/app-version-history";
 
 export default function AppDetailPage({ appId }: { appId: string }) {
@@ -47,7 +44,6 @@ export default function AppDetailPage({ appId }: { appId: string }) {
               <div className="flex items-center gap-2">
                 <AppChatButton app={app} />
                 <AppConnectButton app={app} />
-                <AppPublishDropdown app={app} />
               </div>
             </div>
 
@@ -74,13 +70,10 @@ export default function AppDetailPage({ appId }: { appId: string }) {
                     </div>
                     <AppModelPanel app={app} />
                   </div>
-                  <AppEnabledTools appId={appId} />
                 </div>
               </section>
 
               <AppVersionHistory appId={appId} />
-
-              <AppDeleteSection app={app} />
             </div>
           </>
         ) : null}

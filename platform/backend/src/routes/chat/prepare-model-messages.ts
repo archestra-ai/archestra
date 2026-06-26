@@ -42,6 +42,12 @@ export async function buildModelMessages(params: {
   systemPrompt?: string;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
+  /**
+   * False for an Anthropic-compatible third-party endpoint (custom base URL,
+   * non-Claude model) that rejects Anthropic-only request-body features.
+   * Defaults to true (genuine Anthropic / other providers unaffected).
+   */
+  anthropicNativeEndpoint?: boolean;
 }): Promise<ModelMessage[]> {
   const {
     provider,
@@ -49,6 +55,7 @@ export async function buildModelMessages(params: {
     inputModalities,
     conversationId,
     emit,
+    anthropicNativeEndpoint = true,
     ...compaction
   } = params;
 
@@ -95,11 +102,13 @@ export async function buildModelMessages(params: {
   return applyPromptCacheBreakpoints({
     provider,
     model: selectedModel,
+    anthropicNativeEndpoint,
     messages: await buildModelMessagesForProvider({
       messages: compactionResult.messages,
       provider,
       conversationId,
       ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
+      anthropicNativeEndpoint,
     }),
   });
 }
@@ -116,7 +125,13 @@ async function buildModelMessagesForProvider(params: {
   provider: SupportedProvider;
   conversationId: string;
   ingestibleMimeTypes?: Set<string>;
+  anthropicNativeEndpoint?: boolean;
 }) {
+  const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
+  // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
+  // only suppress for an Anthropic-compatible endpoint that rejects the marker.
+  const applyAnthropicCacheControl =
+    params.provider !== "anthropic" || anthropicNativeEndpoint;
   // Re-inline attachment refs as base64 data URLs for the LLM call (with
   // Anthropic cache_control marker). Refs are filtered to attachments owned
   // by `conversationId` so a client can't reference another conversation's
@@ -127,10 +142,12 @@ async function buildModelMessagesForProvider(params: {
     params.messages,
     params.conversationId,
     params.ingestibleMimeTypes,
+    applyAnthropicCacheControl,
   );
   const providerPreparedMessages = prepareMessagesForProvider({
     messages: materialized,
     provider: params.provider,
+    anthropicNativeEndpoint,
   });
 
   // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.

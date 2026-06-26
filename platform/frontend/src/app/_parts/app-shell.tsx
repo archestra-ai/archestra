@@ -8,7 +8,6 @@ import {
   NavigationStatusProvider,
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
-import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import {
   SidebarCircleToggle,
   SidebarProvider,
@@ -138,7 +137,6 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </main>
         <Toaster />
-        <OnboardingDialogWrapper />
         <ConversationSearchProvider />
       </SidebarProvider>
     </NavigationStatusProvider>

@@ -13,17 +13,38 @@ vi.mock("@/observability", () => ({
   },
 }));
 
+type Operation = { responses?: unknown; requestBody?: unknown };
 type CompactDoc = {
   openapi?: unknown;
-  paths?: Record<string, Record<string, { responses?: unknown }>>;
+  paths?: Record<string, Record<string, Operation>>;
+  components?: { schemas?: Record<string, unknown> };
 };
 
+/** Collect every `#/components/schemas/<name>` reference in a serialized doc. */
+function refNames(node: unknown, acc = new Set<string>()): Set<string> {
+  if (Array.isArray(node)) {
+    for (const n of node) refNames(n, acc);
+  } else if (node && typeof node === "object") {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "$ref" && typeof v === "string") {
+        const m = v.match(/^#\/components\/schemas\/(.+)$/);
+        if (m) acc.add(m[1]);
+      } else {
+        refNames(v, acc);
+      }
+    }
+  }
+  return acc;
+}
+
 // Swagger must be registered before the routes it should capture. We register
-// `limits` (a real /api/* route that carries responses) alongside the compact
-// route so the projection has something to strip, then assert the live endpoint
-// returns the request-focused view — proving the route is wired, auth-mapped
-// (operationId resolves, so it isn't denied-by-default), and that the loose
-// `z.record` response schema serializes the nested doc without flattening it.
+// `limits` (a real /api/* route with a request body and responses) alongside the
+// compact route, then hit the live endpoint and assert the projection survives
+// the HTTP boundary: the loose `z.record` response schema must serialize the
+// nested doc without flattening it. Auth/denial is intentionally NOT exercised
+// here — this app stubs `request.user` via onRequest and does not register the
+// Authnz plugin; the `{}` permission mapping and deny-by-default behavior are
+// covered by shared/access-control.test.ts and the middleware tests.
 describe("GET /api/openapi-compact", () => {
   let app: FastifyInstanceWithZod;
 
@@ -66,6 +87,19 @@ describe("GET /api/openapi-compact", () => {
     expect(limits).toBeDefined();
     for (const op of Object.values(limits ?? {})) {
       expect(op.responses).toBeUndefined();
+    }
+
+    // The request shape (a deeply nested object) must round-trip through the
+    // loose `z.record` response serializer intact — that is the whole contract.
+    expect(limits?.post?.requestBody).toBeDefined();
+
+    // Self-containedness: any schema $ref the projection keeps must resolve
+    // within components.schemas. Vacuously true when everything is inlined
+    // (fastify inlines most request schemas), but catches a serializer that
+    // dropped components while leaving dangling refs behind.
+    const componentNames = new Set(Object.keys(body.components?.schemas ?? {}));
+    for (const name of refNames(body.paths)) {
+      expect(componentNames.has(name)).toBe(true);
     }
   });
 

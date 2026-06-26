@@ -186,7 +186,7 @@ that is **not** a plain REST call.
   manage them.)
 
 This is orientation, not the full list — discover exact paths and bodies with the
-\`?compact=1\` call above.
+\`/api/openapi-compact\` call above.
 
 ## Deprecated bespoke tools
 
@@ -226,7 +226,7 @@ or \`"mcp_gateway"\` — because the route defaults it to \`mcp_gateway\` and de
 follow-up calls on the agent's sub-routes (\`/api/agents/:agentId/tools/:toolId\`
 or bulk \`/api/agents/tools/bulk-assign\`; \`/api/agents/:agentId/delegations\`), not
 fields on the create body — discover their shapes with
-\`?compact=1&path=/api/agents\`.
+\`/api/openapi-compact?path=/api/agents\`.
 
 ## The one non-REST operation: deploying an MCP server
 Registering a catalog entry (\`POST /api/internal_mcp_catalog\`) only records the

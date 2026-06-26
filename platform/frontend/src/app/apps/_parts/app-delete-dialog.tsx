@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,14 +10,10 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useDeleteApp } from "@/lib/app.query";
 
-// Confirm-by-name delete: the caller must retype the app name to arm the
-// destructive button. Deleting tears down the app's backing catalog/server, so
-// the query invalidation in useDeleteApp refreshes both the gallery and the
-// MCP registry card.
+// Deleting tears down the app's backing catalog/server; the query invalidation
+// in useDeleteApp refreshes both the gallery and the MCP registry card.
 export function AppDeleteDialog({
   app,
   open,
@@ -29,22 +24,14 @@ export function AppDeleteDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const deleteApp = useDeleteApp();
-  const [confirmName, setConfirmName] = useState("");
-  const canDelete = confirmName === app.name && !deleteApp.isPending;
-
-  const close = (next: boolean) => {
-    if (!next) setConfirmName("");
-    onOpenChange(next);
-  };
 
   const handleConfirm = async () => {
-    if (!canDelete) return;
     const data = await deleteApp.mutateAsync(app.id);
-    if (data) close(false);
+    if (data) onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={close}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="border-b-0">
           <DialogTitle>Delete app</DialogTitle>
@@ -65,33 +52,25 @@ export function AppDeleteDialog({
         >
           <div className="flex flex-col gap-3 px-4 pb-4">
             <DialogDescription>
-              Permanently delete this app and its version history. This cannot
-              be undone.
+              Are you sure you want to delete &quot;{app.name}&quot;? This
+              permanently removes the app and its version history and cannot be
+              undone.
             </DialogDescription>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-app-name" className="block">
-                Type{" "}
-                <span className="font-bold text-foreground">{app.name}</span> to
-                confirm
-              </Label>
-              <Input
-                id="confirm-app-name"
-                value={confirmName}
-                onChange={(e) => setConfirmName(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
           </div>
           <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
             <Button
               type="button"
               variant="outline"
-              onClick={() => close(false)}
+              onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="destructive" disabled={!canDelete}>
-              {deleteApp.isPending ? "Deleting…" : "Delete app"}
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteApp.isPending}
+            >
+              {deleteApp.isPending ? "Deleting…" : "Delete"}
             </Button>
           </DialogStickyFooter>
         </DialogForm>

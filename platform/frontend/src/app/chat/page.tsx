@@ -1288,7 +1288,11 @@ export function ChatPageContent({
       } else {
         stop?.();
       }
-      return;
+      // Throw to keep the textarea and draft intact — see onSubmit contract
+      // in ArchestraPromptInputProps. The submit button doubles as Stop while
+      // streaming; treating that click as an accepted submit would clear any
+      // follow-up the user had already started typing.
+      throw new Error("stop-not-submit");
     }
 
     const hasText = message.text?.trim();

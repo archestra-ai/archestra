@@ -486,7 +486,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter showBuiltIn ownerLabelPlural="agents" />
+                <AgentScopeFilter
+                  showBuiltIn
+                  ownerLabelPlural="agents"
+                  adminPermission={{ agent: ["admin"] }}
+                />
                 <AgentDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
@@ -497,7 +501,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>

@@ -25,20 +25,17 @@ export function FileDetailHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+    <div className="flex shrink-0 items-center gap-1 border-b px-4 py-1.5">
       {expanded && (
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={onCollapse}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Files
-          </Button>
-          <span className="shrink-0 text-muted-foreground">·</span>
-        </>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={onCollapse}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Files
+        </Button>
       )}
       <span
         className="min-w-0 flex-1 truncate text-sm font-medium"

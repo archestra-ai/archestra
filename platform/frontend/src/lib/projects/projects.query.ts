@@ -15,6 +15,7 @@ function isProjectNotFound(error: unknown): boolean {
 
 const {
   createProject,
+  createProjectFromConversation,
   deleteProject,
   deleteSkillSandboxArtifact,
   getProject,
@@ -191,6 +192,35 @@ export function useCreateProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+    },
+  });
+}
+
+/**
+ * Turn a chat into a project: creates the project, moves the chat into it, and
+ * transfers the chat's files. The chat now carries a project tag, so the
+ * conversations list is invalidated alongside the projects list.
+ */
+export function useCreateProjectFromConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<
+        archestraApiTypes.CreateProjectFromConversationData["body"]
+      >,
+    ) => {
+      const { data, error } = await createProjectFromConversation({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (project) => {
+      if (!project) return;
+      toast.success(`Project "${project.name}" created from this chat`);
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
 }

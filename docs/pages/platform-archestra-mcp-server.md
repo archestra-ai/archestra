@@ -1455,6 +1455,7 @@ Required RBAC permission: `knowledgeSource:update`
 | `swap_agent` | Switch the current conversation to a different agent. | `agent:read` |
 | `swap_to_default_agent` | Return to the default agent. | None (no additional RBAC permission required) |
 | `artifact_write` | Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. | None (no additional RBAC permission required) |
+| `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 
 #### todo_write
 
@@ -1524,6 +1525,27 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-------|------|----------|-------------|
 | `success` | `boolean` | Yes | Whether the artifact write succeeded. |
 | `characterCount` | `integer` | Yes | The number of characters written to the artifact. |
+
+#### create_project_from_conversation
+
+Required RBAC permission: `project:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | No | Project name. Defaults to the chat's title when omitted. |
+| `description` | `string` | No | Optional project description. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes | Whether the project was created. |
+| `project_id` | `string` | Yes | The new project's id. |
+| `project_name` | `string` | Yes | The new project's name. |
+| `project_slug` | `string` | Yes | The new project's slug. |
+| `files_transferred` | `integer` | Yes | How many of the chat's files were moved into the project. |
 
 ### Meta
 

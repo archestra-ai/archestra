@@ -101,6 +101,17 @@ export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 export const USER_ID_HEADER = "X-Archestra-User-Id";
 
 /**
+ * Header name for a passthrough virtual key.
+ * Clients can pass this header to authenticate the acting Archestra user on an
+ * LLM proxy request whose provider credential is something the proxy forwards
+ * untouched (e.g. a Claude Code subscription token or a raw provider key in the
+ * Authorization header). The passthrough key carries no provider credential of
+ * its own — it only attributes the interaction to its owner and gates access to
+ * the proxy. Standard virtual keys still go in the Authorization header.
+ */
+export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
+
+/**
  * Header name for session ID.
  * Clients can pass this header to group related LLM requests into a session.
  * This enables session-based grouping in the LLM proxy logs UI.

@@ -12,6 +12,7 @@ import {
 import db, { schema } from "@/database";
 import type {
   Conversation,
+  ConversationOrigin,
   InsertConversation,
   ToolExposureMode,
   UpdateConversation,
@@ -381,6 +382,41 @@ class ConversationModel {
       )
       .limit(1);
     return row !== undefined;
+  }
+
+  /**
+   * Owner-scoped metadata for eligibility checks (e.g. turning a chat into a
+   * project) without loading the conversation's messages, errors, or
+   * compactions like {@link findById} does. Null when the chat does not exist
+   * or is not owned by the caller.
+   */
+  static async getOwnedMeta(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<{
+    id: string;
+    title: string | null;
+    origin: ConversationOrigin;
+    projectId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        title: schema.conversationsTable.title,
+        origin: schema.conversationsTable.origin,
+        projectId: schema.conversationsTable.projectId,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   static async findAccessibleById(params: {

@@ -561,6 +561,7 @@ export const RouteId = {
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
   CreateProject: "createProject",
+  CreateProjectFromConversation: "createProjectFromConversation",
   GetProjects: "getProjects",
   GetProject: "getProject",
   UpdateProject: "updateProject",

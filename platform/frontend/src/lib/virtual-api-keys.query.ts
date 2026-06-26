@@ -130,8 +130,16 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const offset = params?.offset ?? 0;
   const search = params?.search;
   const providerApiKeyId = params?.providerApiKeyId;
+  const keyType = params?.keyType;
   return useQuery({
-    queryKey: ["all-virtual-api-keys", limit, offset, search, providerApiKeyId],
+    queryKey: [
+      "all-virtual-api-keys",
+      limit,
+      offset,
+      search,
+      providerApiKeyId,
+      keyType,
+    ],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
         query: {
@@ -139,6 +147,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           offset,
           search: search || undefined,
           providerApiKeyId: providerApiKeyId || undefined,
+          keyType: keyType || undefined,
         },
       });
       if (error) {

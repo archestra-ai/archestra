@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
@@ -109,6 +110,7 @@ import {
 } from "@/lib/chat/chat-share.query";
 import {
   conversationStorageKeys,
+  getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
@@ -124,7 +126,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -134,6 +136,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
+import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -215,6 +218,7 @@ export function ChatPageContent({
   >(undefined);
 
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
   const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
@@ -260,6 +264,10 @@ export function ChatPageContent({
     useHasPermissions({
       chatAgentPicker: ["enable"],
     });
+  const { data: canCreateProjectPerm } = useHasPermissions({
+    project: ["create"],
+  });
+  const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
@@ -398,6 +406,17 @@ export function ChatPageContent({
     !!conversation &&
     conversation.userId === session?.user.id;
   useConversationShare(canManageShare ? conversationId : undefined);
+
+  // Turning this chat into a project is owner-only (same as sharing) and
+  // restricted to a user chat not already in a project.
+  const canCreateProjectFromThisChat =
+    canManageShare &&
+    !!conversation &&
+    canCreateProjectFromChat({
+      projectsEnabled,
+      hasCreatePermission: canCreateProjectPerm === true,
+      conversation,
+    });
   const isShared = !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -1897,8 +1916,10 @@ export function ChatPageContent({
               }
               canManageShare={canManageShare}
               isShared={isShared}
+              canCreateProject={canCreateProjectFromThisChat}
               onShare={() => setIsShareDialogOpen(true)}
               onExportMarkdown={handleExportMarkdown}
+              onCreateProject={() => setIsCreateProjectOpen(true)}
               panel={{
                 isOpen: isRightPanelOpen,
                 isArtifactOpen,
@@ -2300,6 +2321,20 @@ export function ChatPageContent({
             onOpenChange={setIsShareDialogOpen}
           />
         )}
+
+        <CreateProjectFromChatDialog
+          conversationId={conversationId ?? null}
+          defaultName={
+            conversation
+              ? getConversationDisplayTitle(
+                  conversation.title,
+                  conversation.messages,
+                )
+              : ""
+          }
+          open={isCreateProjectOpen}
+          onOpenChange={setIsCreateProjectOpen}
+        />
 
         <StandardDialog
           open={isForkDialogOpen}

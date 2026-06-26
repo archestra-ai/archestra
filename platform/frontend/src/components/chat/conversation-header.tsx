@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   Download,
   FileText,
+  FolderPlus,
   Globe,
   MoreHorizontal,
   MoreVertical,
@@ -46,8 +47,11 @@ interface ConversationHeaderProps {
   isTitleAnimating: boolean;
   canManageShare: boolean;
   isShared: boolean;
+  /** Whether this chat is eligible to be turned into a project. */
+  canCreateProject: boolean;
   onShare: () => void;
   onExportMarkdown: () => void;
+  onCreateProject: () => void;
   panel: PanelControls;
 }
 
@@ -58,16 +62,20 @@ export function ConversationHeader({
   isTitleAnimating,
   canManageShare,
   isShared,
+  canCreateProject,
   onShare,
   onExportMarkdown,
+  onCreateProject,
   panel,
 }: ConversationHeaderProps) {
   const actionsProps = {
     canManageShare,
     isShared,
+    canCreateProject,
     messageCount,
     onShare,
     onExportMarkdown,
+    onCreateProject,
   };
 
   return (
@@ -201,19 +209,23 @@ export function ConversationHeader({
   );
 }
 
-/** Share + Export Markdown menu items, shared by the desktop and mobile menus. */
+/** Share / Export / Create project menu items, shared by desktop + mobile menus. */
 function ChatActionItems({
   canManageShare,
   isShared,
+  canCreateProject,
   messageCount,
   onShare,
   onExportMarkdown,
+  onCreateProject,
 }: {
   canManageShare: boolean;
   isShared: boolean;
+  canCreateProject: boolean;
   messageCount: number;
   onShare: () => void;
   onExportMarkdown: () => void;
+  onCreateProject: () => void;
 }) {
   return (
     <>
@@ -230,6 +242,12 @@ function ChatActionItems({
               Share
             </>
           )}
+        </DropdownMenuItem>
+      )}
+      {canCreateProject && (
+        <DropdownMenuItem onSelect={onCreateProject}>
+          <FolderPlus className="h-4 w-4" />
+          Create project
         </DropdownMenuItem>
       )}
       {messageCount > 0 && (

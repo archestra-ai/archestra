@@ -1818,8 +1818,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
+      // Validate that the agent exists and the user has access to it. Only the
+      // LLM-selection fields are read below, so skip findById's full hydration.
+      const agent = await AgentModel.findLlmSelectionFieldsById(
+        agentId,
+        user.id,
+        isAgentAdmin,
+      );
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");

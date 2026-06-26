@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
+import { TestSetupStep } from "./test-setup-link";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 /** Compact provider tile — colored square with a short glyph or letter. */
@@ -669,6 +670,7 @@ function StepList({
               />
             )}
             {s.code && <TerminalBlock code={s.code} />}
+            {s.testSetupLink && <TestSetupStep />}
           </div>
         </li>
       ))}

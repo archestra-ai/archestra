@@ -766,6 +766,55 @@ test("keeps an image inlined on a non-native Anthropic endpoint", async ({
   expect(part.url).toBe(`data:image/png;base64,${bytes.toString("base64")}`);
 });
 
+test("keeps a text-inlineable, model-readable document inlined on a non-native Anthropic endpoint", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("just text", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "notes.txt",
+    mimeType: "text/plain",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "text/plain",
+          filename: "notes.txt",
+        },
+      ],
+    },
+  ];
+
+  // text/plain is in INGESTIBLE and is text-inlineable, so the binary-doc
+  // reroute must NOT touch it — it stays a file part (prepare-for-provider
+  // inlines it as text later).
+  const output = await materializeAttachments(
+    input,
+    conversation.id,
+    INGESTIBLE,
+    true,
+    true,
+  );
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("file");
+  expect(part.url).toBe(`data:text/plain;base64,${bytes.toString("base64")}`);
+});
+
 test("an inline data: binary document is dropped with a notice on a non-native endpoint", async () => {
   const dataUrl = `data:application/pdf;base64,${Buffer.from("legacy", "utf8").toString("base64")}`;
   const input: ChatMessage[] = [

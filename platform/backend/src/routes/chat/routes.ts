@@ -234,6 +234,13 @@ function buildStreamErrorPayload(params: {
   return serialized;
 }
 
+// Upper bound on how long the response body's close waits for the active-run row
+// to be marked terminal. Terminalization is normally tens of milliseconds; this
+// cap keeps a wedged DB or notifier after stream-end from hanging the client EOF
+// indefinitely. Past it we release EOF and fall back to the pre-existing 409
+// window (which the stale reaper still cleans up).
+const TERMINAL_CLOSE_GATE_TIMEOUT_MS = 10_000;
+
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/chat",
@@ -1291,7 +1298,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ).pipeThrough(
               new TransformStream<Uint8Array, Uint8Array>({
                 async flush() {
-                  await terminalReady;
+                  let timer: ReturnType<typeof setTimeout> | undefined;
+                  try {
+                    await Promise.race([
+                      terminalReady,
+                      new Promise<void>((resolve) => {
+                        timer = setTimeout(
+                          resolve,
+                          TERMINAL_CLOSE_GATE_TIMEOUT_MS,
+                        );
+                      }),
+                    ]);
+                  } finally {
+                    if (timer) {
+                      clearTimeout(timer);
+                    }
+                  }
                 },
               }),
             );

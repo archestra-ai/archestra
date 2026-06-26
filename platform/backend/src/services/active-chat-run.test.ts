@@ -125,6 +125,48 @@ test("terminalReady resolves only once the run is terminal, so an immediate next
   expect(next).not.toBeNull();
 });
 
+test("terminalReady resolves on the error path too, so a next send after a failed run isn't 409-blocked", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  const { terminalReady } = activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    // An error chunk, then the stream closes (the common provider-error case).
+    stream: createChunkStream([
+      { type: "start" },
+      { type: "error", errorText: "provider exploded" },
+    ]),
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  await terminalReady;
+
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("failed");
+  const next = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(next).not.toBeNull();
+});
+
 test("drainStreamToEvents fails the run as soon as an error chunk arrives, even if the stream never closes", async ({
   makeAgent,
   makeConversation,

@@ -693,6 +693,7 @@ async function tryCreateInContextCompaction(params: {
       params.conversationId,
       getModelReadableMimeTypes(compactionModelRow?.inputModalities ?? null),
       params.provider !== "anthropic" || anthropicNativeEndpoint,
+      params.provider === "anthropic" && !anthropicNativeEndpoint,
     );
     const compactionMessages = buildInContextCompactionMessages({
       previousSummary: params.previousSummary,

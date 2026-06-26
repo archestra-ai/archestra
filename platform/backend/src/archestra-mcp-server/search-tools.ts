@@ -105,7 +105,7 @@ const SearchToolsOutputSchema = z.object({
     .string()
     .nullable()
     .describe(
-      "Actionable guidance when results were truncated, empty, or when some query terms matched no tool text.",
+      "Actionable guidance when results were truncated or empty (an empty result also names which query terms matched no tool text).",
     ),
   tools: z.array(
     z.object({
@@ -781,10 +781,10 @@ function regexMatchRank(candidate: SearchCandidate, regex: RegExp): number {
 }
 
 // Actionable next-step guidance (Anthropic recovery-error practice). Null when
-// results are complete, non-empty, and every query term hit some tool text.
-// Clauses compose: a vocabulary-mismatch note can ride alongside the empty- or
-// truncated-result note so the model learns both what happened and which terms
-// to drop or replace.
+// results came back and were not truncated. On a zero-result search the
+// vocabulary-mismatch note rides alongside the empty-result note so the model
+// learns both what happened and which terms matched nothing; a successful search
+// never carries it, since flagging extra terms on a hit only invites a re-search.
 function buildSearchHint(params: {
   matchCount: number;
   truncated: boolean;
@@ -822,7 +822,11 @@ function buildSearchHint(params: {
     );
   }
 
-  if (unmatchedTerms.length > 0) {
+  // Only surface unmatched query terms when the search found nothing. On a successful search
+  // (matchCount > 0) the model has what it needs; flagging the extra terms it threw in reads as
+  // "your query was partly wrong" and provokes a wasted re-search, so it rides only the zero-result
+  // note where it explains why nothing matched.
+  if (matchCount === 0 && unmatchedTerms.length > 0) {
     parts.push(
       `No tool text matches these query terms: ${unmatchedTerms.join(", ")}.`,
     );

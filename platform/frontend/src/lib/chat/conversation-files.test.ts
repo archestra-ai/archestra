@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { assembleFileSections } from "@/lib/chat/conversation-files";
+import {
+  assembleFileSections,
+  type ConversationFileItem,
+  deleteTargetFor,
+} from "@/lib/chat/conversation-files";
+
+function fileItem(
+  source: ConversationFileItem["source"],
+  id = source,
+): ConversationFileItem {
+  return {
+    id,
+    name: `${id}.bin`,
+    mimeType: "text/plain",
+    contentUrl: "",
+    source,
+  };
+}
 
 const apiFiles = {
   generated: [
@@ -30,6 +47,7 @@ const apiFiles = {
     },
   ],
   projectName: "hello",
+  canManageFiles: true,
 };
 
 describe("assembleFileSections", () => {
@@ -94,5 +112,20 @@ describe("assembleFileSections", () => {
         source: "project",
       },
     ]);
+  });
+});
+
+describe("deleteTargetFor", () => {
+  it("routes attachments to the attachment endpoint", () => {
+    expect(deleteTargetFor(fileItem("attachment"))).toEqual({
+      kind: "attachment",
+    });
+  });
+
+  it("routes generated and project files to the artifact endpoint", () => {
+    expect(deleteTargetFor(fileItem("generated"))).toEqual({
+      kind: "artifact",
+    });
+    expect(deleteTargetFor(fileItem("project"))).toEqual({ kind: "artifact" });
   });
 });

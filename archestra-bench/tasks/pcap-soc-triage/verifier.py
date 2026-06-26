@@ -109,3 +109,34 @@ def test_flags_match() -> None:
     truth = _recompute()
     submitted = result()["flags"]
     assert submitted == truth["flags"], f"submitted flags {submitted!r} != expected {truth['flags']!r}"
+
+
+def test_no_borderline_cases() -> None:
+    """The prompt describes the patterns qualitatively (no numeric thresholds), so the agent must judge
+    "wide spread / extreme rate / steady interval" itself. That is only fair if the staged data keeps
+    every flow well clear of every oracle threshold -- otherwise a reasonable analyst could land on a
+    different answer than the exact-rule recompute. Enforce comfortable margins so a future fixture
+    edit can't silently reintroduce an ambiguous case.
+    """
+    ports_by_pair: dict[tuple[str, str], set[int]] = defaultdict(set)
+    first_ts_by_pair: dict[tuple[str, str], list[int]] = defaultdict(list)
+    with fixtures("inputs", "flows.csv").open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            pair = (row["src_ip"], row["dst_ip"])
+            ports_by_pair[pair].add(int(row["dst_port"]))
+            first_ts_by_pair[pair].append(int(row["first_ts"]))
+            rate = int(row["packets"]) / max(1, int(row["last_ts"]) - int(row["first_ts"]))
+            assert rate < 500 or rate > 5000, f"flow rate {rate:.1f} pkt/s sits in the ambiguous flood band"
+
+    for pair, ports in ports_by_pair.items():
+        count = len(ports)
+        assert count <= 10 or count >= 22, f"pair {pair} has {count} distinct ports -- ambiguous port-scan band"
+
+    for pair, first_tss in first_ts_by_pair.items():
+        if len(first_tss) >= 4:
+            ordered = sorted(first_tss)
+            gaps = [b - a for a, b in zip(ordered, ordered[1:])]
+            span = max(gaps) - min(gaps)
+            assert (len(first_tss) >= 6 and span <= 5) or span >= 20, (
+                f"pair {pair} ({len(first_tss)} flows, gap span {span}s) is beacon-ambiguous"
+            )

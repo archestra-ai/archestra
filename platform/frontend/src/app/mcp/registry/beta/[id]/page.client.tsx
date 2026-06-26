@@ -580,9 +580,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         <Card>
           <CardHeader>
             <h2 className="text-base font-semibold">Credentials</h2>
-            <CardDescription>
-              Who is connected to this server and with which credentials.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <ManageUsersContent

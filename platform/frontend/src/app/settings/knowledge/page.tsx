@@ -29,6 +29,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -794,6 +795,7 @@ function KnowledgeSettingsContent() {
 export default function KnowledgeSettingsPage() {
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <KnowledgeSettingsContent />
     </ErrorBoundary>
   );

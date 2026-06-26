@@ -1646,14 +1646,14 @@ async fn grade_rollout(
             .await;
     }
 
-    // Safety net: a capable model often solves the task and reports the answer in chat, then ends its
-    // turn without ever calling the submit tool. If it stopped voluntarily with nothing submitted,
-    // prompt it once more. Bounded to a single extra turn, and only on a clean `stop`, so a model that
-    // genuinely refuses or already hit an error/limit still terminates.
-    if stage_error.is_none()
-        && run.finish_reason.as_deref() == Some("stop")
-        && !bench_mcp.has_submission(rollout_key).await
-    {
+    // Safety net: a model often solves the task and reports the answer in chat, then ends its turn
+    // without ever calling the submit tool. Prompt it once more whenever the rollout terminated with
+    // nothing submitted, regardless of `finish_reason` -- a voluntary `stop`, a repeat-breaker
+    // `tool-calls` termination, an empty `other`, or a truncated `length` all reach here, and the
+    // weaker-model failure modes (repeat-breaker, empty response) are exactly the ones that most need
+    // the nudge. Bounded to a single extra turn. Hard errors and hit limits are still excluded by
+    // `stage_error.is_none()`, so a rollout that genuinely failed still terminates.
+    if stage_error.is_none() && !bench_mcp.has_submission(rollout_key).await {
         artifacts
             .append("submit_nudge", serde_json::json!({}))
             .await;
@@ -1662,7 +1662,12 @@ async fn grade_rollout(
             files: Vec::new(),
             new_conversation: false,
         };
-        stage_error = drive_stage_with_retry(
+        // The pre-nudge turn already terminated cleanly (the gate requires `stage_error.is_none()`);
+        // the nudge is a best-effort extra turn to recover a missing submission. Keep its error out of
+        // `stage_error` so a failed nudge -- most likely for the truncated/stuck population whose
+        // resent history can provoke a provider error -- doesn't mask the rollout's clean
+        // `NoSubmission` as an agent error. Record it as an artifact for triage instead.
+        if let Some(nudge_error) = drive_stage_with_retry(
             &client,
             &conversation_id,
             &nudge,
@@ -1673,7 +1678,15 @@ async fn grade_rollout(
             true,
             true,
         )
-        .await?;
+        .await?
+        {
+            artifacts
+                .append(
+                    "submit_nudge_error",
+                    serde_json::json!({"error": nudge_error}),
+                )
+                .await;
+        }
     }
 
     // Source the rollout's billable usage from the persisted LLM-proxy interaction rows, summed across

@@ -44,7 +44,13 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
+import {
+  classifyThrownRefreshError,
+  discoverOAuthEndpoints,
+  type OAuthRefreshOutcome,
+  refreshFailureToServerFields,
+  refreshOAuthToken,
+} from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
@@ -263,6 +269,7 @@ class McpClient {
     Promise<{
       refreshed: boolean;
       updatedSecret: Record<string, unknown> | null;
+      outcome: OAuthRefreshOutcome;
     }>
   >();
   // Session affinity metadata discovered during transport creation.
@@ -791,6 +798,7 @@ class McpClient {
         ) {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
+            oauthRefreshErrorMessage: "no_refresh_token",
             oauthRefreshFailedAt: new Date(),
           });
           logger.warn(
@@ -2314,15 +2322,22 @@ class McpClient {
 
     if (!refreshResult.refreshed) {
       logger.warn(
-        { toolName: toolCall.name, secretId },
+        {
+          toolName: toolCall.name,
+          secretId,
+          classification: refreshResult.outcome.ok
+            ? undefined
+            : refreshResult.outcome.kind,
+        },
         "attemptTokenRefreshAndRetry: token refresh failed",
       );
 
-      // Track the refresh failure in the MCP server record
-      await McpServerModel.update(targetMcpServerId, {
-        oauthRefreshError: "refresh_failed",
-        oauthRefreshFailedAt: new Date(),
-      });
+      // Only a terminal failure changes persisted connection health; a
+      // transient failure persists nothing and is re-attempted next use.
+      const failureFields = refreshFailureToServerFields(refreshResult.outcome);
+      if (failureFields) {
+        await McpServerModel.update(targetMcpServerId, failureFields);
+      }
 
       return null;
     }
@@ -2335,6 +2350,7 @@ class McpClient {
     // Clear any previous refresh error since refresh succeeded
     await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
+      oauthRefreshErrorMessage: null,
       oauthRefreshFailedAt: null,
     });
 
@@ -2412,6 +2428,7 @@ class McpClient {
   }): Promise<{
     refreshed: boolean;
     updatedSecret: Record<string, unknown> | null;
+    outcome: OAuthRefreshOutcome;
   }> {
     const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
     const existingRefresh = this.oauthRefreshLocks.get(secretId);
@@ -2423,7 +2440,11 @@ class McpClient {
       return existingRefresh;
     }
 
-    const refreshPromise = (async () => {
+    const refreshPromise = (async (): Promise<{
+      refreshed: boolean;
+      updatedSecret: Record<string, unknown> | null;
+      outcome: OAuthRefreshOutcome;
+    }> => {
       const existingClient = this.activeConnections.get(connectionKey);
       if (existingClient) {
         try {
@@ -2434,9 +2455,9 @@ class McpClient {
         this.clearConnectionState(connectionKey);
       }
 
-      const refreshed = await refreshOAuthToken(secretId, catalogId);
-      if (!refreshed) {
-        return { refreshed: false, updatedSecret: null };
+      const outcome = await refreshOAuthToken(secretId, catalogId);
+      if (!outcome.ok) {
+        return { refreshed: false, updatedSecret: null, outcome };
       }
 
       const updatedSecret = await secretManager().getSecret(secretId);
@@ -2445,7 +2466,13 @@ class McpClient {
           { secretId, catalogId },
           "OAuth token refresh succeeded but updated secret could not be loaded",
         );
-        return { refreshed: false, updatedSecret: null };
+        // Refresh itself succeeded; the secret-load blip is transient and
+        // must not flip the connection into needs-reauthentication.
+        return {
+          refreshed: false,
+          updatedSecret: null,
+          outcome: { ok: false, kind: "transient", reason: "network" },
+        };
       }
 
       this.secretsCache.set(targetMcpServerId, {
@@ -2453,14 +2480,18 @@ class McpClient {
         secretId,
       });
 
-      return { refreshed: true, updatedSecret: updatedSecret.secret };
+      return { refreshed: true, updatedSecret: updatedSecret.secret, outcome };
     })()
       .catch((error) => {
         logger.error(
           { secretId, catalogId, error },
           "OAuth token refresh lock encountered an unexpected error",
         );
-        return { refreshed: false, updatedSecret: null };
+        return {
+          refreshed: false,
+          updatedSecret: null,
+          outcome: classifyThrownRefreshError(error),
+        };
       })
       .finally(() => {
         this.oauthRefreshLocks.delete(secretId);

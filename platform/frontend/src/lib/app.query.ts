@@ -149,6 +149,9 @@ export function useUpdateApp() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["apps"] });
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      // Visibility/environment edits write through to the app's backing catalog,
+      // which drives the MCP registry card — refresh it too.
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
     },
   });
@@ -168,6 +171,8 @@ export function useDeleteApp() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["apps"] });
+      // Deleting an app tears down its backing catalog — refresh the registry.
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App deleted");
     },
   });

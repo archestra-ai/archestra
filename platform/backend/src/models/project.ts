@@ -119,25 +119,53 @@ class ProjectModel {
       origin: ConversationOrigin;
       lastMessageAt: Date;
       createdAt: Date;
+      // The schedule + run that produced a `schedule_trigger` chat (null for
+      // user chats); lets the chat list collapse a schedule's runs into one row
+      // and open the latest run with its sidebar runs navigator.
+      scheduleTriggerId: string | null;
+      scheduleRunId: string | null;
+      // The schedule's display name, shown on a collapsed scheduled chat row.
+      scheduleName: string | null;
     }[]
   > {
-    return db
-      .select({
-        id: schema.conversationsTable.id,
-        title: schema.conversationsTable.title,
-        authorUserId: schema.conversationsTable.userId,
-        authorName: schema.usersTable.name,
-        origin: schema.conversationsTable.origin,
-        lastMessageAt: schema.conversationsTable.lastMessageAt,
-        createdAt: schema.conversationsTable.createdAt,
-      })
-      .from(schema.conversationsTable)
-      .leftJoin(
-        schema.usersTable,
-        eq(schema.conversationsTable.userId, schema.usersTable.id),
-      )
-      .where(eq(schema.conversationsTable.projectId, projectId))
-      .orderBy(desc(schema.conversationsTable.lastMessageAt));
+    return (
+      db
+        .select({
+          id: schema.conversationsTable.id,
+          title: schema.conversationsTable.title,
+          authorUserId: schema.conversationsTable.userId,
+          authorName: schema.usersTable.name,
+          origin: schema.conversationsTable.origin,
+          lastMessageAt: schema.conversationsTable.lastMessageAt,
+          createdAt: schema.conversationsTable.createdAt,
+          scheduleTriggerId: schema.scheduleTriggerRunsTable.triggerId,
+          scheduleRunId: schema.scheduleTriggerRunsTable.id,
+          scheduleName: schema.scheduleTriggersTable.name,
+        })
+        .from(schema.conversationsTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.conversationsTable.userId, schema.usersTable.id),
+        )
+        // 1:1 — a conversation is linked by at most one run (CAS-set), so this
+        // never fans out conversation rows.
+        .leftJoin(
+          schema.scheduleTriggerRunsTable,
+          eq(
+            schema.scheduleTriggerRunsTable.chatConversationId,
+            schema.conversationsTable.id,
+          ),
+        )
+        .leftJoin(
+          schema.scheduleTriggersTable,
+          eq(
+            schema.scheduleTriggersTable.id,
+            schema.scheduleTriggerRunsTable.triggerId,
+          ),
+        )
+        .where(eq(schema.conversationsTable.projectId, projectId))
+        .orderBy(desc(schema.conversationsTable.lastMessageAt))
+    );
   }
 
   // === internal ===

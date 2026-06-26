@@ -1295,6 +1295,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updatedServer = await McpServerModel.update(id, {
         secretId: newSecretId,
         oauthRefreshError: null,
+        oauthRefreshErrorMessage: null,
         oauthRefreshFailedAt: null,
       });
 

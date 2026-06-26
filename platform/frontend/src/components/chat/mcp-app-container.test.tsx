@@ -63,6 +63,12 @@ vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
 }));
 
+// Stub the bottom meta bar (it fetches environments/session); its behavior is
+// covered by mcp-app-meta-bar.test.tsx.
+vi.mock("@/components/mcp-app/mcp-app-meta-bar", () => ({
+  McpAppMetaBar: () => <div data-testid="meta-bar" />,
+}));
+
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { useApp } from "@/lib/app.query";
@@ -427,12 +433,10 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     return bridge;
   }
 
-  function inlineMaxHeightPx(): number {
-    const el = Array.from(document.querySelectorAll<HTMLElement>("*")).find(
-      (e) => e.style.maxHeight !== "",
-    );
-    if (!el) throw new Error("no element carries a max-height style");
-    return Number.parseFloat(el.style.maxHeight);
+  function inlineIframeHeightPx(): number {
+    const iframe = document.querySelector("iframe");
+    if (!iframe) throw new Error("iframe did not mount");
+    return Number.parseFloat(iframe.style.height);
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: reading mock call args
@@ -441,32 +445,29 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
     return calls[calls.length - 1]?.[0]?.containerDimensions;
   }
 
-  it("caps the inline card at a viewport fraction, well above the legacy 500px", async () => {
+  it("grows the inline app to its reported height", async () => {
     const bridge = await renderReadyApp(2000);
 
     await act(async () => {
       bridge.onsizechange({ height: 700 });
     });
 
-    expect(inlineMaxHeightPx()).toBe(700);
-    expect(inlineMaxHeightPx()).not.toBe(500);
+    expect(inlineIframeHeightPx()).toBe(700);
   });
 
-  it("clamps a report taller than the ceiling to the ceiling", async () => {
+  it("does not cap a report taller than the viewport", async () => {
     const bridge = await renderReadyApp(2000);
 
     await act(async () => {
       bridge.onsizechange({ height: 100_000 });
     });
 
-    // ceiling = round(2000 * 0.6) = 1200
-    expect(inlineMaxHeightPx()).toBe(1200);
+    expect(inlineIframeHeightPx()).toBe(100_000);
   });
 
-  it("hints the viewport ceiling to the guest, not the legacy 500px", async () => {
+  it("hints no height cap to the guest inline", async () => {
     const bridge = await renderReadyApp(2000);
-    // ceiling = round(2000 * 0.6) = 1200
-    expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
+    expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
 
   it("hints no cap to the guest when the app fills the panel", async () => {

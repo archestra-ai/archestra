@@ -10,6 +10,7 @@ import {
   MCP_OAUTH_CLIENT_ID_PREFIX,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_GRANT_TYPE,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
 import { verifyPassword } from "better-auth/crypto";
@@ -18,6 +19,7 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
   AccountModel,
@@ -51,6 +53,7 @@ import {
   isLoopbackRedirectUri,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "@/utils/network";
+import { isPublicOAuthCorsPath } from "./oauth-cors";
 import { getPublicRequestOrigin } from "./request-origin";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -302,21 +305,37 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Forward to better-auth
       const url = new URL(request.url, `http://${request.headers.host}`);
 
-      // Per OAuth 2.1, scopes must be declared as supported both during Dynamic Client
-      // Registration (DCR) and at the token exchange. Some clients (e.g. Cursor) omit
-      // offline_access from the authorization request despite registering it during DCR,
-      // which would prevent refresh token issuance. To handle this, we inject offline_access
-      // into the authorization request if the client registered it during DCR.
-      // We only inject it when the client's DCR registration includes offline_access,
-      // because clients that did not advertise it during DCR (e.g. MCP Inspector) will
-      // reject the authorization response containing an unexpected scope.
+      // Per OAuth 2.1, scopes must be declared at Dynamic Client Registration
+      // (DCR) and re-validated at authorize. The OAuth provider checks the
+      // authorize-time scopes against the client's *stored* scopes, so the two
+      // must agree. Two native-client mismatches need reconciling here:
       const currentScopes = url.searchParams.get("scope") ?? "";
-      if (clientId && !currentScopes.split(" ").includes("offline_access")) {
+      if (clientId) {
         const client = await OAuthClientModel.findByClientId(clientId);
-        if (client?.scopes?.includes("offline_access")) {
+        const clientHasOfflineAccess = !!client?.scopes?.includes(
+          OFFLINE_ACCESS_OAUTH_SCOPE,
+        );
+        if (currentScopes.split(" ").includes(OFFLINE_ACCESS_OAUTH_SCOPE)) {
+          // The client requests offline_access but registered only a narrower
+          // scope (e.g. Claude Desktop registers "mcp"). Persist offline_access
+          // onto the refresh-capable client so the provider's scope check
+          // passes — self-heals clients registered before DCR carried it.
+          if (client && !clientHasOfflineAccess) {
+            await OAuthClientModel.ensureOfflineAccessScope(clientId);
+            logger.info(
+              { clientId },
+              "[auth:oauth2/authorize] Persisted offline_access to client's registered scopes",
+            );
+          }
+        } else if (clientHasOfflineAccess) {
+          // Inverse: the client registered offline_access during DCR but omitted
+          // it from this request (e.g. Cursor), which would prevent refresh
+          // token issuance. Inject it back. We only do this when the client
+          // registered it, because clients that did not advertise it during DCR
+          // (e.g. MCP Inspector) reject an unexpected scope in the response.
           const augmentedScopes = currentScopes
-            ? `${currentScopes} offline_access`
-            : "offline_access";
+            ? `${currentScopes} ${OFFLINE_ACCESS_OAUTH_SCOPE}`
+            : OFFLINE_ACCESS_OAUTH_SCOPE;
           url.searchParams.set("scope", augmentedScopes);
           logger.debug(
             { originalScope: currentScopes, augmentedScope: augmentedScopes },
@@ -460,9 +479,43 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete body.resource;
       }
 
+      // Convert client_secret_basic to client_secret_post for the grants that
+      // forward to better-auth (authorization_code, refresh_token). Confidential
+      // native clients (e.g. Claude Desktop) authenticate with
+      // `Authorization: Basic base64(client_id:client_secret)`, but our
+      // better-auth instance runs the apiKey plugin with apiKeyHeaders:
+      // ["Authorization"] (see config.ts). It intercepts that header, fails to
+      // parse it as an `archestra_` API key, and rejects the request with
+      // {"code":"INVALID_API_KEY"} *before* the OAuth token handler ever
+      // authenticates the client. RFC 6749 Section 2.3.1 lets a client present
+      // its credentials either in the Authorization header or in the body, and
+      // requires the server to support the body form, so lift the Basic
+      // credentials into the body (these MCP OAuth clients are registered as
+      // client_secret_post) and drop the Authorization header so the apiKey
+      // plugin stays out of the OAuth client-authentication path.
+      const authorizationHeader = request.headers.authorization;
+      const usesClientSecretBasic =
+        typeof authorizationHeader === "string" &&
+        authorizationHeader.startsWith("Basic ");
+      if (usesClientSecretBasic && body) {
+        const { clientId: basicClientId, clientSecret: basicClientSecret } =
+          extractOAuthClientCredentials({ authorizationHeader, body });
+        if (basicClientId && body.client_id === undefined) {
+          body.client_id = basicClientId;
+        }
+        if (basicClientSecret && body.client_secret === undefined) {
+          body.client_secret = basicClientSecret;
+        }
+      }
+
       const tokenEndpointOrigin = getPublicRequestOrigin(request);
       const url = new URL(request.url, tokenEndpointOrigin);
-      const headers = buildBetterAuthForwardedHeaders(request);
+      const headers = buildBetterAuthForwardedHeaders(
+        request,
+        usesClientSecretBasic
+          ? (name) => name.toLowerCase() === "authorization"
+          : undefined,
+      );
 
       const contentType = request.headers["content-type"] || "";
       const serializedBody = contentType.includes(
@@ -675,6 +728,34 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Override any client-provided value — see route comment above
       body.token_endpoint_auth_method = "none";
+
+      // Native MCP clients (e.g. Claude Desktop) register the refresh_token
+      // grant but list only "mcp" in their requested scope, then ask for
+      // offline_access at the authorize step to obtain a refresh token. The
+      // OAuth provider validates authorize-time scopes against the client's
+      // *registered* scopes, so a client that never registered offline_access
+      // gets `invalid_scope` at authorize. Register offline_access whenever the
+      // client asks for the refresh_token grant so the later request succeeds
+      // (this is also what the authorize handler's offline_access injection
+      // assumes — that refresh-capable clients carry the scope from DCR).
+      const grantTypes = Array.isArray(body.grant_types)
+        ? body.grant_types
+        : [];
+      if (
+        grantTypes.includes("refresh_token") &&
+        typeof body.scope === "string" &&
+        body.scope.length > 0
+      ) {
+        const scopes = body.scope.split(" ").filter(Boolean);
+        if (!scopes.includes(OFFLINE_ACCESS_OAUTH_SCOPE)) {
+          scopes.push(OFFLINE_ACCESS_OAUTH_SCOPE);
+          body.scope = scopes.join(" ");
+          logger.info(
+            { clientName: body.client_name, scope: body.scope },
+            "[auth:oauth2/register] Added offline_access to refresh_token client's registered scopes",
+          );
+        }
+      }
 
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = buildBetterAuthForwardedHeaders(request);
@@ -889,7 +970,7 @@ async function rewriteGoogleSsoResponseWithHostedDomainHint(params: {
 }
 
 async function getGoogleHostedDomainHint(): Promise<string | undefined> {
-  if (!config.enterpriseFeatures.core) {
+  if (!enterpriseTier.isCoreActive()) {
     return undefined;
   }
 
@@ -1097,9 +1178,28 @@ function shouldSkipForwardedAuthHeader(headerName: string): boolean {
  * - Skips empty header values.
  * - Skips headers rejected by the optional `skipHeader` predicate (used by
  *   `oauth2/authorize` to drop hop-by-hop headers).
+ * - See https://github.com/better-auth/better-auth/issues/6257
+ * - Injects the configured frontend origin when the incoming request carries no
+ *   `Origin` header *and* targets a public OAuth endpoint (see
+ *   `isPublicOAuthCorsPath`). Native MCP clients (e.g. Claude Desktop) call those
+ *   endpoints — dynamic client registration and the token endpoint — directly,
+ *   server-to-server, with no Origin. Better Auth's CSRF check rejects any
+ *   state-changing request that lacks an Origin with `MISSING_OR_NULL_ORIGIN`
+ *   before it ever consults `trustedOrigins`, so without this those flows 403.
+ *   This mirrors what the frontend proxy already does for the browser path
+ *   (`frontend/src/app/api/auth/[...path]/route.ts`, `frontend/src/proxy.ts`).
+ *   Scoped to the same public OAuth paths as the permissive CORS policy so the
+ *   carve-out is visible and symmetric: the credentialed browser routes (sign-in,
+ *   consent, authorize) keep Better Auth's full origin-based CSRF protection.
+ *   Only ever fills in a *missing* Origin, so it can't relax the check for a
+ *   real browser request (those always send Origin on cross-origin POSTs).
  */
 function buildBetterAuthForwardedHeaders(
-  request: { headers: Record<string, unknown>; ip?: string | null },
+  request: {
+    headers: Record<string, unknown>;
+    ip?: string | null;
+    url: string;
+  },
   skipHeader?: (headerName: string) => boolean,
 ): Headers {
   const headers = new Headers();
@@ -1111,6 +1211,15 @@ function buildBetterAuthForwardedHeaders(
   }
   if (request.ip) {
     headers.set("x-archestra-client-ip", request.ip);
+  }
+  // Back-fill a missing Origin only on the public OAuth endpoints (see the
+  // docstring above and `isPublicOAuthCorsPath`). Scoping it to those paths is
+  // what keeps the credentialed browser routes (sign-in, consent, authorize)
+  // on Better Auth's full origin-based CSRF protection — a missing Origin on
+  // those must stay missing rather than be back-filled with the frontend origin.
+  const origin = headers.get("origin");
+  if ((!origin || origin === "null") && isPublicOAuthCorsPath(request.url)) {
+    headers.set("origin", config.frontendBaseUrl);
   }
   return headers;
 }

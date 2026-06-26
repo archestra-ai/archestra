@@ -639,6 +639,16 @@ describe("applyTextEditToMessages", () => {
   });
 });
 
+describe("conversationStorageKeys", () => {
+  it("returns conversation-scoped right-panel open + tab keys", () => {
+    const keys = conversationStorageKeys("conv-123");
+    expect(keys.rightPanelOpen).toBe(
+      "archestra-chat-right-panel-open-conv-123",
+    );
+    expect(keys.rightPanelTab).toBe("archestra-chat-right-panel-tab-conv-123");
+  });
+});
+
 describe("chatDraftStorageKey", () => {
   it("returns the conversation-scoped draft key for an existing conversation", () => {
     expect(chatDraftStorageKey("conv-123")).toBe(

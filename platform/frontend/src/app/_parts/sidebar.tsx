@@ -596,7 +596,9 @@ export function AppSidebar() {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
+  // Show community menu items unless the Enterprise license env var is set
+  // (the small-team free tier doesn't hide them).
+  const showCommunityLinks = !config.enterpriseFeatures.core;
   // SPDX-SnippetEnd
   // GitHub stars are cosmetic and external, so defer them until after the
   // authenticated shell data has had a chance to load.
@@ -664,7 +666,8 @@ export function AppSidebar() {
                   ...resolved,
                   subItems: resolved.subItems.filter((sub) => {
                     // With projects on, schedules are managed per-project on the
-                    // project detail page, so the standalone entry is hidden.
+                    // project detail page (the per-project runs view), so the
+                    // standalone entry is hidden.
                     if (sub.url === "/scheduled-tasks") return !projectsEnabled;
                     return true;
                   }),

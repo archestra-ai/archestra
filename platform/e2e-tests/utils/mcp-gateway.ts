@@ -528,15 +528,14 @@ export async function openManageCredentialsDialog(
   const connectionsNavButton = settingsDialog.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
-  const connectionsHeading = settingsDialog.getByRole("heading", {
-    name: "Credentials",
-    exact: true,
-  });
+  const connectionsContent = settingsDialog.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsContent,
+  );
   if (await settingsDialog.isVisible().catch(() => false)) {
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
+    if (!(await connectionsContent.isVisible().catch(() => false))) {
       await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
+    await expect(connectionsContent).toBeVisible({ timeout: 10_000 });
     return;
   }
 
@@ -547,10 +546,10 @@ export async function openManageCredentialsDialog(
 
   await expect(async () => {
     if (await settingsDialog.isVisible().catch(() => false)) {
-      if (!(await connectionsHeading.isVisible().catch(() => false))) {
+      if (!(await connectionsContent.isVisible().catch(() => false))) {
         await connectionsNavButton.click();
       }
-      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -589,10 +588,10 @@ export async function openManageCredentialsDialog(
     }
 
     await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
+    if (!(await connectionsContent.isVisible().catch(() => false))) {
       await connectionsNavButton.click();
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+    await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
@@ -601,9 +600,9 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
     .getByRole("dialog")
     .filter({ visible: true })
     .last();
-  const connectionsNavButton = visibleDialog.getByRole("button", {
-    name: /^Credentials\b/,
-  });
+  const connectionsNavButton = visibleDialog.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
   const badgeText =
     (await connectionsNavButton.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(

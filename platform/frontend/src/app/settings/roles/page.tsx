@@ -2,21 +2,26 @@
 
 import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
-import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
   useCanImpersonate,
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
 
-const { RolesList } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with roles
-    await import("@/components/roles/roles-list.ee")
-  : await import("@/components/roles/roles-list");
+const RolesListEnterprise = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("@/components/roles/roles-list.ee").then((m) => ({
+    default: m.RolesList,
+  })),
+);
 
 function RoleDebuggerCallout() {
   const canImpersonate = useCanImpersonate();
@@ -75,10 +80,14 @@ function RoleDebuggerCallout() {
 }
 
 export default function RolesSettingsPage() {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner featureName="RBAC" />
       <RoleDebuggerCallout />
-      <RolesList />
+      <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
+        <RolesListEnterprise />
+      </DisabledEnterpriseSection>
     </ErrorBoundary>
   );
 }

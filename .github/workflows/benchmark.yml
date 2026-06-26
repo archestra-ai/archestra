@@ -143,13 +143,16 @@ jobs:
       - name: Create bench secret
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SLACK_BENCH_WEBHOOK_URL: ${{ secrets.SLACK_BENCH_WEBHOOK_URL }}
         run: |
           set -euo pipefail
-          # The pod reads both: the glm lane key and (optionally, empty when unset) the Slack webhook it
-          # posts the summary to. Recreated each run; left in place since the pod needs it after CI exits.
+          # The pod reads: the glm lane key, the OpenRouter key for the OR-served lanes, and (optionally,
+          # empty when unset) the Slack webhook it posts the summary to. Recreated each run; left in place
+          # since the pod needs it after CI exits.
           kubectl create secret generic archestra-bench-secrets -n archestra \
             --from-literal=ZAI_API_KEY="${ZAI_API_KEY}" \
+            --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
             --from-literal=SLACK_BENCH_WEBHOOK_URL="${SLACK_BENCH_WEBHOOK_URL:-}" \
             --dry-run=client -o yaml | kubectl apply -f -
 

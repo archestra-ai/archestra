@@ -801,6 +801,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatAttachmentContent]: {
     chat: ["read"],
   },
+  [RouteId.DeleteChatAttachment]: {
+    chat: ["update"],
+  },
   [RouteId.GetChatAgentMcpTools]: {
     agent: ["read"],
   },
@@ -820,6 +823,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
+  },
+  // Clearing a conversation's recorded chat errors is a chat-content edit, not a
+  // conversation deletion — same gate as compact / message edit.
+  [RouteId.ClearChatConversationErrors]: {
+    chat: ["update"],
   },
   [RouteId.CompactChatConversation]: {
     chat: ["update"],

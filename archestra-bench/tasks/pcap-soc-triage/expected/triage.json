@@ -14,8 +14,8 @@
     "10.0.0.5"
   ],
   "protocol_counts": {
-    "icmp": 4,
-    "tcp": 69,
-    "udp": 5
+    "icmp": 5,
+    "tcp": 78,
+    "udp": 7
   }
 }

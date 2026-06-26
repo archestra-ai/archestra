@@ -1,4 +1,4 @@
-"""Verify the agent's exported artifact: a zip holding the inverted Monte-Carlo GIF.
+"""Verify the agent's exported artifact: a zip holding the inverted pi-estimate GIF.
 
 Reads BENCH_OUTPUT (the downloaded artifact bytes). We assert the deliverable shape and the
 animation contract the prompt asked for -- a zip with a GIF of 60 distinct 400x400 frames. Colors

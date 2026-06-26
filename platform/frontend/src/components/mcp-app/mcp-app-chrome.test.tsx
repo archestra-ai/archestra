@@ -7,7 +7,6 @@ import {
   McpAppChangelogPill,
   McpAppFullscreenExitButton,
   McpAppStandaloneButton,
-  McpAppVersionBar,
 } from "./mcp-app-chrome";
 
 vi.mock("next/link", () => ({
@@ -16,20 +15,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-describe("McpAppVersionBar", () => {
-  it("links the app version to the app page", () => {
-    render(<McpAppVersionBar appId="app-123" version={3} />);
-
-    const versionLink = screen.getByRole("link", { name: /version 3/i });
-    expect(versionLink).toHaveAttribute("href", "/apps/app-123");
-  });
-});
-
 describe("address-pill action buttons", () => {
   it("opens the owned app's standalone run page in a new tab", () => {
     render(<McpAppStandaloneButton appId="app-123" />);
 
-    const link = screen.getByRole("link", { name: /open standalone/i });
+    const link = screen.getByRole("link", { name: /open in new tab/i });
     expect(link).toHaveAttribute("href", "/a/app-123");
     expect(link).toHaveAttribute("target", "_blank");
   });

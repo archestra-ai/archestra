@@ -23,6 +23,12 @@ export const ConversationFilesResponseSchema = z.object({
   projectFiles: z.array(ConversationFileSchema),
   /** Set when the chat belongs to a project; null for a personal chat. */
   projectName: z.string().nullable(),
+  /**
+   * Whether the requester owns this conversation, and so may delete its files.
+   * Gates the destructive UI (delete / multi-select) in the Files panel; a
+   * shared- or project-viewer who can read the chat sees files read-only.
+   */
+  canManageFiles: z.boolean(),
 });
 export type ConversationFilesResponse = z.infer<
   typeof ConversationFilesResponseSchema

@@ -28,7 +28,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
-import ToolModel from "./tool";
+import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 // Alias for users table to avoid conflict with the owner LEFT JOIN
 const assignedUsersTable = alias(schema.usersTable, "assigned_users");
@@ -503,14 +503,7 @@ class McpServerModel {
     const { catalogIds, search } = params;
     if (catalogIds.length === 0) return [];
     const searchTerm = search?.trim();
-    // An MCP App UI resource must use the ui:// scheme; a tool whose
-    // _meta.ui.resourceUri is some other URI is not an app. Canonical key
-    // first, then the legacy flat key.
-    const toolMeta = schema.toolsTable.meta;
-    const uiResourceUri = sql<string | null>`coalesce(
-      case when ${toolMeta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->'ui'->>'resourceUri' end,
-      case when ${toolMeta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${toolMeta}->'_meta'->>'ui/resourceUri' end
-    )`;
+    const uiResourceUri = toolUiResourceUriSql();
     const rows = await db
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
@@ -573,6 +566,29 @@ class McpServerModel {
       description: c.description,
       resourceUri: c.resourceUri,
     }));
+  }
+
+  /**
+   * Catalog ids the caller has an accessible install of (own personal + team +
+   * org). Distinct from catalog *visibility* (McpCatalogTeamModel): an
+   * org-scoped catalog is visible to every member, but if its only install is
+   * another user's personal server it is absent here. Scopes the search_tools /
+   * run_tool dynamic-discovery space so it cannot reach another user's servers.
+   */
+  static async getAccessibleInstallCatalogIds(
+    userId: string,
+  ): Promise<Set<string>> {
+    const installIds = await McpServerModel.getAccessibleInstallIds(userId);
+    if (installIds.length === 0) return new Set();
+    const rows = await db
+      .select({ catalogId: schema.mcpServersTable.catalogId })
+      .from(schema.mcpServersTable)
+      .where(inArray(schema.mcpServersTable.id, installIds));
+    const catalogIds = new Set<string>();
+    for (const row of rows) {
+      if (row.catalogId) catalogIds.add(row.catalogId);
+    }
+    return catalogIds;
   }
 
   /** Distinct scopes of the caller's accessible installs, keyed by catalog. */

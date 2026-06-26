@@ -3055,6 +3055,100 @@ describe("mcp server core route coverage", () => {
       );
       await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
     });
+
+    test("uninstalling the last connection retains tools, policies, and assignments (binding nulled)", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+
+      const catalog = await makeInternalMcpCatalog({
+        name: "Retain On Uninstall",
+        serverType: "remote",
+        serverUrl: "http://localhost:30082/mcp",
+      });
+
+      connectAndGetToolsMock.mockResolvedValueOnce([
+        {
+          name: "retained-tool",
+          description: "kept after uninstall",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+      const installResponse = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: { name: "Retain On Uninstall", catalogId: catalog.id },
+      });
+      expect(installResponse.statusCode).toBe(200);
+      const installedServer = installResponse.json();
+
+      const toolsBefore = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalog.id));
+      expect(toolsBefore).toHaveLength(1);
+      const tool = toolsBefore[0];
+
+      const personalGateway = await AgentModel.getPersonalMcpGateway(
+        user.id,
+        organizationId,
+      );
+      if (!personalGateway) throw new Error("expected personal gateway");
+
+      const assignmentBefore = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, tool.id),
+          ),
+        );
+      expect(assignmentBefore).toHaveLength(1);
+      expect(assignmentBefore[0].mcpServerId).toBe(installedServer.id);
+
+      const policiesBefore = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(policiesBefore.length).toBeGreaterThan(0);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${installedServer.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+
+      // The connection is gone, but the catalog's capability is retained.
+      await expect(
+        McpServerModel.findById(installedServer.id),
+      ).resolves.toBeNull();
+
+      const toolsAfter = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalog.id));
+      expect(toolsAfter).toHaveLength(1);
+
+      const policiesAfter = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(policiesAfter).toHaveLength(policiesBefore.length);
+
+      const assignmentAfter = await db
+        .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
+        .from(schema.agentToolsTable)
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, personalGateway.id),
+            eq(schema.agentToolsTable.toolId, tool.id),
+          ),
+        );
+      expect(assignmentAfter).toHaveLength(1);
+      expect(assignmentAfter[0].mcpServerId).toBeNull();
+    });
   });
 
   describe("PATCH /api/mcp_server/:id/reauthenticate", () => {

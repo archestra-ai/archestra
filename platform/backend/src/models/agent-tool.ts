@@ -1089,27 +1089,6 @@ class AgentToolModel {
   }
 
   /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByExecutionSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.mcpServerId, mcpServerId));
-    return result.rowCount ?? 0;
-  }
-
-  /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByCredentialSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    return AgentToolModel.deleteByExecutionSourceMcpServerId(mcpServerId);
-  }
-
-  /**
    * Clean up invalid static MCP server assignments when a user is removed from a team.
    * Sets mcpServerId to null for agent-tools where:
    * - The assigned MCP server is owned by the removed user

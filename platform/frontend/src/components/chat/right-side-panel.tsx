@@ -194,10 +194,10 @@ export function RightSidePanel({
   );
 }
 
-// Per-schedule runs-list scroll position. Selecting a run navigates to a
-// different conversation, which remounts this panel; remembering scrollTop here
-// (module scope survives the remount) lets us restore it so the list doesn't
-// jump back to the top after you scroll down and pick a run.
+// Per-schedule runs-list scroll position. Selecting a run swaps the chat to the
+// run's conversation; the page re-renders (and the panel can remount), which
+// resets the list to the top. Remembering scrollTop here (module scope survives
+// both) lets us restore it so the list stays where you left it after picking a run.
 const runsScrollTopByTrigger = new Map<string, number>();
 
 /** The Runs tab content: the schedule's runs, with the current run highlighted. */
@@ -213,15 +213,26 @@ function RunsPanel({
   const { data: trigger } = useScheduleTrigger(triggerId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Restore the saved scroll position on (re)mount, before paint, so there's no
-  // visible jump.
+  // Restore the saved scroll position whenever the panel (re)mounts OR the
+  // selected run changes — selecting a run re-renders without remounting, so a
+  // mount-only effect would miss it. Restore before paint, then re-assert next
+  // frame in case the reset lands a frame late (content relayout).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentRunId is a deliberate re-run trigger (restore on run selection), not read in the body.
   useLayoutEffect(() => {
-    const el = scrollRef.current;
     const saved = runsScrollTopByTrigger.get(triggerId);
-    if (el && saved != null) {
-      el.scrollTop = saved;
+    if (saved == null) {
+      return;
     }
-  }, [triggerId]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = saved;
+    }
+    const raf = requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = saved;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [triggerId, currentRunId]);
 
   if (!projectId) {
     return (

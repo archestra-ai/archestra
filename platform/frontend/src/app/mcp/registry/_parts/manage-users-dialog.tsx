@@ -146,6 +146,7 @@ interface ManageUsersContentProps {
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
+  bodyTestId?: string;
 }
 
 export function ManageUsersContent({
@@ -159,6 +160,7 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
+  bodyTestId,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
@@ -393,7 +395,10 @@ export function ManageUsersContent({
         </DialogHeader>
       )}
 
-      <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
+      <div
+        className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}
+        data-testid={bodyTestId}
+      >
         {catalogItem && (
           <AgentConnectionsSection
             item={catalogItem}

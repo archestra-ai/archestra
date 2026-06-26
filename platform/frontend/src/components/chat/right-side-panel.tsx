@@ -7,7 +7,7 @@ import {
   Globe,
   PanelRightClose,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
@@ -194,6 +194,12 @@ export function RightSidePanel({
   );
 }
 
+// Per-schedule runs-list scroll position. Selecting a run navigates to a
+// different conversation, which remounts this panel; remembering scrollTop here
+// (module scope survives the remount) lets us restore it so the list doesn't
+// jump back to the top after you scroll down and pick a run.
+const runsScrollTopByTrigger = new Map<string, number>();
+
 /** The Runs tab content: the schedule's runs, with the current run highlighted. */
 function RunsPanel({
   triggerId,
@@ -205,6 +211,17 @@ function RunsPanel({
   projectId: string | null;
 }) {
   const { data: trigger } = useScheduleTrigger(triggerId);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Restore the saved scroll position on (re)mount, before paint, so there's no
+  // visible jump.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const saved = runsScrollTopByTrigger.get(triggerId);
+    if (el && saved != null) {
+      el.scrollTop = saved;
+    }
+  }, [triggerId]);
 
   if (!projectId) {
     return (
@@ -215,7 +232,13 @@ function RunsPanel({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-3">
+    <div
+      ref={scrollRef}
+      onScroll={(e) => {
+        runsScrollTopByTrigger.set(triggerId, e.currentTarget.scrollTop);
+      }}
+      className="flex h-full flex-col overflow-y-auto p-3"
+    >
       <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Runs · {trigger?.name ?? "Schedule"}
       </div>
